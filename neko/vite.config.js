@@ -5,10 +5,12 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
   server: {
+    host: '127.0.0.1',
     port: 8717,
-    strictPort: false,
+    strictPort: true,
   },
   preview: {
+    host: '127.0.0.1',
     port: 8717,
   },
   plugins: [

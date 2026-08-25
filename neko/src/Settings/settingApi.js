@@ -318,11 +318,11 @@ export const localModelsApi = {
     });
   },
 
-  searchHuggingFace: async (query, { limit = 20 } = {}) => {
+  searchHuggingFace: async (query, { limit = 20, sort = 'downloads' } = {}) => {
     const params = new URLSearchParams({
       q: query,
       limit: String(limit),
-      sort: 'downloads',
+      sort,
     });
     return apiCall(`${AI_API_BASE}/hf-search?${params.toString()}`);
   },
@@ -330,6 +330,15 @@ export const localModelsApi = {
   listHuggingFaceFiles: async (repoId) => {
     const params = new URLSearchParams({ repoId });
     return apiCall(`${AI_API_BASE}/hf-files?${params.toString()}`);
+  },
+
+  // Estimate whether concrete model files can run on this machine. Batching
+  // keeps hardware detection to one backend call for a full model list.
+  estimateFits: async (models) => {
+    return apiCall(`${AI_API_BASE}/model-fit`, {
+      method: 'POST',
+      body: JSON.stringify({ models }),
+    });
   },
 
   // List active downloads

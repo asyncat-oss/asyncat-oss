@@ -1,5 +1,6 @@
 /* eslint-disable react/prop-types */
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import {
   RefreshCw, TriangleAlert, X,
   Mic, Volume2, Image, MessageSquare, BarChart3
@@ -72,6 +73,7 @@ const AssetSubtitle = ({ count, emptyLabel, singularLabel, pluralLabel }) => {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 const ModelsPage = () => {
+  const { hardwareStats, hardwareStatsLoading, refreshHardwareStats } = useOutletContext() || {};
   const {
     modelContextConfig, serverStatus, setServerStatus, mlxStatus,
     models, engineData, setInstallJob,
@@ -510,6 +512,9 @@ const ModelsPage = () => {
               onModelRefresh={loadModelList}
               onAudioRefresh={refreshVoiceData}
               onVisualRefresh={refreshVisualData}
+              hardware={hardwareStats?.hardware}
+              hardwareLoading={hardwareStatsLoading}
+              onHardwareRefresh={refreshHardwareStats}
             />
 
             {/* ── Active tab content ───────────────────────────────────────── */}

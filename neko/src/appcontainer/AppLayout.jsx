@@ -6,6 +6,7 @@ import { useCommandCenter } from '../CommandCenter/context/CommandCenterContextE
 import { useUiPreferences } from '../contexts/UiPreferencesContext.jsx';
 import { useUser } from '../contexts/UserContext.jsx';
 import { useNetworkStatus } from '../hooks/useNetworkStatus.js';
+import { aiProviderApi } from '../Settings/settingApi.js';
 
 // Import components
 import Sidebar from '../sidebar/Sidebar.jsx';
@@ -74,7 +75,27 @@ const AppLayout = () => {
   
   // UI state
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [hardwareStats, setHardwareStats] = useState(null);
+  const [hardwareStatsLoading, setHardwareStatsLoading] = useState(true);
   const { pageTransitionsEnabled, sidebarState } = useUiPreferences();
+
+  const refreshHardwareStats = useCallback(async () => {
+    setHardwareStatsLoading(true);
+    try {
+      const stats = await aiProviderApi.getStats();
+      setHardwareStats(stats);
+      return stats;
+    } catch (error) {
+      console.warn('Failed to detect model-fit hardware:', error);
+      return null;
+    } finally {
+      setHardwareStatsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshHardwareStats();
+  }, [refreshHardwareStats]);
 
   // Project state
   const [selectedProject, setSelectedProject] = useState(null);
@@ -331,6 +352,9 @@ const AppLayout = () => {
               currentTab: params.tab,
               refreshProjects,
               onOpenSettings: handleOpenSettings,
+              hardwareStats,
+              hardwareStatsLoading,
+              refreshHardwareStats,
             }} />
         </div>
       </main>

@@ -16,7 +16,7 @@ function getCpuSample() {
   return { idle, total };
 }
 
-async function getSystemHardware() {
+export async function getSystemHardware({ sampleUsage = true } = {}) {
   const cpus = os.cpus();
   const totalRam = os.totalmem();
   const freeRam = os.freemem();
@@ -38,16 +38,18 @@ async function getSystemHardware() {
     arch: os.arch(),
   };
 
-  // Sample CPU usage (compare two snapshots 200ms apart)
-  try {
-    const sample1 = getCpuSample();
-    await new Promise(r => setTimeout(r, 200));
-    const sample2 = getCpuSample();
-    const idle = sample2.idle - sample1.idle;
-    const total = sample2.total - sample1.total;
-    hardware.cpu.usagePercent = total > 0 ? Math.round((1 - idle / total) * 100) : 0;
-  } catch {
-    hardware.cpu.usagePercent = 0;
+  // Sample CPU usage only for live stats. Fit checks do not need the delay.
+  if (sampleUsage) {
+    try {
+      const sample1 = getCpuSample();
+      await new Promise(r => setTimeout(r, 200));
+      const sample2 = getCpuSample();
+      const idle = sample2.idle - sample1.idle;
+      const total = sample2.total - sample1.total;
+      hardware.cpu.usagePercent = total > 0 ? Math.round((1 - idle / total) * 100) : 0;
+    } catch {
+      hardware.cpu.usagePercent = 0;
+    }
   }
 
   // Try NVIDIA GPU via nvidia-smi
@@ -65,6 +67,7 @@ async function getSystemHardware() {
           name,
           vramTotalGb: +((parseInt(memTotal) || 0) / 1024).toFixed(1),
           vramUsedGb: +((parseInt(memUsed) || 0) / 1024).toFixed(1),
+          vramFreeGb: +((parseInt(memFree) || 0) / 1024).toFixed(1),
           utilizationPercent: parseInt(utilGpu) || 0,
           temperatureC: parseInt(temp) || null,
         };
@@ -73,29 +76,64 @@ async function getSystemHardware() {
     }
   } catch { /* nvidia-smi not available */ }
 
-  // Try AMD GPU via rocm-smi
+  // Try AMD GPU via ROCm, including VRAM capacity when the installed version
+  // supports JSON output.
   try {
-    const { stdout } = await execAsync('rocm-smi --showmeminfo vram --showuse --csv', { timeout: 3000 });
-    if (stdout.includes('GPU')) {
-      hardware.gpu = [{ vendor: 'AMD', name: 'AMD GPU (ROCm)', raw: stdout.trim() }];
+    const { stdout } = await execAsync('rocm-smi --showmeminfo vram --json', { timeout: 3000 });
+    const data = JSON.parse(stdout);
+    const detected = Object.entries(data || {}).map(([name, values]) => {
+      const totalBytes = Number(values?.['VRAM Total Memory (B)'] ?? values?.vram_total ?? 0);
+      const usedBytes = Number(values?.['VRAM Total Used Memory (B)'] ?? values?.vram_used ?? 0);
+      return {
+        vendor: 'AMD',
+        name,
+        vramTotalGb: totalBytes > 0 ? +(totalBytes / 1024 ** 3).toFixed(1) : null,
+        vramUsedGb: usedBytes > 0 ? +(usedBytes / 1024 ** 3).toFixed(1) : 0,
+        vramFreeGb: totalBytes > 0 ? +((totalBytes - usedBytes) / 1024 ** 3).toFixed(1) : null,
+      };
+    }).filter(gpu => gpu.vramTotalGb);
+    if (detected.length > 0) {
+      hardware.gpu = detected;
       return hardware;
     }
   } catch { /* rocm-smi not available */ }
 
-  // Try Apple Metal via system_profiler
-  if (os.platform() === 'darwin') {
+  try {
+    const { stdout } = await execAsync('rocm-smi --showuse --csv', { timeout: 3000 });
+    if (stdout.includes('GPU')) {
+      hardware.gpu = [{ vendor: 'AMD', name: 'AMD GPU (ROCm)', memoryUnknown: true }];
+      return hardware;
+    }
+  } catch { /* rocm-smi not available */ }
+
+  // Apple Silicon uses one pool for CPU and GPU memory. Always expose that
+  // architecture even if system_profiler is unavailable.
+  if (os.platform() === 'darwin' && os.arch() === 'arm64') {
     try {
       const { stdout } = await execAsync(
-        "system_profiler SPDisplaysDataType | grep -E 'Chipset Model|VRAM'",
+        'system_profiler SPHardwareDataType -json',
         { timeout: 3000 }
       );
-      if (stdout.trim()) {
-        const lines = stdout.trim().split('\n').map(l => l.trim());
-        const name = lines.find(l => l.startsWith('Chipset Model'))?.split(':')[1]?.trim() || 'Apple GPU';
-        const vramLine = lines.find(l => l.includes('VRAM'));
-        hardware.gpu = [{ vendor: 'Apple', name, vramInfo: vramLine || null }];
-      }
+      const profile = JSON.parse(stdout)?.SPHardwareDataType?.[0] || {};
+      hardware.gpu = [{
+        vendor: 'Apple',
+        name: profile.chip_type || profile.cpu_type || 'Apple Silicon',
+        vramTotalGb: hardware.ram.totalGb,
+        vramUsedGb: hardware.ram.usedGb,
+        vramFreeGb: hardware.ram.freeGb,
+        unifiedMemory: true,
+      }];
     } catch { /* system_profiler not available */ }
+    if (!hardware.gpu) {
+      hardware.gpu = [{
+        vendor: 'Apple',
+        name: 'Apple Silicon',
+        vramTotalGb: hardware.ram.totalGb,
+        vramUsedGb: hardware.ram.usedGb,
+        vramFreeGb: hardware.ram.freeGb,
+        unifiedMemory: true,
+      }];
+    }
   }
 
   return hardware;

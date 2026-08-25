@@ -1,12 +1,19 @@
 // providerRoutes.js — AI provider management API
 // GET  /api/ai/providers/stats              — hardware stats
+// POST /api/ai/providers/model-fit          — batch model memory/placement estimates
 // GET  /api/ai/providers/local-models/*     — downloaded model management
 // POST /api/ai/providers/server/*           — built-in llama.cpp server control
 
 import express from 'express';
 import fs from 'fs';
 import { randomUUID } from 'crypto';
-import { getProviderStats } from '../controllers/ai/providerManager.js';
+import { getProviderStats, getSystemHardware } from '../controllers/ai/providerManager.js';
+import { estimateModelFits } from '../controllers/ai/modelFitEstimator.js';
+import {
+  classifyHuggingFaceFile,
+  normalizeHuggingFaceModelSort,
+  summarizeHuggingFaceModel,
+} from '../controllers/ai/huggingFaceModelCompatibility.js';
 import OpenAIClient from '../controllers/ai/openAIClient.js';
 import LocalRuntimeClient from '../controllers/ai/localRuntimeClient.js';
 import CodexDirectClient, { CODEX_MODEL_CATALOG, makeCodexTokenBundle } from '../controllers/ai/codexDirectClient.js';
@@ -669,6 +676,60 @@ router.get('/stats', async (req, res) => {
   }
 });
 
+// ── POST /model-fit — batch local-model fit estimates for this machine ───────
+router.post('/model-fit', async (req, res) => {
+  try {
+    const models = Array.isArray(req.body?.models) ? req.body.models.slice(0, 100) : [];
+    if (models.length === 0) {
+      return res.status(400).json({ success: false, error: 'models must be a non-empty array' });
+    }
+
+    const sanitized = models.map((model, index) => {
+      const requestedPath = String(model?.path || '').trim().slice(0, 32768);
+      const providedSize = Number(model?.sizeBytes);
+      const hasProvidedSize = Number.isFinite(providedSize) && providedSize > 0;
+      let inspectedSize;
+      if (requestedPath && !hasProvidedSize) {
+        try {
+          const stat = fs.statSync(requestedPath);
+          if (stat.isFile()) {
+            inspectedSize = stat.size;
+          } else if (stat.isDirectory()) {
+            // MLX weights are normally top-level safetensors files. Keep this
+            // bounded so a mistakenly selected broad directory cannot trigger
+            // an expensive recursive scan.
+            inspectedSize = fs.readdirSync(requestedPath, { withFileTypes: true })
+              .slice(0, 2000)
+              .filter(entry => entry.isFile())
+              .reduce((total, entry) => total + fs.statSync(path.join(requestedPath, entry.name)).size, 0);
+          }
+        } catch { /* an unknown path simply falls back to filename parsing */ }
+      }
+
+      return {
+        id: String(model?.id ?? index).slice(0, 500),
+        modelName: String(model?.modelName || requestedPath || '').slice(0, 1000),
+        sizeBytes: hasProvidedSize ? providedSize : inspectedSize,
+        paramsBillions: Number.isFinite(Number(model?.paramsBillions)) ? Math.max(0, Number(model.paramsBillions)) : undefined,
+        quantization: String(model?.quantization || '').slice(0, 50),
+        contextLength: Number.isFinite(Number(model?.contextLength))
+          ? Math.min(1048576, Math.max(512, Number(model.contextLength)))
+          : 4096,
+      };
+    });
+    const hardware = await getSystemHardware({ sampleUsage: false });
+    res.json({
+      success: true,
+      hardware,
+      fits: estimateModelFits(sanitized, hardware),
+      note: 'Fit results are planning estimates. Architecture, batch size, runtime, and other open applications can change actual usage.',
+    });
+  } catch (err) {
+    console.error('Model fit estimate error:', err);
+    res.status(500).json({ success: false, error: 'Failed to estimate model fit' });
+  }
+});
+
 // ── GET /check-ollama — detect if Ollama is running ────────────────────────
 router.get('/check-ollama', async (_req, res) => {
   const { checkOllamaRunning } = await import('../controllers/ai/providerCatalog.js');
@@ -1197,16 +1258,21 @@ router.get('/local-models/downloads/:downloadId/stream', async (req, res) => {
   req.on('close', () => clearInterval(interval));
 });
 
-// ── GET /hf-search — search HuggingFace GGUF models ─────────────────────────
+// ── GET /hf-search — search Hugging Face repos Asyncat can install ───────────
 router.get('/hf-search', async (req, res) => {
   try {
     const { q = '', filter = '', sort = 'downloads', page = 0, limit = 20 } = req.query;
+    const requestedLimit = Math.min(50, Math.max(1, Number.parseInt(limit, 10) || 20));
+    const normalizedSort = normalizeHuggingFaceModelSort(sort);
+    // Broad searches are dominated by Transformers repos. Inspect a larger
+    // ranked window, then return only repositories with compatible files.
+    const discoveryLimit = Math.min(100, Math.max(40, requestedLimit * 4));
     const params = new URLSearchParams({
       search: q || 'text generation gguf',
-      sort,
+      sort: normalizedSort,
       direction: '-1',
       page: String(page),
-      limit: String(limit),
+      limit: String(discoveryLimit),
       full: 'true',
     });
     if (filter) params.set('filter', String(filter));
@@ -1214,7 +1280,7 @@ router.get('/hf-search', async (req, res) => {
 
     const hfRes = await fetch(url, {
       headers: huggingFaceHeaders(req.user.id),
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(20_000),
     });
 
     if (!hfRes.ok) {
@@ -1223,26 +1289,38 @@ router.get('/hf-search', async (req, res) => {
 
     const data = await hfRes.json();
 
-    const models = (Array.isArray(data) ? data : []).map(m => ({
-      id: m.id,
-      repoId: m.id,
-      repo: m.repoId || m.id,
-      modelId: m.modelId || m.id,
-      author: m.author || m.id.split('/')[0],
-      downloads: m.downloads || 0,
-      likes: m.likes || 0,
-      tags: (m.tags || []).filter(t => !t.startsWith('license:')),
-      pipeline_tag: m.pipeline_tag || '',
-      created: m.createdAt || null,
-      updated: m.lastModified || null,
-      private: m.private || false,
-      gated: m.gated || false,
-    }));
+    const models = (Array.isArray(data) ? data : [])
+      .map(m => ({ source: m, compatibility: summarizeHuggingFaceModel(m) }))
+      .filter(({ compatibility }) => compatibility.compatible)
+      .slice(0, requestedLimit)
+      .map(({ source: m, compatibility }) => ({
+        id: m.id,
+        repoId: m.id,
+        repo: m.repoId || m.id,
+        modelId: m.modelId || m.id,
+        author: m.author || m.id.split('/')[0],
+        downloads: m.downloads || 0,
+        likes: m.likes || 0,
+        tags: (m.tags || []).filter(t => !t.startsWith('license:')),
+        pipeline_tag: m.pipeline_tag || '',
+        created: m.createdAt || null,
+        updated: m.lastModified || null,
+        private: m.private || false,
+        gated: m.gated || false,
+        ...compatibility,
+      }));
 
-    res.json({ success: true, models, count: models.length });
+    res.json({ success: true, models, count: models.length, sort: normalizedSort });
   } catch (err) {
-    console.error('HF search error:', err.message);
-    res.status(500).json({ success: false, error: 'HuggingFace search failed', details: err.message });
+    const cause = err.cause?.code || err.cause?.message || '';
+    const timedOut = err.name === 'TimeoutError' || err.name === 'AbortError';
+    const publicError = timedOut
+      ? 'Hugging Face search timed out. Please try again.'
+      : err.message?.startsWith('HF API ')
+        ? `Hugging Face search failed: ${err.message}`
+        : 'Could not connect to Hugging Face. Check your internet connection and try again.';
+    console.error('HF search error:', err.message, cause ? `(${cause})` : '');
+    res.status(502).json({ success: false, error: publicError, details: err.message });
   }
 });
 
@@ -1269,9 +1347,15 @@ router.get('/hf-files', async (req, res) => {
     }
 
     const data = await hfRes.json();
+    const metadata = {
+      repoId,
+      pipelineTag: data.pipeline_tag || '',
+      tags: data.tags || [],
+    };
     const files = (data.siblings || []).map(f => ({
       rfilename: f.rfilename,
       size: f.size || 0,
+      targetKinds: classifyHuggingFaceFile(f.rfilename, metadata),
     }));
     res.json({
       success: true,

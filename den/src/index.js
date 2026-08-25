@@ -158,11 +158,18 @@ app.use('/api/training', trainingRouter);
 
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {
+  const managedParentPid = Number.parseInt(process.env.ASYNCAT_PARENT_PID || '', 10);
   res.status(200).json({
+    service: 'asyncat-backend',
     status: 'healthy',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     environment: process.env.NODE_ENV || 'development',
+    instanceId: process.env.ASYNCAT_INSTANCE_ID || null,
+    pid: process.pid,
+    parentPid: Number.isInteger(managedParentPid) && managedParentPid > 0
+      ? managedParentPid
+      : null,
   });
 });
 
@@ -256,6 +263,25 @@ seed().then(async () => {
   };
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT',  () => shutdown('SIGINT'));
+
+  // Electron can be terminated abruptly by a terminal runner on Windows,
+  // which does not reliably deliver before-quit to the desktop process. A
+  // managed backend must not survive its Electron parent and retain port 8716.
+  const managedParentPid = Number.parseInt(process.env.ASYNCAT_PARENT_PID || '', 10);
+  if (Number.isInteger(managedParentPid) && managedParentPid > 0) {
+    const parentWatch = setInterval(() => {
+      try {
+        process.kill(managedParentPid, 0);
+      } catch {
+        clearInterval(parentWatch);
+        shutdown('DESKTOP_PARENT_EXIT').catch((err) => {
+          logger.warn('Parent-exit shutdown error:', err.message);
+          process.exit(1);
+        });
+      }
+    }, 1500);
+    parentWatch.unref();
+  }
 }).catch(async (err) => {
   logError('Startup failed:', err);
   await flushLogs();

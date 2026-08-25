@@ -1,9 +1,11 @@
 /* eslint-disable react/prop-types */
+import { useEffect, useMemo, useState } from 'react';
 import { RefreshCw, Play, Trash2, Box, TriangleAlert, ChevronDown, ChevronUp, CheckCircle2, Plus, File, FolderOpen, Image } from 'lucide-react';
 import { LocalModelLogo } from './modelLogos.jsx';
 import MlxModelsSection from './MlxModelsSection.jsx';
 import { localModelsApi, llamaServerApi, mlxApi } from '../Settings/settingApi.js';
 import { Badge, DEFAULT_LOAD_CTX_SIZE, Panel, SectionHeader, getModelContextLimit, getModelLoadCtxError } from './modelPageShared.jsx';
+import { ModelFitExplanation } from './modelFitShared.jsx';
 
 const notifyModelRuntimeUpdated = () => {
   window.dispatchEvent(new CustomEvent('asyncat-model-runtime-updated'));
@@ -13,6 +15,7 @@ const notifyModelRuntimeUpdated = () => {
 const ModelCard = ({
   m, serverStatus, status, startingModel, deletingModel,
   switchingEngine, installingEngine,
+  fit,
   highlighted,
   modelLoadCtxSizes, modelLoadCtxErrors,
   updateModelLoadCtxSize, commitModelLoadCtxSize,
@@ -143,6 +146,8 @@ const ModelCard = ({
         {loadCtxError && (
           <p className="mt-2 text-[11px] text-red-500">{loadCtxError}</p>
         )}
+
+        {!m.isMissing && <ModelFitExplanation fit={fit} />}
       </div>
 
       {/* Action bar */}
@@ -205,7 +210,71 @@ const LocalModelsPane = ({
   modelLoadCtxSizes, modelLoadCtxErrors,
   updateModelLoadCtxSize, commitModelLoadCtxSize,
   handleStart, handleDelete
-}) => (
+}) => {
+  const [modelFits, setModelFits] = useState({});
+  const [quickLoadFit, setQuickLoadFit] = useState(null);
+  const fitRequests = useMemo(() => models
+    .filter(model => !model.isMissing)
+    .map(model => ({
+      id: model.path || model.filename,
+      modelName: model.filename || model.name,
+      sizeBytes: model.sizeBytes,
+      contextLength: Number(modelLoadCtxSizes[model.filename]) || Math.min(DEFAULT_LOAD_CTX_SIZE, getModelContextLimit(model)),
+    })), [modelLoadCtxSizes, models]);
+
+  useEffect(() => {
+    if (fitRequests.length === 0) {
+      setModelFits({});
+      return undefined;
+    }
+
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      localModelsApi.estimateFits(fitRequests)
+        .then(response => {
+          if (cancelled) return;
+          setModelFits(Object.fromEntries((response.fits || []).map(fit => [fit.id, fit])));
+        })
+        .catch(() => {
+          if (!cancelled) setModelFits({});
+        });
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [fitRequests]);
+
+  useEffect(() => {
+    const localPath = quickLoadPath.trim();
+    if (!localPath) {
+      setQuickLoadFit(null);
+      return undefined;
+    }
+
+    setQuickLoadFit(null);
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      localModelsApi.estimateFits([{
+        id: 'quick-load',
+        path: localPath,
+        modelName: localPath,
+        contextLength: Number(modelContextConfig?.ctx_size) || 4096,
+      }]).then(response => {
+        if (!cancelled) setQuickLoadFit(response.fits?.[0] || null);
+      }).catch(() => {
+        if (!cancelled) setQuickLoadFit(null);
+      });
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [modelContextConfig?.ctx_size, quickLoadPath]);
+
+  return (
   <div className="flex flex-col gap-6">
     {/* From Disk loader */}
     <Panel className="p-5">
@@ -273,6 +342,7 @@ const LocalModelsPane = ({
               )}
             </div>
           )}
+          <ModelFitExplanation fit={quickLoadFit} />
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <button
@@ -370,6 +440,7 @@ const LocalModelsPane = ({
             deletingModel={deletingModel}
             switchingEngine={switchingEngine}
             installingEngine={installingEngine}
+            fit={modelFits[m.path || m.filename]}
             highlighted={highlightedItem?.type === 'model' && String(highlightedItem.id) === String(m.id || m.filename)}
             modelLoadCtxSizes={modelLoadCtxSizes}
             modelLoadCtxErrors={modelLoadCtxErrors}
@@ -403,6 +474,7 @@ const LocalModelsPane = ({
       </Panel>
     )}
   </div>
-);
+  );
+};
 
 export default LocalModelsPane;

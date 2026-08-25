@@ -1,11 +1,13 @@
+/* eslint-disable react/prop-types */
 import { useCallback, useEffect, useState } from 'react';
 import { Cpu, RefreshCw } from 'lucide-react';
 import EngineRuntimeSection from '../Models/EngineRuntimeSection.jsx';
 import RuntimeSetupPanel from '../Models/RuntimeSetupPanel.jsx';
 import { useModelsPageController } from '../Models/useModelsPageController.js';
 import { installApi } from '../CommandCenter/api/installApi.js';
+import { HardwareFitOverview } from '../Models/modelFitShared.jsx';
 
-const RuntimeSection = () => {
+const RuntimeSection = ({ hardware, hardwareLoading, onRefreshHardware }) => {
   const {
     serverStatus,
     engineData,
@@ -62,11 +64,12 @@ const RuntimeSection = () => {
         loadEngineData({ clearActions: true }),
         loadEngineCatalog(true),
         loadInstallReadiness(),
+        onRefreshHardware?.(),
       ]);
     } finally {
       setRuntimeRefreshing(false);
     }
-  }, [clearEngineActionMessages, loadEngineCatalog, loadEngineData, loadInstallReadiness, loadStatus, setInstallJob]);
+  }, [clearEngineActionMessages, loadEngineCatalog, loadEngineData, loadInstallReadiness, loadStatus, onRefreshHardware, setInstallJob]);
 
   const refreshRuntimeCatalog = useCallback(async (refresh = false) => {
     await Promise.all([
@@ -101,6 +104,12 @@ const RuntimeSection = () => {
           Refresh
         </button>
       </div>
+
+      <HardwareFitOverview
+        hardware={hardware}
+        loading={hardwareLoading}
+        onRefresh={onRefreshHardware}
+      />
 
       <RuntimeSetupPanel showChatEngine={false} onRuntimeInstalled={refreshRuntime} />
 

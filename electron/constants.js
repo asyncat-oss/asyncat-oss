@@ -71,11 +71,11 @@ export const IS_WIN      = process.platform === 'win32';
 export const IS_LINUX    = process.platform === 'linux';
 
 /**
- * Keep one stable Windows identity in development and packaged builds.
- * A development-only ID has no matching Start menu shortcut, so Windows can
- * fall back to electron.exe when it resolves the taskbar group's icon.
+ * Match the Windows shell identity to the executable that launched the app.
+ * Development runs through electron.exe and has no installed Start menu
+ * shortcut; packaged builds use Asyncat's stable application ID.
  */
-export const WINDOWS_APP_ID = APP_ID;
+export const WINDOWS_APP_ID = IS_DEV ? process.execPath : APP_ID;
 
 /** Developer Tools stay opt-in so development launches remain uncluttered. */
 export const OPEN_DEVTOOLS = IS_DEV && process.argv.includes('--open-devtools');

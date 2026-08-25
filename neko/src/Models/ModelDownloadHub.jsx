@@ -2,9 +2,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertCircle,
+  ChevronDown,
   Cloud,
   Cpu,
   Download,
+  ExternalLink,
   File,
   FileArchive,
   Heart,
@@ -20,6 +22,7 @@ import {
 import { localModelsApi } from '../Settings/settingApi.js';
 import { Badge, Panel, SectionHeader } from './modelPageShared.jsx';
 import { HFAuthorLogo } from './modelLogos.jsx';
+import { HardwareFitOverview, ModelFitBadge } from './modelFitShared.jsx';
 
 const TARGETS = {
   model: {
@@ -80,19 +83,24 @@ const formatETA = (secondsLeft) => {
   return `${m}:${s.toString().padStart(2, '0')}`;
 };
 
-const targetOptionsForFile = (filename, repoId = '') => {
+const targetOptionsForFile = (file, repoId = '') => {
+  const filename = typeof file === 'string' ? file : file?.rfilename;
+  if (Array.isArray(file?.targetKinds)) {
+    return file.targetKinds
+      .filter(key => TARGETS[key])
+      .map(key => [key, TARGETS[key]]);
+  }
   const lowerName = String(filename || '').toLowerCase();
   const lowerRepo = String(repoId || '').toLowerCase();
   const context = `${lowerRepo}/${lowerName}`;
-  const isWhisperLike = (
-    context.includes('whisper') ||
-    lowerName.startsWith('ggml-')
-  );
-  const isPiperLike = (
-    context.includes('piper') ||
-    lowerName.endsWith('.onnx') ||
-    lowerName.endsWith('.onnx.json')
-  );
+  const isWhisperLike = context.includes('whisper') || [
+    'ggml-tiny',
+    'ggml-base',
+    'ggml-small',
+    'ggml-medium',
+    'ggml-large',
+  ].some(prefix => lowerName.startsWith(prefix));
+  const isPiperLike = context.includes('piper');
   const isImageLike = (
     context.includes('stable-diffusion') ||
     context.includes('sdxl') ||
@@ -106,7 +114,10 @@ const targetOptionsForFile = (filename, repoId = '') => {
   );
   const options = [];
 
-  if ((lowerName.endsWith('.gguf') || lowerName.endsWith('.bin')) && !isWhisperLike && !isImageLike) {
+  const isLegacyGgml = lowerName.endsWith('.bin') && (
+    lowerName.startsWith('ggml-') || context.includes('ggml') || context.includes('llama.cpp') || context.includes('llamacpp')
+  );
+  if ((lowerName.endsWith('.gguf') || isLegacyGgml) && !isWhisperLike && !isImageLike) {
     options.push(['model', TARGETS.model]);
   }
   if ((lowerName.endsWith('.bin') || lowerName.endsWith('.gguf')) && isWhisperLike) {
@@ -122,13 +133,23 @@ const targetOptionsForFile = (filename, repoId = '') => {
   return options;
 };
 
-const useHFSearch = (query, setQuery) => {
+const FIT_RANK = {
+  great: 0,
+  fits: 1,
+  cpu: 2,
+  tight: 3,
+  partial: 4,
+  too_large: 5,
+  unknown: 6,
+};
+
+const useHFSearch = (query, setQuery, sort) => {
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState(null);
   const debounceRef = useRef(null);
 
-  const search = useCallback(async (q) => {
+  const search = useCallback(async (q, requestedSort = sort) => {
     if (!q.trim()) {
       setResults([]);
       return;
@@ -136,7 +157,7 @@ const useHFSearch = (query, setQuery) => {
     setSearching(true);
     setSearchError(null);
     try {
-      const data = await localModelsApi.searchHuggingFace(q, { limit: 20 });
+      const data = await localModelsApi.searchHuggingFace(q, { limit: 20, sort: requestedSort });
       setResults(data.models || []);
     } catch (err) {
       setSearchError(err.message || 'Could not reach HuggingFace. Check your connection.');
@@ -144,7 +165,7 @@ const useHFSearch = (query, setQuery) => {
     } finally {
       setSearching(false);
     }
-  }, []);
+  }, [sort]);
 
   const handleQueryChange = useCallback((q) => {
     setQuery(q);
@@ -154,10 +175,10 @@ const useHFSearch = (query, setQuery) => {
       setSearchError(null);
       return;
     }
-    debounceRef.current = setTimeout(() => search(q), 500);
-  }, [search, setQuery]);
+    debounceRef.current = setTimeout(() => search(q, sort), 500);
+  }, [search, setQuery, sort]);
 
-  return { query, handleQueryChange, results, searching, searchError, setResults, setQuery };
+  return { query, handleQueryChange, results, searching, searchError, search, setResults, setQuery };
 };
 
 const HFFilePicker = ({ repoId, onSelect, onClose }) => {
@@ -169,8 +190,30 @@ const HFFilePicker = ({ repoId, onSelect, onClose }) => {
     const fetchFiles = async () => {
       try {
         const data = await localModelsApi.listHuggingFaceFiles(repoId);
-        const validFiles = (data.files || []).filter(f => targetOptionsForFile(f.rfilename, repoId).length > 0);
-        setFiles(validFiles);
+        const validFiles = (data.files || []).filter(f => targetOptionsForFile(f, repoId).length > 0);
+        const llmFiles = validFiles.filter(file => (
+          targetOptionsForFile(file, repoId).some(([key]) => key === 'model')
+        ));
+        let fitsByFilename = {};
+        if (llmFiles.length > 0) {
+          try {
+            const fitResponse = await localModelsApi.estimateFits(llmFiles.map(file => ({
+              id: file.rfilename,
+              modelName: `${repoId}/${file.rfilename}`,
+              sizeBytes: file.size,
+              contextLength: 4096,
+            })));
+            fitsByFilename = Object.fromEntries((fitResponse.fits || []).map(fit => [fit.id, fit]));
+          } catch {
+            // File discovery still works when hardware probing is unavailable.
+          }
+        }
+        setFiles(validFiles
+          .map(file => ({ ...file, fit: fitsByFilename[file.rfilename] || null }))
+          .sort((a, b) => {
+            const fitDelta = (FIT_RANK[a.fit?.status] ?? 7) - (FIT_RANK[b.fit?.status] ?? 7);
+            return fitDelta || a.rfilename.localeCompare(b.rfilename, undefined, { numeric: true });
+          }));
       } catch (err) {
         setError(err.message || 'Could not load model files.');
       } finally {
@@ -213,13 +256,21 @@ const HFFilePicker = ({ repoId, onSelect, onClose }) => {
           </div>
         )}
         {!loading && !error && files.length === 0 && (
-          <div className="flex flex-col items-center gap-1 py-5 text-xs text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+          <div className="flex flex-col items-center gap-1.5 px-4 py-6 text-center text-xs text-gray-400 dark:text-gray-500 midnight:text-slate-500">
             <File className="h-5 w-5 opacity-40" />
-            No downloadable files found in this repo.
+            <span>No compatible files are available now. The repository may have changed since search.</span>
+            <a
+              href={`https://huggingface.co/${repoId}/tree/main`}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-1 inline-flex items-center gap-1 font-medium text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white midnight:text-slate-300"
+            >
+              Inspect repository <ExternalLink className="h-3 w-3" />
+            </a>
           </div>
         )}
         {files.map((f) => {
-          const targets = targetOptionsForFile(f.rfilename, repoId);
+          const targets = targetOptionsForFile(f, repoId);
           const pathParts = String(f.rfilename).split('/');
           const folder = pathParts.length > 1 ? pathParts.slice(0, -1).join('/') + '/' : '';
           const basename = pathParts[pathParts.length - 1];
@@ -242,21 +293,31 @@ const HFFilePicker = ({ repoId, onSelect, onClose }) => {
                     {formatBytes(f.size)}
                   </span>
                 )}
+                {f.fit && (
+                  <div className="mt-1.5">
+                    <ModelFitBadge fit={f.fit} />
+                  </div>
+                )}
               </div>
-              <div className="flex flex-shrink-0 items-center gap-1.5">
+              <div className="flex flex-shrink-0 items-center gap-2">
                 {targets.map(([key, target]) => (
-                  <button
-                    key={key}
-                    onClick={() => onSelect({
-                      url: `https://huggingface.co/${repoId}/resolve/main/${f.rfilename}`,
-                      filename: f.rfilename,
-                      targetKey: key,
-                      subDir: target.subDir,
-                    })}
-                    className={`rounded-md px-2.5 py-1 text-[10px] font-semibold transition-colors ${target.color}`}
-                  >
-                    {target.label}
-                  </button>
+                  <div key={key} className="flex items-center gap-1.5">
+                    <span className="hidden rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-[10px] font-semibold text-gray-500 sm:inline-flex dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 midnight:border-slate-700 midnight:bg-slate-800 midnight:text-slate-400">
+                      {target.label}
+                    </span>
+                    <button
+                      onClick={() => onSelect({
+                        url: `https://huggingface.co/${repoId}/resolve/main/${f.rfilename}`,
+                        filename: f.rfilename,
+                        targetKey: key,
+                        subDir: target.subDir,
+                        fit: f.fit,
+                      })}
+                      className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[10px] font-semibold transition-colors ${target.color}`}
+                    >
+                      <Download className="h-3 w-3" /> Download
+                    </button>
+                  </div>
                 ))}
               </div>
             </div>
@@ -362,7 +423,15 @@ const FILTER_CHIPS = [
   { key: 'audio', label: 'Audio' },
   { key: 'image', label: 'Image' },
   { key: 'provider', label: 'Providers' },
-  { key: 'hf', label: 'HuggingFace' },
+  { key: 'hf', label: 'Hugging Face' },
+];
+
+const HF_SORT_OPTIONS = [
+  { value: 'downloads', label: 'Most downloaded' },
+  { value: 'trendingScore', label: 'Trending' },
+  { value: 'lastModified', label: 'Recently updated' },
+  { value: 'createdAt', label: 'Newest' },
+  { value: 'likes', label: 'Most liked' },
 ];
 
 const matchesFilter = (item, filter) => {
@@ -377,17 +446,18 @@ const matchesFilter = (item, filter) => {
 
 const matchesHFFilter = (model, filter) => {
   if (filter === 'all' || filter === 'hf') return true;
-  if (filter === 'model') {
-    const tag = (model.pipeline_tag || '').toLowerCase();
-    return ['text-generation', 'image-text-to-text', 'text2text-generation'].some(t => tag.includes(t));
-  }
-  if (filter === 'image') {
-    const tag = (model.pipeline_tag || '').toLowerCase();
-    const tags = (model.tags || []).map(t => t.toLowerCase());
-    return tag.includes('text-to-image') || tag.includes('image-generation') || tags.some(t => t.includes('diffusion') || t.includes('flux') || t.includes('sdxl') || t.includes('stable-diffusion'));
-  }
+  const targetKinds = Array.isArray(model.targetKinds) ? model.targetKinds : [];
+  if (filter === 'model') return targetKinds.includes('model');
+  if (filter === 'audio') return targetKinds.includes('whisper') || targetKinds.includes('tts');
+  if (filter === 'image') return targetKinds.includes('image');
   return false;
 };
+
+const humanizePipeline = (pipeline = '') => pipeline
+  .split('-')
+  .filter(Boolean)
+  .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+  .join(' ');
 
 const ModelDownloadHub = ({
   searchQuery = '',
@@ -397,10 +467,14 @@ const ModelDownloadHub = ({
   onModelRefresh,
   onAudioRefresh,
   onVisualRefresh,
+  hardware,
+  hardwareLoading,
+  onHardwareRefresh,
 }) => {
   const [activeDownloads, setActiveDownloads] = useState({});
   const [expandedRepo, setExpandedRepo] = useState(null);
   const [activeFilter, setActiveFilter] = useState('all');
+  const [hfSort, setHfSort] = useState('downloads');
   const cleanupFnsRef = useRef({});
 
   const {
@@ -408,9 +482,16 @@ const ModelDownloadHub = ({
     results,
     searching,
     searchError,
+    search,
     setResults,
     setQuery,
-  } = useHFSearch(searchQuery, onSearchQueryChange || (() => {}));
+  } = useHFSearch(searchQuery, onSearchQueryChange || (() => {}), hfSort);
+
+  const handleSortChange = useCallback((nextSort) => {
+    setHfSort(nextSort);
+    setExpandedRepo(null);
+    if (searchQuery.trim()) search(searchQuery, nextSort);
+  }, [search, searchQuery]);
 
   const refreshAfterDownload = useCallback((targetKey) => {
     onModelRefresh?.();
@@ -587,13 +668,22 @@ const ModelDownloadHub = ({
   };
 
   const activeEntries = Object.entries(activeDownloads);
+  const visibleHFResults = results.filter(model => matchesHFFilter(model, activeFilter));
+  const visibleDownloadedMatches = downloadedMatches.filter(model => matchesFilter(model, activeFilter));
 
   return (
     <Panel className="p-5">
       <SectionHeader
         title="Download Models"
-        description="Search HuggingFace once, then save files as local LLM, voice, or image generation assets. Multimodal LLMs stay in the normal model library."
+        description="Search installable Hugging Face repositories, compare files against this machine, then download to the right local library."
         action={activeEntries.length > 0 ? <Badge color="amber">{activeEntries.length} downloading</Badge> : null}
+      />
+
+      <HardwareFitOverview
+        hardware={hardware}
+        loading={hardwareLoading}
+        onRefresh={onHardwareRefresh}
+        compact
       />
 
       {activeEntries.length > 0 && (
@@ -649,23 +739,38 @@ const ModelDownloadHub = ({
       )}
 
       <div className="mt-5">
-        <div className="mb-3 flex flex-wrap items-center gap-1.5">
-          {FILTER_CHIPS.map((chip) => {
-            const isActive = activeFilter === chip.key;
-            return (
-              <button
-                key={chip.key}
-                onClick={() => setActiveFilter(isActive ? 'all' : chip.key)}
-                className={`rounded-full px-3 py-1 text-[11px] font-semibold transition-all ${
-                  isActive
-                    ? 'bg-gray-900 text-white shadow-sm dark:bg-gray-100 dark:text-gray-900 midnight:bg-slate-800 midnight:text-slate-100 midnight:ring-1 midnight:ring-slate-700'
-                    : 'border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200 midnight:border-gray-700 midnight:bg-gray-900 midnight:text-gray-400 midnight:hover:bg-gray-800 midnight:hover:text-gray-200'
-                }`}
-              >
-                {chip.label}
-              </button>
-            );
-          })}
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {FILTER_CHIPS.map((chip) => {
+              const isActive = activeFilter === chip.key;
+              return (
+                <button
+                  key={chip.key}
+                  onClick={() => setActiveFilter(isActive ? 'all' : chip.key)}
+                  className={`rounded-full px-3 py-1 text-[11px] font-semibold transition-all ${
+                    isActive
+                      ? 'bg-gray-900 text-white shadow-sm dark:bg-gray-100 dark:text-gray-900 midnight:bg-slate-800 midnight:text-slate-100 midnight:ring-1 midnight:ring-slate-700'
+                      : 'border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200 midnight:border-gray-700 midnight:bg-gray-900 midnight:text-gray-400 midnight:hover:bg-gray-800 midnight:hover:text-gray-200'
+                  }`}
+                >
+                  {chip.label}
+                </button>
+              );
+            })}
+          </div>
+          <label className="flex items-center gap-2 text-[11px] font-medium text-gray-500 dark:text-gray-400 midnight:text-slate-400">
+            <span>Sort</span>
+            <select
+              aria-label="Sort Hugging Face model results"
+              value={hfSort}
+              onChange={(event) => handleSortChange(event.target.value)}
+              className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 outline-none hover:bg-gray-50 focus:border-gray-300 focus:ring-1 focus:ring-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 midnight:border-gray-700 midnight:bg-gray-900 midnight:text-slate-300 midnight:hover:bg-gray-800"
+            >
+              {HF_SORT_OPTIONS.map(option => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
         </div>
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
@@ -683,9 +788,9 @@ const ModelDownloadHub = ({
           )}
         </div>
 
-        {searchQuery && activeFilter !== 'hf' && downloadedMatches.filter(m => matchesFilter(m, activeFilter)).length > 0 && (
+        {searchQuery && activeFilter !== 'hf' && visibleDownloadedMatches.length > 0 && (
           <div className="mt-2 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800">
-            {groupMatches(downloadedMatches.filter(m => matchesFilter(m, activeFilter))).map((group) => (
+            {groupMatches(visibleDownloadedMatches).map((group) => (
               <div key={group.key}>
                 <div className="flex items-center gap-2 border-b border-gray-100 bg-gray-50/80 px-3 py-1.5 dark:border-gray-800 dark:bg-gray-800/50 midnight:border-slate-800 midnight:bg-slate-900">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 midnight:text-slate-500">
@@ -737,19 +842,24 @@ const ModelDownloadHub = ({
           </div>
         )}
 
-        {searching && <div className="mt-3 flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500"><Loader2 className="h-3.5 w-3.5 animate-spin" />Searching HuggingFace...</div>}
+        {searching && <div className="mt-3 flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500"><Loader2 className="h-3.5 w-3.5 animate-spin" />Finding installable files on Hugging Face...</div>}
         {searchError && <p className="mt-2 flex items-center gap-1 text-xs text-red-500 dark:text-red-400"><AlertCircle className="h-3 w-3" /> {searchError}</p>}
-        {!searching && results.filter(m => matchesHFFilter(m, activeFilter)).length > 0 && (
+        {!searching && visibleHFResults.length > 0 && (
           <div className="mt-2 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800">
-            <div className="flex items-center gap-2 border-b border-gray-100 bg-gray-50/80 px-3 py-1.5 dark:border-gray-800 dark:bg-gray-800/50 midnight:border-slate-800 midnight:bg-slate-900">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 midnight:text-slate-500">
-                HuggingFace
-              </span>
-              <span className="rounded-full bg-gray-200 px-1.5 py-0 text-[10px] font-medium text-gray-500 dark:bg-gray-700 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-400">
-                {results.filter(m => matchesHFFilter(m, activeFilter)).length}
+            <div className="flex items-center justify-between gap-3 border-b border-gray-100 bg-gray-50/80 px-3 py-2 dark:border-gray-800 dark:bg-gray-800/50 midnight:border-slate-800 midnight:bg-slate-900">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 midnight:text-slate-400">
+                  Installable from Hugging Face
+                </span>
+                <span className="rounded-full bg-gray-200 px-1.5 py-0 text-[10px] font-medium text-gray-500 dark:bg-gray-700 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-400">
+                  {visibleHFResults.length}
+                </span>
+              </div>
+              <span className="hidden text-[10px] text-gray-400 sm:inline dark:text-gray-500 midnight:text-slate-500">
+                Compatible files only
               </span>
             </div>
-            {results.filter(m => matchesHFFilter(m, activeFilter)).map((model) => {
+            {visibleHFResults.map((model) => {
               const repoId = model.modelId || model.id;
               const isExpanded = expandedRepo === repoId;
               const downloads = model.downloads ? `${(model.downloads >= 1000 ? (model.downloads / 1000).toFixed(0) + 'k' : model.downloads)}` : null;
@@ -757,74 +867,79 @@ const ModelDownloadHub = ({
               const author = model.author || (repoId.includes('/') ? repoId.split('/')[0] : '');
               const modelName = repoId.includes('/') ? repoId.split('/').slice(1).join('/') : repoId;
               const updated = timeAgo(model.updated);
-              const tags = (model.tags || []).slice(0, 3);
-              const pipeline = model.pipeline_tag || '';
+              const formats = Array.isArray(model.formats) ? model.formats : [];
+              const pipeline = humanizePipeline(model.pipeline_tag || '');
+              const fileCount = Number(model.compatibleFileCount) || 0;
               return (
                 <div key={repoId} className="border-b border-gray-100 last:border-0 dark:border-gray-800 midnight:border-slate-800">
-                  <div className="flex items-start justify-between gap-3 px-3 py-2.5">
-                    <div className="flex min-w-0 flex-1 items-start gap-2.5">
+                  <div className="flex items-start justify-between gap-3 px-3 py-3">
+                    <div className="flex min-w-0 flex-1 items-start gap-3">
                       <HFAuthorLogo author={author} size="sm" />
                       <div className="min-w-0 flex-1">
-                      {/* Author stacked above model name */}
-                      <div className="flex flex-col gap-0.5">
-                        {author && (
-                          <span className="text-[10px] leading-none text-gray-400 dark:text-gray-500 midnight:text-slate-500">
-                            {author}
+                        <div className="flex min-w-0 items-baseline gap-1.5">
+                          <span className="truncate text-sm font-semibold leading-tight text-gray-900 dark:text-gray-100 midnight:text-slate-100">
+                            <HighlightText text={modelName} query={searchQuery} />
                           </span>
-                        )}
-                        <span className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100 leading-tight">
-                          <HighlightText text={modelName} query={searchQuery} />
-                        </span>
-                      </div>
-                      {/* Pipeline tag + tags */}
-                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                        {pipeline && (
-                          <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-400">
-                            {pipeline}
-                          </span>
-                        )}
-                        {tags.map((tag) => (
-                          <span key={tag} className="text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                      {/* Stats row */}
-                      <div className="mt-1.5 flex items-center gap-2.5 text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">
-                        {downloads && (
-                          <span className="flex items-center gap-0.5">
-                            <Download className="h-2.5 w-2.5" />
-                            {downloads}
-                          </span>
-                        )}
-                        {likes && (
-                          <span className="flex items-center gap-0.5">
-                            <Heart className="h-2.5 w-2.5" />
-                            {likes}
-                          </span>
-                        )}
-                        {updated && <span>{updated}</span>}
-                        {model.gated && (
-                          <span className="flex items-center gap-0.5 text-amber-600 dark:text-amber-400">
-                            <ShieldAlert className="h-2.5 w-2.5" />
-                            gated
-                          </span>
-                        )}
-                        {model.private && (
-                          <span className="flex items-center gap-0.5 text-red-500 dark:text-red-400">
-                            <Lock className="h-2.5 w-2.5" />
-                            private
-                          </span>
-                        )}
-                      </div>
+                          {author && <span className="hidden flex-shrink-0 text-[10px] text-gray-400 sm:inline dark:text-gray-500 midnight:text-slate-500">by {author}</span>}
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          {formats.map(format => (
+                            <span key={format} className="inline-flex items-center rounded-md border border-gray-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-gray-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-300">
+                              {format}
+                            </span>
+                          ))}
+                          {pipeline && (
+                            <span className="text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+                              {pipeline}
+                            </span>
+                          )}
+                          {fileCount > 0 && (
+                            <span className="text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+                              · {fileCount} compatible {fileCount === 1 ? 'file' : 'files'}
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-1.5 flex items-center gap-2.5 text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+                          {downloads && (
+                            <span className="flex items-center gap-0.5">
+                              <Download className="h-2.5 w-2.5" />
+                              {downloads}
+                            </span>
+                          )}
+                          {likes && (
+                            <span className="flex items-center gap-0.5">
+                              <Heart className="h-2.5 w-2.5" />
+                              {likes}
+                            </span>
+                          )}
+                          {updated && <span>{updated}</span>}
+                          {model.gated && (
+                            <span className="flex items-center gap-0.5 text-amber-600 dark:text-amber-400">
+                              <ShieldAlert className="h-2.5 w-2.5" />
+                              gated
+                            </span>
+                          )}
+                          {model.private && (
+                            <span className="flex items-center gap-0.5 text-red-500 dark:text-red-400">
+                              <Lock className="h-2.5 w-2.5" />
+                              private
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <button
+                      type="button"
                       onClick={() => setExpandedRepo(isExpanded ? null : repoId)}
-                      className="mt-0.5 flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 hover:text-gray-950 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-300 midnight:hover:bg-slate-800"
+                      aria-expanded={isExpanded}
+                      className={`mt-0.5 flex flex-shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                        isExpanded
+                          ? 'border-gray-300 bg-gray-100 text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 midnight:border-slate-600 midnight:bg-slate-800 midnight:text-slate-100'
+                          : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-950 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-300 midnight:hover:bg-slate-800'
+                      }`}
                     >
-                      <Download className="h-3 w-3" />
-                      {isExpanded ? 'Hide' : 'Get'}
+                      Files
+                      <ChevronDown className={`h-3 w-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                     </button>
                   </div>
                   {isExpanded && (
@@ -837,14 +952,14 @@ const ModelDownloadHub = ({
             })}
           </div>
         )}
-        {!searching && searchQuery && downloadedMatches.filter(m => matchesFilter(m, activeFilter)).length === 0 && results.filter(m => matchesHFFilter(m, activeFilter)).length === 0 && !searchError && (
+        {!searching && searchQuery && visibleDownloadedMatches.length === 0 && visibleHFResults.length === 0 && !searchError && (
           <div className="mt-4 flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-gray-200 bg-gray-50/50 py-6 dark:border-gray-800 dark:bg-gray-800/20 midnight:border-slate-800 midnight:bg-slate-900/30">
             <Search className="h-5 w-5 text-gray-300 dark:text-gray-600 midnight:text-slate-600" />
             <p className="text-xs text-gray-400 dark:text-gray-500 midnight:text-slate-500">
-              {activeFilter === 'all' ? `No results for "${searchQuery}"` : `No ${FILTER_CHIPS.find(c => c.key === activeFilter)?.label || ''} results for "${searchQuery}"`}
+              {activeFilter === 'all' ? `No installable results for "${searchQuery}"` : `No installable ${FILTER_CHIPS.find(c => c.key === activeFilter)?.label || ''} results for "${searchQuery}"`}
             </p>
             <p className="text-[10px] text-gray-300 dark:text-gray-600 midnight:text-slate-600">
-              {activeFilter === 'all' ? 'Try a broader keyword like "llama", "qwen", or "flux"' : 'Try switching the filter to "All" for broader results'}
+              {activeFilter === 'all' ? 'Transformer-only repositories are hidden because Asyncat cannot run those individual files.' : 'Try switching the filter to "All" for broader results'}
             </p>
           </div>
         )}

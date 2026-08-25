@@ -11,6 +11,7 @@
 //   Electron's bundled Node. System/bundled Node sidesteps both problems.
 //
 import { spawn, execSync } from 'child_process';
+import { randomUUID } from 'crypto';
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
@@ -18,11 +19,63 @@ import { app } from 'electron';
 import { DEN_ENTRY, DEN_CWD, BACKEND_PORT, HEALTH_URL, IS_DEV } from './constants.js';
 
 let backendProcess = null;
+let backendStartPromise = null;
 let isShuttingDown = false;
 let cachedNodeBinary = null;
 let recentBackendOutput = '';
 
 const MAX_RECENT_BACKEND_OUTPUT = 64 * 1024;
+
+function readExistingHealth(timeoutMs = 800) {
+  return new Promise((resolve) => {
+    const request = http.get(HEALTH_URL, (res) => {
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', chunk => { body += chunk; });
+      res.on('end', () => {
+        try { resolve(JSON.parse(body)); } catch { resolve(null); }
+      });
+    });
+    request.setTimeout(timeoutMs, () => {
+      request.destroy();
+      resolve(null);
+    });
+    request.on('error', () => resolve(null));
+  });
+}
+
+function isProcessAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function recoverOrphanedBackend() {
+  const health = await readExistingHealth();
+  if (health?.service !== 'asyncat-backend') return;
+
+  const pid = Number(health.pid);
+  const parentPid = Number(health.parentPid);
+  const managedOrphan = Number.isInteger(pid)
+    && pid > 0
+    && Number.isInteger(parentPid)
+    && parentPid > 0
+    && !isProcessAlive(parentPid);
+  if (!managedOrphan) return;
+
+  console.warn(`[Asyncat] Reclaiming orphaned backend process ${pid} from exited desktop process ${parentPid}.`);
+  try { process.kill(pid, 'SIGTERM'); } catch {}
+
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline) {
+    if (!isProcessAlive(pid)) return;
+    await new Promise(resolve => setTimeout(resolve, 150));
+  }
+}
 
 function backendProcessLogPath() {
   return path.join(DEN_CWD, 'logs', 'backend-process.log');
@@ -181,6 +234,16 @@ function setupEnvFile() {
 // ─── Backend lifecycle ────────────────────────────────────────────────────────
 
 export function startBackend() {
+  if (backendStartPromise) return backendStartPromise;
+  if (backendProcess) return Promise.resolve();
+
+  backendStartPromise = recoverOrphanedBackend()
+    .then(() => spawnBackend())
+    .finally(() => { backendStartPromise = null; });
+  return backendStartPromise;
+}
+
+function spawnBackend() {
   return new Promise((resolve, reject) => {
     if (backendProcess) { resolve(); return; }
 
@@ -204,10 +267,16 @@ export function startBackend() {
       cachedNodeBinary = resolveNodeBinary();
     }
 
+    // The health endpoint carries this token so a stale process already using
+    // the port cannot be mistaken for the child that Electron just spawned.
+    const instanceId = randomUUID();
+
     const env = {
       ...process.env,
       PORT: String(BACKEND_PORT),
       NODE_ENV: IS_DEV ? 'development' : 'production',
+      ASYNCAT_INSTANCE_ID: instanceId,
+      ASYNCAT_PARENT_PID: String(process.pid),
       // Ensure ELECTRON_RUN_AS_NODE is cleared — we're using a plain Node binary
       ELECTRON_RUN_AS_NODE: undefined,
       // In packaged builds, logger.js resolves log path from __dirname inside
@@ -269,7 +338,7 @@ export function startBackend() {
       });
     });
 
-    Promise.race([waitForHealth(30_000), startupFailure])
+    Promise.race([waitForHealth(30_000, instanceId), startupFailure])
       .then(() => {
         startupComplete = true;
         resolve();
@@ -314,7 +383,7 @@ export function isBackendRunning() {
   return backendProcess !== null && !backendProcess.killed;
 }
 
-function waitForHealth(timeoutMs = 30_000) {
+function waitForHealth(timeoutMs = 30_000, expectedInstanceId = null) {
   const start = Date.now();
 
   return new Promise((resolve, reject) => {
@@ -325,12 +394,19 @@ function waitForHealth(timeoutMs = 30_000) {
       }
 
       http.get(HEALTH_URL, (res) => {
-        if (res.statusCode === 200) {
-          resolve();
-        } else {
-          setTimeout(check, 500);
-        }
-        res.resume();
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', chunk => { body += chunk; });
+        res.on('end', () => {
+          let health = null;
+          try { health = JSON.parse(body); } catch {}
+          const expectedProcess = !expectedInstanceId || health?.instanceId === expectedInstanceId;
+          if (res.statusCode === 200 && health?.status === 'healthy' && expectedProcess) {
+            resolve();
+          } else {
+            setTimeout(check, 500);
+          }
+        });
       }).on('error', () => {
         setTimeout(check, 500);
       });

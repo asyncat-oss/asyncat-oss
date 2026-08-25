@@ -39,7 +39,12 @@ const TAB_ALIASES = {
 const SettingsPage = () => {
   const { tab } = useParams();
   const navigate = useNavigate();
-  const { localUser } = useOutletContext() || {};
+  const {
+    localUser,
+    hardwareStats,
+    hardwareStatsLoading,
+    refreshHardwareStats,
+  } = useOutletContext() || {};
   const { currentWorkspace, updateCurrentWorkspace } = useWorkspace();
   const { theme, setTheme } = useUiPreferences();
   const [advancedView, setAdvancedView] = useState(tab === 'server' ? 'server' : 'storage');
@@ -161,7 +166,13 @@ const SettingsPage = () => {
       case 'workbench':
         return <WorkbenchSection />;
       case 'runtime':
-        return <RuntimeSection />;
+        return (
+          <RuntimeSection
+            hardware={hardwareStats?.hardware}
+            hardwareLoading={hardwareStatsLoading}
+            onRefreshHardware={refreshHardwareStats}
+          />
+        );
       case 'advanced':
         return renderAdvanced();
       case 'about':
