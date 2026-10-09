@@ -125,9 +125,12 @@ export class ToolCallFormatter {
    * Produces a format that works across most models.
    *
    * @param {Array} tools - Array of tool definition objects
+   * @param {object} [opts]
+   * @param {boolean} [opts.partial] - The list is a core subset; tell the model
+   *   how to find the rest with tool_search.
    * @returns {string} Formatted tool descriptions for system prompt
    */
-  static formatToolsForPrompt(tools) {
+  static formatToolsForPrompt(tools, { partial = false } = {}) {
     if (!tools || tools.length === 0) return '';
 
     const lines = [
@@ -145,6 +148,7 @@ export class ToolCallFormatter {
       'You may call multiple tools in sequence. After each tool call, you will receive the result.',
       'Always wait for tool results before proceeding.',
       '',
+      ...(partial ? [ToolCallFormatter.toolSearchHint(), ''] : []),
       '## Tool Definitions',
       '',
     ];
@@ -169,6 +173,19 @@ export class ToolCallFormatter {
     }
 
     return lines.join('\n');
+  }
+
+  /**
+   * One paragraph telling the model its tool list is a core subset and how to
+   * reach the rest. Used in the text tool list, and on its own when tools are
+   * passed natively.
+   */
+  static toolSearchHint() {
+    return [
+      'The tools listed are a core set chosen for this task, not everything you can do.',
+      'Many more exist (git, browser automation, docker, databases, screenshots, scheduling, notes, image generation, model management, and others).',
+      'When you need a capability that is not listed, call `tool_search` with a few keywords; the tools it returns can then be called by name like any other.',
+    ].join(' ');
   }
 
   /**

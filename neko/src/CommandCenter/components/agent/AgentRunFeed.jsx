@@ -115,6 +115,7 @@ const TOOL_META = {
   create_task:       { icon: LayoutList,  label: 'Create task' },
   list_tasks:        { icon: List,        label: 'List tasks' },
   todo_write:        { icon: LayoutList,  label: 'Update plan' },
+  tool_search:       { icon: Search,      label: 'Find tools' },
   create_note:       { icon: FileText,    label: 'Create note' },
   list_notes:        { icon: FileText,    label: 'List notes' },
   app_open:          { icon: ExternalLink,label: 'Open app' },
