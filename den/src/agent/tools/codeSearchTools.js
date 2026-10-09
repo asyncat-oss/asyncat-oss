@@ -5,7 +5,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { PermissionLevel } from './toolRegistry.js';
 import { safePath, truncate, hasBin, IS_WIN } from './shared.js';
 
@@ -93,6 +93,19 @@ function findCodeRoot(workingDir) {
     dir = parent;
   }
   return workingDir;
+}
+
+// Run a search binary without a shell (symbols and paths come from callers,
+// including HTTP query strings). Returns at most maxLines lines of stdout,
+// keeping partial output when the search exits non-zero or overflows.
+function runSearchCommand(file, args, { maxLines, ...options }) {
+  let output;
+  try {
+    output = execFileSync(file, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], ...options });
+  } catch (err) {
+    output = typeof err.stdout === 'string' ? err.stdout : '';
+  }
+  return output.split('\n').filter(Boolean).slice(0, maxLines);
 }
 
 function collectFiles(root, extensions, maxFiles = 500) {
@@ -277,16 +290,13 @@ export const codeSearchTool = {
       let fallbackMethod = null;
 
       // Fallback 1: grep-based search (case-insensitive, simpler)
-      try {
-        const hasRg = hasBin('rg');
-        const escaped = symbol.replace(/'/g, "'\\''");
-        const cmd = hasRg
-          ? `rg --no-heading --line-number -i --max-count 20 -e '${escaped}' '${rootDir}' 2>/dev/null | head -20`
-          : `grep -rnI -i --max-count=20 '${escaped}' '${rootDir}' 2>/dev/null | head -20`;
-        const output = execSync(cmd, { encoding: 'utf8', timeout: 10000, maxBuffer: 256 * 1024 }).trim();
-        if (output) {
+      if (!IS_WIN) {
+        const searchOptions = { timeout: 10000, maxBuffer: 256 * 1024, maxLines: 15 };
+        const lines = hasBin('rg')
+          ? runSearchCommand('rg', ['--no-heading', '--line-number', '-i', '--max-count', '20', '-e', symbol, rootDir], searchOptions)
+          : runSearchCommand('grep', ['-rnI', '-i', '--max-count=20', '-e', symbol, rootDir], searchOptions);
+        if (lines.length) {
           fallbackMethod = 'grep_fallback';
-          const lines = output.split('\n').filter(Boolean).slice(0, 15);
           for (const line of lines) {
             const match = line.match(/^(.+?):(\d+):(.*)$/);
             if (match) {
@@ -299,26 +309,25 @@ export const codeSearchTool = {
             }
           }
         }
-      } catch { /* grep found nothing or errored */ }
+      }
 
       // Fallback 2: filename search
-      if (fallbackResults.length === 0) {
-        try {
-          const escaped = symbol.replace(/'/g, "'\\''").toLowerCase();
-          const cmd = `find '${rootDir}' -iname '*${escaped}*' -not -path '*/node_modules/*' -not -path '*/.git/*' 2>/dev/null | head -10`;
-          const output = execSync(cmd, { encoding: 'utf8', timeout: 5000 }).trim();
-          if (output) {
-            fallbackMethod = 'filename_search';
-            for (const f of output.split('\n').filter(Boolean)) {
-              fallbackResults.push({
-                file: path.relative(rootDir, f) || f,
-                line: 0,
-                text: `[filename match]`,
-                name: path.basename(f),
-              });
-            }
+      if (fallbackResults.length === 0 && !IS_WIN) {
+        const files = runSearchCommand('find', [
+          rootDir, '-iname', `*${symbol.toLowerCase()}*`,
+          '-not', '-path', '*/node_modules/*', '-not', '-path', '*/.git/*',
+        ], { timeout: 5000, maxLines: 10 });
+        if (files.length) {
+          fallbackMethod = 'filename_search';
+          for (const f of files) {
+            fallbackResults.push({
+              file: path.relative(rootDir, f) || f,
+              line: 0,
+              text: `[filename match]`,
+              name: path.basename(f),
+            });
           }
-        } catch { /* find errored */ }
+        }
       }
 
       if (fallbackResults.length > 0) {
@@ -562,11 +571,14 @@ export const findReferencesTool = {
     // Try ripgrep first (fast), fall back to manual scan
     if (hasBin('rg')) {
       try {
-        const langFlag = args.language ? `--type=${args.language}` : '';
-        const out = execSync(
-          `rg --json -n --word-regexp ${langFlag} ${JSON.stringify(symbol)}`,
-          { cwd: rootDir, encoding: 'utf8', timeout: 15000, maxBuffer: 4 * 1024 * 1024 }
-        );
+        const rgArgs = ['--json', '-n', '--word-regexp'];
+        if (args.language) rgArgs.push(`--type=${args.language}`);
+        // Pass the root explicitly: with no path and a piped stdin, rg searches stdin.
+        rgArgs.push('-e', symbol, rootDir);
+        const out = execFileSync('rg', rgArgs, {
+          cwd: rootDir, encoding: 'utf8', timeout: 15000, maxBuffer: 4 * 1024 * 1024,
+          stdio: ['ignore', 'pipe', 'ignore'],
+        });
         const results = out.trim().split('\n')
           .filter(Boolean)
           .map(line => { try { return JSON.parse(line); } catch { return null; } })
