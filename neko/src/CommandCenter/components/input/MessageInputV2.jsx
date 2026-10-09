@@ -235,6 +235,46 @@ function summarizePermissionRequest(data = {}) {
   return { label: "Use tool", value: tool };
 }
 
+// The change a file edit will make, shown before it is approved. Opens at the
+// first changed line rather than the top of the file.
+function PermissionDiff({ diff }) {
+  const scrollRef = useRef(null);
+  const lines = useMemo(() => String(diff).split("\n"), [diff]);
+
+  useEffect(() => {
+    const container = scrollRef.current;
+    const firstChange = container?.querySelector("[data-changed]");
+    if (container && firstChange) container.scrollTop = Math.max(0, firstChange.offsetTop - 24);
+  }, [lines]);
+
+  return (
+    <div
+      ref={scrollRef}
+      aria-label="Proposed changes"
+      className="relative mt-2 max-h-40 overflow-auto rounded-xl border border-gray-200 bg-gray-950 py-2 font-mono text-[11px] leading-relaxed dark:border-gray-800 midnight:border-slate-800"
+    >
+      {lines.map((line, index) => {
+        const header = line.startsWith("---") || line.startsWith("+++");
+        const added = !header && line.startsWith("+");
+        const removed = !header && line.startsWith("-");
+        return (
+          <div
+            key={index}
+            data-changed={added || removed ? "" : undefined}
+            className={`whitespace-pre px-3 ${
+              added ? "bg-emerald-500/15 text-emerald-300"
+                : removed ? "bg-rose-500/15 text-rose-300"
+                  : header ? "text-gray-500" : "text-gray-400"
+            }`}
+          >
+            {line || " "}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function PendingInteractionInput({ interaction, onPermissionDecision, onAskUserAnswer, tokenUsage, isRunning, onStop }) {
   const [answer, setAnswer] = useState("");
   const [now, setNow] = useState(() => Date.now());
@@ -380,11 +420,15 @@ function PendingInteractionInput({ interaction, onPermissionDecision, onAskUserA
                 <span className={`text-[10px] font-medium ${expired ? "text-red-500" : "text-gray-400 dark:text-gray-500"}`}>{statusText}</span>
               </div>
               <p className="mt-1 text-sm text-gray-800 dark:text-gray-100 midnight:text-slate-100">{intent.label}</p>
-              <div className="mt-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-950/50 midnight:border-slate-800 midnight:bg-slate-950/50">
-                <code className="block max-h-24 overflow-y-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-gray-700 dark:text-gray-300 midnight:text-slate-300">
-                  {intent.value}
-                </code>
-              </div>
+              {typeof data.diff === "string" && data.diff ? (
+                <PermissionDiff diff={data.diff} />
+              ) : (
+                <div className="mt-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-950/50 midnight:border-slate-800 midnight:bg-slate-950/50">
+                  <code className="block max-h-24 overflow-y-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-gray-700 dark:text-gray-300 midnight:text-slate-300">
+                    {intent.value}
+                  </code>
+                </div>
+              )}
               {data.workingDir && (
                 <p className="mt-1 truncate text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">{data.workingDir}</p>
               )}
