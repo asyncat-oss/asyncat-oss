@@ -1,7 +1,22 @@
+import { useEffect } from 'react';
 import { AlertTriangle, X, Loader2, Check } from 'lucide-react';
 import Portal from '../../../components/Portal';
 
 const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message, confirmLabel = 'Confirm', cancelLabel = 'Cancel', isDestructive = false, isProcessing = false }) => {
+  // Escape cancels. Listen in the capture phase and stop the event there so a
+  // dialog underneath (this often opens on top of one) does not close too.
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape' && !isProcessing) {
+        e.stopPropagation();
+        onClose?.();
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [isOpen, isProcessing, onClose]);
+
   if (!isOpen) return null;
 
   return (
@@ -12,6 +27,8 @@ const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message, confirmLabel
           onClick={(e) => e.stopPropagation()}
           role="alertdialog"
           aria-modal="true"
+          aria-labelledby="confirm-modal-title"
+          aria-describedby="confirm-modal-message"
         >
           {/* Header */}
           <div className={`px-6 py-5 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 flex items-center justify-between ${isDestructive ? 'bg-red-50/50 dark:bg-red-900/10 midnight:bg-red-950/20' : 'bg-gray-50/50 dark:bg-gray-800/50 midnight:bg-slate-900/30'}`}>
@@ -23,11 +40,12 @@ const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message, confirmLabel
                   <Check className="w-5 h-5" />
                 )}
               </div>
-              <h2 className="text-xl font-semibold">{title}</h2>
+              <h2 id="confirm-modal-title" className="text-xl font-semibold">{title}</h2>
             </div>
             {!isProcessing && (
               <button
                 onClick={onClose}
+                aria-label="Close"
                 className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 bg-transparent hover:bg-gray-100/50 dark:hover:bg-gray-800 rounded-full p-2 transition-colors"
                 disabled={isProcessing}
               >
@@ -38,7 +56,7 @@ const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message, confirmLabel
 
           {/* Body */}
           <div className="px-6 py-6 text-gray-600 dark:text-gray-300 midnight:text-slate-300">
-            <p className="text-base whitespace-pre-line">{message}</p>
+            <p id="confirm-modal-message" className="text-base whitespace-pre-line">{message}</p>
           </div>
 
           {/* Footer */}
@@ -46,6 +64,7 @@ const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message, confirmLabel
             <button
               onClick={onClose}
               disabled={isProcessing}
+              autoFocus
               className="px-4 py-2 bg-white dark:bg-gray-800 midnight:bg-slate-800 border border-gray-200 dark:border-gray-700 midnight:border-gray-700 text-gray-700 dark:text-gray-300 midnight:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 midnight:hover:bg-slate-700 transition-colors font-medium cursor-pointer disabled:opacity-50"
             >
               {cancelLabel}

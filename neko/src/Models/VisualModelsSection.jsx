@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { visualModelsApi } from '../Settings/settingApi.js';
 import { Badge, Panel, SectionHeader } from './modelPageShared.jsx';
+import { useConfirm } from '../components/confirmContext.js';
 
 const TYPE_META = {
   image: {
@@ -641,6 +642,7 @@ const VisualColumn = ({ type, models, loading, highlightedItem, onDelete, onRelo
 };
 
 const VisualModelsSection = ({ highlightedItem = null, onModelsChange }) => {
+  const confirm = useConfirm();
   const [models, setModels] = useState({ image: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -673,6 +675,11 @@ const VisualModelsSection = ({ highlightedItem = null, onModelsChange }) => {
   }, [loadData]);
 
   const handleDelete = async (model) => {
+    const name = model.name || model.filename || 'this model';
+    const ok = await confirm(model.isExternal
+      ? { title: 'Remove from library?', message: `${name} will be removed from Asyncat. The file on disk is not touched.`, confirmLabel: 'Remove' }
+      : { title: 'Delete model?', message: `${name} will be deleted from disk. You will need to download it again to use it.`, confirmLabel: 'Delete', destructive: true });
+    if (!ok) return;
     try {
       await visualModelsApi.deleteModel(model.id || model.filename, model.type);
       await loadData();

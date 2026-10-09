@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Mic, Volume2, Play, Square, Trash2, FolderOpen, Plus, RefreshCw, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 import { audioApi } from '../Settings/settingApi.js';
 import { Badge, Panel, SectionHeader } from './modelPageShared.jsx';
+import { useConfirm } from '../components/confirmContext.js';
 
 const STATUS_COLORS = {
   idle: 'bg-gray-400',
@@ -191,6 +192,7 @@ const AddPathForm = ({ type, onAdd }) => {
 };
 
 const AudioModelsSection = ({ highlightedItem = null, onModelsChange, mode = 'all' }) => {
+  const confirm = useConfirm();
   const [whisperModels, setWhisperModels] = useState([]);
   const [ttsModels, setTtsModels] = useState([]);
   const [whisperStatus, setWhisperStatus] = useState({ status: 'idle' });
@@ -299,6 +301,11 @@ const AudioModelsSection = ({ highlightedItem = null, onModelsChange, mode = 'al
   };
 
   const handleDelete = async (model) => {
+    const name = model.name || model.filename || 'this model';
+    const ok = await confirm(model.isExternal
+      ? { title: 'Remove from library?', message: `${name} will be removed from Asyncat. The file on disk is not touched.`, confirmLabel: 'Remove' }
+      : { title: 'Delete model?', message: `${name} will be deleted from disk. You will need to download it again to use it.`, confirmLabel: 'Delete', destructive: true });
+    if (!ok) return;
     try {
       await audioApi.deleteModel(model.id, model.isExternal ? undefined : model.type);
       loadData();

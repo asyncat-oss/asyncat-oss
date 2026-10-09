@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useUiPreferences } from '../contexts/UiPreferencesContext.jsx';
+import { useConfirm } from '../components/confirmContext.js';
 
 const card = 'overflow-hidden rounded-xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950';
 const row = 'flex items-center justify-between gap-4 rounded-lg px-3 py-3 transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03] midnight:hover:bg-white/[0.03]';
@@ -101,6 +102,7 @@ function ToggleRow({ icon: Icon, label, description, checked, onChange, disabled
 
 export default function WorkbenchSection() {
   const { workbenchPreferences: prefs, setWorkbenchPreference: setPreference, resetWorkbenchLayout } = useUiPreferences();
+  const confirm = useConfirm();
   const [clearing, setClearing] = useState(false);
   const [clearMessage, setClearMessage] = useState('');
 
@@ -130,6 +132,13 @@ export default function WorkbenchSection() {
   }, [platform]);
 
   const clearBrowserData = async () => {
+    const ok = await confirm({
+      title: 'Clear browsing data?',
+      message: "Cookies, history and saved site data for Asyncat's built-in browser will be cleared, so you'll be signed out of sites there. Your system browser is not affected.",
+      confirmLabel: 'Clear data',
+      destructive: true,
+    });
+    if (!ok) return;
     setClearing(true);
     setClearMessage('');
     try {

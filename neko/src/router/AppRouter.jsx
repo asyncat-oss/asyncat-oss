@@ -5,6 +5,7 @@ import { createBrowserRouter, RouterProvider, Navigate, useParams } from 'react-
 import { UserProvider } from '../contexts/UserContext';
 import { WorkspaceProvider } from '../contexts/WorkspaceContext';
 import { UiPreferencesProvider } from '../contexts/UiPreferencesContext';
+import ConfirmProvider from '../components/ConfirmProvider';
 import { CommandCenterProvider } from '../CommandCenter/context/CommandCenterContextEnhanced';
 import ErrorBoundary from '../error/ErrorBoundary';
 import RouteErrorElement from '../error/ErrorBoundary';
@@ -44,7 +45,9 @@ const LocalApp = ({ children }) => {
       <WorkspaceProvider>
         <CommandCenterProvider>
           <UiPreferencesProvider>
-            {children}
+            <ConfirmProvider>
+              {children}
+            </ConfirmProvider>
           </UiPreferencesProvider>
         </CommandCenterProvider>
       </WorkspaceProvider>

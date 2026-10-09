@@ -394,7 +394,9 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
 
   const openAction = useCallback((nextAction, nextPayload = {}) => {
     setCommitMenuOpen(false);
-    if (nextAction === 'stage' || nextAction === 'unstage' || nextAction === 'discard') {
+    // Staging is reversible, so it runs straight away. Discard is not: it
+    // goes through the confirm dialog like every other destructive action.
+    if (nextAction === 'stage' || nextAction === 'unstage') {
       executeAction(nextAction, nextPayload);
       return;
     }
