@@ -81,6 +81,19 @@ Starts at `http://127.0.0.1:8716` and only accepts connections from the local
 machine. Browser requests must come from Asyncat's own frontend: requests with
 another `Origin`, or addressed to a non-local `Host`, are rejected.
 
+## Agent tools
+
+About 220 tools are registered. Each agent step sends the model a core set
+chosen for the task: about 40 with native tool calling, 24 for models that
+read tool definitions from the prompt. The rest stay reachable through the
+`tool_search` tool, which returns matching definitions and makes those tools
+callable for the rest of the run. This keeps a step's prompt small enough for
+local models.
+
+In Work's Action mode, any tool not marked safe asks for approval first
+(`_checkPermission` in `src/agent/AgentRuntime.js`). File edit and write
+requests carry a diff, so the change is visible before it is allowed.
+
 ## Local profile
 
 Asyncat creates one local profile automatically. It is used only to associate

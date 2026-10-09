@@ -2,9 +2,11 @@
 
 **A local-first AI agent desktop app.** 220+ tools. 51 skills. Self-improving. Desktop automation. Fully offline.
 
-> **v0.8.0-beta.5** · MIT · [Install](#quick-start) · [Website](https://asyncat.com)
+> **v0.8.0-beta.6** · MIT · [Install](#quick-start) · [Screenshots](#screenshots) · [Website](https://asyncat.com)
 
-![asyncat home screen](neko/public/image.png)
+![Asyncat finding and fixing a failing test](docs/images/demo.gif)
+
+<sub>A Work-mode run in a project folder: the agent makes a plan, asks before running `npm test` and before editing a file (with the diff), then runs the tests again. The commands and the edit really ran. The model's replies came from a scripted local endpoint, so the recording can be reproduced.</sub>
 
 ---
 
@@ -24,23 +26,39 @@ It is not a chatbot wrapper. It controls your screen, writes and runs code, mana
 | **51 bundled skills** | Reusable instruction modules: code review, debugging, TDD, deployment, security audit, incident response, data engineering, and more |
 | **Basal Ganglia** | Watches which tools succeed for which kinds of goals. After 3 successful runs of the same goal pattern with the same set of tools it writes a new skill automatically. No annotation, no config |
 | **Chat + agent modes** | **Chat** talks to the model directly (no tools). **Work** runs the agent in `plan` (read-only tools), `action` (full ReAct loop, asks before risky tools) or **Yolo** (`action` with auto-approve). A `design` mode (canvases, artifacts and images; no source edits or shell/git writes) is available through the API |
+| **Approvals** | Before a risky tool runs, Work asks: approve once, trust it for the rest of the run, or always allow. File edits show the diff before you decide |
+| **Small prompts for local models** | Each agent step sends a core set of tools (about 40, or 24 for models that read tools from the prompt) instead of the full list. The agent finds the rest with `tool_search` when it needs them |
 | **35+ providers** | OpenAI, Anthropic, Gemini, Ollama, llama.cpp, MLX, LM Studio, OpenRouter, DeepSeek, Groq, Together AI, Mistral, Perplexity, Cohere, and more |
 | **Agent profiles** | Bundle a soul, working directory, tool permissions, and max rounds into named configurations. Switch profiles per task |
 | **Desktop automation** | Click, type, read screen content via OCR, focus windows — controls your actual machine |
 | **Sandboxes** | Isolated workspace copies. Review changes as a unified diff. Apply or discard. Commit to a branch |
-| **Schedules** | One place for recurring agent jobs and scheduled workflows, with friendly recurrence controls |
-| **Workflows** | Chain agent steps into a saved automation. Run on demand or on a cron schedule, under any agent profile. Each step can pass its output to the next. The agent can trigger workflows too |
+| **Automations** | Workflows, Schedules and Activity under one sidebar entry. Chain agent steps into a saved workflow and run it on demand or on a schedule, under any agent profile; each step can pass its output to the next. Schedule single agent jobs too, and follow every run in one feed. The agent can trigger workflows itself |
 | **Command palette** | `Cmd/Ctrl+K` from anywhere — jump to any page, or search projects, notes, chats, tasks, and memory |
 | **Semantic memory** | Recall by meaning, not just keywords. Uses your provider's embeddings when available, falls back to an offline keyword (hashed lexical) index |
 | **Built-in browser** | A real tabbed browser the agent shares. Hand it the page you're on with one click, or let it browse on its own |
-| **Activity** | One feed for task agents, scheduled jobs, workflow runs, and outbound notifications |
 | **MCP support** | Add stdio MCP servers to `data/mcp.json` in the backend data folder (`den/data/mcp.json` from source, `<user data>/data/mcp.json` when installed). It is created on first start and hot-reloaded. Also manageable through `/api/agent/mcp` (no UI yet) |
 | **Persistent memory** | SQLite-backed key-value memory with types: `user`, `feedback`, `project`, `reference`, `fact`, `preference`, `context`, `task_state` |
 | **Workspace** | Notes (markdown, delta-based, export to DOCX/PDF), Kanban (columns, cards, checklists) |
 | **System tray** | Left-click for quick chat, right-click to show Asyncat, restart the backend, or quit. On macOS, closing the window keeps the backend, schedules, and workflows running |
-| **Global shortcuts** | `Cmd/Ctrl+Shift+A` summons Asyncat from any app; `Cmd/Ctrl+Shift+Space` opens quick chat |
+| **Global shortcuts** | `Cmd/Ctrl+Shift+A` summons Asyncat from any app; `Cmd/Ctrl+Shift+Space` opens quick chat. Change or turn off either one in **Settings → Appearance** |
+| **Fine-tuning (Labs)** | **Models → Training** trains a LoRA adapter for a local model and saves it to disk. Loading the adapter is still up to you |
 | **Native notifications** | System-level alerts when a background run finishes, asks you a question, or needs tool approval |
 | **Fully offline** | Every feature works with local models. No data leaves your machine (installed builds only check GitHub Releases for updates) |
+
+---
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Approving a file edit with its diff, dark theme](docs/images/approval.png) | ![Automations: a scheduled workflow, Midnight theme](docs/images/automations.png) |
+| **Approvals** show what a file edit will change before you allow it. | **Automations** keeps Workflows, Schedules and Activity together. |
+| ![Models page, dark theme](docs/images/models.png) | ![A finished agent run](docs/images/agent-run.png) |
+| **Models**: providers, local engines, audio, images, usage and training. | **A finished run**: the answer, what changed, and the steps folded away. |
+
+![System-wide shortcut settings](docs/images/shortcuts.png)
+
+The system-wide shortcuts can be rebound or turned off, and the card says when another app already owns a combination.
 
 ---
 
@@ -48,7 +66,7 @@ It is not a chatbot wrapper. It controls your screen, writes and runs code, mana
 
 Moving from a web app to a native desktop app unlocks things that aren't possible in a browser:
 
-- **Global keyboard shortcut** — `Cmd/Ctrl+Shift+A` brings Asyncat up from anywhere on your machine, whether you're in a code editor, a terminal, or a browser. No alt-tabbing to find the right tab.
+- **Global keyboard shortcut** — `Cmd/Ctrl+Shift+A` brings Asyncat up from anywhere on your machine, whether you're in a code editor, a terminal, or a browser. No alt-tabbing to find the right tab. If it clashes with a shortcut you use, pick another combination or turn it off in **Settings → Appearance**.
 - **System tray** — Quick chat is one click away in your menu bar. On macOS, closing the window keeps the agent, schedules, and workflows running in the background; on Windows and Linux, closing the window quits Asyncat.
 - **Native notifications** — When a background run finishes, asks you something, or needs approval, you get a real OS notification, not a browser popup that requires a permission grant.
 - **No browser security sandbox** — Screen capture, keyboard control, OCR, and desktop automation tools run without the restrictions that a browser tab imposes.
@@ -202,7 +220,7 @@ chmod +x Asyncat-*.AppImage
 | `Cmd/Ctrl+R` | Reload window |
 | `Shift+F5` | Force reload window (ignore cache) |
 
-Page navigation shortcuts (`Cmd/Ctrl+1`…) can be changed in **Settings → Appearance**.
+Page navigation shortcuts (`Cmd/Ctrl+1`…) and the two global shortcuts can be changed in **Settings → Appearance**. The global ones can also be turned off.
 
 ---
 
@@ -225,7 +243,7 @@ Start a **New chat** and pick **Chat** (talks to the model directly, no tools) o
 
 ### 3. Run scheduled tasks
 
-Go to **Schedules** and create repeating agent jobs — daily reports, hourly checks, custom cron expressions.
+Go to **Automations → Schedules** and create repeating agent jobs — hourly checks, a daily report at a set time — or put a workflow on a schedule.
 
 ### 4. Manage skills and memory
 
@@ -246,6 +264,7 @@ asyncat-oss/
 │   ├── pet.js       #   Optional desktop companion that shows agent status
 │   ├── updater.js   #   Assisted update checks against GitHub Releases
 │   ├── menu.js      #   Native OS menu bar
+│   ├── shortcuts.js #   System-wide shortcuts (settings in shortcut-config.js)
 │   ├── preload.js   #   Secure renderer ↔ main bridge
 │   └── constants.js #   Paths, ports, platform flags
 ├── den/             # Backend — Express API + Agent Runtime
@@ -276,11 +295,12 @@ asyncat-oss/
 │       ├── Agent/             # Agents page (profiles)
 │       ├── Models/            # LLM providers, local models and runtimes, audio, images
 │       ├── Profiles/          # Agent profiles
-│       ├── Scheduler/         # Unified Schedules UI
+│       ├── Automations/       # Tab bar grouping the next three pages
+│       ├── Scheduler/         # Schedules
 │       ├── Workflows/         # Workflow builder
 │       ├── Activity/          # Background activity feed
 │       ├── Tools/             # Tools & skills browser
-│       ├── Training/          # Fine-tuning jobs
+│       ├── Training/          # Fine-tuning jobs (shown as Models → Training)
 │       ├── Settings/          # Settings tabs
 │       ├── projects/          # Projects
 │       ├── sidebar/           # Sidebar and Cmd/Ctrl+K search
@@ -296,6 +316,7 @@ asyncat-oss/
 ```text
 Electron starts
   → electron/main.js — single-instance lock, IPC, updater, menu, tray, global shortcuts
+    (registered from the user's settings by electron/shortcuts.js)
   → creates the window and shows the loading screen
   → electron/backend.js — spawns den/src/index.js (bundled Node.js when packaged,
     system Node in dev; dev scripts reuse the watch-mode backend instead)
@@ -312,6 +333,7 @@ Electron starts
 User goal
   → AgentRuntime.run() — ReAct loop (up to 25 rounds)
   → System prompt: soul + skills + memory + capabilities
+  → Core tool set for the task; tool_search loads others on demand
   → Any model provider (local or cloud)
   → Tool execution with permission guards
   → BasalGanglia observes patterns, synthesizes skills
