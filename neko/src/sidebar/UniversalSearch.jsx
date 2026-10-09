@@ -257,7 +257,8 @@ const UniversalSearch = ({ isOpen, onClose }) => {
         searchApi.search(term, { limit: 6 }).catch(() => null),
         agentApi.semanticSearch(term, 5).catch(() => null),
       ]);
-      setServerResults(data?.results || []);
+      // A note can only be opened from the chat it was written in.
+      setServerResults((data?.results || []).filter(r => r._type !== 'note' || r.conversationId));
       setMemoryResults((mem?.results || []).map(m => ({ _type: 'memory', id: m.key, title: m.key, snippet: m.content })));
     } catch {
       setServerResults(null); // fall back to local
@@ -368,7 +369,7 @@ const UniversalSearch = ({ isOpen, onClose }) => {
         return;
       }
       if (item._type === 'memory') {
-        navigate('/tools');
+        navigate('/tools?tab=memory');
         onClose();
         return;
       }
@@ -378,7 +379,9 @@ const UniversalSearch = ({ isOpen, onClose }) => {
       } else if (item._type === 'conversation') {
         navigate(`/conversations/${item.id}`);
       } else if (item._type === 'note') {
-        navigate(item.projectId ? `/projects/${item.projectId}/notes/${item.id}` : `/notes/${item.id}`);
+        // Notes have no page of their own; they live as artifacts in the chat
+        // that created them. Results without a chat are filtered out below.
+        navigate(`/conversations/${item.conversationId}`);
       } else if (item._type === 'card') {
         navigate(item.projectId ? `/tasks/${item.projectId}/list` : '/tasks');
       }

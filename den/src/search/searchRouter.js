@@ -74,7 +74,7 @@ router.get('/', (req, res) => {
     // ── Notes ────────────────────────────────────────────────────────────────
     if (rawTypes.includes('notes')) {
       const rows = db.prepare(`
-        SELECT id, title, content, projectid, updatedat
+        SELECT id, title, content, projectid, conversation_id, updatedat
         FROM notes
         WHERE createdby = ?
           AND isarchived = 0
@@ -89,6 +89,8 @@ router.get('/', (req, res) => {
         title: r.title || 'Untitled Note',
         snippet: snippet(r.content, q),
         projectId: r.projectid || null,
+        // The chat the note was created in, which is where it can be opened.
+        conversationId: r.conversation_id || null,
         updatedAt: r.updatedat,
       }));
     }

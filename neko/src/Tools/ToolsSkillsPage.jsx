@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import {
   Search, Wrench, File,
@@ -798,7 +799,11 @@ NewSkillModal.propTypes = {
 };
 
 export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
-  const [activeTab, setActiveTab] = useState(initialTab);
+  // `?tab=memory` (or soul/skills/tools) opens a specific tab, e.g. from ⌘K.
+  const [searchParams] = useSearchParams();
+  const requestedTab = searchParams.get('tab');
+  const startTab = ['tools', 'skills', 'soul', 'memory'].includes(requestedTab) ? requestedTab : initialTab;
+  const [activeTab, setActiveTab] = useState(startTab);
   const [tools, setTools] = useState([]);
   const [skills, setSkills] = useState([]);
   const [loadingTools, setLoadingTools] = useState(true);
@@ -844,8 +849,8 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
   const [consolidating, setConsolidating] = useState(false);
 
   useEffect(() => {
-    setActiveTab(initialTab);
-  }, [initialTab]);
+    setActiveTab(startTab);
+  }, [startTab]);
 
   useEffect(() => {
     if (toolsFetchedRef.current) return;
