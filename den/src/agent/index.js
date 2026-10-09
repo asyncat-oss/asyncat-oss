@@ -18,6 +18,7 @@ import { osTools } from './tools/osTools.js';
 import { screenTools } from './tools/screenTools.js';
 import { dataTools } from './tools/dataTools.js';
 import { planTools } from './tools/planTools.js';
+import { toolSearchTools } from './tools/toolSearchTool.js';
 import { askUserTools } from './tools/askUserTool.js';
 import { skillTools } from './tools/skillTools.js';
 import { artifactTools } from './tools/artifactTools.js';
@@ -87,6 +88,7 @@ export async function initializeAgent() {
   toolRegistry.registerAll(screenTools);
   toolRegistry.registerAll(dataTools);
   toolRegistry.registerAll(planTools);
+  toolRegistry.registerAll(toolSearchTools);
   toolRegistry.registerAll(askUserTools);
   toolRegistry.registerAll(skillTools);
   toolRegistry.registerAll(artifactTools);

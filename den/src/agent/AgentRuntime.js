@@ -140,6 +140,21 @@ const TOOL_PROFILE_PATTERNS = {
   schedule: /\b(schedule|scheduled|cron|remind|reminder|every\s+\d*|hourly|daily|tomorrow|later)\b/i,
   navigation: /\b(open|browser|page|website|screenshot|click|navigate|inspect\s+page|localhost)\b/i,
 };
+// The prompt carries a core set of tool definitions, not all ~220; the rest are
+// reachable through tool_search. Every definition is resent on every step: with
+// native tool calling the full set cost ~32k tokens (and was also repeated as
+// text in the system prompt), OpenAI-style APIs reject more than 128 tools, and
+// for local models reading the text list (~28k tokens) filled most of a small
+// context window before the user's message.
+const CORE_TOOL_LIMIT_NATIVE = 40;
+const CORE_TOOL_LIMIT_TEXT = 24;
+const MAX_NATIVE_TOOLS = 128;
+// In the core set whenever the mode allows them, whatever the task.
+const ESSENTIAL_TOOLS = [
+  'tool_search', 'todo_write', 'ask_user',
+  'read_file', 'write_file', 'edit_file', 'patch_file', 'list_directory', 'search_files', 'find_files',
+  'run_command', 'web_search', 'fetch_url', 'save_memory', 'recall_memory', 'create_artifact',
+];
 const TOOL_CATEGORY_PRIORITY = {
   design: ['plan', 'design', 'artifact', 'visual', 'browser', 'file', 'code', 'lsp', 'search', 'web', 'workspace', 'skill', 'memory'],
   coding: ['plan', 'file', 'code', 'lsp', 'rag', 'git', 'shell', 'workspace', 'dev', 'docker', 'skill', 'memory'],
@@ -444,21 +459,31 @@ export class AgentRuntime {
     // Load relevant memories
     const memories = this._loadMemories(goal);
 
-    // Build tool descriptions and select skills in parallel — both are independent.
+    // Every tool this run may call (the mode/permission scope); knownTools below
+    // stays this full set. Only a core subset is described to the model, and
+    // tool_search makes the rest callable on demand.
     const toolDefs = this._toolDefinitionsForMode(goal);
-    const [toolDescriptions, skillSelection] = await Promise.all([
-      Promise.resolve(ToolCallFormatter.formatToolsForPrompt(
-        toolDefs.map(t => ({ name: t.name, description: t.description, parameters: t.parameters }))
-      )),
-      selectRelevantSkillsWithLlm({
-        aiClient: this.aiClient,
-        model: this.model,
-        goal,
-        conversationHistory,
-        workingDir: this.workingDir,
-        limit: 5,
-      }),
-    ]);
+    const coreToolDefs = this._selectCoreTools(toolDefs);
+    this.coreToolNames = coreToolDefs.map(t => t.name);
+    this.loadedToolNames = new Set();
+    const partialToolList = coreToolDefs.length < toolDefs.length;
+    // With native tool calling the API request already carries the definitions,
+    // so the prompt only needs the tool_search hint (it used to repeat every
+    // definition as text, doubling the prompt).
+    const toolDescriptions = this.supportsNativeTools
+      ? (partialToolList ? `\n# More Tools\n\n${ToolCallFormatter.toolSearchHint()}\n` : '')
+      : ToolCallFormatter.formatToolsForPrompt(
+          coreToolDefs.map(t => ({ name: t.name, description: t.description, parameters: t.parameters })),
+          { partial: partialToolList },
+        );
+    const skillSelection = await selectRelevantSkillsWithLlm({
+      aiClient: this.aiClient,
+      model: this.model,
+      goal,
+      conversationHistory,
+      workingDir: this.workingDir,
+      limit: 5,
+    });
     const relevantSkills = skillSelection.skills || [];
 
     if (relevantSkills.length > 0) {
@@ -571,6 +596,8 @@ export class AgentRuntime {
           return await embedText(text, { userId: this.userId });
         } catch { return null; }
       },
+      // Backs tool_search; limited to the tools this run may already call.
+      discoverTools: (query, limit) => this._discoverTools(query, limit, toolDefs),
     };
 
     const knownTools = toolDefs.map(t => t.name);
@@ -1559,7 +1586,7 @@ export class AgentRuntime {
 
     // For cloud models with native tool support, pass tool definitions via API
     if (useNativeTools) {
-      const nativeTools = toolRegistry.toOpenAIFormat(this._toolDefinitionsForMode().map(t => t.name));
+      const nativeTools = toolRegistry.toOpenAIFormat(this._activeNativeToolNames(options.forceToolName));
       if (nativeTools.length > 0) {
         params.tools = nativeTools;
         params.tool_choice = options.forceToolName
@@ -2084,6 +2111,81 @@ export class AgentRuntime {
       : visibleTools;
 
     return this._rankToolsForGoal(scopedTools, goal);
+  }
+
+  // Pick the tool definitions to describe to the model: the essentials, then
+  // the best-ranked tools for this goal, up to the core limit. Sets that fit
+  // (no project attached, scoped sub-agents) are sent whole, and so is any set
+  // that cannot reach tool_search, so nothing becomes unreachable.
+  _selectCoreTools(toolDefs) {
+    const limit = this.supportsNativeTools ? CORE_TOOL_LIMIT_NATIVE : CORE_TOOL_LIMIT_TEXT;
+    const byName = new Map(toolDefs.map(t => [t.name, t]));
+    if (!byName.has('tool_search')) return toolDefs;
+    const withoutSearch = toolDefs.filter(t => t.name !== 'tool_search');
+    if (withoutSearch.length <= limit) return withoutSearch;
+
+    const picked = new Map();
+    for (const name of ESSENTIAL_TOOLS) {
+      if (byName.has(name)) picked.set(name, byName.get(name));
+    }
+    for (const tool of toolDefs) {
+      if (picked.size >= limit) break;
+      if (!picked.has(tool.name)) picked.set(tool.name, tool);
+    }
+    return [...picked.values()];
+  }
+
+  // Tools to declare in a native tool-calling request: the core set plus any
+  // found with tool_search during this run, within the mode's allowed set.
+  _activeNativeToolNames(forceToolName = null) {
+    const allowedDefs = this._toolDefinitionsForMode();
+    const allowed = new Set(allowedDefs.map(t => t.name));
+    const core = Array.isArray(this.coreToolNames)
+      ? this.coreToolNames
+      : this._selectCoreTools(allowedDefs).map(t => t.name);
+    const names = [];
+    const add = (name) => {
+      if (name && allowed.has(name) && !names.includes(name)) names.push(name);
+    };
+    add(forceToolName);
+    core.forEach(add);
+    (this.loadedToolNames || []).forEach(add);
+    return names.slice(0, MAX_NATIVE_TOOLS);
+  }
+
+  // Backs the tool_search tool: keyword-match the tools this run may call and
+  // make the matches available from the next step on.
+  _discoverTools(query, limit, allowedDefs) {
+    const terms = String(query || '')
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(term => term.length >= 2)
+      // Plurals: "screenshots" should find take_screenshot.
+      .map(term => (term.length > 3 && term.endsWith('s') ? term.slice(0, -1) : term));
+    if (terms.length === 0) return [];
+
+    const scored = [];
+    allowedDefs.forEach((tool, rank) => {
+      if (tool.name === 'tool_search') return;
+      const name = tool.name.toLowerCase();
+      const words = name.split('_');
+      const description = String(tool.description || '').toLowerCase();
+      const category = String(tool.category || '').toLowerCase();
+      let score = 0;
+      for (const term of terms) {
+        if (words.includes(term)) score += 6;
+        else if (name.includes(term)) score += 4;
+        if (category === term) score += 3;
+        if (description.includes(term)) score += 1;
+      }
+      if (score > 0) scored.push({ tool, score, rank });
+    });
+    scored.sort((a, b) => b.score - a.score || a.rank - b.rank);
+
+    const found = scored.slice(0, limit).map(entry => entry.tool);
+    if (!this.loadedToolNames) this.loadedToolNames = new Set();
+    for (const tool of found) this.loadedToolNames.add(tool.name);
+    return found;
   }
 
   _rankToolsForGoal(tools, goal = '') {
