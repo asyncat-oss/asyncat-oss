@@ -5,6 +5,7 @@ import { fileIconMeta } from '../../../files/fileUtils.js';
 import { useUiPreferences } from '../../../contexts/UiPreferencesContext.jsx';
 import { openWebLink } from '../../../utils/openWebLink.js';
 import { tokenTracker } from '../stats/LocalModelStats';
+import { evalExpr } from '../../utils/chartExpression.js';
 
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
@@ -1056,7 +1057,9 @@ const MermaidBlock = ({ content }) => {
           mermaid.initialize({
             startOnLoad: false,
             theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default',
-            securityLevel: 'loose',
+            // Diagrams come from model output: keep mermaid's default sanitizing of
+            // labels and links (loose allowed javascript: URLs in click handlers).
+            securityLevel: 'strict',
             fontFamily: 'inherit',
           });
           mermaidInitialized = true;
@@ -1178,18 +1181,6 @@ const DiffBlock = ({ content }) => {
 const CHART_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4', '#d946ef', '#0ea5e9'];
 
 // ─── Shared math expression evaluator ────────────────────────────────────────
-
-function evalExpr(expr, vars) {
-  try {
-    const names = Object.keys(vars);
-    const vals = names.map(k => vars[k]);
-    const fn = new Function('Math', ...names, `"use strict"; return (${expr});`);
-    const v = fn(Math, ...vals);
-    return Number.isFinite(v) ? v : null;
-  } catch {
-    return null;
-  }
-}
 
 function fmtVal(v) {
   if (v == null) return '—';

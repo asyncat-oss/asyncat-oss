@@ -39,6 +39,9 @@ jobs:
       - name: Release tooling tests
         run: npm run test:release
 
+      - name: Frontend unit tests
+        run: npm test -w neko
+
       - name: Lint frontend
         run: npm run lint -w neko
 
