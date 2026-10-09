@@ -623,12 +623,17 @@ function startFrontendServer() {
     if (frontendServer) { resolve(); return; }
 
     frontendServer = http.createServer((req, res) => {
-      let urlPath = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
+      let urlPath;
+      try {
+        urlPath = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
+      } catch {
+        res.writeHead(400); res.end(); return;
+      }
       if (urlPath === '/') urlPath = '/index.html';
 
       const filePath = path.join(NEKO_DIST, urlPath);
-      // Security: prevent directory traversal
-      if (!filePath.startsWith(NEKO_DIST)) {
+      // Security: prevent directory traversal (including sibling dirs like dist-*)
+      if (!filePath.startsWith(NEKO_DIST + path.sep)) {
         res.writeHead(403); res.end(); return;
       }
 
