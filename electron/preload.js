@@ -15,6 +15,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   isElectron:     true,
   isPackaged:     ipcRenderer.sendSync('app:is-packaged'),
 
+  // ─── System-wide Shortcuts ────────────────────────────────────────────
+  getGlobalShortcuts:   () => ipcRenderer.invoke('shortcuts:get'),
+  setGlobalShortcut:    (id, patch) => ipcRenderer.invoke('shortcuts:set', id, patch),
+  resetGlobalShortcuts: () => ipcRenderer.invoke('shortcuts:reset'),
+
   // ─── Window Controls ──────────────────────────────────────────────────
   minimizeWindow: () => ipcRenderer.send('window:minimize'),
   maximizeWindow: () => ipcRenderer.send('window:maximize'),

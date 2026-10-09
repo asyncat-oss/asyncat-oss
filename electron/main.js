@@ -12,6 +12,7 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 import { togglePopup, closePopup } from './popup.js';
 import { setupAutoUpdater, setupUpdaterIPC } from './updater.js';
+import { initShortcuts, registerShortcutIPC } from './shortcuts.js';
 import { startBackend, stopBackend, isBackendRunning } from './backend.js';
 import http from 'http';
 import net from 'net';
@@ -103,6 +104,7 @@ function setupPopupIPC() {
 }
 
 function setupIPC() {
+  registerShortcutIPC(ipcMain);
   ipcMain.handle('app:version', () => app.getVersion());
   ipcMain.handle('app:platform', () => process.platform);
   ipcMain.on('app:is-packaged', (event) => { event.returnValue = app.isPackaged; });
@@ -818,24 +820,23 @@ app.whenReady().then(async () => {
     onTrayClick: (tray) => togglePopup(tray),
   });
 
-  // Register global shortcut: Cmd/Ctrl+Shift+Space → toggle popup (quick agent)
-  globalShortcut.register('CmdOrCtrl+Shift+Space', () => {
-    togglePopup(null);
-  });
-
-  // Register global shortcut: Cmd/Ctrl+Shift+A → toggle window
-  globalShortcut.register('CmdOrCtrl+Shift+A', () => {
-    const win = getMainWindow();
-    if (win) {
-      if (win.isVisible() && win.isFocused()) {
-        win.hide();
+  // System-wide shortcuts (defaults Cmd/Ctrl+Shift+Space and Cmd/Ctrl+Shift+A).
+  // Users can rebind or turn them off in Settings → Appearance; see shortcuts.js.
+  initShortcuts({
+    quickAsk: () => togglePopup(null),
+    toggleWindow: () => {
+      const win = getMainWindow();
+      if (win) {
+        if (win.isVisible() && win.isFocused()) {
+          win.hide();
+        } else {
+          win.show();
+          win.focus();
+        }
       } else {
-        win.show();
-        win.focus();
+        bootApp();
       }
-    } else {
-      bootApp();
-    }
+    },
   });
 
   // Boot the app
