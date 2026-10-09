@@ -95,7 +95,7 @@ npm run electron:dev
 npm run electron:dev:tools
 ```
 
-In dev mode Electron loads the frontend from the Vite dev server (`localhost:8717`), so you get hot module replacement, and uses the backend that `nodemon` runs on port 8716, which restarts when you edit `den/`. Developer Tools are also available at any time from **View → Toggle Developer Tools**.
+In dev mode Electron loads the frontend from the Vite dev server (`localhost:8717`), so you get hot module replacement, and uses the backend that `npm run dev:backend` runs on port 8716 in Node's watch mode, which restarts when you edit `den/`. Developer Tools are also available at any time from **View → Toggle Developer Tools**.
 
 To work in a regular browser instead, `npm run dev` starts only the backend and the Vite dev server.
 
@@ -298,7 +298,7 @@ Electron starts
   → electron/main.js — single-instance lock, IPC, updater, menu, tray, global shortcuts
   → creates the window and shows the loading screen
   → electron/backend.js — spawns den/src/index.js (bundled Node.js when packaged,
-    system Node in dev; dev scripts reuse the nodemon backend instead)
+    system Node in dev; dev scripts reuse the watch-mode backend instead)
   → polls /health until the backend is ready (30s timeout; on failure a dialog
     offers the diagnostic logs and the app continues)
   → starts the static frontend server (neko/dist/) on port 8717 unless Vite is running

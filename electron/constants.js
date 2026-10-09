@@ -81,7 +81,7 @@ export const WINDOWS_APP_ID = APP_ID;
 export const OPEN_DEVTOOLS = IS_DEV && process.argv.includes('--open-devtools');
 
 /**
- * `npm run electron:dev` already runs den under nodemon. Spawning a second
+ * `npm run electron:dev` already runs den in watch mode. Spawning a second
  * copy would race it for the port and break backend hot reload.
  */
 export const USE_EXTERNAL_BACKEND = IS_DEV && process.argv.includes('--external-backend');
