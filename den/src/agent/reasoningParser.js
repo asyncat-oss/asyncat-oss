@@ -161,33 +161,78 @@ export function reasoningTextFromDelta(delta = {}) {
     candidates.push(delta.reasoning_details);
   }
 
-  return candidates
-    .map(value => {
-      if (!value) return '';
-      if (typeof value === 'string') return value;
-      if (typeof value.text === 'string') return value.text;
-      if (typeof value.content === 'string') return value.content;
-      if (typeof value.reasoning === 'string') return value.reasoning;
-      return '';
-    })
-    .join('');
+  const texts = candidates.map(value => {
+    if (!value) return '';
+    if (typeof value === 'string') return value;
+    if (typeof value.text === 'string') return value.text;
+    if (typeof value.content === 'string') return value.content;
+    if (typeof value.reasoning === 'string') return value.reasoning;
+    return '';
+  });
+  // Providers repeat the same text in several fields (OpenRouter sends both
+  // `reasoning` and `reasoning_details`), so use one field, not all of them.
+  // Only `reasoning_details` can legitimately hold several parts.
+  const direct = texts.slice(0, 6).find(Boolean);
+  return direct || texts.slice(6).join('');
 }
 
-export function appendReasoningText(existing = '', incoming = '') {
-  const current = String(existing || '');
-  const next = String(incoming || '');
-  if (!next) return current;
-  if (!current) return next;
-  if (current.endsWith(next)) return current;
-  if (next.startsWith(current)) return next;
+/**
+ * Joins the text chunks of a streamed response.
+ *
+ * Chunks are normally new text and are appended as they are, even when one
+ * starts with the same characters the previous one ended with ("10" + "0",
+ * "\n" + "\n"). A few providers instead resend everything so far in each
+ * chunk; a stream is treated that way only once three chunks in a row have
+ * each extended the previous one.
+ *
+ * push(chunk) returns the text to show now (may be '' while undecided);
+ * text() returns the full text.
+ */
+export function createStreamTextAccumulator() {
+  let mode = 'undecided'; // then 'append' or 'cumulative'
+  const pending = [];
+  let full = '';
 
-  const max = Math.min(current.length, next.length);
-  for (let size = max; size > 0; size--) {
-    if (current.slice(-size) === next.slice(0, size)) {
-      return current + next.slice(size);
-    }
-  }
-  return current + next;
+  const decide = (nextMode) => {
+    mode = nextMode;
+    full = mode === 'cumulative' ? pending[pending.length - 1] : pending.join('');
+    pending.length = 0;
+    return full;
+  };
+
+  return {
+    push(chunk) {
+      const next = String(chunk || '');
+      if (!next) return '';
+      if (mode === 'append') {
+        full += next;
+        return next;
+      }
+      if (mode === 'cumulative') {
+        if (next.length > full.length && next.startsWith(full)) {
+          const added = next.slice(full.length);
+          full = next;
+          return added;
+        }
+        if (next === full) return '';
+        full += next;
+        return next;
+      }
+      const previous = pending[pending.length - 1];
+      pending.push(next);
+      if (previous !== undefined && !(next.length > previous.length && next.startsWith(previous))) {
+        return decide('append');
+      }
+      return pending.length >= 3 ? decide('cumulative') : '';
+    },
+    text() {
+      return mode === 'undecided' ? pending.join('') : full;
+    },
+    /** Text held back while undecided; call once the stream ends. */
+    flush() {
+      return mode === 'undecided' && pending.length ? decide('append') : '';
+    },
+  };
 }
 
 export function combineReasoningParts(...parts) {

@@ -44,13 +44,15 @@ for (const item of cases) {
   });
 }
 
-test('joins OpenAI-compatible reasoning delta fields', () => {
+test('reads one OpenAI-compatible reasoning delta field', () => {
+  // Providers repeat the same text across fields, so joining them doubles it.
   assert.equal(
     reasoningTextFromDelta({
       reasoning: 'a',
-      reasoning_content: 'b',
-      reasoning_details: [{ text: 'c' }, { content: 'd' }],
+      reasoning_content: 'a',
+      reasoning_details: [{ text: 'a' }],
     }),
-    'abcd',
+    'a',
   );
+  assert.equal(reasoningTextFromDelta({ reasoning_details: [{ text: 'c' }, { content: 'd' }] }), 'cd');
 });

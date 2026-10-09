@@ -22,7 +22,7 @@ import { listMemories, searchMemories, enforceMemoryCap, decayMemoryImportance }
 import { memoryConsolidator } from './MemoryConsolidator.js';
 import { isGitDangerousAction, isGitReadOnlyAction } from './gitService.js';
 import { getModelCapabilities, normalizeReasoningEffort } from '../ai/controllers/ai/modelCapabilities.js';
-import { appendReasoningText, cleanReasoningAnswer, combineReasoningParts, extractReasoningFromText, reasoningTextFromDelta } from './reasoningParser.js';
+import { cleanReasoningAnswer, combineReasoningParts, createStreamTextAccumulator, extractReasoningFromText, reasoningTextFromDelta } from './reasoningParser.js';
 import { resolveContextWindow } from '../ai/controllers/ai/modelContextResolver.js';
 import { embedText } from '../ai/embeddings/embeddingService.js';
 import { normalizeUsage, recordModelUsage } from '../ai/controllers/ai/modelUsageService.js';
@@ -1609,8 +1609,10 @@ export class AgentRuntime {
       const fallbackParams = { ...params, tool_choice: 'auto' };
       stream = await this.aiClient.client.chat.completions.create(fallbackParams, requestOptions);
     }
-    let fullText = '';
-    let reasoningText = '';
+    const answerStream = createStreamTextAccumulator();
+    const reasoningStream = createStreamTextAccumulator();
+    const emitAnswer = (content) => { if (content) this.onEvent({ type: 'delta', data: { content } }); };
+    const emitReasoning = (content) => { if (content) this.onEvent({ type: 'reasoning_delta', data: { content } }); };
     const toolCalls = {};
     let finishReason = null;
     let streamUsage = null;
@@ -1638,21 +1640,11 @@ export class AgentRuntime {
       finishReason = chunk.choices[0]?.finish_reason || finishReason;
 
       const reasoningDelta = reasoningTextFromDelta(delta);
-      if (reasoningDelta) {
-        reasoningText = appendReasoningText(reasoningText, reasoningDelta);
-        this.onEvent({ type: 'reasoning_delta', data: { content: reasoningDelta } });
-      }
+      if (reasoningDelta) emitReasoning(reasoningStream.push(reasoningDelta));
 
-      if (delta.content) {
-        // Use appendReasoningText dedup logic so models that send cumulative
-        // text per chunk (e.g. DeepSeek via OpenRouter) don't produce doubled output.
-        const prev = fullText;
-        fullText = appendReasoningText(fullText, delta.content);
-        const emitted = fullText.slice(prev.length);
-        if (emitted) {
-          this.onEvent({ type: 'delta', data: { content: emitted } });
-        }
-      }
+      // Chunks are appended as sent; see createStreamTextAccumulator for the
+      // providers that resend the whole text in every chunk.
+      if (delta.content) emitAnswer(answerStream.push(delta.content));
 
       if (delta.tool_calls) {
         for (const tc of delta.tool_calls) {
@@ -1674,12 +1666,14 @@ export class AgentRuntime {
     }
 
     this._throwIfAborted();
+    emitReasoning(reasoningStream.flush());
+    emitAnswer(answerStream.flush());
 
     const apiToolCalls = normalizeNativeToolCalls(Object.values(toolCalls));
 
     return {
-      text: fullText,
-      reasoning: reasoningText,
+      text: answerStream.text(),
+      reasoning: reasoningStream.text(),
       toolCalls: apiToolCalls,
       // rawToolCalls: the accumulated-but-not-yet-normalized tool calls; used by
       // the finish_reason=length warning to detect silently-dropped tool calls.
