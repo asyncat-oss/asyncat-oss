@@ -108,7 +108,7 @@ router.get(/^\/([^/]+)\/(.+)$/, (req, res) => {
 
   const filePath = path.join(STORAGE_ROOT, container, sanitizedRelPath);
 
-  if (!filePath.startsWith(path.join(STORAGE_ROOT, container))) {
+  if (!filePath.startsWith(path.join(STORAGE_ROOT, container) + path.sep)) {
     return res.status(403).json({ success: false, error: 'Invalid path' });
   }
 

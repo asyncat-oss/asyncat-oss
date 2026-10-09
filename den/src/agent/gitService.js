@@ -448,6 +448,11 @@ export function stashGit(cwd, { action = 'list', message = null, index = null } 
 }
 
 export function getGitCommit(cwd, hash) {
+  // Only accept object ids: anything else reaches `git show` as an option
+  // (e.g. --output=<path> writes a file).
+  if (!/^[0-9a-f]{4,64}$/i.test(String(hash || ''))) {
+    return { success: false, error: 'Invalid commit hash.' };
+  }
   const repo = ensureRepo(cwd);
   if (!repo.success) return repo;
 
