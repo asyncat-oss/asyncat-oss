@@ -2690,7 +2690,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                       ttsReady,
                       experienceMode === 'chat'
                         ? 'Message the model...'
-                        : 'Ask anything, or create tasks, events, notes...'
+                        : 'Ask anything, or describe what you want done...'
                     )
               }
               hasMessages={hasConversationContent}

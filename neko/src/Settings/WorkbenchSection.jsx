@@ -17,7 +17,7 @@ import {
   SquareTerminal,
   Wrench,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useUiPreferences } from '../contexts/UiPreferencesContext.jsx';
 
 const card = 'overflow-hidden rounded-xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950';
@@ -104,6 +104,31 @@ export default function WorkbenchSection() {
   const [clearing, setClearing] = useState(false);
   const [clearMessage, setClearMessage] = useState('');
 
+  // The terminal runs on the backend host (the same machine in the desktop
+  // app), so offer only the shells that exist there instead of every shell on
+  // every OS. Default to the browser's guess until Electron reports the real
+  // platform.
+  const [platform, setPlatform] = useState(() => (
+    typeof navigator !== 'undefined' && /win/i.test(navigator.userAgent) ? 'win32'
+      : typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent) ? 'darwin'
+        : 'linux'
+  ));
+  useEffect(() => {
+    let active = true;
+    window.electronAPI?.getPlatform?.()
+      .then((p) => { if (active && p) setPlatform(p); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
+  const shellOptions = useMemo(() => {
+    const auto = { value: 'auto', label: 'Auto' };
+    if (platform === 'win32') {
+      return [auto, { value: 'pwsh', label: 'PS 7' }, { value: 'powershell', label: 'PS 5' }, { value: 'cmd', label: 'CMD' }];
+    }
+    // macOS and Linux: POSIX shells, plus PowerShell 7 if the user installed it.
+    return [auto, { value: 'bash', label: 'bash' }, { value: 'zsh', label: 'zsh' }, { value: 'pwsh', label: 'PS 7' }];
+  }, [platform]);
+
   const clearBrowserData = async () => {
     setClearing(true);
     setClearMessage('');
@@ -146,9 +171,7 @@ export default function WorkbenchSection() {
       </SectionCard>
 
       <SectionCard icon={SquareTerminal} title="Terminal" description="Defaults for new interactive shells. Existing terminal tabs keep the values they started with.">
-        <ChoiceRow icon={SquareTerminal} label="Default shell" value={prefs.terminalShell} onChange={(value) => setPreference('terminalShell', value)} compact options={[
-          { value: 'auto', label: 'Auto' }, { value: 'pwsh', label: 'PS 7' }, { value: 'powershell', label: 'PS 5' }, { value: 'cmd', label: 'CMD' }, { value: 'zsh', label: 'zsh' }, { value: 'bash', label: 'bash' },
-        ]} />
+        <ChoiceRow icon={SquareTerminal} label="Default shell" value={prefs.terminalShell} onChange={(value) => setPreference('terminalShell', value)} compact options={shellOptions} />
         <ChoiceRow icon={FolderOpen} label="Starting folder" value={prefs.terminalStartDirectory} onChange={(value) => setPreference('terminalStartDirectory', value)} options={[
           { value: 'working', label: 'Current Project folder', description: 'Match the Project shown in the composer' },
           { value: 'home', label: 'Home folder', description: 'Start from your operating-system home' },

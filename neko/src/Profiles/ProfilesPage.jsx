@@ -41,8 +41,8 @@ const TOOL_PERMISSION_META = {
 
 const TOOL_PRESETS = [
   { key: 'safe', label: 'Safe only', description: 'Low-risk lookup and read actions.', filter: tool => tool.permission === 'safe' },
-  { key: 'files', label: 'File work', description: 'Common read, write, and edit tools.', names: ['read_file', 'list_directory', 'write_file', 'edit_file', 'create_file', 'create_directory'] },
-  { key: 'research', label: 'Research', description: 'Search, fetch, and memory helpers.', names: ['web_search', 'fetch_url', 'save_memory', 'search_memory'] },
+  { key: 'files', label: 'File work', description: 'Common read, write, and edit tools.', names: ['read_file', 'list_directory', 'write_file', 'edit_file', 'create_directory'] },
+  { key: 'research', label: 'Research', description: 'Search, fetch, and memory helpers.', names: ['web_search', 'fetch_url', 'save_memory', 'recall_memory'] },
 ];
 
 function getColorMeta(key) {
@@ -536,7 +536,7 @@ function ProfileCard({ profile, onEdit, onDelete, onSetDefault, deleting, settin
             <p className="text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400 mt-0.5 truncate">{profile.description}</p>
           )}
           {profile.handle && (
-            <p className="text-[11px] font-mono text-gray-400 dark:text-gray-500 midnight:text-slate-500 mt-0.5">@{profile.handle}</p>
+            <p className="text-[11px] font-mono text-gray-400 dark:text-gray-500 midnight:text-slate-500 mt-0.5">#{profile.handle}</p>
           )}
           <div className="flex items-center gap-3 mt-1.5 text-[11px] text-gray-400 dark:text-gray-500 midnight:text-slate-400 flex-wrap">
             <span>Soul: {profile.soul_override ? 'custom' : profile.soul_name}</span>
