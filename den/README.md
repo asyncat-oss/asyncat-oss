@@ -4,7 +4,7 @@ The unified backend for the AI Agent OS.
 
 > We give the baby models the keys. They just need a bigger brain to use them properly.
 
-Built with **Node.js** (20.19+, 22.13+, or 24+) and **Express 4**.
+Built with **Node.js** (22.13+ or 24+) and **Express 4**.
 
 ## What it does
 
@@ -31,7 +31,7 @@ Den is a single Express server that handles everything:
 
 ### Prerequisites
 
-- Node.js 20.19+, 22.13+, or 24+
+- Node.js 22.13+ or 24+
 - A local model (GGUF) OR an API key
 
 ### Install
