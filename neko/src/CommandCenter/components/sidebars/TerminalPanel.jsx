@@ -1,4 +1,3 @@
-/* eslint-disable react/prop-types */
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { SquareTerminal, Plus, X, Bot, Square, RefreshCw, Globe, FolderOpen, Copy, Eraser } from 'lucide-react';
 import '@xterm/xterm/css/xterm.css';

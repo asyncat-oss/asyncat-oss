@@ -1,4 +1,3 @@
-/* eslint-disable react/prop-types */
 /**
  * SymbolOutlinePanel — shows the symbol outline for the currently open file.
  * Calls list_definitions backend and groups by kind.

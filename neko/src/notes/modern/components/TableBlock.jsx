@@ -46,7 +46,6 @@ const TableCell = React.memo(
     onKeyDown,
     onCellFocus,
     cellRefs,
-    columnWidth,
     headerNumber,
   }) => {
     const elementRef = useRef(null);
@@ -224,7 +223,6 @@ const TableCell = React.memo(
           // If only zero-width space exists and user is typing, clear it
           const selection = window.getSelection();
           if (selection && selection.rangeCount > 0) {
-            const range = selection.getRangeAt(0);
             // Check if this is likely a typing event (not our programmatic change)
             if (
               element.innerHTML !== "\u200B" &&
@@ -287,9 +285,6 @@ const TableCell = React.memo(
           const element = elementRef.current;
 
           if (element && selection && selection.rangeCount > 0) {
-            const range = selection.getRangeAt(0);
-            const isAtStart = range.startOffset === 0 && range.endOffset === 0;
-
             // Check if cell is already empty or will become empty
             const textContent = element.textContent || "";
             const isEmpty = textContent.trim() === "";
@@ -437,6 +432,8 @@ const TableCell = React.memo(
   }
 );
 
+TableCell.displayName = "TableCell";
+
 const TableBlock = forwardRef(({ block, onChange, commonProps }, ref) => {
   useEffect(() => {
     ensureTableSelectionStyle();
@@ -453,7 +450,7 @@ const TableBlock = forwardRef(({ block, onChange, commonProps }, ref) => {
   const [hasHeader, setHasHeader] = useState(() => {
     return block.properties?.hasHeader || false;
   });
-  const [selectedCell, setSelectedCell] = useState(null);
+  const [, setSelectedCell] = useState(null);
   const [hoveredRow, setHoveredRow] = useState(null);
   const [hoveredCol, setHoveredCol] = useState(null);
   const [hoveredAddRow, setHoveredAddRow] = useState(null);
@@ -592,7 +589,7 @@ const TableBlock = forwardRef(({ block, onChange, commonProps }, ref) => {
   const restoreCursorPosition = useCallback((savedPosition) => {
     if (!savedPosition) return;
 
-    const { cellKey, caretOffset, element } = savedPosition;
+    const { cellKey, caretOffset } = savedPosition;
     const cellElement = cellRefs.current[cellKey];
 
     if (cellElement && cellElement.contentEditable === "true") {
@@ -742,12 +739,6 @@ const TableBlock = forwardRef(({ block, onChange, commonProps }, ref) => {
     const hasFewerRows = tableData.length < propsData.length;
     const hasFewerCols = tableData[0]?.length < propsData[0]?.length;
     const stateContentDifferent = propsStateString !== currentStateString;
-
-    // Check if this could be an undo operation (content changes without size increase)
-    const couldBeUndo =
-      stateContentDifferent &&
-      propsData.length <= tableData.length &&
-      (propsData[0]?.length || 0) <= (tableData[0]?.length || 0);
 
     const shouldAcceptPropsUpdate =
       hasFewerRows || hasFewerCols || stateContentDifferent;
@@ -1374,8 +1365,6 @@ const TableBlock = forwardRef(({ block, onChange, commonProps }, ref) => {
     try {
       const selection = window.getSelection();
       if (!selection) return;
-
-      const textContent = element.textContent || "";
 
       // If position is 0, set at start
       if (position === 0) {
@@ -2683,5 +2672,7 @@ const TableBlock = forwardRef(({ block, onChange, commonProps }, ref) => {
     </div>
   );
 });
+
+TableBlock.displayName = "TableBlock";
 
 export default TableBlock;

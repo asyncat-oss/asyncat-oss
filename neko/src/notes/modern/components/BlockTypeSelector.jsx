@@ -201,7 +201,6 @@ const slashCommands = [
 ];
 
 const BlockTypeSelector = ({
-  currentType,
   onSelect,
   onClose,
   searchTerm,

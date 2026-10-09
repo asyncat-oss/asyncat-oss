@@ -1,4 +1,3 @@
-/* eslint-disable react/prop-types */
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 export default function ChatFloatingNav({ items = [], scrollContainerRef }) {

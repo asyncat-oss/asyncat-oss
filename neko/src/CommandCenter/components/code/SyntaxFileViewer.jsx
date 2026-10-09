@@ -1,4 +1,3 @@
-/* eslint-disable react/prop-types */
 /**
  * SyntaxFileViewer — shows file content with:
  *  - Monaco Editor in read-only mode (syntax highlighting + line numbers + code folding)
@@ -8,7 +7,7 @@
  *  - Binary/large-file guards
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import Editor from '@monaco-editor/react';
 import { Copy, Check } from 'lucide-react';
 import { usePrefersDark } from '../../../utils/usePrefersDark.js';

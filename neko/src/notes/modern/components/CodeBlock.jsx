@@ -622,7 +622,7 @@ const languageDetection = {
     /\b(SELECT|FROM|WHERE|INSERT|UPDATE|DELETE|CREATE TABLE)\b/i,
     /\b(JOIN|GROUP BY|ORDER BY|HAVING)\b/i,
   ],
-  json: [/^\s*{[\s\S]*}$/, /"\w+":\s*["{\[]/],
+  json: [/^\s*{[\s\S]*}$/, /"\w+":\s*["{[]/],
   xml: [/<\?xml\s+version/, /<\/?\w+[^>]*>/],
   yaml: [/^[\w-]+:\s*$/m, /^---$/m],
   markdown: [/^#{1,6}\s+/m, /\*\*[^*]+\*\*|\*[^*]+\*/],

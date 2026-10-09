@@ -348,7 +348,7 @@ const SlashCommandMenu = ({ position, onSelect, onClose, searchTerm, blockId }) 
           setSelectedIndex(nextIndex);
           keyboardUsed = true;
           break;
-        case 'Enter':
+        case 'Enter': {
           e.preventDefault();
           e.stopPropagation();
           const selectedCommand = flatCommands[selectedIndex];
@@ -356,6 +356,7 @@ const SlashCommandMenu = ({ position, onSelect, onClose, searchTerm, blockId }) 
             onSelect(selectedCommand.type);
           }
           break;
+        }
         case 'Escape':
           e.preventDefault();
           e.stopPropagation();

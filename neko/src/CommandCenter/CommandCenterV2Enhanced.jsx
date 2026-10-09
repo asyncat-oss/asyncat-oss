@@ -39,7 +39,6 @@ import {
   Code2,
   Edit2,
   Trash2,
-  Check,
   X,
   Ghost,
   Download,
@@ -49,10 +48,8 @@ import {
   GitBranch,
   BookMarked,
   FilePlus,
-  Headphones,
   Sparkles,
   Globe,
-  List,
   Link2,
   Lock,
   SquareTerminal,
@@ -60,14 +57,10 @@ import {
 } from "lucide-react";
 
 import {
-  getRelativeConversationTime,
   getTaskRunDisplayStatus,
-  getSourceDomain,
   buildConversationSourceCatalog,
 } from "./utils/conversationUtils.js";
 import {
-  escapeExportHtml,
-  stringifyExportValue,
   sanitizeExportFilename,
   formatExportTime,
   triggerExportDownload,
@@ -254,9 +247,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     toolsEnabled,
     setToolsEnabled,
     saveCurrentConversation,
-    generateAndSetTitle,
     setCurrentConversationId,
-    onProjectsChange,
     chatRuns = {},
     updateChatRun = () => {},
     agentAbortControllersRef = fallbackAgentAbortControllersRef,
@@ -379,11 +370,9 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       return [];
     }
   });
-  const [selectedProfileId, setSelectedProfileId] = useState(null);
+  const [selectedProfileId] = useState(null);
   const [agentLoadingSession, setAgentLoadingSession] = useState(false);
-  const [editGoalText, setEditGoalText] = useState('');
   const [showDeleteAgentConfirm, setShowDeleteAgentConfirm] = useState(false);
-  const [isEditingGoal, setIsEditingGoal] = useState(false);
   // Skill-learned toast
   const [skillToast, setSkillToast] = useState(null);
   // Track whether we're on an xl+ (≥1280px) viewport so we can skip mounting
@@ -2153,32 +2142,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     setReasoningEffort(value);
     try { localStorage.setItem('asyncat_reasoning_effort', value); } catch { /* localStorage may be unavailable */ }
   }, []);
-
-  const handleAgentRename = useCallback(async () => {
-    const newGoal = editGoalText.trim();
-    if (newGoal && newGoal !== agentCurrentGoal && agentCurrentSessionId) {
-      try {
-        await agentApi.renameSession(agentCurrentSessionId, newGoal);
-        setCurrentChatRun({ goal: newGoal });
-        triggerConversationRefresh();
-      } catch { /* non-fatal */ }
-    }
-    setIsEditingGoal(false);
-  }, [editGoalText, agentCurrentGoal, agentCurrentSessionId, setCurrentChatRun, triggerConversationRefresh]);
-
-  const handleNewAgentRun = useCallback(() => {
-    setCurrentChatRun({
-      events: [],
-      goal: '',
-      session: null,
-      conversationHistory: [],
-      sessionId: null,
-      streamingText: '',
-      streamingReasoning: '',
-      running: false,
-    });
-    setIsEditingGoal(false);
-  }, [setCurrentChatRun]);
 
   const handleAgentDelete = useCallback(async () => {
     if (!agentCurrentSessionId) return;

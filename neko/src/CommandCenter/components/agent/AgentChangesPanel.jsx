@@ -331,7 +331,7 @@ export function RevertRunModal({ open, goal, total, checkpoint, reverting, onCan
                   Revert this agent run?
                 </h2>
                 <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400 midnight:text-slate-400">
-                  This restores the workspace to the baseline captured before the run's first mutating tool.
+                  This restores the workspace to the baseline captured before the run&apos;s first mutating tool.
                 </p>
               </div>
             </div>

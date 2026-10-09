@@ -9,7 +9,7 @@ import { agentTaskRunsApi, profilesApi } from "../../CommandCenter/api";
 
 const ListView = ({ selectedProject }) => {
 	const navigate = useNavigate();
-	const { columns, isLoading, error } = useColumnContext();
+	const { columns, error } = useColumnContext();
 	const { setSelectedCard } = useCardContext();
 	const [searchTerm, setSearchTerm] = useState("");
 	const [sortConfig, setSortConfig] = useState({

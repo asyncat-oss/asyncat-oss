@@ -1,4 +1,3 @@
-/* eslint-disable react/prop-types */
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Activity, Code2, Link2, X, History, BookMarked, Globe, RotateCcw, ExternalLink, AlertTriangle, WifiOff, FilePlus, ArrowLeft, ArrowRight, List, Bug, Camera, Plus, Search, Sparkles, Lock, ShieldAlert, FileText, MoreHorizontal, Copy, Download, Volume2, VolumeX, Trash2, Ghost, Maximize2, Minimize2 } from 'lucide-react';
 import eventBus from '../../../utils/eventBus.js';

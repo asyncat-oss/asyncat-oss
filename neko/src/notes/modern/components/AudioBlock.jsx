@@ -317,15 +317,6 @@ const AudioBlock = ({ block, onChange, contentRef, readOnly }) => {
     }
   };
 
-  const handleCaptionChange = (newCaption) => {
-    onChange(block.id, {
-      properties: {
-        ...block.properties,
-        caption: newCaption,
-      },
-    });
-  };
-
   // Custom audio control handlers
   const togglePlayPause = () => {
     const audio = audioRef.current;

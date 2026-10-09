@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { Link, Youtube, ExternalLink, RefreshCw, Edit3 } from 'lucide-react';
 
-const EmbedBlock = ({ block, onChange, contentRef, commonProps }) => {
+const EmbedBlock = ({ block, onChange }) => {
   const [url, setUrl] = useState(block.properties?.url || '');
   const [embedType, setEmbedType] = useState(block.properties?.type || 'generic');
   const [isLoading, setIsLoading] = useState(false);
@@ -9,7 +9,7 @@ const EmbedBlock = ({ block, onChange, contentRef, commonProps }) => {
   const inputRef = useRef(null);
 
   const embedTypes = [
-    { type: 'youtube', label: 'YouTube', icon: Youtube, pattern: /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/ },
+    { type: 'youtube', label: 'YouTube', icon: Youtube, pattern: /(?:youtube\.com\/(?:[^/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?/\s]{11})/ },
     { type: 'vimeo', label: 'Vimeo', icon: ExternalLink, pattern: /vimeo\.com\/(?:.*#|.*\/)?(\d+)/ },
     { type: 'codepen', label: 'CodePen', icon: ExternalLink, pattern: /codepen\.io\/.*\/pen\/(.*)/ },
     { type: 'figma', label: 'Figma', icon: ExternalLink, pattern: /figma\.com\/(file|proto)\/([a-zA-Z0-9]{22,128})/ },
@@ -62,8 +62,8 @@ const EmbedBlock = ({ block, onChange, contentRef, commonProps }) => {
     if (!url) return null;
 
     switch (embedType) {
-      case 'youtube':
-        const youtubeId = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/)?.[1];
+      case 'youtube': {
+        const youtubeId = url.match(/(?:youtube\.com\/(?:[^/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?/\s]{11})/)?.[1];
         return (
           <div className="aspect-video bg-gray-900 dark:bg-gray-800 midnight:bg-gray-900 rounded-lg flex items-center justify-center">
             <div className="text-center text-white">
@@ -73,6 +73,7 @@ const EmbedBlock = ({ block, onChange, contentRef, commonProps }) => {
             </div>
           </div>
         );
+      }
 
       case 'vimeo':
         return (

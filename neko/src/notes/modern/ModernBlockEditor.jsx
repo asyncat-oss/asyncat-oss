@@ -17,10 +17,7 @@ import {
   useSensors,
   useDraggable,
   useDroppable,
-  closestCenter,
   closestCorners,
-  pointerWithin,
-  rectIntersection,
 } from "@dnd-kit/core";
 import {
   restrictToVerticalAxis,
@@ -468,7 +465,7 @@ const writeBlocksToClipboard = async (templates, plainText = "") => {
 };
 
 // Draggable Block Wrapper Component
-const DraggableBlockWrapper = ({ block, children, isDragging, onDragData }) => {
+const DraggableBlockWrapper = ({ block, children, onDragData }) => {
   const {
     attributes,
     listeners,
@@ -522,7 +519,6 @@ const DropZone = ({
   index,
   isActive,
   isOver,
-  draggedBlock,
   draggedBlockHeight,
 }) => {
   const { setNodeRef } = useDroppable({
@@ -575,7 +571,6 @@ const DropZone = ({
 };
 
 const ZERO_WIDTH_SPACE_REGEX = /\u200B/g;
-const NBSP_ENTITY_REGEX = /&nbsp;/gi;
 const NBSP_CHAR_REGEX = /\u00A0/g;
 
 const MEDIA_CONTENT_SELECTOR =
@@ -729,13 +724,11 @@ const ModernBlockEditor = forwardRef(
       onContentChange,
       onSave,
       onDeltaChange,
-      placeholder = "Type '/' for commands...",
       title = "",
       onTitleChange,
       onOutlineChange,
       enableDeltaTracking = true,
       autoSaveDelay = 2000,
-      blockLocks = {},
       noteId, // Add noteId for persistent history storage
     },
     ref
@@ -1008,7 +1001,7 @@ const ModernBlockEditor = forwardRef(
       useState(null);
     const [draggedBlockHeight, setDraggedBlockHeight] = useState(null);
     const [dropScrollPosition, setDropScrollPosition] = useState(null);
-    const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+    const [, setMousePosition] = useState({ x: 0, y: 0 });
     const [blockDragData, setBlockDragData] = useState({});
     const lockedScrollPositionRef = useRef(null);
 
@@ -1692,7 +1685,6 @@ const ModernBlockEditor = forwardRef(
     const typingTimeoutRef = useRef(null);
 
     // Auto-versioning state (Google Docs style checkpoints)
-    const lastVersionTimestampRef = useRef(Date.now());
     const changeCountRef = useRef(0);
     const shouldCreateVersionRef = useRef(false);
     const autoVersionTimeoutRef = useRef(null);
@@ -1775,7 +1767,6 @@ const ModernBlockEditor = forwardRef(
       createAutoVersionIfNeeded,
     ]);
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     const deleteSelectedBlocks = useCallback(
       ({ skipNotification = false, skipWarning = false } = {}) => {
         if (!selectedBlockIdsRef.current.size) {
@@ -1911,7 +1902,6 @@ const ModernBlockEditor = forwardRef(
       return deleted;
     }, [copySelectedBlocks, deleteSelectedBlocks, showNotification]);
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     const pasteClipboardBlocks = useCallback(
       ({ replaceSelection = true, templatesOverride = null } = {}) => {
         const sourceTemplates =
@@ -2109,8 +2099,6 @@ const ModernBlockEditor = forwardRef(
     const titleRef = useRef(null);
     const listConversionRef = useRef({});
     const blockCreationInProgressRef = useRef(false);
-    const lastEnterTimestampRef = useRef(0);
-    const directEventLastEnterRef = useRef(0);
     const toolbarAnimationFrameRef = useRef(null);
 
     const updateExistingHighlights = useCallback((color) => {
@@ -2278,11 +2266,6 @@ const ModernBlockEditor = forwardRef(
       isEntireEditorSelected,
       isSelectionInsideCheckedTodo,
     ]);
-
-    // Subscribe to global race condition manager
-    useEffect(() => {
-      const editorId = Math.random().toString(36).substr(2, 9);
-    }, []);
 
     // Sync blocks state with initialBlocks prop when note content changes
     // But don't override local changes during rapid delete operations
@@ -3478,7 +3461,6 @@ const ModernBlockEditor = forwardRef(
     );
 
     // Block-level undo/redo functions
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     const handleBlockUndo = useCallback(() => {
       // Clear command delete and rapid delete flags to allow undo to restore content
       commandDeleteActiveRef.current = false;
@@ -3875,7 +3857,6 @@ const ModernBlockEditor = forwardRef(
       title,
     ]);
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     const handleBlockRedo = useCallback(() => {
       // Clear command delete and rapid delete flags to allow redo to restore content
       commandDeleteActiveRef.current = false;
@@ -4256,7 +4237,6 @@ const ModernBlockEditor = forwardRef(
     );
 
     // Enhanced block change handler with delta tracking and typing detection
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     const handleBlockChange = useCallback(
       (blockId, updates, isTyping = false) => {
         let didChange = false;
@@ -4522,7 +4502,7 @@ const ModernBlockEditor = forwardRef(
             let listText = getPlainTextFromHtml(originalContent);
 
             listText = listText
-              .replace(/^\s*\d+[\.\)]\s+/gm, "")
+              .replace(/^\s*\d+[.)]\s+/gm, "")
               .replace(/^\s*[*\-•·‣⁃]\s+/gm, "")
               .replace(/^\s*\[\s*[x✓✗☐☑☒]?\s*\]\s*/gm, "")
               .replace(/^\s*[☐☑✓✗]\s+/gm, "")
@@ -4709,7 +4689,6 @@ const ModernBlockEditor = forwardRef(
     );
 
     // Enhanced block actions with delta tracking
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     const handleBlockAction = useCallback(
       (action, blockId) => {
         switch (action) {
@@ -4938,7 +4917,7 @@ const ModernBlockEditor = forwardRef(
             });
             break;
 
-          case "duplicate":
+          case "duplicate": {
             const blockToDuplicate = blocks.find((b) => b.id === blockId);
             if (blockToDuplicate) {
               const newBlock = createBlock(
@@ -4961,28 +4940,11 @@ const ModernBlockEditor = forwardRef(
               trackContentChange();
             }
             break;
+          }
 
-          case "moveUp":
+          case "moveUp": {
             const upIndex = blocks.findIndex((b) => b.id === blockId);
             if (upIndex > 0) {
-              // Store cursor position before movement
-              const currentElement = document.activeElement;
-              let cursorPosition = 0;
-              let wasFocused = false;
-
-              if (currentElement && currentElement.isContentEditable) {
-                const blockElement = currentElement.closest(
-                  `[data-block-id="${blockId}"]`
-                );
-                if (blockElement) {
-                  wasFocused = true;
-                  const selection = window.getSelection();
-                  if (selection.rangeCount > 0) {
-                    cursorPosition = selection.getRangeAt(0).startOffset;
-                  }
-                }
-              }
-
               if (enableDeltaTracking && deltaTrackerRef.current) {
                 deltaTrackerRef.current.moveBlock(
                   blockId,
@@ -5022,28 +4984,11 @@ const ModernBlockEditor = forwardRef(
               }, 0);
             }
             break;
+          }
 
-          case "moveDown":
+          case "moveDown": {
             const downIndex = blocks.findIndex((b) => b.id === blockId);
             if (downIndex < blocks.length - 1) {
-              // Store cursor position before movement
-              const currentElement = document.activeElement;
-              let cursorPosition = 0;
-              let wasFocused = false;
-
-              if (currentElement && currentElement.isContentEditable) {
-                const blockElement = currentElement.closest(
-                  `[data-block-id="${blockId}"]`
-                );
-                if (blockElement) {
-                  wasFocused = true;
-                  const selection = window.getSelection();
-                  if (selection.rangeCount > 0) {
-                    cursorPosition = selection.getRangeAt(0).startOffset;
-                  }
-                }
-              }
-
               if (enableDeltaTracking && deltaTrackerRef.current) {
                 deltaTrackerRef.current.moveBlock(
                   blockId,
@@ -5083,6 +5028,7 @@ const ModernBlockEditor = forwardRef(
               }, 0);
             }
             break;
+          }
         }
       },
       [
@@ -5273,7 +5219,7 @@ const ModernBlockEditor = forwardRef(
           };
 
           // Create paste handler for immediate state capture before paste
-          const handlePaste = (e) => {
+          const handlePaste = () => {
             // Capture state before paste operation
             if (!isBlockUndoRedoRef.current) {
               addBlockState(blockId, true); // Immediate capture
@@ -5345,14 +5291,6 @@ const ModernBlockEditor = forwardRef(
         updateActiveBlockId,
         clearBlockSelection,
       ]
-    );
-
-    // Handle click on specific position in block
-    const handleBlockClick = useCallback(
-      (blockId, event) => {
-        updateActiveBlockId(blockId);
-      },
-      [updateActiveBlockId]
     );
 
     // Clear active block when clicking outside
@@ -6771,35 +6709,6 @@ const ModernBlockEditor = forwardRef(
     );
 
     // Drag and drop event handlers
-    // Helper function to determine which drop zones should be active
-    const getActiveDropZones = useCallback(
-      (draggedBlockIndex, currentY, direction) => {
-        const adjacentZones = [];
-
-        // Always include immediate adjacent zones
-        adjacentZones.push(draggedBlockIndex); // Drop zone before the block
-        adjacentZones.push(draggedBlockIndex + 1); // Drop zone after the block
-
-        // Add directional zones based on drag direction
-        if (direction === "up") {
-          // Prioritize zones above
-          if (draggedBlockIndex > 0) adjacentZones.push(draggedBlockIndex - 1);
-          if (draggedBlockIndex > 1) adjacentZones.push(draggedBlockIndex - 2);
-        } else if (direction === "down") {
-          // Prioritize zones below
-          if (draggedBlockIndex < blocks.length)
-            adjacentZones.push(draggedBlockIndex + 2);
-          if (draggedBlockIndex < blocks.length - 1)
-            adjacentZones.push(draggedBlockIndex + 3);
-        }
-
-        return [...new Set(adjacentZones)].filter(
-          (index) => index >= 0 && index <= blocks.length
-        );
-      },
-      [blocks.length]
-    );
-
     const handleDragStart = useCallback(
       (event) => {
         const { active } = event;
@@ -7122,13 +7031,6 @@ const ModernBlockEditor = forwardRef(
     useEffect(() => {
       const handleKeyboardShortcuts = (e) => {
         const focusedBlockId = getCurrentlyFocusedBlockId();
-        const titleElement = titleRef.current;
-        const isEventInTitle =
-          !!titleElement &&
-          !!e.target &&
-          (e.target === titleElement ||
-            (typeof titleElement.contains === "function" &&
-              titleElement.contains(e.target)));
         const resolvedBlockId =
           focusedBlockId || activeBlockIdRef.current || activeBlockId;
         const hasBlockSelection =
@@ -7454,11 +7356,7 @@ const ModernBlockEditor = forwardRef(
               };
             }
 
-            // Update block content and calculate updated blocks for save
-            const updatedBlocks = blocks.map((block) =>
-              block.id === resolvedBlockId ? { ...block, ...updates } : block
-            );
-
+            // Update block content
             handleBlockChange(resolvedBlockId, updates);
 
             // Explicitly add the cleared state to history for redo functionality
@@ -7559,7 +7457,6 @@ const ModernBlockEditor = forwardRef(
                   );
                 }
               }
-            } else {
             }
           }
           return false;
@@ -8529,7 +8426,7 @@ const ModernBlockEditor = forwardRef(
                       }}
                     />
                     <span className="text-sm text-gray-700 dark:text-gray-300">
-                      Don't show this warning again during this session
+                      Don&apos;t show this warning again during this session
                     </span>
                   </label>
 

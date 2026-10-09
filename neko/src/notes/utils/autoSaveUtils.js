@@ -94,7 +94,7 @@ export const useAutoSave = (saveFunction, options = {}) => {
           isTypingRef.current = false;
           onStatusChange("auto-saving");
 
-          const result = await saveFunction(pendingChangesRef.current);
+          await saveFunction(pendingChangesRef.current);
 
           lastSavedContentRef.current = contentString;
           pendingChangesRef.current = false;

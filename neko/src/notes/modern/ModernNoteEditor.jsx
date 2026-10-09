@@ -25,7 +25,7 @@ import { attachmentsApi, notesApi } from "../noteApi";
 import ModernBlockEditor from "./ModernBlockEditor";
 import NoteBanner from "./components/NoteBanner";
 import KeyboardShortcutsDropdown from "./components/KeyboardShortcutsDropdown";
-import { blocksToHtml, htmlToBlocks } from "../utils/blockConverter";
+import { htmlToBlocks } from "../utils/blockConverter";
 import { useAutoSave, hasContentChanged } from "../utils/autoSaveUtils";
 
 const ModernNoteEditor = ({ note, onBack, embedded = false }) => {
@@ -70,7 +70,6 @@ const ModernNoteEditor = ({ note, onBack, embedded = false }) => {
   const [deleteConfirming, setDeleteConfirming] = useState(false);
   const isInitializedRef = useRef(false);
   const deltaQueueRef = useRef([]);
-  const lastRemoteUpdateRef = useRef(0);
   const shortcutsTriggerRef = useRef(null);
   const downloadTriggerRef = useRef(null);
   const getEditorIsTypingRef = useRef(() => false);

@@ -1,4 +1,3 @@
-/* eslint-disable react/prop-types */
 import { RefreshCw, Play, Trash2, Box, TriangleAlert, ChevronDown, ChevronUp, CheckCircle2, Plus, File, FolderOpen, Image } from 'lucide-react';
 import { LocalModelLogo } from './modelLogos.jsx';
 import MlxModelsSection from './MlxModelsSection.jsx';

@@ -650,7 +650,7 @@ export const BlockRenderer = ({ block, onTermClick }) => {
             {items.map((item, i) => {
             // Block parser already stripped the bullet prefix before storing content.
             // Only strip real bullet chars (•, -) here — never *, which could be italic markdown.
-            const text = item.replace(/^[•\-]\s+/, '');
+            const text = item.replace(/^[•-]\s+/, '');
             const hasSubContent = text.includes('→') || text.match(/^\s+[-•]/);
 
             return (
@@ -676,7 +676,7 @@ export const BlockRenderer = ({ block, onTermClick }) => {
 
         allLines.forEach(line => {
           const mainMatch = line.match(/^(\d+)\.\s+(.+)/);
-          const subMatch = line.match(/^[→\-]\s+(.+)/);
+          const subMatch = line.match(/^[→-]\s+(.+)/);
 
           if (mainMatch) {
             if (currentItem) structuredItems.push(currentItem);
@@ -797,7 +797,7 @@ export const BlockRenderer = ({ block, onTermClick }) => {
       // Standalone display-mode math block with copy-as-LaTeX button
       return <MathBlock latex={block.content} />;
 
-    case 'table':
+    case 'table': {
       const tableData = block.properties?.tableData || [];
       if (tableData.length === 0) return null;
       const columnCount = Math.max(...tableData.map(row => row.length), 1);
@@ -833,6 +833,7 @@ export const BlockRenderer = ({ block, onTermClick }) => {
           </div>
         </div>
       );
+    }
 
     case 'divider':
       return <hr className="my-6 border-t border-gray-200 dark:border-gray-700 midnight:border-slate-700" />;
@@ -1182,7 +1183,6 @@ function evalExpr(expr, vars) {
   try {
     const names = Object.keys(vars);
     const vals = names.map(k => vars[k]);
-    // eslint-disable-next-line no-new-func
     const fn = new Function('Math', ...names, `"use strict"; return (${expr});`);
     const v = fn(Math, ...vals);
     return Number.isFinite(v) ? v : null;
@@ -1983,7 +1983,7 @@ export const parseAIResponseToBlocks = (content, options = {}) => {
     }
 
     // Handle sub-items (arrows) within lists
-    if (trimmed.match(/^[→\-]\s+/) && currentBlock?.type === BlockType.NUMBERED_LIST) {
+    if (trimmed.match(/^[→-]\s+/) && currentBlock?.type === BlockType.NUMBERED_LIST) {
       currentBlock.content += '\n' + trimmed;
       continue;
     }

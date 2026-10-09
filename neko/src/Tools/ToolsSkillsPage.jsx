@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import {
   Search, Wrench, File,
-  Brain, Loader2, AlertCircle, ChevronDown, ChevronRight,
+  Brain, Loader2, AlertCircle, ChevronRight,
   BookOpen, Cpu, ShieldAlert,
   Bot, Save, Edit2, X, Check, BookMarked, Trash2, RefreshCw, Plus,
   PanelLeft, PanelLeftClose,

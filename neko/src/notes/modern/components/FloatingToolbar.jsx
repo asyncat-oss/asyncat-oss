@@ -31,7 +31,7 @@ const FloatingToolbar = ({ position, onFormat, selection }) => {
       }}
     >
       {/* Format buttons */}
-      {buttons.map((button, index) => {
+      {buttons.map((button) => {
         const Icon = button.icon;
         return (
           <button

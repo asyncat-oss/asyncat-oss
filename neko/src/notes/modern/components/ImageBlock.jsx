@@ -43,7 +43,7 @@ const createInitialUploadAlert = () => ({
   allowedFormats: "",
 });
 
-const ImageBlock = ({ block, onChange, contentRef, commonProps, readOnly }) => {
+const ImageBlock = ({ block, onChange, contentRef, readOnly }) => {
   // Add CSS animation styles
   React.useEffect(() => {
     const style = document.createElement("style");
@@ -83,7 +83,6 @@ const ImageBlock = ({ block, onChange, contentRef, commonProps, readOnly }) => {
   const alt = block.properties?.alt || "Image";
   const width = block.properties?.width || "600px";
   const height = block.properties?.height || "auto";
-  const originalName = block.properties?.originalName || "";
   const currentSize = block.properties?.size || "medium";
 
   const handleCloseUploadAlert = () => {
@@ -397,15 +396,6 @@ const ImageBlock = ({ block, onChange, contentRef, commonProps, readOnly }) => {
         width: newWidth,
         height: newHeight,
         size: size,
-      },
-    });
-  };
-
-  const handleCaptionChange = (newCaption) => {
-    onChange(block.id, {
-      properties: {
-        ...block.properties,
-        caption: newCaption,
       },
     });
   };

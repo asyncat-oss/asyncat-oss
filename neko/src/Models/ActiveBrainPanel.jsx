@@ -25,8 +25,6 @@ const ActiveBrainPanel = ({
   activeProviderName,
   serverStatus,
   statusLabel,
-  statusColor,
-  iconClass,
   isReady,
   isRunning,
   stopping,

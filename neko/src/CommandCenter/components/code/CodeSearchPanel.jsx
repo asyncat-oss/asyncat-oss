@@ -1,4 +1,3 @@
-/* eslint-disable react/prop-types */
 /**
  * CodeSearchPanel — symbol/text search across the workspace.
  * Calls the backend code search endpoint and shows results with file + line.

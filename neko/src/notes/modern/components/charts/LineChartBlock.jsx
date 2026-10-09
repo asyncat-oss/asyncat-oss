@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from "react";
 import {
   Edit3,
   Download,
-  RefreshCw,
   X,
   Plus,
   ChevronUp,
@@ -335,7 +334,7 @@ const ColorPicker = ({ selectedColor, onColorSelect, onClose }) => {
   );
 };
 
-const LineChartBlock = ({ block, onChange, contentRef, commonProps }) => {
+const LineChartBlock = ({ block, onChange }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [activeColorPalette, setActiveColorPalette] = useState(null);
   const [theme, setTheme] = useState(() => {

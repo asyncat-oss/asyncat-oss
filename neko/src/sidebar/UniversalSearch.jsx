@@ -431,7 +431,7 @@ const UniversalSearch = ({ isOpen, onClose }) => {
                 <p className="text-sm text-gray-400 dark:text-gray-500 midnight:text-gray-500">
                   No results for{' '}
                   <span className="text-gray-600 dark:text-gray-300 midnight:text-gray-300">
-                    "{searchTerm}"
+                    &quot;{searchTerm}&quot;
                   </span>
                 </p>
               </div>

@@ -1,6 +1,5 @@
 import { API_BASE_URL, apiRequest, addWorkspaceToUrl, getCurrentWorkspaceId, handleResponse } from './client.js';
 import apiClient from '../../services/apiClient.js';
-import eventBus from '../../utils/eventBus.js';
 
 export const agentApi = {
   runStream: async function* (goal, conversationHistory = [], workingDir = null, maxRounds = 25, signal = null, continueSessionId = null, opts = {}) {

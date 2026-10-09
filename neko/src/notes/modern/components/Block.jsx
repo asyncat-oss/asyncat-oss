@@ -146,6 +146,8 @@ const TodoCheckbox = memo(
   )
 );
 
+TodoCheckbox.displayName = "TodoCheckbox";
+
 // Memoized list number component with indentation level support
 const ListNumber = memo(({ blockIndex, indentLevel = 0 }) => {
   const formatNumber = (index, level) => {
@@ -179,6 +181,8 @@ const ListNumber = memo(({ blockIndex, indentLevel = 0 }) => {
     </span>
   );
 });
+
+ListNumber.displayName = "ListNumber";
 
 // Enhanced Block Component with Collaboration Support
 const Block = forwardRef(
@@ -1147,10 +1151,6 @@ const Block = forwardRef(
       const currentHTML = contentRef.current.innerHTML;
       const newContent = block.content || "";
 
-      // Check if TODO is checked
-      const isTodoChecked =
-        block.type === BlockType.TODO && block.properties?.checked;
-
       // Only update if content is actually different AND element is not focused
       // This prevents cursor jumping during active typing
       const isActiveElement = document.activeElement === contentRef.current;
@@ -1373,7 +1373,7 @@ const Block = forwardRef(
             />
           );
 
-        case BlockType.NUMBERED_LIST:
+        case BlockType.NUMBERED_LIST: {
           const numberedIndentLevel = block.properties?.indentLevel || 0;
           const numberedIndentPadding = numberedIndentLevel * 2; // 2rem per level
 
@@ -1390,8 +1390,9 @@ const Block = forwardRef(
               />
             </div>
           );
+        }
 
-        case BlockType.BULLET_LIST:
+        case BlockType.BULLET_LIST: {
           const indentLevel = block.properties?.indentLevel || 0;
           const bulletShapes = ['•', '◦', '▪', '▫']; // Main, sub1, sub2, sub3
           const bulletShape = bulletShapes[indentLevel] || '•';
@@ -1412,8 +1413,9 @@ const Block = forwardRef(
               />
             </div>
           );
+        }
 
-        case BlockType.TODO:
+        case BlockType.TODO: {
           const isTodoChecked = block.properties?.checked;
           const isTodoReadOnly = readOnly || isTodoChecked;
           const canToggleTodo = isTodoChecked || hasTodoContent;
@@ -1461,6 +1463,7 @@ const Block = forwardRef(
               />
             </div>
           );
+        }
 
         case BlockType.QUOTE:
           return (

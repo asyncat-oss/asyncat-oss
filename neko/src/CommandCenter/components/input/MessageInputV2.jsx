@@ -1127,11 +1127,6 @@ export const MessageInputV2 = ({
     () => new Set(Array.isArray(enabledIntegrationTools) ? enabledIntegrationTools : []),
     [enabledIntegrationTools],
   );
-  const enabledIntegrationPacks = useMemo(
-    () => INTEGRATION_TOOL_PACKS.filter(pack => pack.tools.some(tool => enabledIntegrationSet.has(tool))),
-    [enabledIntegrationSet],
-  );
-  const enabledIntegrationCount = enabledIntegrationPacks.length;
   const toggleIntegrationPack = useCallback((pack) => {
     if (!onEnabledIntegrationToolsChange) return;
     const next = new Set(enabledIntegrationSet);

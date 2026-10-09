@@ -1,4 +1,3 @@
-/* eslint-disable react/prop-types */
 import { BarChart3, Clock, Gauge, RefreshCw } from 'lucide-react';
 import { Badge, providerLabel } from './modelPageShared.jsx';
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { RefreshCw, Cloud, KeyRound, CheckCircle2, X, Plus, Save, Link2, Search, Zap, Sparkles, TriangleAlert, FileText, Image, Mic, Brain, Calendar, DollarSign, ChevronDown, Settings } from 'lucide-react';
+import { RefreshCw, Cloud, KeyRound, X, Plus, Save, Link2, Search, Zap, Sparkles, TriangleAlert, FileText, Image, Mic, Brain, Calendar, DollarSign, ChevronDown, Settings } from 'lucide-react';
 import { aiProviderApi } from '../Settings/settingApi.js';
 import { useNetworkStatus } from '../hooks/useNetworkStatus.js';
 import { Badge, providerLabel } from './modelPageShared.jsx';
@@ -688,7 +688,6 @@ const ProvidersSection = ({
             {profiles.map(profile => {
               const isActive = activeProfileId === profile.id;
               const busy = providerAction === profile.id;
-              const isLocal = profile.provider_type === 'local';
               const isHighlighted = highlightedItem?.type === 'provider' && highlightedItem.id === profile.id;
               return (
                 <div
