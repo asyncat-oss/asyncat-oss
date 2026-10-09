@@ -1,0 +1,84 @@
+name: Package check
+
+# Builds and verifies the desktop installers on every native runner without
+# publishing anything, so dependency, Electron, and packaging changes are
+# proven on Windows and macOS before a release tag. Keep the matrix and build
+# steps in sync with the build job in release.yml.
+
+on:
+  pull_request:
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+      - 'den/package.json'
+      - 'neko/package.json'
+      - 'electron/**'
+      - 'electron-builder.yml'
+      - 'scripts/**'
+      - 'build/**'
+      - '.github/workflows/package.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Package ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-latest
+            platform: win
+            arch: x64
+          - name: Linux x64
+            os: ubuntu-latest
+            platform: linux
+            arch: x64
+          - name: macOS Apple Silicon
+            os: macos-15
+            platform: mac
+            arch: arm64
+          - name: macOS Intel
+            os: macos-15-intel
+            platform: mac
+            arch: x64
+
+    runs-on: ${{ matrix.os }}
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      PUPPETEER_SKIP_DOWNLOAD: 'true'
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Confirm native runner architecture
+        run: node -e "if (process.arch !== '${{ matrix.arch }}') throw new Error('Runner architecture is ' + process.arch + ', expected ${{ matrix.arch }}')"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Bundle target-native Node.js
+        run: node scripts/bundle-node.js --arch=${{ matrix.arch }}
+
+      - name: Build frontend
+        run: npm run build -w neko
+
+      - name: Build desktop package
+        run: npm exec -- electron-builder --${{ matrix.platform }} --${{ matrix.arch }} --publish never --config electron-builder.yml
+
+      - name: Verify packaged runtime and privacy contract
+        run: node scripts/verify-package.js --arch=${{ matrix.arch }}
