@@ -7,6 +7,7 @@ import compression from 'compression';
 import morgan from 'morgan';
 import logger, { flushLogs, logError, morganStream } from './logger.js';
 import { attachLocalContext } from './middleware/localContext.js';
+import { createLocalRequestGuard, hostnameOf } from './middleware/localRequestGuard.js';
 
 // ─── AI / MCP routes (from asy_b_main) ───────────────────────────────────────
 import aiAgentRoutes from './ai/routes/aiAgentRoutes.js';
@@ -86,6 +87,12 @@ const allowedOrigins = [
   'http://127.0.0.1:8716',
   process.env.FRONTEND_URL,
 ].filter(Boolean);
+
+// CORS only hides responses from other sites; this guard stops their requests.
+app.use(createLocalRequestGuard({
+  allowedOrigins,
+  allowedHostnames: [hostnameOf(process.env.PUBLIC_URL)].filter(Boolean),
+}));
 
 // All other routes use the restricted allow-list
 app.use(cors({
