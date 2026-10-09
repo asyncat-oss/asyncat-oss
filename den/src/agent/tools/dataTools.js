@@ -3,7 +3,7 @@
 // read_pdf, read_csv, write_csv, zip_files, unzip_files, json_query,
 // diff_apply, ssh_exec
 
-import { execSync, spawn } from 'child_process';
+import { execSync, execFileSync, spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -336,8 +336,14 @@ export const jsonQueryTool = {
       try {
         const tmpIn = path.join(os.tmpdir(), `asyncat_jq_${Date.now()}.json`);
         fs.writeFileSync(tmpIn, JSON.stringify(jsonData), 'utf8');
-        const out = execSync(`jq '${args.query.replace(/'/g, "'\\''")}' "${tmpIn}"`, { encoding: 'utf8', timeout: 10000 });
-        try { fs.unlinkSync(tmpIn); } catch {}
+        // Pass the jq program and the file as separate argv entries (no shell),
+        // so the query is handed to jq verbatim instead of to /bin/sh.
+        let out;
+        try {
+          out = execFileSync('jq', [String(args.query), tmpIn], { encoding: 'utf8', timeout: 10000, stdio: ['ignore', 'pipe', 'pipe'] });
+        } finally {
+          try { fs.unlinkSync(tmpIn); } catch {}
+        }
         let result;
         try { result = JSON.parse(out); } catch { result = out.trim(); }
         return { success: true, engine: 'jq', query: args.query, result };

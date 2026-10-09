@@ -12,7 +12,7 @@
 // All output is written to a temp file, path returned to agent.
 // Zero new npm packages — pure child_process.
 
-import { execSync, spawnSync } from 'child_process';
+import { execSync, execFileSync, spawnSync } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -290,11 +290,17 @@ export const screenFindWindowTool = {
     try {
       if (PLATFORM === 'linux') {
         if (!hasBin('xdotool')) return missingDepError('xdotool', 'sudo apt install xdotool');
-        const out = execSync(`xdotool search --name "${args.pattern}" 2>/dev/null || true`, { encoding: 'utf8', timeout: 3000 });
+        // Pass the pattern as its own argv entry so it is matched literally and
+        // never interpreted by a shell. xdotool exits non-zero when nothing
+        // matches, so treat a thrown error as "no windows".
+        let out = '';
+        try {
+          out = execFileSync('xdotool', ['search', '--name', String(args.pattern)], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] });
+        } catch { out = ''; }
         const ids = out.trim().split('\n').filter(Boolean);
         const windows = ids.map(id => {
           try {
-            const name = execSync(`xdotool getwindowname ${id} 2>/dev/null`, { encoding: 'utf8', timeout: 1000 }).trim();
+            const name = execFileSync('xdotool', ['getwindowname', id], { encoding: 'utf8', timeout: 1000, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
             return { id, title: name };
           } catch { return { id, title: '(unknown)' }; }
         });
