@@ -50,7 +50,7 @@
   },
   "dependencies": {
     "den": "0.8.0-beta.5",
-    "express": "4.22.2",
+    "express": "4.22.3",
     "node-pty": "^1.1.0"
   }
 }
