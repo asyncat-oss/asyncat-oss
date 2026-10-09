@@ -2660,7 +2660,7 @@ function AgentDelegateEvent({ data, result, pending = false, events = [] }) {
                     </span>
                     {handle && (
                       <code className="rounded-md bg-gray-100/70 px-1.5 py-0.5 text-[10px] font-medium text-gray-400 dark:bg-gray-900/70 dark:text-gray-500 midnight:bg-slate-900/70 midnight:text-slate-500">
-                        @{handle}
+                        #{handle}
                       </code>
                     )}
                   </div>
