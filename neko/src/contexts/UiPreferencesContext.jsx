@@ -7,21 +7,9 @@ import {
   useState,
 } from 'react';
 import PropTypes from 'prop-types';
+import { migrateNavItems } from './navItems.js';
 
 const UiPreferencesContext = createContext(null);
-
-const DEFAULT_NAV_ITEMS = {
-  projects: true,
-  tasks: true,
-  workflows: true,
-  schedules: true,
-  activity: true,
-  models: true,
-  tools: true,
-  agent: true,
-  training: true,
-  trash: true,
-};
 
 const DEFAULT_WORKBENCH_PREFERENCES = {
   restoreOpenPanels: true,
@@ -82,11 +70,9 @@ const loadTheme = () => {
 const loadNavItems = () => {
   try {
     const stored = localStorage.getItem('navItemsVisibility');
-    return stored
-      ? { ...DEFAULT_NAV_ITEMS, ...JSON.parse(stored) }
-      : { ...DEFAULT_NAV_ITEMS };
+    return migrateNavItems(stored ? JSON.parse(stored) : null);
   } catch {
-    return { ...DEFAULT_NAV_ITEMS };
+    return migrateNavItems(null);
   }
 };
 

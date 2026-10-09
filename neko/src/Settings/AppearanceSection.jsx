@@ -1,7 +1,5 @@
 import {
   BrainCircuit,
-  Bell,
-  CalendarClock,
   Cpu,
   Layout,
   Moon,
@@ -14,8 +12,7 @@ import {
   Wrench,
   KanbanSquare,
   FolderKanban,
-  GraduationCap,
-  Workflow,
+  Zap,
 } from "lucide-react";
 import KeyboardShortcutsSection from "./KeyboardShortcutsSection.jsx";
 import GlobalShortcutsSection from "./GlobalShortcutsSection.jsx";
@@ -64,7 +61,7 @@ const RadioRow = ({ name, checked, onChange, icon: Icon, label }) => (
   </label>
 );
 
-const CheckboxRow = ({ checked, onChange, icon: Icon, label, locked }) => (
+const CheckboxRow = ({ checked, onChange, icon: Icon, label, description, locked }) => (
   <label
     className={`flex items-center justify-between gap-4 p-3 rounded-lg border border-transparent transition-colors ${locked ? "opacity-50 cursor-not-allowed" : "hover:border-gray-300/70 dark:hover:border-gray-600/70 midnight:hover:border-gray-600/70 hover:bg-gray-200/70 dark:hover:bg-gray-700/70 midnight:hover:bg-gray-700/70 cursor-pointer"}`}
   >
@@ -73,6 +70,11 @@ const CheckboxRow = ({ checked, onChange, icon: Icon, label, locked }) => (
         <Icon className="w-5 h-5 shrink-0 text-gray-500 dark:text-gray-400 midnight:text-gray-400" />
       ) : null}
       <span className={`${textClasses} truncate`}>{label}</span>
+      {description ? (
+        <span className="hidden truncate text-xs text-gray-400 sm:inline dark:text-gray-500 midnight:text-slate-500">
+          {description}
+        </span>
+      ) : null}
       {locked && (
         <span className="text-xs text-gray-400 dark:text-gray-500 midnight:text-gray-500 ml-1">
           (always shown)
@@ -172,22 +174,11 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
           onChange={() => toggleNavItem("tasks")}
         />
         <CheckboxRow
-          icon={Workflow}
-          label="Workflows"
-          checked={navItemsVisibility.workflows}
-          onChange={() => toggleNavItem("workflows")}
-        />
-        <CheckboxRow
-          icon={CalendarClock}
-          label="Schedules"
-          checked={navItemsVisibility.schedules}
-          onChange={() => toggleNavItem("schedules")}
-        />
-        <CheckboxRow
-          icon={Bell}
-          label="Activity"
-          checked={navItemsVisibility.activity}
-          onChange={() => toggleNavItem("activity")}
+          icon={Zap}
+          label="Automations"
+          description="Workflows, Schedules and Activity"
+          checked={navItemsVisibility.automations}
+          onChange={() => toggleNavItem("automations")}
         />
         <CheckboxRow
           icon={Cpu}
@@ -206,12 +197,6 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
           label="Agents"
           checked={navItemsVisibility.agent}
           onChange={() => toggleNavItem("agent")}
-        />
-        <CheckboxRow
-          icon={GraduationCap}
-          label="Training"
-          checked={navItemsVisibility.training}
-          onChange={() => toggleNavItem("training")}
         />
         <CheckboxRow
           icon={Trash2}
@@ -269,6 +254,7 @@ CheckboxRow.propTypes = {
   onChange: PropTypes.func.isRequired,
   icon: PropTypes.elementType,
   label: PropTypes.string.isRequired,
+  description: PropTypes.string,
   locked: PropTypes.bool,
 };
 
