@@ -1,8 +1,18 @@
 import express from "express";
+import path from "path";
 import * as attachmentController from "../controllers/attachmentController.js";
 import { handleFileUpload } from "../middleware/fileUpload.js";
 
 const router = express.Router();
+
+// Attachments are stored flat in note-<id>/, so a name with path parts
+// (e.g. an encoded ../) could only be an attempt to leave that folder.
+router.param("filename", (req, res, next, filename) => {
+  if (filename !== path.basename(filename) || filename === "." || filename === "..") {
+    return res.status(400).json({ success: false, error: "Invalid attachment name" });
+  }
+  next();
+});
 
 // Upload attachment to a note
 router.post(
