@@ -64,7 +64,7 @@ Moving from a web app to a native desktop app unlocks things that aren't possibl
 
 **Pre-built installers:** no prerequisites. Download, open, run.
 
-**Run from source:** Node.js `20.19+` (20.x), `22.13+`, or `24+`; npm; git.
+**Run from source:** Node.js `22.13+` or `24+`; npm; git.
 
 ### Install & Run
 

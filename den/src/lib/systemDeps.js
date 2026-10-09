@@ -62,9 +62,7 @@ function versionAtLeast(actual, required) {
 function nodeVersionSupported(version) {
   const parsed = parseSemver(version);
   if (!parsed) return false;
-  return (parsed.major === 20 && parsed.minor >= 19) ||
-    (parsed.major === 22 && parsed.minor >= 13) ||
-    parsed.major >= 24;
+  return (parsed.major === 22 && parsed.minor >= 13) || parsed.major >= 24;
 }
 
 function versionFor(command, args = ['--version']) {
@@ -248,7 +246,7 @@ function nodeCheck() {
     ok: Boolean(command) && nodeVersionSupported(version),
     command,
     version,
-    minVersion: '20.19 / 22.13 / 24',
+    minVersion: '22.13 / 24',
     required: true,
     scope: 'core',
     reason: isDesktopRuntime ? 'Bundled with the Asyncat desktop app.' : 'Runs the Asyncat backend.',
