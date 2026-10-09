@@ -112,6 +112,15 @@ const ProjectSidebar = ({ basePath = '/projects', mode = 'projects' }) => {
     setIsCreating(true);
   };
 
+  // The empty state in the main pane asks for a new project too.
+  useEffect(() => {
+    if (isTaskMode) return undefined;
+    return eventBus.on("projects:create", () => {
+      setCreateError(null);
+      setIsCreating(true);
+    });
+  }, [isTaskMode]);
+
   const cancelCreate = () => {
     setIsCreating(false);
     setCreateError(null);

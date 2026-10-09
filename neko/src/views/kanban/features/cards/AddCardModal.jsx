@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import { X, Play, Loader2, Bot, Check } from 'lucide-react';
 import { profilesApi, agentTaskRunsApi } from '../../../../CommandCenter/api';
@@ -21,6 +22,7 @@ function profileColorClass(color) {
 }
 
 const NewTaskModal = ({ column, onClose, onSuccess }) => {
+  const navigate = useNavigate();
   const [profiles, setProfiles] = useState([]);
   const [loadingProfiles, setLoadingProfiles] = useState(true);
   const [selectedProfileId, setSelectedProfileId] = useState(null);
@@ -114,7 +116,14 @@ const NewTaskModal = ({ column, onClose, onSuccess }) => {
               <div className="flex flex-col items-center gap-2 py-6 text-center">
                 <Bot className="w-8 h-8 text-gray-300 dark:text-gray-600" />
                 <p className="text-sm text-gray-500 dark:text-gray-400">No agent profiles found.</p>
-                <p className="text-xs text-gray-400">Create a profile in the Agents section first.</p>
+                <p className="text-xs text-gray-400">Tasks are run by an agent. Create one to continue.</p>
+                <button
+                  type="button"
+                  onClick={() => { onClose?.(); navigate('/agent/profiles'); }}
+                  className="mt-1 inline-flex items-center gap-1.5 rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
+                >
+                  Create an agent
+                </button>
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-2">
