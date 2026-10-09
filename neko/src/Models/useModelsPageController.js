@@ -2,12 +2,14 @@ import { useState, useEffect, useRef } from 'react';
 import { llamaServerApi, localModelsApi, aiProviderApi, mlxApi } from '../Settings/settingApi.js';
 import { useModelConfig } from '../CommandCenter/hooks/useModelConfig.js';
 import { INSTALL_PROFILE_LABELS, DEFAULT_LOAD_CTX_SIZE, MAX_LOAD_CTX_SIZE, normalizeLoadCtxSize, getModelContextLimit, getModelLoadCtxError, loadSavedModelContextSizes, saveModelContextSizes } from './modelPageShared.jsx';
+import { useConfirm } from '../components/confirmContext.js';
 
 const notifyModelRuntimeUpdated = () => {
   window.dispatchEvent(new CustomEvent('asyncat-model-runtime-updated'));
 };
 
 export const useModelsPageController = ({ runtimeOnly = false } = {}) => {
+  const confirm = useConfirm();
   const { config: modelContextConfig, setConfig: setModelContextConfig } = useModelConfig();
   const [serverStatus, setServerStatus] = useState(null);
   const [mlxStatus, setMlxStatus] = useState(null);
@@ -332,6 +334,14 @@ export const useModelsPageController = ({ runtimeOnly = false } = {}) => {
   };
 
   const handleProviderDelete = async (id) => {
+    const profile = providerProfiles.find((p) => p.id === id);
+    const ok = await confirm({
+      title: 'Delete provider?',
+      message: `${profile?.name || 'This provider'} and its saved API key will be removed. This can't be undone.`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!ok) return;
     setProviderAction(id);
     setProviderError('');
     try {

@@ -10,6 +10,7 @@ import {
   Workflow, ExternalLink, Pencil,
 } from 'lucide-react';
 import { agentApi, schedulerApi, profilesApi } from '../CommandCenter/api';
+import { useConfirm } from '../components/confirmContext.js';
 import { aiProviderApi } from '../Settings/settingApi.js';
 import WorkflowScheduleControls from './ScheduleControls';
 import { describeCron, getAvailableTimeZones, getLocalTimeZone } from './scheduleUtils';
@@ -832,6 +833,7 @@ function EmptyState({ onAdd }) {
 
 export default function SchedulerPage({ embedded = false }) {
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const [jobs, setJobs]           = useState([]);
   const [workflows, setWorkflows] = useState([]);
   const [loading, setLoading]     = useState(true);
@@ -896,6 +898,14 @@ export default function SchedulerPage({ embedded = false }) {
   }
 
   async function handleDelete(id) {
+    const job = jobs.find(j => j.id === id);
+    const ok = await confirm({
+      title: 'Delete schedule?',
+      message: `${job?.name || 'This schedule'} will stop running and be deleted, along with its run history.`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!ok) return;
     setDeletingId(id);
     try {
       await schedulerApi.deleteJob(id);

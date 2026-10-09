@@ -7,6 +7,7 @@ import { useCommandCenter } from '../context/CommandCenterContextEnhanced';
 import { Bot, MessageSquare, CheckSquare, Clock, Search, Folder, FolderOpen, Plus, Pencil, Square, Trash2, Wrench, X, BookMarked, Loader2 } from 'lucide-react';
 
 import { getRelativeTime, cleanTaskAgentTitle, parseConversationDate } from '../utils/conversationUtils.js';
+import { useConfirm } from '../../components/confirmContext.js';
 
 function basenamePath(value = '') {
   const parts = String(value || '').split(/[\\/]/).filter(Boolean);
@@ -42,6 +43,7 @@ function getItemUpdatedMs(item) {
 
 const ChatsPage = () => {
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const { currentWorkspace } = useWorkspace();
   const {
     handleNewConversation,
@@ -347,6 +349,13 @@ const ChatsPage = () => {
   const deleteSelected = async () => {
     if (selectedCount === 0 || bulkDeleting) return;
     const items = selectedList;
+    const ok = await confirm({
+      title: `Delete ${items.length} ${items.length === 1 ? 'chat' : 'chats'}?`,
+      message: 'They will be moved to Trash, where you can restore them.',
+      confirmLabel: 'Move to Trash',
+      destructive: true,
+    });
+    if (!ok) return;
     setBulkDeleting(true);
     setSelectedItems({});
     setConversations(prev => prev.filter(chat => !items.some(item => item.type === 'chat' && item.id === chat.id)));

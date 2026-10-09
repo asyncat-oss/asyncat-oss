@@ -10,6 +10,7 @@ import {
   FolderOpen, SlidersHorizontal,
 } from 'lucide-react';
 import { profilesApi, agentApi } from '../CommandCenter/api';
+import { useConfirm } from '../components/confirmContext.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -678,6 +679,7 @@ EmptyState.propTypes = {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function AgentProfilesPage({ embedded = false }) {
+  const confirm = useConfirm();
   const [profiles, setProfiles] = useState([]);
   const [tools, setTools]       = useState([]);
   const [souls, setSouls]       = useState(['default']);
@@ -744,6 +746,14 @@ export default function AgentProfilesPage({ embedded = false }) {
   }
 
   async function handleDelete(id) {
+    const profile = profiles.find(p => p.id === id);
+    const ok = await confirm({
+      title: 'Delete agent?',
+      message: `${profile?.name || 'This agent'} will be deleted. This can't be undone.`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!ok) return;
     setDeletingId(id);
     try {
       await profilesApi.deleteProfile(id);
