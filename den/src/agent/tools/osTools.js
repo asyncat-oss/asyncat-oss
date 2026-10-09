@@ -2,11 +2,23 @@
 // ─── OS-Level Tools ───────────────────────────────────────────────────────────
 // process_kill, process_spawn, port_scan, disk_usage, memory_detail, network_check.
 
-import { spawn, execSync, exec } from 'child_process';
+import { spawn, execSync, execFileSync, exec } from 'child_process';
 import net from 'net';
 import os from 'os';
 import { PermissionLevel } from './toolRegistry.js';
 import { IS_WIN, PLATFORM } from './shared.js';
+
+// Run a binary with an explicit argument vector (no shell), returning stdout as
+// a string. Model-supplied values go in `argv`, so they can never be parsed as
+// shell syntax. Non-zero exits still return whatever was printed, mirroring the
+// old `… || true` behaviour.
+function captureArgv(file, argv, timeout = 8000) {
+  try {
+    return execFileSync(file, argv, { encoding: 'utf8', timeout, stdio: ['ignore', 'pipe', 'ignore'] });
+  } catch (err) {
+    return (err.stdout || '').toString();
+  }
+}
 
 const execAsync = (cmd, cwd, timeout = 10000) => {
   return new Promise((resolve) => {
@@ -129,33 +141,35 @@ export const portScanTool = {
     required: [],
   },
   execute: async (args) => {
+    // Coerce the port to a plain integer so it can only ever be matched as a
+    // literal, never spliced into a command.
+    const port = Number.isFinite(args.port) ? Math.trunc(args.port)
+      : (args.port != null && /^\d+$/.test(String(args.port)) ? parseInt(args.port, 10) : null);
+    const proto = args.protocol === 'udp' ? '-u' : '-t';
     try {
-      let output;
+      let lines;
       if (IS_WIN) {
-        // netstat -ano shows PID; filter by port if requested
-        const raw = execSync('netstat -ano 2>nul', { encoding: 'utf8', timeout: 8000 });
-        const lines = raw.split('\n').filter(l => /TCP|UDP/.test(l));
-        const filtered = args.port ? lines.filter(l => l.includes(`:${args.port}`)) : lines.slice(0, 50);
-        output = filtered.join('\n') || `No process found on port ${args.port}`;
+        const raw = captureArgv('netstat', ['-ano']);
+        lines = raw.split('\n').map(l => l.trim()).filter(l => /TCP|UDP/.test(l));
       } else if (PLATFORM === 'linux') {
-        const proto = args.protocol === 'udp' ? '-u' : '-t';
-        if (args.port) {
-          output = execSync(`ss -${proto}lnp 2>/dev/null | grep ':${args.port}' || netstat -${proto}lnp 2>/dev/null | grep ':${args.port}' || echo "No process found on port ${args.port}"`, { encoding: 'utf8', timeout: 8000 });
-        } else {
-          output = execSync(`ss -${proto}lnp 2>/dev/null | head -50 || netstat -${proto}lnp 2>/dev/null | head -50`, { encoding: 'utf8', timeout: 8000 });
-        }
+        let raw = captureArgv('ss', [`${proto}lnp`]);
+        if (!raw.trim()) raw = captureArgv('netstat', [`${proto}lnp`]);
+        lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
       } else if (PLATFORM === 'darwin') {
-        if (args.port) {
-          output = execSync(`lsof -i :${args.port} -P -n 2>/dev/null || echo "No process found on port ${args.port}"`, { encoding: 'utf8', timeout: 8000 });
-        } else {
-          output = execSync(`lsof -i -P -n 2>/dev/null | head -50`, { encoding: 'utf8', timeout: 8000 });
-        }
+        const raw = captureArgv('lsof', ['-i', '-P', '-n']);
+        lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
       } else {
         return { success: false, error: `Platform "${PLATFORM}" not supported for port scanning.` };
       }
 
-      const lines = output.trim().split('\n').filter(Boolean);
-      return { success: true, port: args.port || null, protocol: args.protocol || 'tcp', count: lines.length, processes: lines.join('\n').slice(0, 4000) };
+      // Filter to the requested port in JS rather than via a shell grep.
+      if (port != null) lines = lines.filter(l => l.includes(`:${port}`));
+      else lines = lines.slice(0, 50);
+
+      if (lines.length === 0) {
+        return { success: true, port, protocol: args.protocol || 'tcp', count: 0, processes: port != null ? `No process found on port ${port}` : '' };
+      }
+      return { success: true, port, protocol: args.protocol || 'tcp', count: lines.length, processes: lines.join('\n').slice(0, 4000) };
     } catch (err) {
       return { success: false, error: err.message };
     }
@@ -176,17 +190,19 @@ export const diskUsageTool = {
     required: [],
   },
   execute: async (args) => {
-    const pathArg = args.path || '/';
+    const pathArg = typeof args.path === 'string' && args.path.trim() ? args.path : '/';
+    // Take the last non-empty line, which is the data row under df's header.
+    const lastLine = (out) => {
+      const lines = out.trim().split('\n').filter(Boolean);
+      return lines[lines.length - 1] || '';
+    };
     try {
-      const dfOut = execSync(`df -h ${pathArg} 2>/dev/null | tail -1`, { encoding: 'utf8', timeout: 5000 });
-      const inodesOut = args.inodes ? execSync(`df -i ${pathArg} 2>/dev/null | tail -1`, { encoding: 'utf8', timeout: 5000 }) : '';
-
-      const dfLine = dfOut.trim().split(/\s+/);
+      const dfLine = lastLine(captureArgv('df', ['-h', pathArg], 5000)).split(/\s+/);
       const [filesystem, total, used, available, percent, mounted] = dfLine;
 
       let inodes = null;
-      if (inodesOut) {
-        const iLine = inodesOut.trim().split(/\s+/);
+      if (args.inodes) {
+        const iLine = lastLine(captureArgv('df', ['-i', pathArg], 5000)).split(/\s+/);
         inodes = { total: iLine[1], used: iLine[2], available: iLine[3], percent: iLine[4] };
       }
 
