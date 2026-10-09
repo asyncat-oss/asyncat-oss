@@ -10,11 +10,8 @@
     "test": "node --test test/*.test.js"
   },
   "dependencies": {
-    "@azure/ai-projects": "^1.0.0-beta.8",
-    "@azure/identity": "^4.10.1",
     "@babel/parser": "^7.29.3",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "axios": "^1.8.3",
     "better-sqlite3": "^12.8.0",
     "busboy": "^1.6.0",
     "canvas": "^3.2.0",
@@ -24,9 +21,6 @@
     "docx": "^9.5.1",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "express-rate-limit": "^6.11.2",
-    "file-type": "^22.0.1",
-    "handlebars": "^4.7.8",
     "isomorphic-dompurify": "^3.12.0",
     "joi": "^18.0.1",
     "jsdom": "^29.1.1",
@@ -35,16 +29,10 @@
     "multer": "^2.0.0",
     "node-cron": "^4.0.7",
     "nodemailer": "^9.0.3",
-    "octokit": "^4.1.2",
     "openai": "^6.13.0",
-    "pg": "^8.13.1",
-    "postgres": "^3.4.5",
     "puppeteer": "^24.25.0",
-    "redis": "^4.6.11",
     "uuid": "^11.1.0",
-    "web-push": "^1.0.2",
     "winston": "^3.17.0",
-    "ws": "^8.14.2",
     "zod": "^3.25.76"
   },
   "engines": {
