@@ -34,7 +34,7 @@
     "electron:build:linux": "node scripts/bundle-node.js && npm run build -w neko && npx electron-builder --linux --config electron-builder.yml",
     "release:validate": "node scripts/validate-release.js",
     "release:verify": "node scripts/verify-package.js",
-    "test:release": "node --test electron/update-policy.test.js scripts/validate-release.test.js"
+    "test:release": "node --test electron/update-policy.test.js electron/shortcut-config.test.js scripts/validate-release.test.js"
   },
   "engines": {
     "node": "^22.13.0 || ^24.0.0 || ^25.0.0 || ^26.0.0"
