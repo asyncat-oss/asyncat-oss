@@ -27,9 +27,11 @@ const SECRETS = [
   'NOTIFY_TELEGRAM_BOT_TOKEN',
 ];
 
-function maskSecret(value) {
-  if (!value || value.length < 8) return '***';
-  return value.slice(0, 4) + '****' + value.slice(-4);
+// Enough to tell which key is stored without revealing a useful part of it.
+export function maskSecret(value) {
+  if (!value) return '';
+  const text = String(value);
+  return text.length < 12 ? '****' : `****${text.slice(-4)}`;
 }
 
 const readEnv = () => readEnvFile(ENV_FILE);

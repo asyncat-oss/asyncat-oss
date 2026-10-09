@@ -31,7 +31,7 @@ import { codeSearchTool, listDefinitionsTool, findDefinitionTool, findReferences
 import { publicProvider } from '../controllers/ai/providerCatalog.js';
 import { listMemories, normalizeMemoryRow, searchMemories, hybridRecall } from '../../agent/tools/memoryTools.js';
 import { embeddingStatus, resetEmbeddingStrategy, embedText } from '../embeddings/embeddingService.js';
-import { getMcpStatus, listMcpServers, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
+import { getMcpStatus, listMcpServers, mergeMcpEnv, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
 import { toolRegistry } from '../../agent/tools/toolRegistry.js';
 import { formatMultimodalCapabilityPrompt, getMultimodalCapabilities } from '../../agent/multimodalCapabilities.js';
 import { getModelCapabilities } from '../controllers/ai/modelCapabilities.js';
@@ -2984,7 +2984,8 @@ router.post('/mcp', withWorkspaceContext, async (req, res) => {
     const { name, command, args = [], env = {}, disabled = false } = req.body || {};
     if (!name || !command) return res.status(400).json({ success: false, error: 'name and command are required' });
     const config = readMcpConfig(MCP_CONFIG_PATH);
-    config.mcpServers[name] = { command, args: Array.isArray(args) ? args : [], env, disabled: !!disabled };
+    const existingEnv = config.mcpServers[name]?.env;
+    config.mcpServers[name] = { command, args: Array.isArray(args) ? args : [], env: mergeMcpEnv(existingEnv, env), disabled: !!disabled };
     writeMcpConfig(MCP_CONFIG_PATH, config);
     const status = await reloadMcpTools(MCP_CONFIG_PATH);
     res.json({ success: true, servers: listMcpServers(MCP_CONFIG_PATH), status });
@@ -3001,7 +3002,7 @@ router.patch('/mcp/:name', withWorkspaceContext, async (req, res) => {
     if (req.body?.disabled !== undefined) server.disabled = !!req.body.disabled;
     if (req.body?.command) server.command = req.body.command;
     if (Array.isArray(req.body?.args)) server.args = req.body.args;
-    if (req.body?.env && typeof req.body.env === 'object') server.env = req.body.env;
+    if (req.body?.env && typeof req.body.env === 'object') server.env = mergeMcpEnv(server.env, req.body.env);
     writeMcpConfig(MCP_CONFIG_PATH, config);
     const status = await reloadMcpTools(MCP_CONFIG_PATH);
     res.json({ success: true, server: req.params.name, status });

@@ -131,16 +131,29 @@ export async function loadMcpTools(configPath) {
   return status;
 }
 
+// MCP server env vars usually hold API keys, so listings only show which keys
+// are set. Sending this placeholder back for a key keeps its stored value.
+export const MASKED_ENV_VALUE = '********';
+
 export function listMcpServers(configPath = activeConfigPath) {
   const config = readMcpConfig(configPath);
   return Object.entries(config.mcpServers || {}).map(([name, server]) => ({
     name,
     command: server.command,
     args: server.args || [],
-    env: server.env || {},
+    env: Object.fromEntries(Object.keys(server.env || {}).map((key) => [key, MASKED_ENV_VALUE])),
     disabled: !!server.disabled,
     status: lastStatus.servers[name] || null,
   }));
+}
+
+export function mergeMcpEnv(currentEnv, submittedEnv) {
+  if (!submittedEnv || typeof submittedEnv !== 'object' || Array.isArray(submittedEnv)) return {};
+  const stored = currentEnv && typeof currentEnv === 'object' ? currentEnv : {};
+  return Object.fromEntries(Object.entries(submittedEnv).map(([key, value]) => [
+    key,
+    value === MASKED_ENV_VALUE && Object.hasOwn(stored, key) ? stored[key] : value,
+  ]));
 }
 
 export function getMcpStatus() {
