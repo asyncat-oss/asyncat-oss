@@ -10,6 +10,7 @@ import ToastProvider from '../components/ToastProvider';
 import { CommandCenterProvider } from '../CommandCenter/context/CommandCenterContextEnhanced';
 import ErrorBoundary from '../error/ErrorBoundary';
 import RouteErrorElement from '../error/ErrorBoundary';
+import { lastAutomationPath } from '../Automations/automationsNav.js';
 
 // Page components. The chat (the landing page) and the layout load up front;
 // every other page is split into its own chunk and loaded on first visit.
@@ -26,10 +27,10 @@ const SettingsPage = lazy(() => import('../Settings/SettingsPage'));
 const ModelsPage = lazy(() => import('../Models/ModelsPage'));
 const ToolsSkillsPage = lazy(() => import('../Tools/ToolsSkillsPage'));
 const AgentPage = lazy(() => import('../Agent/AgentPage'));
+const AutomationsLayout = lazy(() => import('../Automations/AutomationsLayout'));
 const SchedulerPage = lazy(() => import('../Scheduler/SchedulerPage'));
 const WorkflowsPage = lazy(() => import('../Workflows/WorkflowsPage'));
 const ActivityPage = lazy(() => import('../Activity/ActivityPage'));
-const TrainingPage = lazy(() => import('../Training/TrainingPage'));
 
 const LegacyWorkspaceRedirect = () => {
   const { projectId, tab } = useParams();
@@ -39,6 +40,9 @@ const LegacyWorkspaceRedirect = () => {
   const taskTab = ['kanban', 'list'].includes(tab) ? tab : null;
   return <Navigate to={projectId ? (taskTab ? `/tasks/${projectId}/${taskTab}` : `/tasks/${projectId}`) : '/tasks'} replace />;
 };
+
+// /automations opens whichever of Workflows, Schedules or Activity was used last.
+const AutomationsRedirect = () => <Navigate to={lastAutomationPath()} replace />;
 
 const LocalApp = ({ children }) => {
   return (
@@ -190,23 +194,36 @@ const createRouter = () => createBrowserRouter([
         errorElement: <RouteErrorElement />
       },
       {
-        path: "workflows",
-        element: <WorkflowsPage />,
+        // Workflows, Schedules and Activity share one sidebar entry and a tab bar.
+        element: <AutomationsLayout />,
+        errorElement: <RouteErrorElement />,
+        children: [
+          {
+            path: "workflows",
+            element: <WorkflowsPage />,
+            errorElement: <RouteErrorElement />
+          },
+          {
+            path: "schedules",
+            element: <SchedulerPage />,
+            errorElement: <RouteErrorElement />
+          },
+          {
+            path: "activity",
+            element: <ActivityPage />,
+            errorElement: <RouteErrorElement />
+          },
+        ],
+      },
+      {
+        path: "automations",
+        element: <AutomationsRedirect />,
         errorElement: <RouteErrorElement />
       },
       {
-        path: "schedules",
-        element: <SchedulerPage />,
-        errorElement: <RouteErrorElement />
-      },
-      {
-        path: "activity",
-        element: <ActivityPage />,
-        errorElement: <RouteErrorElement />
-      },
-      {
+        // Training is a tab of the Models page.
         path: "training",
-        element: <TrainingPage />,
+        element: <Navigate to="/models?tab=training" replace />,
         errorElement: <RouteErrorElement />
       },
       {

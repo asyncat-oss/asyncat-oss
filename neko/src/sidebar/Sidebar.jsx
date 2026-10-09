@@ -2,11 +2,8 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PropTypes from "prop-types";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
-  Bell,
   BrainCircuit,
-  CalendarClock,
   Cpu,
-  GraduationCap,
   History,
   Folder,
   FolderOpen,
@@ -22,8 +19,8 @@ import {
   Settings,
   SquarePen,
   Trash2,
-  Workflow,
   Wrench,
+  Zap,
 } from "lucide-react";
 
 import { useCommandCenter } from "../CommandCenter/context/CommandCenterContextEnhanced";
@@ -33,6 +30,7 @@ import { useWorkspace } from "../contexts/WorkspaceContext.jsx";
 import eventBus from "../utils/eventBus.js";
 import { loadKeyboardShortcuts } from "../utils/keyboardShortcutsUtils.js";
 import UniversalSearch from "./UniversalSearch";
+import { isAutomationPath, lastAutomationPath } from "../Automations/automationsNav.js";
 
 const iconClass = "h-[18px] w-[18px]";
 
@@ -424,11 +422,8 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
   const isOnAgent = location.pathname === "/agent"
     || location.pathname.startsWith("/agent/profiles")
     || location.pathname.startsWith("/profiles");
-  const isOnSchedules = ["/schedules", "/scheduler", "/agent/scheduler"].some((path) => location.pathname.startsWith(path));
+  const isOnAutomations = isAutomationPath(location.pathname);
   const isOnTools = location.pathname.startsWith("/tools");
-  const isOnWorkflows = location.pathname.startsWith("/workflows");
-  const isOnActivity = location.pathname.startsWith("/activity");
-  const isOnTraining = location.pathname.startsWith("/training");
   const isOnTrash = basePage === "trash";
   const isOnSettings = basePage === "settings";
   const routeConversationId = location.pathname.match(/^\/conversations\/([^/]+)/)?.[1] || null;
@@ -463,19 +458,20 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
     }));
   }, [conversationCatalog, projects]);
 
+  // With labels shown, projects are listed below together with their chats.
+  const showProjectsTree = !collapsed && navItemsVisibility.projects !== false;
+
   const workItems = [
     { key: "projects", label: "Projects", path: "/projects", active: isOnProjects, icon: <FolderKanban className={iconClass} /> },
     { key: "tasks", label: "Tasks", path: "/tasks", active: isOnTasks, icon: <KanbanSquare className={iconClass} /> },
-    { key: "workflows", label: "Workflows", path: "/workflows", active: isOnWorkflows, icon: <Workflow className={iconClass} /> },
-    { key: "schedules", label: "Schedules", path: "/schedules", active: isOnSchedules, icon: <CalendarClock className={iconClass} /> },
-    { key: "activity", label: "Activity", path: "/activity", active: isOnActivity, icon: <Bell className={iconClass} /> },
-  ].filter((item) => navItemsVisibility[item.key] !== false);
+    // Workflows, Schedules and Activity; reopens the one used last.
+    { key: "automations", label: "Automations", path: lastAutomationPath, active: isOnAutomations, icon: <Zap className={iconClass} /> },
+  ].filter((item) => navItemsVisibility[item.key] !== false && (collapsed || item.key !== "projects"));
 
-  const buildItems = [
+  const configureItems = [
     { key: "models", label: "Models", path: "/models", active: isOnModels, icon: <Cpu className={iconClass} /> },
     { key: "tools", label: "Tools & Skills", path: "/tools", active: isOnTools, icon: <Wrench className={iconClass} /> },
     { key: "agent", label: "Agents", path: "/agent/profiles", active: isOnAgent, icon: <BrainCircuit className={iconClass} /> },
-    { key: "training", label: "Training", path: "/training", active: isOnTraining, icon: <GraduationCap className={iconClass} /> },
   ].filter((item) => navItemsVisibility[item.key] !== false);
 
   const renderItems = (items) => items.map((item) => (
@@ -483,7 +479,7 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
       key={item.key}
       icon={item.icon}
       label={item.label}
-      onClick={() => navigate(item.path)}
+      onClick={() => navigate(typeof item.path === "function" ? item.path() : item.path)}
       isActive={item.active}
       collapsed={collapsed}
     />
@@ -532,30 +528,35 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
           </button>
         </div>
 
-        <div className={`space-y-0.5 px-3 pb-3 ${collapsed ? "pt-11" : ""}`}>
-          <SidebarNavItem
-            icon={<SquarePen className={iconClass} />}
-            label="New chat"
-            onClick={onNewChat}
-            collapsed={collapsed}
-          />
-          <SidebarNavItem
-            icon={<History className={iconClass} />}
-            label="All chats"
-            onClick={() => navigate("/all-chats")}
-            isActive={isOnChats}
-            collapsed={collapsed}
-          />
-          <SidebarNavItem
-            icon={<Search className={iconClass} />}
-            label="Search"
-            onClick={() => onSearchOpen(true)}
-            collapsed={collapsed}
-          />
-        </div>
+        {/* Destinations stay pinned here; only the project and chat lists below scroll. */}
+        <nav aria-label="Main" className={`flex-shrink-0 px-3 pb-3 ${collapsed ? "pt-11" : ""}`}>
+          <div className="space-y-0.5">
+            <SidebarNavItem
+              icon={<SquarePen className={iconClass} />}
+              label="New chat"
+              onClick={onNewChat}
+              collapsed={collapsed}
+            />
+            <SidebarNavItem
+              icon={<History className={iconClass} />}
+              label="All chats"
+              onClick={() => navigate("/all-chats")}
+              isActive={isOnChats}
+              collapsed={collapsed}
+            />
+            <SidebarNavItem
+              icon={<Search className={iconClass} />}
+              label="Search"
+              onClick={() => onSearchOpen(true)}
+              collapsed={collapsed}
+            />
+          </div>
+          {workItems.length ? <div className="mt-3 space-y-0.5">{renderItems(workItems)}</div> : null}
+          {configureItems.length ? <div className="mt-3 space-y-0.5">{renderItems(configureItems)}</div> : null}
+        </nav>
 
-        <nav className="flex-1 overflow-y-auto px-3 py-2">
-          {!collapsed ? (
+        <div className={`min-h-0 flex-1 overflow-y-auto px-3 py-3 ${collapsed ? "" : "sm:border-t sm:border-gray-200/70 sm:dark:border-gray-800 sm:midnight:border-slate-800"}`}>
+          {showProjectsTree ? (
             <section className="relative mb-5 hidden sm:block" aria-label="Projects and their conversations">
               <div className="flex items-center justify-between px-2.5 pb-1.5">
                 <button
@@ -689,12 +690,7 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
             </section>
           ) : null}
 
-          {!collapsed ? <div className="hidden px-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 sm:block dark:text-gray-600 midnight:text-slate-600">Work</div> : null}
-          <div className="space-y-0.5">{renderItems(collapsed ? workItems : workItems.filter((item) => item.key !== "projects"))}</div>
-
-          {!collapsed ? <div className="mt-5 hidden px-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 sm:block dark:text-gray-600 midnight:text-slate-600">Configure</div> : null}
-          <div className="space-y-0.5">{renderItems(buildItems)}</div>
-        </nav>
+        </div>
 
         <div className="space-y-0.5 border-t border-gray-200/70 p-3 dark:border-gray-800 midnight:border-slate-800">
           {navItemsVisibility.trash !== false ? (

@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { lazy, Suspense, useState, useEffect, useMemo, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   RefreshCw, TriangleAlert, X,
-  Mic, Volume2, Image, MessageSquare, BarChart3
+  Mic, Volume2, Image, MessageSquare, BarChart3, GraduationCap, Loader2
 } from 'lucide-react';
 import ActiveBrainPanel from './ActiveBrainPanel.jsx';
 import ProvidersSection from './ProvidersSection.jsx';
@@ -18,6 +19,11 @@ import {
 } from './modelPageShared.jsx';
 import { useModelsPageController } from './useModelsPageController.js';
 import { audioApi, visualModelsApi, aiProviderApi } from '../Settings/settingApi.js';
+
+// Fine-tuning lives under Models but loads its own chunk (it brings charts).
+const TrainingPage = lazy(() => import('../Training/TrainingPage.jsx'));
+
+const TAB_KEYS = ['chat', 'audio', 'image', 'usage', 'training'];
 
 // ── Status dot ────────────────────────────────────────────────────────────────
 const StatusDot = ({ status }) => {
@@ -183,7 +189,18 @@ const ModelsPage = () => {
   }, [refreshUsageData]);
 
   // ── Task navigation ───────────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState('chat');
+  // The tab is kept in the URL (?tab=audio) so links like /training can open it.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get('tab');
+  const activeTab = TAB_KEYS.includes(requestedTab) ? requestedTab : 'chat';
+  const setActiveTab = useCallback((key) => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      if (key === 'chat') next.delete('tab');
+      else next.set('tab', key);
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
 
   // ── Unified search ─────────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState('');
@@ -313,6 +330,7 @@ const ModelsPage = () => {
     { key: 'audio', label: 'Audio', icon: Mic, meta: audioMeta },
     { key: 'image', label: 'Image', icon: Image, meta: visualModels.image.length ? String(visualModels.image.length) : null },
     { key: 'usage', label: 'Usage', icon: BarChart3, meta: usageRequestCount ? String(usageRequestCount) : usageRange },
+    { key: 'training', label: 'Training', icon: GraduationCap, meta: 'Labs' },
   ];
 
   // ── Content header for the active tab (icon/title/subtitle/badge) ─────────
@@ -451,6 +469,16 @@ const ModelsPage = () => {
 
       {/* ── Right Content Area ─────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-gray-900 midnight:bg-gray-950">
+        {activeTab === 'training' ? (
+          <Suspense fallback={(
+            <div className="flex flex-1 items-center justify-center text-gray-400" role="status" aria-label="Loading training">
+              <Loader2 className="h-5 w-5 animate-spin" />
+            </div>
+          )}>
+            <TrainingPage />
+          </Suspense>
+        ) : (
+        <>
         {/* Content Header */}
         <div className="px-8 py-6 border-b border-gray-100 dark:border-gray-800/60 midnight:border-gray-800/60">
           <TabHeader
@@ -619,6 +647,8 @@ const ModelsPage = () => {
 
           </div>
         </div>
+        </>
+        )}
       </div>
     </div>
   );
