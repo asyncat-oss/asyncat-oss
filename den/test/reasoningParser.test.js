@@ -1,4 +1,6 @@
+import test from 'node:test';
 import assert from 'node:assert/strict';
+
 import { extractReasoningFromText, reasoningTextFromDelta } from '../src/agent/reasoningParser.js';
 
 const cases = [
@@ -35,19 +37,20 @@ const cases = [
 ];
 
 for (const item of cases) {
-  const result = extractReasoningFromText(item.input);
-  assert.equal(result.thinking, item.thinking, `${item.name}: thinking`);
-  assert.equal(result.answer, item.answer, `${item.name}: answer`);
+  test(`extracts reasoning: ${item.name}`, () => {
+    const result = extractReasoningFromText(item.input);
+    assert.equal(result.thinking, item.thinking);
+    assert.equal(result.answer, item.answer);
+  });
 }
 
-assert.equal(
-  reasoningTextFromDelta({
-    reasoning: 'a',
-    reasoning_content: 'b',
-    reasoning_details: [{ text: 'c' }, { content: 'd' }],
-  }),
-  'abcd',
-  'OpenAI-compatible reasoning delta fields',
-);
-
-console.log('reasoning parser smoke passed');
+test('joins OpenAI-compatible reasoning delta fields', () => {
+  assert.equal(
+    reasoningTextFromDelta({
+      reasoning: 'a',
+      reasoning_content: 'b',
+      reasoning_details: [{ text: 'c' }, { content: 'd' }],
+    }),
+    'abcd',
+  );
+});
