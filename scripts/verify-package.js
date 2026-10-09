@@ -266,6 +266,8 @@ export async function verifyPackage({ releaseDirectory = path.join(ROOT, 'releas
     'electron/main.js',
     'den/package.json',
     'den/src/index.js',
+    'den/src/ai/controllers/ai/scripts/llama_cpp_server_wrapper.py',
+    'den/src/ai/controllers/ai/scripts/train_lora.py',
     'neko/dist/index.html',
   ];
   for (const relativePath of requiredFiles) {
