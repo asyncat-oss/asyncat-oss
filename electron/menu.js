@@ -80,7 +80,8 @@ export function buildAppMenu({ onNewChat, onSettings, onRestartBackend } = {}) {
       label: 'View',
       submenu: [
         { role: 'reload' },
-        { role: 'forceReload' },
+        // The role's default (CmdOrCtrl+Shift+R) belongs to Backend → Restart Backend.
+        { role: 'forceReload', accelerator: 'Shift+F5' },
         { role: 'toggleDevTools' },
         { type: 'separator' },
         { role: 'resetZoom' },
