@@ -1,7 +1,6 @@
 import { createElement as h } from 'react';
 import {
   Database,
-  File,
   FileArchive,
   FileAudio,
   FileCode,

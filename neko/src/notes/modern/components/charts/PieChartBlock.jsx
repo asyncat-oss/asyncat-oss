@@ -14,69 +14,6 @@ import {
   getHeightKey,
 } from "./chartConstants";
 
-// Helper functions for color conversion
-const hexToRgb = (hex) => {
-  const cleanHex = hex.replace("#", "");
-  if (cleanHex.length === 6) {
-    const r = parseInt(cleanHex.substr(0, 2), 16);
-    const g = parseInt(cleanHex.substr(2, 2), 16);
-    const b = parseInt(cleanHex.substr(4, 2), 16);
-    return { r, g, b };
-  }
-  return { r: 0, g: 0, b: 0 };
-};
-
-const rgbToHsl = (r, g, b) => {
-  r /= 255;
-  g /= 255;
-  b /= 255;
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  let h,
-    s,
-    l = (max + min) / 2;
-
-  if (max === min) {
-    h = s = 0;
-  } else {
-    const d = max - min;
-    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-    switch (max) {
-      case r:
-        h = (g - b) / d + (g < b ? 6 : 0);
-        break;
-      case g:
-        h = (b - r) / d + 2;
-        break;
-      case b:
-        h = (r - g) / d + 4;
-        break;
-    }
-    h /= 6;
-  }
-  return { h: h * 360, s: s * 100, l: l * 100 };
-};
-
-const hslToRgb = (h, s, l) => {
-  h /= 360;
-  s /= 100;
-  l /= 100;
-  const a = s * Math.min(l, 1 - l);
-  const f = (n) => {
-    const k = (n + h / (1 / 12)) % 12;
-    return l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
-  };
-  return {
-    r: Math.round(f(0) * 255),
-    g: Math.round(f(8) * 255),
-    b: Math.round(f(4) * 255),
-  };
-};
-
-const rgbToHex = (r, g, b) => {
-  return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
-};
-
 // Advanced Color Picker Component with Spectrum (same as LineChartBlock)
 const ColorPicker = ({ selectedColor, onColorSelect, onClose }) => {
   const [hsl, setHsl] = useState(() => {
@@ -378,7 +315,7 @@ const ColorPicker = ({ selectedColor, onColorSelect, onClose }) => {
   );
 };
 
-const PieChartBlock = ({ block, onChange, contentRef, commonProps }) => {
+const PieChartBlock = ({ block, onChange }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [chartData, setChartData] = useState(
     block.properties?.data || {
@@ -485,7 +422,6 @@ const PieChartBlock = ({ block, onChange, contentRef, commonProps }) => {
 
     // Chart area - position pie with adequate margins for labels
     const chartWidth = width * 0.6; // Use 60% of width for the pie
-    const legendWidth = width * 0.4; // Use 40% of width for the legend
     const leftMargin = 60; // Add margin from left edge
     const topMargin = 80; // Add margin from top edge for labels
     const bottomMargin = 60; // Add margin from bottom edge for labels

@@ -1,4 +1,3 @@
-/* eslint-disable react/prop-types */
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, CheckSquare, ChevronRight, File, Folder, GitBranch, Loader2, Play, Plus, RefreshCw, Square, Trash2, XCircle } from 'lucide-react';
 import { filesApi, sandboxesApi } from '../../api';

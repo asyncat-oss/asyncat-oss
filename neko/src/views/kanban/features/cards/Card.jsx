@@ -50,7 +50,7 @@ function StatusBadge({ run }) {
   );
 }
 
-const AgentCard = ({ task, columnId, onClick, onRefresh }) => {
+const AgentCard = ({ task, onClick, onRefresh }) => {
   const [acting, setActing] = useState(false);
   const run = task.agentRun;
   const profile = run?.profile;

@@ -8,8 +8,8 @@ const SENSITIVE_PATTERNS = [
   /secret=[^&\s]+/gi,
   /bearer [^\s]+/gi,
   /authorization: [^\s]+/gi,
-  /wss:\/\/[^\/]+\/[^\s?]+\?[^\s]+/gi,
-  /https:\/\/[^\/]+\.supabase\.co\/[^\s?]+\?[^\s]+/gi,
+  /wss:\/\/[^/]+\/[^\s?]+\?[^\s]+/gi,
+  /https:\/\/[^/]+\.supabase\.co\/[^\s?]+\?[^\s]+/gi,
   /eyJ[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_.+]*/gi,
 ];
 
@@ -25,7 +25,7 @@ const sanitizeMessage = (message) => {
   });
 
   sanitized = sanitized.replace(
-    /wss:\/\/[^\/]+\.supabase\.co\/realtime\/v1\/websocket\?[^\s]+/gi,
+    /wss:\/\/[^/]+\.supabase\.co\/realtime\/v1\/websocket\?[^\s]+/gi,
     'wss://[SUPABASE_HOST]/realtime/v1/websocket?[CREDACTED]'
   );
 

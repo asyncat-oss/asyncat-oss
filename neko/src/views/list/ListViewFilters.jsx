@@ -6,7 +6,6 @@ const ListViewFilters = ({
 	setSearchTerm,
 	filterConfig,
 	toggleRunningFilter,
-	togglePriorityFilter,
 	onClearFilters,
 	onCreateTask,
 	searchContext = { isSearchActive: false, totalResults: 0 },

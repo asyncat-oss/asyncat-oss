@@ -1,4 +1,3 @@
-/* eslint-disable react/prop-types */
 /**
  * UnifiedDiffViewer — renders a git-style unified diff with:
  *  - line numbers (old + new) in the gutter
@@ -129,7 +128,6 @@ function DiffLine({ line, lang }) {
       <td className="py-0 px-2 w-full overflow-hidden">
         <code
           className="block font-mono text-[11px] leading-5 whitespace-pre-wrap break-all"
-          // eslint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{ __html: html || '​' }}
         />
       </td>

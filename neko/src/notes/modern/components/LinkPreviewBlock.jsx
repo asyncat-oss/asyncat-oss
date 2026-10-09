@@ -5,8 +5,6 @@ import apiClient from "../../../services/apiClient";
 const LinkPreviewBlock = ({
   block,
   onChange,
-  contentRef,
-  commonProps,
   readOnly = false,
 }) => {
   const [url, setUrl] = useState(block.properties?.url || "");

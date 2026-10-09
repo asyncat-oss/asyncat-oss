@@ -3,7 +3,7 @@ import { Upload, Trash2, File, ExternalLink, Loader, AlertCircle } from 'lucide-
 import { attachmentsApi } from '../../noteApi';
 import { useNoteContext } from '../../context/NoteContext';
 
-const FileBlock = ({ block, onChange, contentRef, commonProps }) => {
+const FileBlock = ({ block, onChange, contentRef }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -16,7 +16,6 @@ const FileBlock = ({ block, onChange, contentRef, commonProps }) => {
   const originalName = block.properties?.originalName || '';
   const fileSize = block.properties?.size || 0;
   const contentType = block.properties?.contentType || '';
-  const description = block.properties?.description || '';
 
   const handleFileUpload = async (files) => {
     if (!files || files.length === 0) return;

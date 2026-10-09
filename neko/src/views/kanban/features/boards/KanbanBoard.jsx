@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, RefreshCw, AlertCircle } from 'lucide-react';
 import { agentTaskRunsApi } from '../../../../CommandCenter/api';
 import { useColumnContext } from '../../../context/viewContexts';
-import AgentCard from '../cards/Card';
 import AgentColumn from '../columns/components/Column';
 import NewTaskModal from '../cards/AddCardModal';
 import AgentTaskDetail from '../../../tasks/carddetail/CardDetailModal';

@@ -1,4 +1,3 @@
-/* eslint-disable react/prop-types */
 import { useState, useEffect, useCallback } from 'react';
 import { Mic, Volume2, Play, Square, Trash2, FolderOpen, Plus, RefreshCw, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 import { audioApi } from '../Settings/settingApi.js';

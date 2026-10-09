@@ -1,4 +1,3 @@
-/* eslint-disable react/prop-types */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { GitBranch, Loader2, Plus, Check, AlertCircle } from 'lucide-react';
 import { gitApi } from '../../api';

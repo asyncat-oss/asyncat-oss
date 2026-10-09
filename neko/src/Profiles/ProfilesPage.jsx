@@ -7,7 +7,7 @@ import {
   Layers, Plus, Trash2, Edit2, Loader2, AlertCircle,
   Check, X, Star, StarOff, ChevronDown, ChevronRight,
   Zap, RefreshCw, Search, ShieldCheck, ShieldAlert, Wrench,
-  FolderOpen, Sparkles, SlidersHorizontal,
+  FolderOpen, SlidersHorizontal,
 } from 'lucide-react';
 import { profilesApi, agentApi } from '../CommandCenter/api';
 

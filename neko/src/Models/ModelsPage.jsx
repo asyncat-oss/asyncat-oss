@@ -1,4 +1,3 @@
-/* eslint-disable react/prop-types */
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   RefreshCw, TriangleAlert, X,

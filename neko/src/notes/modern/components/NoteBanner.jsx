@@ -72,7 +72,7 @@ const NoteBanner = ({ note, onBannerChange, isEditable = true }) => {
         return { backgroundColor: bannerData.color };
       case "gradient":
         return { background: bannerData.gradient };
-      case "image":
+      case "image": {
         // Always construct the URL using the attachmentApi like in the card
         const imageUrl = attachmentApi.getAttachmentUrl(
           note.id,
@@ -88,6 +88,7 @@ const NoteBanner = ({ note, onBannerChange, isEditable = true }) => {
           backgroundPosition: `${position.x}% ${position.y}%`,
           backgroundRepeat: "no-repeat",
         };
+      }
       default:
         return {};
     }

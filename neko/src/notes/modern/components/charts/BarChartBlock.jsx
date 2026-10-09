@@ -339,7 +339,7 @@ const ColorPicker = ({ selectedColor, onColorSelect, onClose }) => {
   );
 };
 
-const BarChartBlock = ({ block, onChange, contentRef, commonProps }) => {
+const BarChartBlock = ({ block, onChange }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [activeColorPalette, setActiveColorPalette] = useState(null);
   const [activeDataPointColor, setActiveDataPointColor] = useState(null); // { datasetIndex, pointIndex }
@@ -543,7 +543,6 @@ const BarChartBlock = ({ block, onChange, contentRef, commonProps }) => {
 
         // Calculate nice round numbers for y-axis
         const stepSize = Math.ceil(maxValue / 4) || 1;
-        const topValue = stepSize * 5;
         for (let i = 0; i <= 5; i++) {
           const value = Math.round(i * stepSize);
           const y = height - bottomPadding - (i * chartHeight) / 5;
@@ -600,7 +599,6 @@ const BarChartBlock = ({ block, onChange, contentRef, commonProps }) => {
 
         // Calculate nice round numbers for x-axis
         const stepSize = Math.ceil(maxValue / 4) || 1;
-        const topValue = stepSize * 5;
         for (let i = 0; i <= 5; i++) {
           const value = Math.round(i * stepSize);
           const x = leftPadding + (i * chartWidth) / 5;

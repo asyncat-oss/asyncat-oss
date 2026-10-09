@@ -93,7 +93,7 @@ const createInitialUploadAlert = () => ({
   allowedFormats: "",
 });
 
-const VideoBlock = ({ block, onChange, contentRef, commonProps, readOnly }) => {
+const VideoBlock = ({ block, onChange, contentRef, readOnly }) => {
   // Add CSS animation styles
   React.useEffect(() => {
     const style = document.createElement("style");
@@ -169,7 +169,6 @@ const VideoBlock = ({ block, onChange, contentRef, commonProps, readOnly }) => {
   const [showControls, setShowControls] = useState(false);
   const filename = block.properties?.filename || "";
   const caption = block.properties?.caption || "";
-  const originalName = block.properties?.originalName || "";
   const currentSize = block.properties?.size || "medium";
 
   // Custom video controls state
@@ -444,15 +443,6 @@ const VideoBlock = ({ block, onChange, contentRef, commonProps, readOnly }) => {
         width: newWidth,
         height: newHeight,
         size: size,
-      },
-    });
-  };
-
-  const handleCaptionChange = (newCaption) => {
-    onChange(block.id, {
-      properties: {
-        ...block.properties,
-        caption: newCaption,
       },
     });
   };

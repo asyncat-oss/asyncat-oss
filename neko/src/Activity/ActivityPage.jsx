@@ -1,4 +1,3 @@
-/* eslint-disable react/prop-types */
 // Unified history for work that runs asynchronously: task agents, scheduled
 // agent jobs, workflows, and outbound notifications.
 

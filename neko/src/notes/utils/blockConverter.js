@@ -96,7 +96,7 @@ export const blocksToHtml = (blocks) => {
         listItems.push(block.content || '');
         break;
 
-      case BlockType.TODO:
+      case BlockType.TODO: {
         closeList();
         const checked = block.properties?.checked ? 'checked' : '';
         const checkedClass = block.properties?.checked ? ' todo-checked' : '';
@@ -105,12 +105,13 @@ export const blocksToHtml = (blocks) => {
         html += `<span class="todo-content">${block.content || ''}</span>`;
         html += `</div>`;
         break;
+      }
           case BlockType.QUOTE:
         closeList();
         html += `<blockquote>${block.content || ''}</blockquote>`;
         break;
         
-      case BlockType.TABLE:
+      case BlockType.TABLE: {
         closeList();
         const tableData = block.properties?.tableData || [[]];
         const hasHeader = block.properties?.hasHeader || false;
@@ -127,8 +128,9 @@ export const blocksToHtml = (blocks) => {
         });
         html += '</table>';
         break;
+      }
 
-      case BlockType.CODE:
+      case BlockType.CODE: {
         closeList();
         const language = block.properties?.language || 'text';
         const showLineNumbers = block.properties?.showLineNumbers || false;
@@ -140,8 +142,9 @@ export const blocksToHtml = (blocks) => {
         html += `<pre><code class="language-${language}">${block.content || ''}</code></pre>`;
         html += `</div>`;
         break;
+      }
 
-      case BlockType.DIVIDER:
+      case BlockType.DIVIDER: {
         closeList();
         const dividerStyle = block.properties?.style || 'line';
         html += `<div class="divider-block divider-${dividerStyle}">`;
@@ -154,8 +157,9 @@ export const blocksToHtml = (blocks) => {
         }
         html += `</div>`;
         break;
+      }
 
-      case BlockType.IMAGE:
+      case BlockType.IMAGE: {
         closeList();
         const imageUrl = block.properties?.url || '';
         const caption = block.properties?.caption || '';
@@ -179,8 +183,9 @@ export const blocksToHtml = (blocks) => {
         }
         html += `</div>`;
         break;
+      }
 
-      case BlockType.VIDEO:
+      case BlockType.VIDEO: {
         closeList();
         const videoUrl = block.properties?.url || '';
         const videoCaption = block.properties?.caption || '';
@@ -203,8 +208,9 @@ export const blocksToHtml = (blocks) => {
         }
         html += `</div>`;
         break;
+      }
 
-      case BlockType.AUDIO:
+      case BlockType.AUDIO: {
         closeList();
         const audioUrl = block.properties?.url || '';
         const audioCaption = block.properties?.caption || '';
@@ -226,14 +232,14 @@ export const blocksToHtml = (blocks) => {
         }
         html += `</div>`;
         break;
+      }
 
-      case BlockType.FILE:
+      case BlockType.FILE: {
         closeList();
         const fileUrl = block.properties?.url || '';
         const filename = block.properties?.filename || '';
         const originalName = block.properties?.originalName || '';
         const fileSize = block.properties?.size || 0;
-        const contentType = block.properties?.contentType || '';
         const description = block.properties?.description || '';
         
         html += `<div class="file-block">`;
@@ -258,8 +264,9 @@ export const blocksToHtml = (blocks) => {
         }
         html += `</div>`;
         break;
+      }
 
-      case BlockType.CALLOUT:
+      case BlockType.CALLOUT: {
         closeList();
         const calloutType = block.properties?.type || 'info';
         const calloutIcon = block.properties?.icon || getCalloutIcon(calloutType);
@@ -277,8 +284,9 @@ export const blocksToHtml = (blocks) => {
         html += `<div class="callout-content">${block.content || ''}</div>`;
         html += `</div>`;
         break;
+      }
 
-      case BlockType.TOGGLE:
+      case BlockType.TOGGLE: {
         closeList();
         const isOpen = block.properties?.isOpen || false;
         const toggleTitle = block.properties?.title || 'Toggle';
@@ -291,8 +299,9 @@ export const blocksToHtml = (blocks) => {
         html += `<div class="toggle-content">${block.content || ''}</div>`;
         html += `</div>`;
         break;
+      }
 
-      case BlockType.EMBED:
+      case BlockType.EMBED: {
         closeList();
         const embedUrl = block.properties?.url || '';
         const embedType = block.properties?.type || 'generic';
@@ -316,8 +325,9 @@ export const blocksToHtml = (blocks) => {
         html += `</div>`;
         html += `</div>`;
         break;
+      }
 
-      case BlockType.MATH:
+      case BlockType.MATH: {
         closeList();
         const isInline = block.properties?.inline || false;
         const mathContent = block.content || '';
@@ -328,8 +338,9 @@ export const blocksToHtml = (blocks) => {
           html += `<div class="math-block" data-math="${mathContent}">$$${mathContent}$$</div>`;
         }
         break;
+      }
 
-      case BlockType.LINK_PREVIEW:
+      case BlockType.LINK_PREVIEW: {
         closeList();
         const linkUrl = block.properties?.url || '';
         const linkTitle = block.properties?.title || linkUrl;
@@ -354,6 +365,7 @@ export const blocksToHtml = (blocks) => {
         html += `</a>`;
         html += `</div>`;
         break;
+      }
 
       // Chart blocks - store as lightweight data structure
       case BlockType.LINE_CHART:
@@ -361,7 +373,7 @@ export const blocksToHtml = (blocks) => {
       case BlockType.PIE_CHART:
       case BlockType.AREA_CHART:
       case BlockType.SCATTER_CHART:
-      case BlockType.DONUT_CHART:
+      case BlockType.DONUT_CHART: {
         closeList();
         const chartType = block.type;
         const chartTitle = block.properties?.config?.title || 'Chart';
@@ -373,6 +385,7 @@ export const blocksToHtml = (blocks) => {
         html += `<p>📊 ${chartTitle}</p>`;
         html += `</div>`;
         break;
+      }
         
       default:
         closeList();
@@ -560,7 +573,6 @@ export const htmlToBlocks = (html) => {
           });
         } else if (node.classList.contains('audio-block')) {
           const audio = node.querySelector('audio');
-          const audioPlaceholder = node.querySelector('.audio-placeholder');
           const audioCaption = node.querySelector('.audio-caption');
           const audioFilename = node.querySelector('.audio-filename');
 
@@ -589,7 +601,6 @@ export const htmlToBlocks = (html) => {
           const fileName = node.querySelector('.file-name');
           const fileSize = node.querySelector('.file-size');
           const description = node.querySelector('.file-description');
-          const placeholder = node.querySelector('.file-placeholder');
           
           const properties = {};
           
@@ -756,7 +767,7 @@ export const htmlToBlocks = (html) => {
         }
         break;
 
-      case 'pre':
+      case 'pre': {
         // Handle code blocks that might not have the wrapper div
         const codeElement = node.querySelector('code');
         if (codeElement) {
@@ -783,6 +794,7 @@ export const htmlToBlocks = (html) => {
           });
         }
         break;
+      }
 
       case 'hr':
         blocks.push({
@@ -842,7 +854,7 @@ export const htmlToBlocks = (html) => {
         }
         break;
         
-      case 'p':
+      case 'p': {
         const content = node.innerHTML;
         if (content && content !== '<br>') {
           blocks.push({
@@ -861,6 +873,7 @@ export const htmlToBlocks = (html) => {
           });
         }
         break;
+      }
         
       default:
         // For other elements, process their children

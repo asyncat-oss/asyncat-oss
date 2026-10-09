@@ -13,7 +13,6 @@ import { extractChanges, FileChangeRow, CommandRow, RevertRunModal } from './Age
 import { parseAIResponseToBlocks, BlockRenderer } from '../renderers/BlockBasedMessageRenderer';
 import { extractReasoningFromText, normalizeReasoningForDisplay } from '../../utils/reasoningParser.js';
 import ArtifactCard from '../renderers/ArtifactRenderer';
-import { fileIconMeta } from '../../../files/fileUtils.js';
 import { AttachmentChip, ImageLightbox } from '../shared/AttachmentComponents.jsx';
 import { useUiPreferences } from '../../../contexts/UiPreferencesContext.jsx';
 import { openWebLink } from '../../../utils/openWebLink.js';
@@ -160,34 +159,6 @@ function formatCountdown(ms) {
   const seconds = totalSeconds % 60;
   if (minutes <= 0) return `${seconds}s`;
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
-}
-
-function getResultSummary(result, toolName) {
-  if (!result) return null;
-  if (typeof result === 'string') return result.length > 80 ? result.slice(0, 80) + '…' : result;
-  if (result.error) return `Error: ${result.error}`;
-  // Audio tool summaries
-  if (toolName === 'speak_text' && result.success) {
-    return `${result.audio_size || 'Audio'} · ${result.voice || 'Piper'}`;
-  }
-  if (toolName === 'transcribe_audio' && result.success) {
-    const text = result.text || '';
-    return text.length > 100 ? text.slice(0, 100) + '…' : (text || 'Transcription complete');
-  }
-  if (toolName === 'image_describe' && result.success) {
-    const text = result.description || '';
-    return text.length > 100 ? text.slice(0, 100) + '…' : 'Image inspected';
-  }
-  if (toolName === 'inspect_attachment' && result.success) {
-    const text = result.description || result.text || result.content || result.message || '';
-    return text.length > 100 ? text.slice(0, 100) + '…' : (text || `${result.kind || 'Attachment'} inspected`);
-  }
-  if ((toolName === 'generate_image' || toolName === 'edit_image') && result.success) {
-    return `${result.width || result.media?.width || '?'}x${result.height || result.media?.height || '?'} · seed ${result.seed || result.media?.seed || 'random'}`;
-  }
-  if (result.output !== undefined) { const s = String(result.output); return s.length > 100 ? s.slice(0, 100) + '…' : s; }
-  if (result.content) { const s = String(result.content); return s.length > 100 ? s.slice(0, 100) + '…' : s; }
-  try { const s = JSON.stringify(result); return s.length > 100 ? s.slice(0, 100) + '…' : s; } catch { return null; }
 }
 
 function getToolIntent(data) {
@@ -474,8 +445,6 @@ function ToolEvent({ data, result, onRetryTool, framed = true, progress = '' }) 
   const StatusIcon = status.icon;
   const isPending = status.label === 'Running';
   const isError = status.label === 'Failed';
-  const isMalformed = result?.code === 'invalid_tool_arguments';
-  const summary = getResultSummary(result, data?.tool);
   const intent = getToolIntent(data);
 
   const canReveal = window.electronAPI?.shellShowInFolder
@@ -1171,7 +1140,7 @@ function AskUserEvent({ data, onAnswer }) {
             <p className="text-sm text-gray-800 dark:text-gray-100 mt-1 leading-relaxed">{data?.question}</p>
 
             {answered ? (
-              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 italic">You replied: "{chosenAnswer}"</p>
+              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 italic">You replied: &quot;{chosenAnswer}&quot;</p>
             ) : (
               <>
                 {data?.choices?.length > 0 && (
@@ -1211,7 +1180,7 @@ function AskUserEvent({ data, onAnswer }) {
                     onClick={() => submit(data.default)}
                     className="mt-1 text-[10px] text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
                   >
-                    Use default: "{data.default}"
+                    Use default: &quot;{data.default}&quot;
                   </button>
                 )}
               </>
@@ -1794,48 +1763,6 @@ function SkillsLoadedEvent({ data }) {
   );
 }
 
-// Token usage meter — compact inline indicator
-function TokenUsageEvent({ data }) {
-  if (!data?.totalTokens) return null;
-  const total = data.totalTokens;
-  const input = data.inputTokens || 0;
-  const output = data.outputTokens || 0;
-  const maxTokens = data.contextWindow || (data.isLocal ? 8000 : 128000);
-  const pct = Math.min(100, Math.round((total / maxTokens) * 100));
-  const isHigh = pct > 70;
-  const isCritical = pct > 90;
-  const speed = data.tokensPerSecond;
-  const isEstimated = data.estimated;
-
-  return (
-    <FeedFrame className="mb-1">
-      <div className="flex items-center gap-2 py-0.5">
-        <Zap className={`w-3 h-3 flex-shrink-0 ${isCritical ? 'text-red-400' : isHigh ? 'text-amber-400' : 'text-gray-400 dark:text-gray-600'}`} />
-        <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
-          <span className="text-[10px] tabular-nums text-gray-400 dark:text-gray-600">
-            {isEstimated ? '~' : ''}{(total / 1000).toFixed(1)}k tokens ({(input / 1000).toFixed(1)}k in / {(output / 1000).toFixed(1)}k out)
-          </span>
-          {speed > 0 && (
-            <span className="text-[10px] tabular-nums text-indigo-400 dark:text-indigo-500">
-              {speed} tok/s
-            </span>
-          )}
-          <div className="flex-1 h-1 max-w-[80px] bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${isCritical ? 'bg-red-400' : isHigh ? 'bg-amber-400' : 'bg-indigo-400'}`}
-              style={{ width: `${pct}%` }}
-            />
-          </div>
-          <span className="text-[9px] tabular-nums text-gray-300 dark:text-gray-700">{pct}%</span>
-          {isEstimated && (
-            <span className="text-[9px] text-gray-300 dark:text-gray-700 italic">est.</span>
-          )}
-        </div>
-      </div>
-    </FeedFrame>
-  );
-}
-
 // Compaction notification — shown when context window was compressed
 function CompactionEvent({ data }) {
   const dropped = data?.droppedMessages || 0;
@@ -1855,7 +1782,7 @@ function CompactionEvent({ data }) {
 }
 
 // Correction learned notification
-function CorrectionLearnedEvent({ data }) {
+function CorrectionLearnedEvent() {
   return (
     <FeedFrame className="mb-2">
       <div className="flex items-center gap-2 py-1 px-2 rounded-md bg-violet-50/50 dark:bg-violet-900/10 border border-violet-200/30 dark:border-violet-800/20">

@@ -1,4 +1,3 @@
-/* eslint-disable react/prop-types */
 // neko/src/Workflows/WorkflowsPage.jsx
 // Visual automation builder. A workflow = trigger (manual / cron schedule) + an
 // ordered list of natural-language steps the agent runs in sequence, optionally

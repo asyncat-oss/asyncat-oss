@@ -1,4 +1,3 @@
-/* eslint-disable react/prop-types */
 import { useEffect, useState } from 'react';
 import { Loader2, AlertCircle, X, Copy, Check, FileCode } from 'lucide-react';
 import { gitApi } from '../../api';

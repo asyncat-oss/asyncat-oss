@@ -1,4 +1,3 @@
-/* eslint-disable react/prop-types */
 // neko/src/Scheduler/SchedulerPage.jsx
 // ─── Agent Scheduler UI ───────────────────────────────────────────────────────
 

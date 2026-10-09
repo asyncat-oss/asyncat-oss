@@ -1,4 +1,3 @@
-/* eslint-disable react/prop-types */
 import { useCallback, useEffect, useMemo, useRef, useState, Suspense, lazy } from 'react';
 import {
   ChevronRight, Code2, Folder, GitBranch, Loader2, RefreshCw,

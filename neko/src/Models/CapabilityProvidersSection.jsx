@@ -1,4 +1,3 @@
-/* eslint-disable react/prop-types */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, ExternalLink, KeyRound, Loader2, RefreshCw, Zap, Construction } from 'lucide-react';
 import { configApi } from '../Settings/settingApi.js';
