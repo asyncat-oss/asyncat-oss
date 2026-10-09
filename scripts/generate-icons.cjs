@@ -13,15 +13,12 @@ const sourcePath = path.join(publicDir, 'Logo_Asyncat.svg');
 const linuxIconDir = path.join(publicDir, 'icons');
 
 const pngTargets = [
-  ['Logo_Asyncat.png', 1024],
   ['app-icon-1024.png', 1024],
   ['app-icon-512.png', 512],
   ['app-tray.png', 32],
   ['favicon-16x16.png', 16],
   ['favicon-32x32.png', 32],
   ['apple-touch-icon.png', 180],
-  ['cat-icon-96.png', 96],
-  ['cat-icon-512.png', 512],
   ['pwa-72x72.png', 72],
   ['pwa-96x96.png', 96],
   ['pwa-128x128.png', 128],
