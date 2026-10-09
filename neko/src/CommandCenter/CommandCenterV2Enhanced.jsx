@@ -18,7 +18,8 @@ import {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import { MessageInputV2 } from "./components/input/MessageInputV2";
-import AgentRunFeed, { CurrentPlanPanel, extractLocalhostUrl, buildEventSegments } from './components/agent/AgentRunFeed';
+import AgentRunFeed, { CurrentPlanPanel, buildEventSegments } from './components/agent/AgentRunFeed';
+import { extractLocalhostUrl } from './utils/localhostUrl.js';
 import CommandCenterSidePanel from './components/sidebars/CommandCenterSidePanel';
 import TerminalPanel from './components/sidebars/TerminalPanel';
 import ChatFloatingNav from './components/nav/ChatFloatingNav';

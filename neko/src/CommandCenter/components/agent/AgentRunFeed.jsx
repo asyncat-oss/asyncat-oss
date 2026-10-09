@@ -16,6 +16,7 @@ import ArtifactCard from '../renderers/ArtifactRenderer';
 import { AttachmentChip, ImageLightbox } from '../shared/AttachmentComponents.jsx';
 import { useUiPreferences } from '../../../contexts/UiPreferencesContext.jsx';
 import { openWebLink } from '../../../utils/openWebLink.js';
+import { extractLocalhostUrl } from '../../utils/localhostUrl.js';
 
 // ── Inline @mention rendering ─────────────────────────────────────────────────
 function renderGoalWithMentions(goal = "", fileAttachments = []) {
@@ -37,24 +38,6 @@ function renderGoalWithMentions(goal = "", fileAttachments = []) {
   }
   if (lastIndex < goal.length) parts.push(<span key={`t${lastIndex}`}>{goal.slice(lastIndex)}</span>);
   return parts.length > 0 ? parts : goal;
-}
-
-// ── Localhost URL detection ───────────────────────────────────────────────────
-
-export function extractLocalhostUrl(text = '') {
-  if (!text || typeof text !== 'string') return null;
-  // Explicit localhost/127.0.0.1 URL (Vite "Local:", plain server output, etc.)
-  const explicit = text.match(/https?:\/\/(?:localhost|127\.0\.0\.1):\d{2,5}(?:\/[^\s,)'"]*)?/);
-  if (explicit) return explicit[0].replace(/[,.)'"]+$/, '');
-  // "→ Local: http://..." (Vite style)
-  const vite = text.match(/Local:\s+(https?:\/\/localhost:\d+)/);
-  if (vite) return vite[1];
-  // "port 3000", "listening on 8080", "running at :5000", "PORT=4000"
-  const port = text.match(
-    /(?:(?:port|serving|listening|running|available|started)[\s:]+|:)(\d{4,5})\b/i
-  );
-  if (port) return `http://localhost:${port[1]}`;
-  return null;
 }
 
 // ── Tool icon / label map ─────────────────────────────────────────────────────
