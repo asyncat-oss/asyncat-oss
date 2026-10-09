@@ -9,6 +9,7 @@ import { randomUUID } from 'crypto';
 import { PermissionLevel } from './toolRegistry.js';
 import { missingDepError, safePath, formatSize } from './shared.js';
 import { getArtifactsDir, getLegacyArtifactsDir } from '../workspacePaths.js';
+import { launchBrowser } from '../../lib/browserLauncher.js';
 
 /** Ensure artifacts directory exists and return its path. */
 function ensureArtifactsDir(workingDir) {
@@ -530,9 +531,8 @@ export const generatePdfTool = {
       fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
     }
 
-    let puppeteer;
     try {
-      puppeteer = (await import('puppeteer')).default;
+      await import('puppeteer');
     } catch {
       return {
         success: false,
@@ -601,8 +601,8 @@ ${htmlContent}
 
       let browser;
       try {
-        browser = await puppeteer.launch({
-          headless: 'new',
+        browser = await launchBrowser({
+          headless: true,
           args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
         });
 

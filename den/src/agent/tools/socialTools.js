@@ -11,6 +11,7 @@ import JSZip from 'jszip';
 import { PermissionLevel } from './toolRegistry.js';
 import { safePath, formatSize, isPathInside } from './shared.js';
 import { getArtifactsDir } from '../workspacePaths.js';
+import { launchBrowser } from '../../lib/browserLauncher.js';
 
 // ── Platform size presets ────────────────────────────────────────────────────
 
@@ -55,15 +56,14 @@ function imageToBase64(filePath) {
 // Cross-platform: headless Chrome with no-sandbox args works on all OSes.
 
 async function screenshotHtmlToPng(html, outputPath, { width, height } = {}) {
-  let puppeteer;
   try {
-    puppeteer = (await import('puppeteer')).default;
+    await import('puppeteer');
   } catch {
     throw new Error('Puppeteer is not available. It should already be installed as a dependency — check "npm install" in the den directory.');
   }
 
-  const browser = await puppeteer.launch({
-    headless: 'new',
+  const browser = await launchBrowser({
+    headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--font-render-hinting=none'],
   });
 
