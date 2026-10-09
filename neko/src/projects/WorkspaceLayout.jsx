@@ -1,9 +1,10 @@
 import { Suspense, useEffect, useState } from "react";
 import PropTypes from 'prop-types';
 import { Outlet, useOutletContext, useNavigate } from "react-router-dom";
-import { ArrowRight, FolderOpen } from "lucide-react";
+import { ArrowRight, FolderOpen, Plus } from "lucide-react";
 import ProjectSidebar from "./ProjectSidebar";
 import { useWorkspace } from "../contexts/WorkspaceContext";
+import eventBus from "../utils/eventBus.js";
 
 export const WorkspaceEmpty = ({ basePath = '/projects' }) => {
   const { getWorkspaceProjects } = useWorkspace();
@@ -40,8 +41,18 @@ export const WorkspaceEmpty = ({ basePath = '/projects' }) => {
         <p className="text-sm text-gray-400 dark:text-gray-500 midnight:text-gray-500">
           {isTaskSection
             ? 'Tasks live inside projects. Create a project first, then return here.'
-            : 'Use New in the sidebar to create your first project.'}
+            : 'Create a project to organise tasks and choose which folders the agent can use.'}
         </p>
+        {!isTaskSection && (
+          <button
+            type="button"
+            onClick={() => eventBus.emit('projects:create')}
+            className="mx-auto mt-4 inline-flex items-center gap-1.5 rounded-lg bg-gray-900 px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Create project
+          </button>
+        )}
         {isTaskSection && (
           <button
             type="button"

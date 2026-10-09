@@ -1456,6 +1456,15 @@ export const MessageInputV2 = ({
                     )}
                     <span className="min-w-0 truncate">{localModelSendBlockReason}</span>
                   </div>
+                  {!(activeBrain.isLoadingModel || activeBrain.loading) && (
+                    <button
+                      type="button"
+                      onClick={() => navigate('/models')}
+                      className="shrink-0 rounded-md border border-amber-300 bg-white px-2.5 py-1 text-xs font-medium text-amber-900 transition-colors hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100 dark:hover:bg-amber-900/40 midnight:border-amber-800 midnight:bg-amber-950/40 midnight:text-amber-100 midnight:hover:bg-amber-900/40"
+                    >
+                      Set up a model
+                    </button>
+                  )}
                 </div>
               )}
 
