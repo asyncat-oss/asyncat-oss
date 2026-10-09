@@ -1,4 +1,5 @@
 // router/AppRouter.jsx - local application routes
+import { lazy } from 'react';
 import PropTypes from 'prop-types';
 import { createBrowserRouter, RouterProvider, Navigate, useParams } from 'react-router-dom';
 import { UserProvider } from '../contexts/UserContext';
@@ -8,22 +9,25 @@ import { CommandCenterProvider } from '../CommandCenter/context/CommandCenterCon
 import ErrorBoundary from '../error/ErrorBoundary';
 import RouteErrorElement from '../error/ErrorBoundary';
 
-// Page components
+// Page components. The chat (the landing page) and the layout load up front;
+// every other page is split into its own chunk and loaded on first visit.
 import AppLayout from '../appcontainer/AppLayout';
 import CommandCenterV2Enhanced from '../CommandCenter/CommandCenterV2EnhancedRouter';
-import ChatsPage from '../CommandCenter/pages/ChatsPage';
-import TrashPage from '../CommandCenter/pages/TrashPage';
-import WorkspaceLayout, { WorkspaceEmpty } from '../projects/WorkspaceLayout';
-import ProjectOverview from '../projects/ProjectOverview';
 import NotFound from '../error/NotFound';
-import SettingsPage from '../Settings/SettingsPage';
-import ModelsPage from '../Models/ModelsPage';
-import ToolsSkillsPage from '../Tools/ToolsSkillsPage';
-import AgentPage from '../Agent/AgentPage';
-import SchedulerPage from '../Scheduler/SchedulerPage';
-import WorkflowsPage from '../Workflows/WorkflowsPage';
-import ActivityPage from '../Activity/ActivityPage';
-import TrainingPage from '../Training/TrainingPage';
+
+const ChatsPage = lazy(() => import('../CommandCenter/pages/ChatsPage'));
+const TrashPage = lazy(() => import('../CommandCenter/pages/TrashPage'));
+const WorkspaceLayout = lazy(() => import('../projects/WorkspaceLayout'));
+const WorkspaceEmpty = lazy(() => import('../projects/WorkspaceLayout').then((m) => ({ default: m.WorkspaceEmpty })));
+const ProjectOverview = lazy(() => import('../projects/ProjectOverview'));
+const SettingsPage = lazy(() => import('../Settings/SettingsPage'));
+const ModelsPage = lazy(() => import('../Models/ModelsPage'));
+const ToolsSkillsPage = lazy(() => import('../Tools/ToolsSkillsPage'));
+const AgentPage = lazy(() => import('../Agent/AgentPage'));
+const SchedulerPage = lazy(() => import('../Scheduler/SchedulerPage'));
+const WorkflowsPage = lazy(() => import('../Workflows/WorkflowsPage'));
+const ActivityPage = lazy(() => import('../Activity/ActivityPage'));
+const TrainingPage = lazy(() => import('../Training/TrainingPage'));
 
 const LegacyWorkspaceRedirect = () => {
   const { projectId, tab } = useParams();

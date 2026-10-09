@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { Suspense, useState, useCallback, useEffect, useRef } from "react";
 import { Outlet, useNavigate, useParams, useLocation } from "react-router-dom";
 import { RotateCw, ServerCrash, WifiOff } from 'lucide-react';
 import { useWorkspace } from '../contexts/WorkspaceContext.jsx';
@@ -324,14 +324,17 @@ const AppLayout = () => {
           key={routeTransitionKey}
           className={`${pageTransitionsEnabled ? 'animate-fadeIn' : ''} h-full ${navigationPaddingClass}`}
         >
-          <Outlet context={{
-              selectedProject: getProjectValue(true),
-              onProjectSelect: handleProjectSelect,
-              localUser,
-              currentTab: params.tab,
-              refreshProjects,
-              onOpenSettings: handleOpenSettings,
-            }} />
+          {/* Pages other than the chat are code-split; they load from the local server instantly. */}
+          <Suspense fallback={null}>
+            <Outlet context={{
+                selectedProject: getProjectValue(true),
+                onProjectSelect: handleProjectSelect,
+                localUser,
+                currentTab: params.tab,
+                refreshProjects,
+                onOpenSettings: handleOpenSettings,
+              }} />
+          </Suspense>
         </div>
       </main>
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import PropTypes from 'prop-types';
 import { Outlet, useOutletContext, useNavigate } from "react-router-dom";
 import { ArrowRight, FolderOpen } from "lucide-react";
@@ -68,7 +68,9 @@ const WorkspaceLayout = ({ basePath = '/projects', section = 'projects' }) => {
     <div className="flex h-full">
       <ProjectSidebar basePath={basePath} mode={section} />
       <div className="flex-1 min-w-0 overflow-hidden">
-        <Outlet context={{ ...outletContext, basePath, section }} />
+        <Suspense fallback={null}>
+          <Outlet context={{ ...outletContext, basePath, section }} />
+        </Suspense>
       </div>
     </div>
   );

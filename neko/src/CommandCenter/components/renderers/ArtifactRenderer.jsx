@@ -3,7 +3,7 @@
 // Renders agent-created artifacts inline with preview and download.
 // Matches the minimal, compact design language of the AgentRunFeed.
 
-import { useEffect, useState, useMemo } from 'react';
+import { lazy, Suspense, useEffect, useState, useMemo } from 'react';
 import {
   Download, FileText, Table2, Code2,
   BarChart3, Globe, Image, ChevronDown, ChevronRight,
@@ -15,7 +15,6 @@ import { agentApi } from '../../api';
 import { notesApi } from '../../../notes/noteApi';
 import { NoteProvider } from '../../../notes/context/NoteProvider';
 import { sanitizeSvg } from '../../../utils/sanitizer';
-import ModernNoteEditor from '../../../notes/modern/ModernNoteEditor';
 
 // ── Type config ─────────────────────────────────────────────────────────────
 const TYPE_META = {
@@ -358,15 +357,20 @@ function ArtifactFullscreenOverlay({ artifact, content, type, title, onClose }) 
 }
 
 // ── Note panel — always the full rich editor, embedded in the side panel ─────
+// The editor is large; load it only when a note artifact is opened.
+const ModernNoteEditor = lazy(() => import('../../../notes/modern/ModernNoteEditor'));
+
 function NotePanel({ html, noteId, title, fullHeight }) {
   return (
     <div className={`flex flex-col ${fullHeight ? 'h-full' : 'h-[640px]'} -mx-3 -my-2.5`}>
       <NoteProvider>
-        <ModernNoteEditor
-          note={{ id: noteId, title: title || 'Untitled Note', content: html || '' }}
-          onBack={() => {}}
-          embedded
-        />
+        <Suspense fallback={<div className="flex-1" />}>
+          <ModernNoteEditor
+            note={{ id: noteId, title: title || 'Untitled Note', content: html || '' }}
+            onBack={() => {}}
+            embedded
+          />
+        </Suspense>
       </NoteProvider>
     </div>
   );
