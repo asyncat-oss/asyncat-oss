@@ -6,7 +6,7 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "nodemon src/index.js",
+    "dev": "node --watch --watch-preserve-output src/index.js",
     "test": "node --test test/*.test.js"
   },
   "dependencies": {
@@ -37,8 +37,5 @@
   },
   "engines": {
     "node": "^22.13.0 || ^24.0.0 || ^25.0.0 || ^26.0.0"
-  },
-  "devDependencies": {
-    "nodemon": "^3.1.14"
   }
 }

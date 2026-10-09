@@ -36,9 +36,6 @@ logs/
 .asyncat-artifacts/
 .agent_tmp/
 
-# nodemon restart trigger (den/nodemon.json watches this file)
-den/.restart
-
 # Local AI model files (large binaries — download separately)
 **/*.gguf
 **/*.ggml

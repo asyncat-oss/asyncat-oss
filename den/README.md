@@ -72,7 +72,7 @@ Do not install `llama-cpp-python` into system Python on Linux; Asyncat uses a ma
 ### Run
 
 ```bash
-npm run dev   # development (nodemon)
+npm run dev   # development (restarts on file changes)
 npm start     # production
 npm test      # node:test suites in test/
 ```
