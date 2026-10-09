@@ -8,7 +8,9 @@
  */
 
 import { useMemo } from 'react';
-import hljs from 'highlight.js';
+// The common build (~36 languages) instead of all ~190: the full build added
+// 1.7 MB to the startup bundle. It shares one core with the chat renderer.
+import hljs from 'highlight.js/lib/common';
 import 'highlight.js/styles/github.css';
 
 // ── Diff parser ───────────────────────────────────────────────────────────────
