@@ -4,7 +4,7 @@ The unified backend for the AI Agent OS.
 
 > We give the baby models the keys. They just need a bigger brain to use them properly.
 
-Built with **Node.js 20+** and **Express 4**.
+Built with **Node.js** (20.19+, 22.13+, or 24+) and **Express 4**.
 
 ## What it does
 
@@ -12,51 +12,54 @@ Den is a single Express server that handles everything:
 
 | Domain | Routes |
 |---|---|
-| AI / Agent | `/api/ai/*`, `/api/agent/*` |
+| AI / Agent | `/api/ai/*`, `/api/agent/*` (same router), `/api/ai/providers/*` |
+| Training | `/api/training/*` |
 | Config | `/api/config/*` |
-| Users | `/api/users/*` |
+| Users / Projects | `/api/users/*`, `/api/projects/*` |
 | Workspaces | `/api/teams/*` |
-| Habits | `/api/habits/*` |
 | Kanban | `/api/cards/*`, `/api/columns/*` |
-| Notes | `/api/notes/*` |
-| Storage | `/api/attachments/*` |
+| Notes | `/api/notes/*`, `/api/attachments/*` (note attachments) |
+| Files | `/api/files/*` (file explorer) |
+| Storage | `/files/*`, `/api/storage/*` (uploaded files and logs) |
+| Integrations | `/api/integrations/*` (GitHub, Obsidian, RSS, mail, notifications) |
+| Search | `/api/search/*` |
+| Browser | `/api/browser/*` (built-in browser history) |
+| Install / Update | `/api/install/*`, `/api/update/*` |
+| Health | `/health` |
 
 ## Getting started
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 20.19+, 22.13+, or 24+
 - A local model (GGUF) OR an API key
 
 ### Install
 
-```bash
-npm install
-```
-
-Auto-creates `.env` from `.env.example`.
+Run `npm install` from the repository root. Its postinstall copies
+`den/.env.example` to `den/.env` when it doesn't exist yet.
 
 ### Configure
 
-Edit `den/.env` for bootstrap server settings. Runtime selections are managed
-from **Settings → Runtime** and persisted in Asyncat's database:
+`den/.env` only holds the bootstrap settings the server needs before its
+database opens:
 
 ```env
 PORT=8716
-
-# Optional source-install overrides
-LLAMA_SERVER_PORT=8765
-MODELS_PATH=./data/models
-# Optional explicit llama.cpp binary
-LLAMA_BINARY_PATH=/full/path/to/llama-server
-# Optional GPU offload tuning for the selected local engine
-LLAMA_GPU_LAYERS=0
-
-# OR cloud API
-AI_BASE_URL=https://api.openai.com/v1
-AI_API_KEY=sk-...
-AI_MODEL=gpt-4o
+NODE_ENV=development
+FRONTEND_URL=http://127.0.0.1:8717
+PUBLIC_URL=http://127.0.0.1:8716
+DB_PATH=./data/asyncat.db
+STORAGE_DRIVER=local
+STORAGE_PATH=./data/uploads
 ```
+
+Everything else (providers and API keys, local engines, integrations) is set
+in the app and stored in the database. A few optional overrides are still
+read from the environment until the same setting is saved in the app:
+`LLAMA_SERVER_PORT`, `MODELS_PATH`, `LLAMA_BINARY_PATH`, `LLAMA_GPU_LAYERS`.
+When no provider is configured in **Models**, `AI_BASE_URL`, `AI_API_KEY`, and
+`AI_MODEL` act as a fallback OpenAI-compatible endpoint.
 
 For local GGUF models, open **Settings → Runtime** and install the recommended
 managed llama.cpp build. The Runtime page inspects the machine, recommends a
@@ -69,12 +72,14 @@ Do not install `llama-cpp-python` into system Python on Linux; Asyncat uses a ma
 ### Run
 
 ```bash
-npm run dev   # development
+npm run dev   # development (nodemon)
 npm start     # production
+npm test      # node:test suites in test/
 ```
 
 Starts at `http://127.0.0.1:8716` and only accepts connections from the local
-machine.
+machine. Browser requests must come from Asyncat's own frontend: requests with
+another `Origin`, or addressed to a non-local `Host`, are rejected.
 
 ## Local profile
 
@@ -84,7 +89,9 @@ password, browser session, or account setup.
 
 ## Database
 
-SQLite. No external dependencies. Data in `data/asyncat.db`.
+SQLite. No external dependencies. The file is `data/asyncat.db` under the
+backend's working directory: `den/data/asyncat.db` from source, or
+`<user data>/data/asyncat.db` in the desktop app. Override it with `DB_PATH`.
 
 ## Config API
 
@@ -92,17 +99,20 @@ SQLite. No external dependencies. Data in `data/asyncat.db`.
 # get config (secrets masked)
 GET /api/config
 
-# update config
+# update a setting (saved to the database and applied live;
+# bootstrap keys such as STORAGE_PATH are written to .env and need a restart)
 PUT /api/config
-{ "key": "AI_MODEL", "value": "llama3.1", "restart": true }
+{ "key": "LLAMA_GPU_LAYERS", "value": "99" }
 
-# get secrets (unmasked)
+# get secrets (masked)
 GET /api/config/secrets
 
-# update secret
+# update a secret
 PUT /api/config/secrets
-{ "key": "AI_API_KEY", "value": "sk-new-key" }
+{ "key": "HF_TOKEN", "value": "hf_..." }
 ```
+
+Chat-provider API keys are managed on the **Models** page, not through this API.
 
 ## License
 
