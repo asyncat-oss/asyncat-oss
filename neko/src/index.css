@@ -131,8 +131,12 @@ body.browser-fullscreen-active [data-app-sidebar] {
   pointer-events: none;
 }
 
-/* Override dark variant to use class instead of media query */
-@custom-variant dark (&:where(.dark, .dark *));
+/* Override dark variant to use class instead of media query. Midnight is a
+   darker dark theme, so dark: styles apply there too; midnight: utilities are
+   emitted after dark: ones and override them where both are set. Without this,
+   any element with only dark: classes fell back to its light styles in
+   Midnight (white inputs, near-invisible headings). */
+@custom-variant dark (&:where(.dark, .dark *, .midnight, .midnight *));
 
 /* Add midnight variant */
 @custom-variant midnight (&:where(.midnight, .midnight *));

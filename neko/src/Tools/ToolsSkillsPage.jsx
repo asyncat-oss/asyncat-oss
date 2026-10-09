@@ -1332,8 +1332,8 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
 
             <main className="relative min-h-0 min-w-0 overflow-hidden px-4 py-5 sm:px-6">
               <div className="mx-auto grid h-full max-w-7xl grid-rows-[minmax(0,1fr)_minmax(280px,42vh)] gap-4 xl:grid-cols-[minmax(0,1fr)_420px] xl:grid-rows-none">
-                <section className="flex min-h-0 min-w-0 flex-col">
-                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <section className="@container flex min-h-0 min-w-0 flex-col">
+                  <div className="mb-4 flex flex-col gap-3 @3xl:flex-row @3xl:items-center @3xl:justify-between">
                     <div className="flex items-center gap-2">
                       {!skillsSidebarOpen && (
                         <button
@@ -1349,9 +1349,9 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Search by name, description, group, or tag. Select a row to read its instructions.</p>
                       </div>
                     </div>
-                    <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
-                      <div className="flex w-full items-center gap-2 sm:w-auto">
-                        <div className="relative flex-1 sm:w-80">
+                    <div className="flex w-full flex-col gap-2 @3xl:w-auto @3xl:items-end">
+                      <div className="flex w-full items-center gap-2 @3xl:w-auto">
+                        <div className="relative min-w-0 flex-1 @3xl:w-80 @3xl:flex-none">
                           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                           <input
                             type="text"
@@ -1381,7 +1381,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                           New
                         </button>
                       </div>
-                      <div className="flex w-full flex-wrap gap-1 rounded-lg bg-gray-100 p-1 dark:bg-gray-800 midnight:bg-slate-800 sm:w-auto">
+                      <div className="flex w-full flex-wrap gap-1 rounded-lg bg-gray-100 p-1 dark:bg-gray-800 midnight:bg-slate-800 @3xl:w-auto">
                         {SKILL_ORIGIN_FILTERS.map(filter => (
                           <button
                             key={filter.id}
