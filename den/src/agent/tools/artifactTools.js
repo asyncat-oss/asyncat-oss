@@ -20,6 +20,17 @@ function ensureArtifactsDir(workingDir) {
   return dir;
 }
 
+// The UI fetches artifact bodies by filename from the default workspace, so a
+// file written into a project's own folder could not be previewed. Return the
+// text inline (the UI prefers it over fetching) for everything but very large
+// files, which still fall back to the download link.
+const MAX_INLINE_ARTIFACT_BYTES = 512 * 1024;
+function inlineContentFields(text) {
+  if (typeof text !== 'string') return {};
+  if (Buffer.byteLength(text, 'utf8') > MAX_INLINE_ARTIFACT_BYTES) return { contentTruncated: true };
+  return { content: text };
+}
+
 // ── create_artifact ─────────────────────────────────────────────────────────
 
 export const createArtifactTool = {
@@ -82,6 +93,7 @@ export const createArtifactTool = {
           type: contentType,
           originalType: args.type,
           description: args.description || '',
+          ...inlineContentFields(finalContent),
           size: stat.size,
           createdAt: new Date().toISOString(),
         },
@@ -141,6 +153,7 @@ export const createMarkdownTool = {
           path: relativePath,
           absolutePath: filePath,
           type: 'markdown',
+          ...inlineContentFields(content),
           size: stat.size,
           createdAt: new Date().toISOString(),
         },
@@ -188,6 +201,7 @@ export const createDiagramTool = {
           path: relativePath,
           absolutePath: filePath,
           type: 'mermaid',
+          ...inlineContentFields(htmlContent),
           size: stat.size,
           diagramSource: args.diagram,
           createdAt: new Date().toISOString(),
@@ -251,6 +265,7 @@ export const createCsvTool = {
           path: relativePath,
           absolutePath: filePath,
           type: 'csv',
+          ...inlineContentFields(csvContent),
           size: stat.size,
           rowCount: args.rows.length,
           columnCount: args.headers.length,
@@ -338,6 +353,7 @@ export const createHtmlPageTool = {
           path: relativePath,
           absolutePath: filePath,
           type: 'html',
+          ...inlineContentFields(content),
           size: stat.size,
           createdAt: new Date().toISOString(),
         },
