@@ -2093,15 +2093,18 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         ...prev,
         events: (prev.events || []).map(ev =>
           ev.type === 'permission_request' && ev.data?.requestId === requestId
-            ? { ...ev, data: { ...ev.data, resolving: false, resolved: true, decision } } : ev
+            ? { ...ev, data: { ...ev.data, resolving: false, resolved: true, decision, error: null } } : ev
         ),
       }));
     } catch (err) {
+      // The agent never got the answer, so leave the request open (it would
+      // otherwise read as "Resolved" while the agent waits and then auto-
+      // denies) and say why, so the user can simply try again.
       setCurrentChatRun(prev => ({
         ...prev,
         events: (prev.events || []).map(ev =>
           ev.type === 'permission_request' && ev.data?.requestId === requestId
-            ? { ...ev, data: { ...ev.data, resolving: false, resolved: true, decision: 'error', error: err.message } } : ev
+            ? { ...ev, data: { ...ev.data, resolving: false, error: err.message || 'Could not reach the agent.' } } : ev
         ),
       }));
     }
@@ -2113,13 +2116,22 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       ...prev,
       events: (prev.events || []).map(ev =>
         ev.type === 'ask_user' && ev.data?.requestId === requestId
-          ? { ...ev, data: { ...ev.data, answered: true } } : ev
+          ? { ...ev, data: { ...ev.data, answered: true, error: null } } : ev
       ),
     }));
     try {
       await agentApi.respondAskUser(requestId, answer);
     } catch (err) {
       console.error('Failed to respond to ask_user:', err);
+      // Reopen the question with the user's answer kept, instead of showing
+      // it as answered while the agent is still waiting.
+      setCurrentChatRun(prev => ({
+        ...prev,
+        events: (prev.events || []).map(ev =>
+          ev.type === 'ask_user' && ev.data?.requestId === requestId
+            ? { ...ev, data: { ...ev.data, answered: false, error: err.message || 'Could not reach the agent.', draft: answer } } : ev
+        ),
+      }));
     }
   }, [setCurrentChatRun]);
 
@@ -2178,7 +2190,11 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     ), -1);
     for (let i = persistedAgentEvents.length - 1; i > lastGoalIndex; i--) {
       const event = persistedAgentEvents[i];
-      if (event?.type === 'plan_update' && Array.isArray(event.data?.plan) && event.data.plan.length > 0) {
+      // `automatic` plans are the runtime's fixed four-step template (inspect,
+      // identify the cause, apply, verify), not something the agent planned.
+      // Its steps tick by heuristics and all turn "done" when the run ends even
+      // if tools failed, so it is not shown as the agent's plan.
+      if (event?.type === 'plan_update' && !event.data?.automatic && Array.isArray(event.data?.plan) && event.data.plan.length > 0) {
         return event;
       }
     }
@@ -2292,6 +2308,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const agentActivityItems = useMemo(() => {
     return persistedAgentEvents
       .filter(event => ['thinking', 'tool_start', 'permission_request', 'ask_user', 'answer', 'error', 'status', 'plan_update'].includes(event.type))
+      // Skip the runtime's template plan (see currentPlanEvent).
+      .filter(event => !(event.type === 'plan_update' && event.data?.automatic))
       .map((event, index) => {
         const type = event.type;
         const label = type === 'tool_start'

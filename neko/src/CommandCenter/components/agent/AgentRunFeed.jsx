@@ -940,24 +940,30 @@ function CompactPermissionEvent({ data, onDecision }) {
     return () => clearInterval(id);
   }, [expiresAt, resolved]);
 
+  // Older runs saved a failed reply as decision 'error'; it was never
+  // delivered, so the agent denied it when the request expired.
+  const notSent = decision === 'error';
+  const negative = isDenied || expired || notSent;
   const decisionLabel = isAllowed
     ? 'Approved'
     : isDenied
       ? 'Denied'
-      : expired
-        ? 'Expired, denied'
-        : 'Resolved';
+      : notSent
+        ? 'Not sent'
+        : expired
+          ? 'Expired, denied'
+          : 'Resolved';
   const decisionTone = isAllowed
     ? 'text-emerald-600 dark:text-emerald-400'
-    : isDenied || expired
+    : negative
       ? 'text-red-600 dark:text-red-400'
       : 'text-gray-500 dark:text-gray-400';
   if (showDecision || historical) {
     return (
       <div className="group rounded-md px-2 py-1.5 transition-colors hover:bg-gray-50 dark:hover:bg-gray-900/40 midnight:hover:bg-slate-900/50">
         <div className="flex items-start gap-2.5">
-          <span className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center ${isDenied ? 'text-red-500' : 'text-emerald-500'}`}>
-            {isDenied ? <XCircle className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
+          <span className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center ${negative ? 'text-red-500' : isAllowed ? 'text-emerald-500' : 'text-gray-400'}`}>
+            {negative ? <XCircle className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -1019,6 +1025,11 @@ function CompactPermissionEvent({ data, onDecision }) {
               {intent.value}
             </code>
           </div>
+          {data?.error && (
+            <p role="alert" className="mt-1.5 text-xs text-red-600 dark:text-red-400 midnight:text-red-400">
+              Couldn&apos;t send your choice ({data.error}). Try again.
+            </p>
+          )}
           {(data?.diff || data?.workingDir) && (
             <button
               type="button"

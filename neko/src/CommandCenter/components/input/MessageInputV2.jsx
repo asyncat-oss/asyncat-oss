@@ -253,6 +253,11 @@ function PendingInteractionInput({ interaction, onPermissionDecision, onAskUserA
     return () => clearInterval(id);
   }, [expiresAt]);
 
+  // If sending an answer failed, put it back in the box so it can be resent.
+  useEffect(() => {
+    if (data.error && typeof data.draft === "string") setAnswer(data.draft);
+  }, [data.error, data.draft]);
+
   if (!interaction?.type) return null;
 
   const resolving = Boolean(data.resolving || data.answered);
@@ -282,6 +287,11 @@ function PendingInteractionInput({ interaction, onPermissionDecision, onAskUserA
                   <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500">{statusText}</span>
                 </div>
                 <p className="mt-1 text-sm leading-relaxed text-gray-800 dark:text-gray-100 midnight:text-slate-100">{data.question}</p>
+                {data.error && (
+                  <p role="alert" className="mt-1.5 text-xs text-red-600 dark:text-red-400 midnight:text-red-400">
+                    Couldn&apos;t send your answer ({data.error}). Try again.
+                  </p>
+                )}
                 {Array.isArray(data.choices) && data.choices.length > 0 && (
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {data.choices.map((choice, index) => (
@@ -377,6 +387,11 @@ function PendingInteractionInput({ interaction, onPermissionDecision, onAskUserA
               </div>
               {data.workingDir && (
                 <p className="mt-1 truncate text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">{data.workingDir}</p>
+              )}
+              {data.error && (
+                <p role="alert" className="mt-1.5 text-xs text-red-600 dark:text-red-400 midnight:text-red-400">
+                  Couldn&apos;t send your choice ({data.error}). Try again.
+                </p>
               )}
             </div>
           </div>
