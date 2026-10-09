@@ -1,9 +1,9 @@
 // pdfConverter.js - Convert note blocks to PDF using Puppeteer
-import puppeteer from 'puppeteer';
 import { renderChartToImage } from './chartRenderer.js';
 import { sanitizeTableCell } from './sanitizer.js';
 import localStorageService from '../../storage/localStorageService.js';
 import fsp from 'fs/promises';
+import { launchBrowser } from '../../lib/browserLauncher.js';
 
 const PUBLIC_ATTACHMENT_BASE_URL = process.env.PUBLIC_ATTACHMENT_BASE_URL
   ? process.env.PUBLIC_ATTACHMENT_BASE_URL.replace(/\/$/, '')
@@ -49,8 +49,8 @@ async function convertBlocksToPdf({
 
     // Launch headless browser
     console.log('[PdfConverter] Launching Puppeteer...');
-    browser = await puppeteer.launch({
-      headless: 'new',
+    browser = await launchBrowser({
+      headless: true,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',

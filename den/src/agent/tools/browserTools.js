@@ -8,6 +8,7 @@
 import { PermissionLevel } from './toolRegistry.js';
 import { truncate, missingDepError } from './shared.js';
 import { getTmpDir } from '../workspacePaths.js';
+import { launchBrowser } from '../../lib/browserLauncher.js';
 
 let browserInstance = null;
 let activePage = null;
@@ -22,9 +23,8 @@ async function getActivePage() {
 
 async function getBrowser() {
   if (browserInstance) return browserInstance;
-  const puppeteer = await import('puppeteer');
-  browserInstance = await puppeteer.default.launch({
-    headless: 'new',
+  browserInstance = await launchBrowser({
+    headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
   });
   return browserInstance;
