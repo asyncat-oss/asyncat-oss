@@ -80,11 +80,11 @@ const app = express();
 const PORT = process.env.PORT || 8716;
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
+// The frontend's origins only: pages served by den itself (file previews,
+// uploads) must not be able to call the API as the app.
 const allowedOrigins = [
   'http://localhost:8717',
-  'http://localhost:8716',
   'http://127.0.0.1:8717',
-  'http://127.0.0.1:8716',
   process.env.FRONTEND_URL,
 ].filter(Boolean);
 
@@ -92,6 +92,7 @@ const allowedOrigins = [
 app.use(createLocalRequestGuard({
   allowedOrigins,
   allowedHostnames: [hostnameOf(process.env.PUBLIC_URL)].filter(Boolean),
+  sameOriginPaths: ['/api/files/site/', '/api/files/raw'],
 }));
 
 // All other routes use the restricted allow-list

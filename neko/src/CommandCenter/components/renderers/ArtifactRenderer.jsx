@@ -14,6 +14,7 @@ import { parseAIResponseToBlocks, BlockRenderer, headingId } from './BlockBasedM
 import { agentApi } from '../../api';
 import { notesApi } from '../../../notes/noteApi';
 import { NoteProvider } from '../../../notes/context/NoteProvider';
+import { sanitizeSvg } from '../../../utils/sanitizer';
 import ModernNoteEditor from '../../../notes/modern/ModernNoteEditor';
 
 // ── Type config ─────────────────────────────────────────────────────────────
@@ -147,6 +148,8 @@ function MarkdownPreview({ content }) {
 // ── HTML iframe ─────────────────────────────────────────────────────────────
 function HtmlPreview({ content, title, fullHeight = false, allowFullscreen = true }) {
   const [fullscreen, setFullscreen] = useState(false);
+  // A blob: URL shares the app's origin, so the sandbox must not add
+  // allow-same-origin: agent-written HTML would then run as the app itself.
   const blob = useMemo(() => {
     if (!content) return null;
     return URL.createObjectURL(new Blob([content], { type: 'text/html' }));
@@ -165,7 +168,7 @@ function HtmlPreview({ content, title, fullHeight = false, allowFullscreen = tru
           src={blob}
           title={title || 'Preview'}
           className={`w-full bg-white ${fullHeight ? 'h-full' : 'h-56'}`}
-          sandbox="allow-scripts allow-same-origin allow-downloads allow-popups allow-presentation"
+          sandbox="allow-scripts allow-downloads allow-popups allow-presentation"
           allow="autoplay"
         />
         {allowFullscreen && (
@@ -186,7 +189,7 @@ function HtmlPreview({ content, title, fullHeight = false, allowFullscreen = tru
               <X className="w-4 h-4" />
             </button>
           </div>
-          <iframe src={blob} title={title} className="flex-1 w-full bg-white" sandbox="allow-scripts allow-same-origin allow-downloads allow-popups allow-presentation" allow="autoplay" />
+          <iframe src={blob} title={title} className="flex-1 w-full bg-white" sandbox="allow-scripts allow-downloads allow-popups allow-presentation" allow="autoplay" />
         </div>
       )}
     </>
@@ -321,7 +324,7 @@ function ArtifactFullscreenOverlay({ artifact, content, type, title, onClose }) 
       case 'svg':
         return (
           <div className="flex h-full items-center justify-center overflow-auto bg-white p-6 dark:bg-gray-950">
-            <div dangerouslySetInnerHTML={{ __html: content }} className="max-h-full max-w-full" />
+            <div dangerouslySetInnerHTML={{ __html: sanitizeSvg(content) }} className="max-h-full max-w-full" />
           </div>
         );
       case 'json':
@@ -567,7 +570,7 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
       case 'svg':
         return (
           <div className={`flex items-center justify-center p-3 bg-white dark:bg-gray-900 rounded ${fullHeight ? 'h-full min-h-[320px]' : ''}`}>
-            <div dangerouslySetInnerHTML={{ __html: content }} className={`max-w-full ${fullHeight ? 'max-h-full' : 'max-h-52'}`} />
+            <div dangerouslySetInnerHTML={{ __html: sanitizeSvg(content) }} className={`max-w-full ${fullHeight ? 'max-h-full' : 'max-h-52'}`} />
           </div>
         );
       default:

@@ -22,7 +22,7 @@ export function hostnameOf(url) {
   }
 }
 
-export function createLocalRequestGuard({ allowedOrigins = [], allowedHostnames = [] } = {}) {
+export function createLocalRequestGuard({ allowedOrigins = [], allowedHostnames = [], sameOriginPaths = [] } = {}) {
   const origins = new Set(allowedOrigins);
   const hostnames = new Set([...LOOPBACK_HOSTNAMES, ...allowedHostnames]);
 
@@ -35,6 +35,17 @@ export function createLocalRequestGuard({ allowedOrigins = [], allowedHostnames 
     const origin = req.headers.origin;
     if (origin && !origins.has(origin)) {
       return res.status(403).json({ success: false, error: 'Cross-origin requests are not allowed.' });
+    }
+
+    // Pages this server serves itself (project site previews, raw or uploaded
+    // HTML) share its origin, so their GETs carry no Origin header. Let them
+    // load files, but not read or change anything else through the API.
+    if (
+      req.headers['sec-fetch-site'] === 'same-origin'
+      && req.path.startsWith('/api/')
+      && !sameOriginPaths.some((prefix) => req.path.startsWith(prefix))
+    ) {
+      return res.status(403).json({ success: false, error: 'Pages served by Asyncat cannot call its API.' });
     }
 
     return next();

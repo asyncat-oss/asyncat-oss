@@ -173,9 +173,20 @@ export const sanitizeTableCell = (html) => {
   return DOMPurify.sanitize(html, tableConfig);
 };
 
+/**
+ * Sanitize SVG markup (e.g. agent-generated artifacts) for inline rendering.
+ * Keeps shapes, text, gradients and filters; drops scripts, event handlers and
+ * foreignObject, so the image cannot run code in the app.
+ */
+export const sanitizeSvg = (svg) => {
+  if (!svg || typeof svg !== "string") return "";
+  return DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true } });
+};
+
 export default {
   sanitizeNoteContent,
   sanitizeToText,
   sanitizeHtmlContent,
   sanitizeTableCell,
+  sanitizeSvg,
 };
