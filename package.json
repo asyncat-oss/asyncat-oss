@@ -2,7 +2,7 @@
   "name": "asyncat-oss",
   "productName": "Asyncat",
   "version": "0.8.0-beta.5",
-  "description": "Asyncat — open-source AI-powered workspace for teams",
+  "description": "Asyncat — local-first AI agent desktop app",
   "author": "Asyncat Contributors",
   "license": "MIT",
   "homepage": "https://github.com/asyncat-oss/asyncat-oss",
@@ -19,7 +19,7 @@
   ],
   "scripts": {
     "postinstall": "node scripts/postinstall.js",
-    "dev": "npm run dev -w den & npm run dev -w neko",
+    "dev": "concurrently --kill-others --names den,neko \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "npm run dev -w den",
     "dev:frontend": "npm run dev -w neko",
     "start": "npm run start -w den",

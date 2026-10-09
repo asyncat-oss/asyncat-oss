@@ -106,5 +106,5 @@ linux:
   maintainer: Asyncat Contributors
   synopsis: AI Agent OS that runs locally
   description: >
-    Asyncat is a local-first AI Agent OS with built-in kanban, calendar, notes,
+    Asyncat is a local-first AI Agent OS with built-in notes, kanban, schedules,
     and a brain-inspired agent runtime. It gives your local model superpowers.
