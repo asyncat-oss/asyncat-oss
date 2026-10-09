@@ -1552,7 +1552,7 @@ const TableBlock = forwardRef(({ block, onChange, commonProps }, ref) => {
           // Trigger cell change to save the tab
           setTimeout(() => {
             if (e.target) {
-              handleInput({ target: e.target });
+              handleCellChange(rowIndex, colIndex, { target: e.target }, true);
             }
           }, 0);
         }
@@ -1888,6 +1888,7 @@ const TableBlock = forwardRef(({ block, onChange, commonProps }, ref) => {
     [
       tableData,
       addRow,
+      handleCellChange,
       isCaretAtEnd,
       isCaretAtStart,
       isCaretAtStartOfLine,

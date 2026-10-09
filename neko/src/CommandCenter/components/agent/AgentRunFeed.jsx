@@ -789,20 +789,28 @@ function InlineAudioPlayer({ src, loadSrc, downloadName, downloadUrl, showInfo, 
 
 // ── Audio tool result inline card (uses reusable player) ──────────────────────
 function AudioResultCard({ result }) {
-  if (!result?.success || !result.path) return null;
+  const audioPath = result?.success ? result.path : null;
   const [blobUrl, setBlobUrl] = useState(null);
   const [fetchError, setFetchError] = useState(null);
 
   useEffect(() => {
+    if (!audioPath) return undefined;
     let cancelled = false;
-    filesApi.fetchRawBlob('workspace', result.path)
-      .then(url => { if (!cancelled) setBlobUrl(url); })
+    let createdUrl = null;
+    filesApi.fetchRawBlob('workspace', audioPath)
+      .then(url => {
+        createdUrl = url;
+        if (cancelled) URL.revokeObjectURL(url);
+        else setBlobUrl(url);
+      })
       .catch(err => { if (!cancelled) setFetchError(err.message); });
     return () => {
       cancelled = true;
-      if (blobUrl) URL.revokeObjectURL(blobUrl);
+      if (createdUrl) URL.revokeObjectURL(createdUrl);
     };
-  }, [result.path]);
+  }, [audioPath]);
+
+  if (!audioPath) return null;
 
   return (
     <div className="mt-1.5 mb-2 ml-7">
