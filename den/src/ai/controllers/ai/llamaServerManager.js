@@ -36,7 +36,7 @@ import { runtimeHome } from '../../../config/runtimeConfig.js';
 const execAsync = promisify(exec);
 const IS_WIN = process.platform === 'win32';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PYTHON_WRAPPER_PATH = path.resolve(__dirname, '../../../../scripts/llama_cpp_server_wrapper.py');
+const PYTHON_WRAPPER_PATH = path.join(__dirname, 'scripts', 'llama_cpp_server_wrapper.py');
 const LLAMA_PYTHON_IMPORT_PROBE =
   'import site, sys; ' +
   'usersite = site.getusersitepackages(); ' +
