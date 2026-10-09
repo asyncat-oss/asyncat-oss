@@ -28,6 +28,7 @@ import { useAudioStatus } from "./hooks/useAudioStatus";
 import { useAgentNotifications } from './hooks/useAgentNotifications';
 import { useCommandCenter } from "./context/CommandCenterContextEnhanced";
 import { useUiPreferences } from '../contexts/UiPreferencesContext.jsx';
+import { useToast, errorDetail } from '../components/toastContext.js';
 import { chatApi, agentApi, gitApi } from "./api";
 import { audioApi } from "../Settings/settingApi.js";
 import { cleanReasoningAnswer } from "./utils/reasoningParser.js";
@@ -225,6 +226,9 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const commandCenterContext = useCommandCenter();
   const { workbenchPreferences, setWorkbenchPreference } = useUiPreferences();
   const navigate = useNavigate();
+  const toast = useToast();
+  // Text to put back in the composer after a send fails (see handleAgentRun).
+  const [composerRestore, setComposerRestore] = useState(null);
   const fallbackAgentAbortControllersRef = useRef(new Map());
   const fallbackRunStartedAtRef = useRef(null);
   const fallbackCurrentConversationIdRef = useRef(null);
@@ -1102,6 +1106,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         triggerConversationRefresh();
       } catch (error) {
         console.error("Failed to rename conversation:", error);
+        toast.error("Couldn't rename the chat", { detail: errorDetail(error) });
       }
     }
     setIsEditingTitle(false);
@@ -1111,6 +1116,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     currentConversationId,
     setConversationTitle,
     triggerConversationRefresh,
+    toast,
   ]);
 
   const handleCancelRename = useCallback(() => {
@@ -1127,6 +1133,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       triggerConversationRefresh();
     } catch (error) {
       console.error("Failed to delete conversation:", error);
+      toast.error("Couldn't delete the chat", { detail: errorDetail(error) });
     }
     setShowDeleteConfirm(false);
   }, [
@@ -1134,6 +1141,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     handleClearConversation,
     navigate,
     triggerConversationRefresh,
+    toast,
   ]);
 
   const handleKeyDown = useCallback(
@@ -1275,9 +1283,17 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         }
       } catch (saveError) {
         console.error('Failed to save submitted message before agent run:', saveError);
-        setError('Failed to save message');
         setMessages(runMessages);
         setConversationHistory(activeConversationHistory);
+        toast.error("Couldn't save your message, so it wasn't sent", { detail: errorDetail(saveError) });
+        if (runOptions?.fromComposer) {
+          // Sending swaps the start screen's composer for the conversation's,
+          // and the revert swaps it back, so the typed text was lost. Hand it
+          // to whichever composer is mounted now, and rethrow so one that
+          // stayed mounted keeps its text too.
+          setComposerRestore({ text: submittedGoal });
+          throw saveError;
+        }
         return;
       }
     }
@@ -1692,6 +1708,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
       window.dispatchEvent(new CustomEvent('agent-run-complete'));
     }
   }, [
+    toast,
     agentRunning,
     currentRunKey,
     agentConversationHistory,
@@ -1720,6 +1737,21 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     refreshGitState,
     workingContext,
   ]);
+
+  // Applied by the mounted composer on this commit; clear it so a later,
+  // freshly mounted composer does not refill it.
+  useEffect(() => {
+    if (!composerRestore) return undefined;
+    const frame = requestAnimationFrame(() => setComposerRestore(null));
+    return () => cancelAnimationFrame(frame);
+  }, [composerRestore]);
+
+  // The composer's submit: on a failed save it gets the error back (see
+  // handleAgentRun), so it keeps the typed message instead of clearing it.
+  const handleComposerSubmit = useCallback(
+    (messageObj) => handleAgentRun(messageObj, { fromComposer: true }),
+    [handleAgentRun],
+  );
 
   const handleEditConversationTurn = useCallback(async (messageId, nextContent) => {
     const messageIndex = messages.findIndex(msg => msg.id === messageId);
@@ -2687,8 +2719,9 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
             </div>
 
             <MessageInputV2
+              prefillValue={composerRestore?.text}
               key={`welcome-input-${currentConversationId || 'draft'}`}
-              onSubmit={handleAgentRun}
+              onSubmit={handleComposerSubmit}
               experienceMode={experienceMode}
               sttReady={sttReady}
               ttsReady={ttsReady}
@@ -3183,8 +3216,9 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 </div>
               )}
               <MessageInputV2
+                prefillValue={composerRestore?.text}
                 key={`conversation-input-${currentConversationId || 'draft'}`}
-                onSubmit={handleAgentRun}
+                onSubmit={handleComposerSubmit}
                 experienceMode={experienceMode}
                 sttReady={sttReady}
                 ttsReady={ttsReady}

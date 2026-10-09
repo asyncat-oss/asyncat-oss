@@ -8,6 +8,7 @@ import { Bot, MessageSquare, CheckSquare, Clock, Search, Folder, FolderOpen, Plu
 
 import { getRelativeTime, cleanTaskAgentTitle, parseConversationDate } from '../utils/conversationUtils.js';
 import { useConfirm } from '../../components/confirmContext.js';
+import { useToast, errorDetail } from '../../components/toastContext.js';
 
 function basenamePath(value = '') {
   const parts = String(value || '').split(/[\\/]/).filter(Boolean);
@@ -44,6 +45,7 @@ function getItemUpdatedMs(item) {
 const ChatsPage = () => {
   const navigate = useNavigate();
   const confirm = useConfirm();
+  const toast = useToast();
   const { currentWorkspace } = useWorkspace();
   const {
     handleNewConversation,
@@ -206,6 +208,7 @@ const ChatsPage = () => {
       setActionModal(null);
     } catch (err) {
       console.error('Failed to rename item:', err);
+      toast.error("Couldn't rename the chat", { detail: errorDetail(err) });
     }
   };
 
@@ -217,6 +220,7 @@ const ChatsPage = () => {
       await chatApi.deleteConversation(itemId);
     } catch (err) {
       console.error('Failed to delete item:', err);
+      toast.error("Couldn't delete the chat", { detail: errorDetail(err) });
       loadAll();
     }
   };

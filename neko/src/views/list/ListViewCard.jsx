@@ -11,6 +11,7 @@ import {
 	Square,
 } from "lucide-react";
 import { useCardActions } from "../hooks/useCardActions";
+import { useToast, errorDetail } from "../../components/toastContext.js";
 
 const statusStyles = {
 	queued: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
@@ -52,6 +53,7 @@ export const InteractiveStatusBadge = ({
 	disabled = false,
 }) => {
 	const { moveCard } = useCardActions();
+	const toast = useToast();
 	const [isMoving, setIsMoving] = useState(false);
 	const [showDropdown, setShowDropdown] = useState(false);
 
@@ -65,6 +67,7 @@ export const InteractiveStatusBadge = ({
 			await moveCard(cardId, columnId, destinationColumnId);
 		} catch (error) {
 			console.error("Failed to move card:", error);
+			toast.error("Couldn't move the task", { detail: errorDetail(error) });
 		} finally {
 			setIsMoving(false);
 			setShowDropdown(false);
@@ -167,6 +170,7 @@ const AgentPicker = ({ profiles, disabled, onAssign }) => {
 
 export const InteractiveChecklistRenderer = ({ checklist, cardId, columnId }) => {
 	const { updateCardChecklist } = useCardActions();
+	const toast = useToast();
 	const [checklistItems, setChecklistItems] = useState(checklist || []);
 	const [updatingItems, setUpdatingItems] = useState({});
 
@@ -184,6 +188,7 @@ export const InteractiveChecklistRenderer = ({ checklist, cardId, columnId }) =>
 			await updateCardChecklist(columnId, cardId, next);
 		} catch (error) {
 			console.error("Error toggling task completion:", error);
+			toast.error("Couldn't update the checklist", { detail: errorDetail(error) });
 			setChecklistItems(checklist || []);
 		} finally {
 			setUpdatingItems((prev) => ({ ...prev, [taskId]: false }));

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Check, Trash2, X } from "lucide-react";
 import { projectApi } from "../projectApi";
 import eventBus from "../../utils/eventBus.js";
+import { useToast, errorDetail } from "../../components/toastContext.js";
 
 const popularEmojis = ["📁", "🚀", "💡", "⚡", "🎯", "📊", "🔧", "🎨", "📱", "💻", "🌟", "🔥", "⭐", "🎉", "🏆", "💎", "📈", "🎮", "🎵", "📚", "🔬", "🏠", "🌱", "⚽", "🍕", "☕", "🎪", "🎭", "🔮", "🎲"];
 
@@ -18,6 +19,7 @@ const ProjectEditModal = ({ project, onClose, onDeleted }) => {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     if (!project) return;
@@ -51,6 +53,7 @@ const ProjectEditModal = ({ project, onClose, onDeleted }) => {
       onClose();
     } catch (err) {
       console.error("Failed to save project:", err);
+      toast.error("Couldn't save the project", { detail: errorDetail(err) });
     } finally {
       setIsSaving(false);
     }
@@ -69,6 +72,7 @@ const ProjectEditModal = ({ project, onClose, onDeleted }) => {
       onClose();
     } catch (err) {
       console.error("Failed to delete project:", err);
+      toast.error("Couldn't delete the project", { detail: errorDetail(err) });
       setPendingDelete(false);
     }
   };
