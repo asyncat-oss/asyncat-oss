@@ -27,7 +27,7 @@ import { scheduleJob, listJobs, listJobRuns, runJobNow, updateJob, deleteJob, en
 import { initWorkflows } from '../../agent/WorkflowEngine.js';
 import { createWorkflowRouter } from './workflowRoutes.js';
 import { getWorkspaceRoot, loadEntry, resolveWorkingDirectoryContext } from '../../files/fileExplorerService.js';
-import { codeSearchTool, listDefinitionsTool, findDefinitionTool, findReferencesTool, renameSymbolTool } from '../../agent/tools/codeSearchTools.js';
+import { codeSearchTool, listDefinitionsTool, findDefinitionTool, findReferencesTool } from '../../agent/tools/codeSearchTools.js';
 import { publicProvider } from '../controllers/ai/providerCatalog.js';
 import { listMemories, normalizeMemoryRow, searchMemories, hybridRecall } from '../../agent/tools/memoryTools.js';
 import { embeddingStatus, resetEmbeddingStrategy, embedText } from '../embeddings/embeddingService.js';
@@ -3437,18 +3437,6 @@ router.get('/code/references', withWorkspaceContext, async (req, res) => {
       symbol: req.query.symbol,
       language: req.query.language,
       max_results: parseInt(req.query.limit || '50'),
-    }, codeContext(req));
-    res.json(result);
-  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
-});
-
-router.post('/code/rename', withWorkspaceContext, async (req, res) => {
-  try {
-    const result = await renameSymbolTool.execute({
-      old_name: req.body.old_name,
-      new_name: req.body.new_name,
-      language: req.body.language,
-      preview: req.body.preview !== false,
     }, codeContext(req));
     res.json(result);
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }

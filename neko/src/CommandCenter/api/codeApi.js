@@ -29,11 +29,4 @@ export const codeApi = {
     if (path) params.set('path', path);
     return apiRequest(`${CODE_BASE}/references?${params}`);
   },
-
-  renameSymbol: (oldName, newName, { language, preview = true, path } = {}) => {
-    return apiRequest(`${CODE_BASE}/rename`, {
-      method: 'POST',
-      body: JSON.stringify({ old_name: oldName, new_name: newName, language, preview, path }),
-    });
-  },
 };
