@@ -15,9 +15,10 @@ import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import { app } from 'electron';
-import { DEN_ENTRY, DEN_CWD, BACKEND_PORT, HEALTH_URL, IS_DEV } from './constants.js';
+import { DEN_ENTRY, DEN_CWD, BACKEND_PORT, HEALTH_URL, IS_DEV, USE_EXTERNAL_BACKEND } from './constants.js';
 
 let backendProcess = null;
+let externalBackendHealthy = false;
 let isShuttingDown = false;
 let cachedNodeBinary = null;
 let recentBackendOutput = '';
@@ -181,6 +182,10 @@ function setupEnvFile() {
 // ─── Backend lifecycle ────────────────────────────────────────────────────────
 
 export function startBackend() {
+  if (USE_EXTERNAL_BACKEND) {
+    return waitForHealth(30_000).then(() => { externalBackendHealthy = true; });
+  }
+
   return new Promise((resolve, reject) => {
     if (backendProcess) { resolve(); return; }
 
@@ -311,6 +316,7 @@ export function stopBackend() {
 }
 
 export function isBackendRunning() {
+  if (USE_EXTERNAL_BACKEND) return externalBackendHealthy;
   return backendProcess !== null && !backendProcess.killed;
 }
 

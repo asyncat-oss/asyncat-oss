@@ -79,3 +79,9 @@ export const WINDOWS_APP_ID = APP_ID;
 
 /** Developer Tools stay opt-in so development launches remain uncluttered. */
 export const OPEN_DEVTOOLS = IS_DEV && process.argv.includes('--open-devtools');
+
+/**
+ * `npm run electron:dev` already runs den under nodemon. Spawning a second
+ * copy would race it for the port and break backend hot reload.
+ */
+export const USE_EXTERNAL_BACKEND = IS_DEV && process.argv.includes('--external-backend');
