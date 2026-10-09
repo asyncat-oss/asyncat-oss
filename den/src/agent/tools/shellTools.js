@@ -40,7 +40,11 @@ function runProcess(cmd, args, options = {}) {
 
     const proc = spawn(cmd, args, {
       cwd: options.cwd || process.cwd(),
-      shell: true,
+      // Callers already pass `sh -c <command>` (or an interpreter and a file).
+      // A second shell would re-split it and run only the first word, so
+      // `npm test` ran plain `npm`. cmd.exe tolerates the extra layer and
+      // relies on Node's quoting for it, so Windows keeps it.
+      shell: IS_WIN,
       env: { ...process.env, ...(options.env || {}) },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
