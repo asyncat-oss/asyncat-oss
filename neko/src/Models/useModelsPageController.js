@@ -3,6 +3,7 @@ import { llamaServerApi, localModelsApi, aiProviderApi, mlxApi } from '../Settin
 import { useModelConfig } from '../CommandCenter/hooks/useModelConfig.js';
 import { INSTALL_PROFILE_LABELS, DEFAULT_LOAD_CTX_SIZE, MAX_LOAD_CTX_SIZE, normalizeLoadCtxSize, getModelContextLimit, getModelLoadCtxError, loadSavedModelContextSizes, saveModelContextSizes } from './modelPageShared.jsx';
 import { useConfirm } from '../components/confirmContext.js';
+import { useToast, errorDetail } from '../components/toastContext.js';
 
 const notifyModelRuntimeUpdated = () => {
   window.dispatchEvent(new CustomEvent('asyncat-model-runtime-updated'));
@@ -10,6 +11,7 @@ const notifyModelRuntimeUpdated = () => {
 
 export const useModelsPageController = ({ runtimeOnly = false } = {}) => {
   const confirm = useConfirm();
+  const toast = useToast();
   const { config: modelContextConfig, setConfig: setModelContextConfig } = useModelConfig();
   const [serverStatus, setServerStatus] = useState(null);
   const [mlxStatus, setMlxStatus] = useState(null);
@@ -150,6 +152,8 @@ export const useModelsPageController = ({ runtimeOnly = false } = {}) => {
       setHasMlxModels(mlxModels.length > 0);
     } catch (err) {
       console.warn('Failed to load unified model list:', err);
+      // Otherwise the page reads "No local LLMs yet" as if there were none.
+      toast.error("Couldn't load your local models", { detail: errorDetail(err) });
     } finally {
       setLoadingModels(false);
     }

@@ -6,8 +6,10 @@ import ListViewFilters from "./ListViewFilters";
 import ListViewTable from "./ListViewTable";
 import AddCardModal from "../kanban/features/cards/AddCardModal";
 import { agentTaskRunsApi, profilesApi } from "../../CommandCenter/api";
+import { useToast, errorDetail } from "../../components/toastContext.js";
 
 const ListView = ({ selectedProject }) => {
+	const toast = useToast();
 	const navigate = useNavigate();
 	const { columns, error } = useColumnContext();
 	const { setSelectedCard } = useCardContext();
@@ -183,6 +185,7 @@ const ListView = ({ selectedProject }) => {
 			await loadAgentTaskRuns();
 		} catch (error) {
 			console.error("Error assigning agent:", error);
+			toast.error("Couldn't start the agent on this task", { detail: errorDetail(error) });
 		} finally {
 			setAssigningCardId(null);
 		}
@@ -200,6 +203,7 @@ const ListView = ({ selectedProject }) => {
 			}
 		} catch (error) {
 			console.error("Error cancelling agent run:", error);
+			toast.error("Couldn't cancel the agent run", { detail: errorDetail(error) });
 		}
 	};
 

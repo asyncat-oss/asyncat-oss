@@ -6,6 +6,7 @@ import { UserProvider } from '../contexts/UserContext';
 import { WorkspaceProvider } from '../contexts/WorkspaceContext';
 import { UiPreferencesProvider } from '../contexts/UiPreferencesContext';
 import ConfirmProvider from '../components/ConfirmProvider';
+import ToastProvider from '../components/ToastProvider';
 import { CommandCenterProvider } from '../CommandCenter/context/CommandCenterContextEnhanced';
 import ErrorBoundary from '../error/ErrorBoundary';
 import RouteErrorElement from '../error/ErrorBoundary';
@@ -45,9 +46,11 @@ const LocalApp = ({ children }) => {
       <WorkspaceProvider>
         <CommandCenterProvider>
           <UiPreferencesProvider>
-            <ConfirmProvider>
-              {children}
-            </ConfirmProvider>
+            <ToastProvider>
+              <ConfirmProvider>
+                {children}
+              </ConfirmProvider>
+            </ToastProvider>
           </UiPreferencesProvider>
         </CommandCenterProvider>
       </WorkspaceProvider>

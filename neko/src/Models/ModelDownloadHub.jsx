@@ -17,6 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import { localModelsApi } from '../Settings/settingApi.js';
+import { useToast, errorDetail } from '../components/toastContext.js';
 import { Badge, Panel, SectionHeader } from './modelPageShared.jsx';
 import { HFAuthorLogo } from './modelLogos.jsx';
 
@@ -398,6 +399,7 @@ const ModelDownloadHub = ({
   onVisualRefresh,
 }) => {
   const [activeDownloads, setActiveDownloads] = useState({});
+  const toast = useToast();
   const [expandedRepo, setExpandedRepo] = useState(null);
   const [activeFilter, setActiveFilter] = useState('all');
   const cleanupFnsRef = useRef({});
@@ -556,8 +558,10 @@ const ModelDownloadHub = ({
     try {
       const res = await localModelsApi.startDownload(url, filename, subDir);
       if (res.success) startTrackingDownload(res.downloadId, filename, targetKey);
+      else toast.error(`Couldn't start downloading ${filename}`, { detail: res.error || '' });
     } catch (err) {
       console.error('Download start failed:', err.message || err);
+      toast.error(`Couldn't start downloading ${filename}`, { detail: errorDetail(err) });
     }
   };
 

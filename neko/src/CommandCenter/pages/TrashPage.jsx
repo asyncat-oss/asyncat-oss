@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { trashApi } from "../api";
 import eventBus from "../../utils/eventBus.js";
+import { useToast, errorDetail } from "../../components/toastContext.js";
 import { Trash2, RotateCcw, AlertTriangle, CheckSquare, Square, X } from "lucide-react";
 
 const TrashPage = () => {
@@ -9,14 +10,19 @@ const TrashPage = () => {
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [selectedItems, setSelectedItems] = useState({});
   const [bulkWorking, setBulkWorking] = useState(false);
+  const [loadError, setLoadError] = useState(null);
+  const toast = useToast();
 
   const loadTrash = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const res = await trashApi.getTrash();
       setTrashItems(res?.conversations || []);
     } catch (err) {
       console.error("Failed to load trash:", err);
+      // Say so, instead of showing an empty Trash.
+      setLoadError(errorDetail(err) || "Unknown error");
     } finally {
       setLoading(false);
     }
@@ -38,6 +44,7 @@ const TrashPage = () => {
       eventBus.emit("conversationsUpdated");
     } catch (err) {
       console.error("Failed to restore:", err);
+      toast.error("Couldn't restore the chat", { detail: errorDetail(err) });
     }
   };
 
@@ -52,6 +59,7 @@ const TrashPage = () => {
       });
     } catch (err) {
       console.error("Failed to delete:", err);
+      toast.error("Couldn't delete the chat permanently", { detail: errorDetail(err) });
     }
     setConfirmDelete(null);
   };
@@ -63,6 +71,7 @@ const TrashPage = () => {
       setSelectedItems({});
     } catch (err) {
       console.error("Failed to empty trash:", err);
+      toast.error("Couldn't empty Trash", { detail: errorDetail(err) });
     }
     setConfirmDelete(null);
   };
@@ -108,6 +117,7 @@ const TrashPage = () => {
       eventBus.emit("conversationsUpdated");
     } catch (err) {
       console.error("Failed to restore selected:", err);
+      toast.error("Couldn't restore some chats", { detail: errorDetail(err) });
       loadTrash();
     } finally {
       setBulkWorking(false);
@@ -124,6 +134,7 @@ const TrashPage = () => {
       await Promise.all(items.map((item) => trashApi.deletePermanent(item.id)));
     } catch (err) {
       console.error("Failed to delete selected:", err);
+      toast.error("Couldn't delete some chats", { detail: errorDetail(err) });
       loadTrash();
     } finally {
       setBulkWorking(false);
@@ -204,6 +215,23 @@ const TrashPage = () => {
           {loading ? (
             <div className="flex items-center py-12">
               <div className="text-sm text-gray-400 dark:text-gray-500">Loading...</div>
+            </div>
+          ) : loadError ? (
+            <div role="alert" className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg border border-red-200 text-red-500 dark:border-red-900/60 dark:text-red-400">
+                <AlertTriangle className="w-4 h-4" />
+              </div>
+              <h2 className="mb-2 text-sm font-medium text-gray-900 dark:text-gray-100 midnight:text-slate-100">
+                Couldn&apos;t load Trash
+              </h2>
+              <p className="mb-4 max-w-xs text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-400">{loadError}</p>
+              <button
+                type="button"
+                onClick={loadTrash}
+                className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+              >
+                Try again
+              </button>
             </div>
           ) : trashItems.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
