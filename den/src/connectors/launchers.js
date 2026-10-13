@@ -8,7 +8,8 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-const NPM_REGISTRY = 'https://registry.npmjs.org';
+// npm's own setting wins, so a mirror or company registry is asked instead.
+const npmRegistry = () => String(process.env.npm_config_registry || 'https://registry.npmjs.org').replace(/\/+$/, '');
 const PYPI = 'https://pypi.org/pypi';
 
 const NPX_FLAGS_WITH_VALUE = new Set(['-p', '--package', '-c', '--call', '--cache', '--registry', '-w', '--workspace']);
@@ -187,6 +188,7 @@ async function fetchJson(fetchImpl, url, signal) {
  */
 export async function estimateNpmDownload(name, version = null, {
   fetchImpl = globalThis.fetch,
+  deep = true,
   maxPackages = 300,
   concurrency = 8,
   timeoutMs = 25_000,
@@ -195,7 +197,20 @@ export async function estimateNpmDownload(name, version = null, {
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   timer.unref?.();
   try {
-    const root = await fetchJson(fetchImpl, `${NPM_REGISTRY}/${encodeNpmName(name)}/${encodeURIComponent(version || 'latest')}`, controller.signal);
+    const root = await fetchJson(fetchImpl, `${npmRegistry()}/${encodeNpmName(name)}/${encodeURIComponent(version || 'latest')}`, controller.signal);
+    // Just the package: one small request. The full count looks up every
+    // package it needs, which itself uses some data.
+    if (!deep) {
+      return {
+        name,
+        version: root.version || version || null,
+        bytes: Number(root?.dist?.unpackedSize) || null,
+        packages: 1,
+        dependencies: Object.keys(root?.dependencies || {}).length,
+        approximate: true,
+        shallow: true,
+      };
+    }
     const seen = new Set([name]);
     let bytes = Number(root?.dist?.unpackedSize) || 0;
     let unknown = root?.dist?.unpackedSize ? 0 : 1;
@@ -212,7 +227,7 @@ export async function estimateNpmDownload(name, version = null, {
         }
         const dep = queue.shift();
         try {
-          const manifest = await fetchJson(fetchImpl, `${NPM_REGISTRY}/${encodeNpmName(dep)}/latest`, controller.signal);
+          const manifest = await fetchJson(fetchImpl, `${npmRegistry()}/${encodeNpmName(dep)}/latest`, controller.signal);
           const size = Number(manifest?.dist?.unpackedSize) || 0;
           if (size) bytes += size;
           else unknown += 1;
@@ -282,7 +297,7 @@ export async function downloadSize(command, args, options = {}) {
   try {
     if (launcher.kind === 'npm') {
       const size = await estimateNpmDownload(launcher.name, launcher.version, options);
-      return { ...base, ...size, note: 'Estimated from the npm registry; the download is compressed, so usually smaller.' };
+      return { ...base, ...size, note: 'From the npm registry. Sizes are unpacked; the download itself is compressed and smaller.' };
     }
     if (launcher.kind === 'pypi') {
       const size = await estimatePypiDownload(launcher.name, launcher.version, options);

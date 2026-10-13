@@ -5,7 +5,7 @@ import {
   Search, Pencil, Trash2, List, Zap, FilePlus, FileDown,
   FileText, LayoutList, ShieldAlert, MessageCircle, Send, GitBranch,
   ShieldOff, Brain, RotateCcw, Link2, Image, ExternalLink, Copy, Volume2, Square, Loader2 as Spinner, Download, Mic, SkipBack, SkipForward,
-  AlertTriangle, RefreshCw, TimerOff, AlertCircle, Palette, Bell, Eye, Lock, Wrench, Check, ChevronLeft
+  AlertTriangle, RefreshCw, TimerOff, AlertCircle, Palette, Bell, Eye, Lock, Wrench, Check, ChevronLeft, Plug
 } from 'lucide-react';
 import { audioApi } from '../../../Settings/settingApi.js';
 import { filesApi, agentApi } from '../../api';
@@ -17,6 +17,7 @@ import { AttachmentChip, ImageLightbox } from '../shared/AttachmentComponents.js
 import { useUiPreferences } from '../../../contexts/UiPreferencesContext.jsx';
 import { openWebLink } from '../../../utils/openWebLink.js';
 import { extractLocalhostUrl } from '../../utils/localhostUrl.js';
+import { connectorToolLabel } from '../../../Connectors/connectorFormat.js';
 import Tooltip from '../../../components/ui/Tooltip.jsx';
 
 // ── Inline @mention rendering ─────────────────────────────────────────────────
@@ -123,8 +124,14 @@ const TOOL_META = {
   transcribe_audio:  { icon: Mic,         label: 'Transcribed audio' },
 };
 
+// Connector tools are named mcp__<connector>__<tool>: show "Connector · tool".
+function connectorToolMeta(toolName) {
+  const label = connectorToolLabel(toolName);
+  return label ? { icon: Plug, label } : null;
+}
+
 function getToolMeta(toolName) {
-  return TOOL_META[toolName] || { icon: Zap, label: toolName };
+  return TOOL_META[toolName] || connectorToolMeta(toolName) || { icon: Zap, label: toolName };
 }
 
 function truncateArgs(args) {

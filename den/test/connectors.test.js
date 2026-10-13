@@ -22,6 +22,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const FAKE_SERVER = path.join(here, 'fixtures', 'fakeMcpServer.mjs');
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'asyncat-connectors-'));
 process.env.npm_config_cache = path.join(scratch, 'npm-cache');
+process.env.npm_config_registry = 'https://registry.npmjs.org';
 process.env.ASYNCAT_HOST_TOKEN = 'host-token-a-connector-must-not-see';
 
 const { default: db } = await import('../src/db/client.js');
@@ -169,6 +170,9 @@ test('the npm size estimate adds up the package and what it needs, once each', a
     const body = manifests[key];
     return { ok: Boolean(body), status: body ? 200 : 404, json: async () => body };
   };
+  const shallow = await launchers.estimateNpmDownload('root', null, { fetchImpl, deep: false });
+  assert.deepEqual([shallow.bytes, shallow.dependencies, shallow.shallow, seen.length], [100_000, 2, true, 1], 'one request for the package alone');
+  seen.length = 0;
   const size = await launchers.estimateNpmDownload('root', null, { fetchImpl });
   assert.equal(size.bytes, 155_000);
   assert.equal(size.packages, 4);
@@ -239,6 +243,9 @@ test('a local connector starts, offers its tools and answers', async () => {
   assert.equal(echo.serverName, 'notes');
   assert.equal(echo.permission, 'safe');
   assert.match(echo.description, /^\[Fake notes\]/);
+  assert.equal(echo.displayName, 'Fake notes · echo');
+  const { PermissionManager } = await import('../src/agent/PermissionManager.js');
+  assert.equal(PermissionManager.describeAction('mcp__notes__add_note', { note: 'buy seeds' }), 'Fake notes · add_note: {"note":"buy seeds"}');
   assert.equal(toolRegistry.get('mcp__notes__add_note').permission, 'moderate');
   assert.equal(toolRegistry.get('mcp__notes__wipe_notes').permission, 'dangerous');
 

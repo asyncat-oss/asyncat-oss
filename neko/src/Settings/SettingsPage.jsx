@@ -23,12 +23,16 @@ import IntegrationsSection from './IntegrationsSection';
 import RuntimeSection from './RuntimeSection';
 import WorkbenchSection from './WorkbenchSection';
 import BackgroundSection from './BackgroundSection';
+import ConnectorsSection from '../Connectors/ConnectorsSection.jsx';
+import { Segmented } from '../components/ui/Tabs.jsx';
 
 const TAB_ALIASES = {
   general: 'profile',
   account: 'profile',
   security: 'profile',
   integrations: 'connections',
+  connectors: 'connections',
+  mcp: 'connections',
   server: 'advanced',
   storage: 'advanced',
   updates: 'about',
@@ -40,6 +44,7 @@ const SettingsPage = () => {
   const navigate = useNavigate();
   const { theme, setTheme } = useUiPreferences();
   const [advancedView, setAdvancedView] = useState(tab === 'server' ? 'server' : 'storage');
+  const [connectionsView, setConnectionsView] = useState(tab === 'connectors' || tab === 'mcp' ? 'connectors' : 'services');
 
   const tabs = useMemo(() => [
     {
@@ -60,7 +65,7 @@ const SettingsPage = () => {
       id: 'connections',
       group: 'App',
       label: 'Connections',
-      description: 'External services available to Asyncat and its agents.',
+      description: 'Connectors that give agents tools from other apps, and the services Asyncat uses.',
       icon: Plug,
     },
     {
@@ -108,6 +113,8 @@ const SettingsPage = () => {
   useEffect(() => {
     if (tab === 'server') setAdvancedView('server');
     if (tab === 'storage') setAdvancedView('storage');
+    if (tab === 'connectors' || tab === 'mcp') setConnectionsView('connectors');
+    if (tab === 'integrations') setConnectionsView('services');
     // Projects moved out of Settings to their own pages.
     if (tab === 'projects' || tab === 'workspace') navigate('/projects', { replace: true });
   }, [navigate, tab]);
@@ -142,6 +149,21 @@ const SettingsPage = () => {
     </div>
   );
 
+  const renderConnections = () => (
+    <div className="space-y-5">
+      <Segmented
+        value={connectionsView}
+        onChange={setConnectionsView}
+        items={[
+          { value: 'services', label: 'Services' },
+          { value: 'connectors', label: 'Connectors' },
+        ]}
+        label="Connections"
+      />
+      {connectionsView === 'connectors' ? <ConnectorsSection /> : <IntegrationsSection />}
+    </div>
+  );
+
   const renderContent = () => {
     switch (activeTab) {
       case 'profile':
@@ -149,7 +171,7 @@ const SettingsPage = () => {
       case 'appearance':
         return <AppearanceSection theme={theme} setThemeMode={setTheme} />;
       case 'connections':
-        return <IntegrationsSection />;
+        return renderConnections();
       case 'workbench':
         return <WorkbenchSection />;
       case 'background':

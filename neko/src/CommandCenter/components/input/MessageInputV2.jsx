@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import PropTypes from "prop-types";
+import { connectorToolLabel, connectorToolParts } from "../../../Connectors/connectorFormat.js";
 import { ArrowUp, Bell, Bookmark, ChevronDown, Hammer, ClipboardPen, Cloud, Cpu, Headphones, ImagePlus, Loader2, Mail, MessageCircle, Mic, Paperclip, Rss, Send, ShieldAlert, ShieldOff, Square, Wrench, X, Zap, Plus, Check, Folder, Sparkles } from "lucide-react";
 import { Menu, MenuItem, MenuLabel, MenuSeparator } from "../../../components/ui/Menu.jsx";
 import AgentAvatar from "../../../Agent/AgentAvatar.jsx";
@@ -214,6 +215,10 @@ function formatCountdown(ms) {
 function summarizePermissionRequest(data = {}) {
   const args = data.args && typeof data.args === "object" ? data.args : {};
   const tool = data.tool || data.toolName || "tool";
+  const connector = connectorToolParts(tool);
+  if (connector) {
+    return { label: `Use ${connector.connector}`, value: data.description || connector.tool };
+  }
   if (typeof args.command === "string" && args.command.trim()) {
     return { label: "Run command", value: args.command.trim() };
   }
@@ -422,7 +427,7 @@ function PendingInteractionInput({ interaction, onPermissionDecision, onAskUserA
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs font-semibold text-gray-800 dark:text-gray-100 midnight:text-slate-100">Permission needed</span>
                 <span className="rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-400">
-                  {data.tool || data.toolName || "tool"}
+                  {connectorToolLabel(data.tool) || data.tool || data.toolName || "tool"}
                 </span>
                 <span className={`text-[10px] font-medium ${expired ? "text-red-500" : "text-gray-400 dark:text-gray-500"}`}>{statusText}</span>
               </div>

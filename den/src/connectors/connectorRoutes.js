@@ -171,7 +171,7 @@ router.get('/oauth/callback', async (req, res) => {
 });
 
 // What a command would download before it first runs, and how big it is.
-// { command, args } or { catalogId }.
+// { command, args } or { catalogId }; { deep: true } counts what it needs too.
 router.post('/check-download', async (req, res) => {
   try {
     const body = req.body || {};
@@ -179,7 +179,7 @@ router.post('/check-download', async (req, res) => {
     const command = catalog?.command || String(body.command || '').trim();
     const args = catalog ? catalog.args : (Array.isArray(body.args) ? body.args.map(String) : []);
     if (!command) throw badRequest('Give the command to check.');
-    res.json({ success: true, download: await downloadSize(command, args) });
+    res.json({ success: true, download: await downloadSize(command, args, { deep: Boolean(body.deep) }) });
   } catch (err) {
     sendError(res, err);
   }
@@ -283,7 +283,7 @@ router.get('/:name/download-size', async (req, res) => {
     const connector = getConnector(req.params.name);
     if (!connector) throw badRequest('No connector by that name.', 404);
     if (connector.kind !== 'local') throw badRequest('Remote connectors download nothing.');
-    res.json({ success: true, download: await downloadSize(connector.command, connector.args) });
+    res.json({ success: true, download: await downloadSize(connector.command, connector.args, { deep: req.query?.deep === '1' }) });
   } catch (err) {
     sendError(res, err);
   }

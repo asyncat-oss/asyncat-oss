@@ -170,6 +170,7 @@ function registerTools(entry, tools) {
       permission,
       category: 'mcp',
       serverName: entry.name,
+      displayName: `${titleOf(entry)} · ${tool.title || tool.annotations?.title || tool.name}`,
       execute: (args, context) => callConnectorTool(entry, tool.name, args, context),
     });
     entry.tools.push({

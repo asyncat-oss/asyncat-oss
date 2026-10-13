@@ -24,8 +24,10 @@ class ToolRegistry {
       parameters: tool.parameters || { type: 'object', properties: {}, required: [] },
       permission: tool.permission || PermissionLevel.SAFE,
       category: tool.category || 'general',
-      // Connector tools (category 'mcp') name the connector they come from.
+      // Connector tools (category 'mcp') name the connector they come from,
+      // and how to show them ("Notion · search").
       ...(tool.serverName ? { serverName: tool.serverName } : {}),
+      ...(tool.displayName ? { displayName: tool.displayName } : {}),
       execute: tool.execute,
     });
   }

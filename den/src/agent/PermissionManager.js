@@ -3,7 +3,7 @@
 // Controls which tools require user approval before execution.
 // In CLI mode: interactive prompt. In API mode: returns permission-required status.
 
-import { PermissionLevel } from './tools/toolRegistry.js';
+import { toolRegistry, PermissionLevel } from './tools/toolRegistry.js';
 
 export class PermissionManager {
   constructor() {
@@ -129,6 +129,11 @@ export class PermissionManager {
 
     const fn = descriptions[toolName];
     if (fn) return fn();
+    const connectorTool = toolRegistry.get(toolName);
+    if (connectorTool?.category === 'mcp' && connectorTool.displayName) {
+      const shown = JSON.stringify(args || {});
+      return `${connectorTool.displayName}${shown === '{}' ? '' : `: ${shown.slice(0, 200)}`}`;
+    }
     return `Execute tool "${toolName}" with args: ${JSON.stringify(args).slice(0, 200)}`;
   }
 }
