@@ -4,7 +4,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { swapManagedDirectory } from '../src/lib/localEngine.js';
+import {
+  cleanupManagedEngineLeftovers,
+  listManagedEngineInstalls,
+  swapManagedDirectory,
+} from '../src/lib/localEngine.js';
 
 // Every managed path must live inside Asyncat's home; point it at a temp dir.
 function withHome() {
@@ -83,6 +87,67 @@ test('the backup is put back when the new copy cannot be moved in', () => {
     assert.equal(read(target), 'old');
     assert.deepEqual(leftovers(root), []);
   } finally {
+    t.cleanup();
+  }
+});
+
+test('install and backup folders are never listed as engines', () => {
+  const t = withHome();
+  try {
+    const profiles = path.join(t.home, 'llama.cpp', 'profiles');
+    makeDir(path.join(profiles, 'cpu-safe'), 'engine');
+    makeDir(path.join(profiles, '.cpu-safe.install-0f3c9a2e-1111-2222-3333-444455556666'), 'half');
+    makeDir(path.join(profiles, 'cpu-safe.backup-0f3c9a2e-1111-2222-3333-444455556666'), 'old');
+    const roots = listManagedEngineInstalls().map((item) => path.basename(item.root));
+    assert.deepEqual(roots, ['cpu-safe']);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test('startup clean-up removes half-made copies and puts back stranded ones', async () => {
+  const t = withHome();
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'asyncat-tmp-'));
+  try {
+    const id = '0f3c9a2e-1111-2222-3333-444455556666';
+    const profiles = path.join(t.home, 'llama.cpp', 'profiles');
+    // A finished swap whose backup could not be deleted.
+    makeDir(path.join(profiles, 'cpu-safe'), 'new');
+    makeDir(path.join(profiles, `cpu-safe.backup-${id}`), 'old');
+    // Interrupted between "old aside" and "new in": only the backup exists.
+    makeDir(path.join(profiles, `vulkan.backup-${id}`), 'vulkan');
+    // A copy that was still being prepared.
+    makeDir(path.join(profiles, `.nvidia-gpu.install-${id}`), 'half');
+    makeDir(path.join(t.home, `.whisper.cpp.install-${id}`), 'half');
+
+    // An older Asyncat rebuilt a Python environment in place and was stopped:
+    // the half-made one has no marker, the moved-aside one finished.
+    const venv = path.join(t.home, 'llama.cpp', 'python');
+    fs.mkdirSync(venv, { recursive: true });
+    fs.writeFileSync(path.join(venv, 'pyvenv.cfg'), 'home = /usr/bin');
+    const oldVenv = path.join(t.home, 'llama.cpp', `python.backup-${id}`);
+    fs.mkdirSync(oldVenv, { recursive: true });
+    fs.writeFileSync(path.join(oldVenv, 'asyncat-engine.json'), '{"profile":"nvidia_gpu"}');
+
+    const legacyTmp = path.join(tmp, 'asyncat-llama-abc');
+    fs.mkdirSync(legacyTmp);
+    const recentTmp = path.join(tmp, 'asyncat-sd-def');
+    fs.mkdirSync(recentTmp);
+    const old = Date.now() / 1000 - 24 * 60 * 60;
+    fs.utimesSync(legacyTmp, old, old);
+
+    const report = await cleanupManagedEngineLeftovers({ tmpDir: tmp });
+    assert.equal(read(path.join(profiles, 'cpu-safe')), 'new');
+    assert.equal(read(path.join(profiles, 'vulkan')), 'vulkan');
+    assert.deepEqual(fs.readdirSync(profiles).sort(), ['cpu-safe', 'vulkan']);
+    assert.equal(fs.existsSync(path.join(t.home, `.whisper.cpp.install-${id}`)), false);
+    assert.equal(fs.existsSync(path.join(venv, 'asyncat-engine.json')), true, 'the finished environment is back');
+    assert.equal(fs.existsSync(oldVenv), false);
+    assert.equal(fs.existsSync(legacyTmp), false);
+    assert.equal(fs.existsSync(recentTmp), true, 'a temp folder in use by a running install is left alone');
+    assert.equal(report.restored.length, 2);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
     t.cleanup();
   }
 });

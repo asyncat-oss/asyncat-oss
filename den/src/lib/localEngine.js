@@ -180,12 +180,21 @@ export function writeManagedPythonEngineMetadata(metadata) {
   writeManagedEngineMetadata(metadata, managedPythonDir());
 }
 
+// Folders an install or swap uses for a moment: `.<name>.install-<id>` (the
+// new copy being prepared) and `<name>.backup-<id>` (the old copy while the
+// new one is moved in). They are never engines of their own.
+const TRANSIENT_DIR_RE = /\.(install|backup)-[0-9a-f-]{8,}$/i;
+
+export function isTransientManagedDir(name) {
+  return String(name || '').startsWith('.') || TRANSIENT_DIR_RE.test(String(name || ''));
+}
+
 export function listManagedEngineInstalls() {
   const roots = new Set();
   const profilesDir = path.join(managedEngineRootDir(), 'profiles');
   try {
     for (const entry of fs.readdirSync(profilesDir, { withFileTypes: true })) {
-      if (entry.isDirectory()) roots.add(path.join(profilesDir, entry.name));
+      if (entry.isDirectory() && !isTransientManagedDir(entry.name)) roots.add(path.join(profilesDir, entry.name));
     }
   } catch {}
 
@@ -282,6 +291,110 @@ export function removeManagedLlamaPython() {
     persistRuntimeConfigValue('LLAMA_GPU_LAYERS', '0');
   }
   return { runtime: 'python', removed, path: targetDir };
+}
+
+// ─── Leftovers of interrupted installs ────────────────────────────────────────
+
+const BACKUP_DIR_RE = /^(.+)\.backup-[0-9a-f-]{8,}$/i;
+const STAGING_DIR_RE = /\.install-[0-9a-f-]{8,}$/i;
+// Temp folders older Asyncat versions unpacked downloads into.
+const LEGACY_TMP_RE = /^asyncat-(llama|cudart|whisper|sd)-/;
+export const MANAGED_VENV_MARKER = 'asyncat-venv.json';
+
+/**
+ * Whether a managed Python environment finished installing. Current installs
+ * mark the environment itself; older ones wrote their metadata only when they
+ * finished (inside the venv for llama-cpp-python, beside it for the others).
+ */
+function pythonEnvLooksComplete(venvDir, parentDir) {
+  if (fs.existsSync(path.join(venvDir, MANAGED_VENV_MARKER))) return true;
+  if (fs.existsSync(path.join(venvDir, MANAGED_ENGINE_METADATA_FILE))) return true;
+  try {
+    const finishedAt = fs.statSync(path.join(parentDir, MANAGED_RUNTIME_METADATA_FILE)).mtimeMs;
+    const createdAt = fs.statSync(path.join(venvDir, 'pyvenv.cfg')).mtimeMs;
+    return finishedAt >= createdAt;
+  } catch {
+    return false;
+  }
+}
+
+async function removeManagedEntryAsync(target) {
+  const resolved = assertManagedTarget(target);
+  await fs.promises.rm(resolved, { recursive: true, force: true });
+}
+
+/**
+ * Clean up after installs that were interrupted (Asyncat quit, crashed, or a
+ * file was locked): half-made `.install-*` copies are removed, and a
+ * `<name>.backup-*` copy is put back when `<name>` is missing (or is a
+ * Python environment that never finished), otherwise removed. Run at startup,
+ * when no install is running.
+ */
+export async function cleanupManagedEngineLeftovers({ now = Date.now(), tmpDir = os.tmpdir() } = {}) {
+  const report = { removed: [], restored: [] };
+  const dirs = new Set([
+    asyncatHome(),
+    managedEngineRootDir(),
+    path.join(managedEngineRootDir(), 'profiles'),
+    ...Object.values(MANAGED_RUNTIME_SPECS).map(spec => managedRuntimeRoot(spec)),
+  ]);
+
+  for (const dir of dirs) {
+    let entries = [];
+    try {
+      entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const full = path.join(dir, entry.name);
+      try {
+        if (STAGING_DIR_RE.test(entry.name)) {
+          await removeManagedEntryAsync(full);
+          report.removed.push(full);
+          continue;
+        }
+        const backup = BACKUP_DIR_RE.exec(entry.name);
+        if (!backup) continue;
+        const target = path.join(dir, backup[1]);
+        if (!fs.existsSync(target)) {
+          // Interrupted between moving the old copy aside and the new one in.
+          await fs.promises.rename(full, assertManagedTarget(target));
+          report.restored.push(target);
+          continue;
+        }
+        if (backup[1] === 'python' && !pythonEnvLooksComplete(target, dir) && pythonEnvLooksComplete(full, dir)) {
+          // An older Asyncat rebuilt the environment in place and was stopped
+          // halfway: put the working one back.
+          await removeManagedEntryAsync(target);
+          await fs.promises.rename(full, target);
+          report.restored.push(target);
+          continue;
+        }
+        await removeManagedEntryAsync(full);
+        report.removed.push(full);
+      } catch (error) {
+        console.warn(`[runtime] Could not clean up ${full}: ${error.message}`);
+      }
+    }
+  }
+
+  // Older versions unpacked into the temp folder; anything left there is stale.
+  try {
+    for (const entry of await fs.promises.readdir(tmpDir, { withFileTypes: true })) {
+      if (!entry.isDirectory() || !LEGACY_TMP_RE.test(entry.name)) continue;
+      const full = path.join(tmpDir, entry.name);
+      try {
+        const { mtimeMs } = await fs.promises.stat(full);
+        if (now - mtimeMs < 6 * 60 * 60 * 1000) continue;
+        await fs.promises.rm(full, { recursive: true, force: true });
+        report.removed.push(full);
+      } catch { /* in use or gone */ }
+    }
+  } catch { /* no temp folder */ }
+
+  return report;
 }
 
 export function commandExists(cmd) {

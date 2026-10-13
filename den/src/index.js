@@ -209,7 +209,16 @@ seed().then(async () => {
     logger.info(`den running on port ${PORT}`);
     logger.info(`environment: ${process.env.NODE_ENV || 'development'}`);
     logger.info(`frontend: ${process.env.FRONTEND_URL || 'http://127.0.0.1:8717'}`);
-    import('./ai/controllers/ai/localModelRestore.js')
+    // Finish or undo engine installs a previous run was stopped in the middle
+    // of, before the last local model is loaded again.
+    import('./lib/localEngine.js')
+      .then(({ cleanupManagedEngineLeftovers }) => cleanupManagedEngineLeftovers())
+      .then((report) => {
+        if (report.restored.length) logger.info(`Restored ${report.restored.length} engine folder(s) after an interrupted install`);
+        if (report.removed.length) logger.info(`Removed ${report.removed.length} leftover engine install folder(s)`);
+      })
+      .catch((err) => logger.warn('Engine clean-up skipped:', err.message))
+      .then(() => import('./ai/controllers/ai/localModelRestore.js'))
       .then(({ restoreLocalModel }) => restoreLocalModel(logger))
       .catch((err) => logger.warn('Local model restore unavailable:', err.message));
   });
