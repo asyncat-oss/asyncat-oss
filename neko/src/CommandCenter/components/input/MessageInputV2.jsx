@@ -558,7 +558,7 @@ function EnginePicker({ engine, engines, onChange, disabled }) {
         disabled={disabled}
         aria-haspopup={locked ? undefined : "menu"}
         aria-expanded={locked ? undefined : open}
-        title={locked ? `${current.name} answers this conversation` : ENGINE_DESCRIPTIONS[current.id]}
+        title={locked ? `${current.name} answers this conversation` : ENGINE_DESCRIPTIONS[current.id] || current.description}
         className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium text-fg-muted transition-colors disabled:cursor-not-allowed ${locked ? "cursor-default" : "hover:bg-hover hover:text-fg"}`}
       >
         <ProviderGlyph providerId={current.id} className="h-3.5 w-3.5" />
@@ -571,10 +571,10 @@ function EnginePicker({ engine, engines, onChange, disabled }) {
           {options.map(option => {
             const unavailable = !option.installed;
             const hint = unavailable
-              ? "Not installed on this computer"
+              ? option.description || "Not installed on this computer"
               : option.signedIn === false
                 ? `Not signed in. Run \`${option.signInCommand}\` in a terminal.`
-                : ENGINE_DESCRIPTIONS[option.id];
+                : ENGINE_DESCRIPTIONS[option.id] || option.description;
             const usage = !unavailable && option.signedIn !== false ? usageHint(option.usage) : "";
             return (
               <MenuItem

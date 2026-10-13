@@ -61,7 +61,7 @@ import {
 import AgentAvatar from "../Agent/AgentAvatar.jsx";
 import { useAgents } from "../Agent/useAgents.js";
 import Cat from "../components/ui/Cat.jsx";
-import { resumeCommand } from "../Agent/externalAgentFormat.js";
+import { engineDisplayName, registerEngineNames, resumeCommand } from "../Agent/externalAgentFormat.js";
 
 import { buildConversationSourceCatalog } from "./utils/conversationUtils.js";
 import {
@@ -307,7 +307,10 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
   useEffect(() => {
     let cancelled = false;
     const refresh = () => agentApi.getEngines()
-      .then(res => { if (!cancelled) setEngines(res?.engines || []); })
+      .then(res => {
+        registerEngineNames(res?.engines);
+        if (!cancelled) setEngines(res?.engines || []);
+      })
       .catch(() => {});
     refresh();
     // Runs report the agents' usage limits, so re-read them after each one.
@@ -2565,7 +2568,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
   ];
   const hasConversationContent = messages.length > 0 || persistedAgentEvents.length > 0 || agentRunning;
   const conversationEngine = conversationMetadata?.engine || (hasConversationContent ? 'asyncat' : selectedEngine);
-  const conversationEngineName = conversationEngine === 'claude-code' ? 'Claude Code' : conversationEngine === 'codex' ? 'Codex' : 'Asyncat';
+  const conversationEngineName = engineDisplayName(conversationEngine);
   const externalSessionId = conversationEngine !== 'asyncat' ? conversationMetadata?.externalSessions?.[conversationEngine] : null;
   const terminalCommand = externalSessionId
     ? resumeCommand(conversationEngine, externalSessionId, workingContext?.workingDir || conversationMetadata?.externalCwd || conversationMetadata?.externalRunDir || null)

@@ -15,7 +15,8 @@ import { Segmented } from '../components/ui/Tabs.jsx';
 import { errorDetail, useToast } from '../components/toastContext.js';
 import { Badge, Panel } from '../Models/modelPageShared.jsx';
 import { ProviderGlyph } from '../Models/modelLogos.jsx';
-import { ENGINE_NAMES, folderName, relativeTime, usageLines } from './externalAgentFormat.js';
+import { ENGINE_NAMES, folderName, registerEngineNames, relativeTime, usageLines } from './externalAgentFormat.js';
+import AcpAgentsPanel from './AcpAgentsPanel.jsx';
 
 const ABOUT = {
   'claude-code': 'Anthropic’s coding agent. Uses your Claude subscription or API key.',
@@ -276,6 +277,7 @@ export default function CodingAgentsSection() {
     setError(null);
     try {
       const result = await agentApi.getEngines();
+      registerEngineNames(result?.engines);
       setEngines(result?.engines || []);
     } catch (err) {
       setError(err?.message || "Couldn't check for coding agents");
@@ -308,9 +310,11 @@ export default function CodingAgentsSection() {
         ) : engines.length === 0 && loading ? (
           <p className="px-5 py-4 text-[13px] text-fg-muted">Checking this computer…</p>
         ) : (
-          engines.map(engine => <EngineRow key={engine.id} engine={engine} onStartChat={startChat} />)
+          engines.filter(engine => !engine.acp).map(engine => <EngineRow key={engine.id} engine={engine} onStartChat={startChat} />)
         )}
       </Panel>
+
+      <AcpAgentsPanel onStartChat={startChat} onChanged={load} />
 
       <p className="mt-4 text-[12px] leading-5 text-fg-subtle">
         Plan mode lets the agent look but not change anything. Action mode lets it edit files in the project folder:

@@ -6,6 +6,16 @@ export const agentApi = {
   // they are signed in.
   getEngines: async () => apiRequest(`${API_BASE_URL}/agent/engines`),
 
+  // Agents spoken to over the Agent Client Protocol (den/src/agent/acp/).
+  acpAgents: {
+    list: async () => apiRequest(`${API_BASE_URL}/agent/acp-agents`),
+    add: async (agent) => apiRequest(`${API_BASE_URL}/agent/acp-agents`, { method: 'POST', body: JSON.stringify(agent) }),
+    update: async (name, agent) => apiRequest(`${API_BASE_URL}/agent/acp-agents/${encodeURIComponent(name)}`, { method: 'PATCH', body: JSON.stringify(agent) }),
+    remove: async (name) => apiRequest(`${API_BASE_URL}/agent/acp-agents/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+    check: async (name) => apiRequest(`${API_BASE_URL}/agent/acp-agents/${encodeURIComponent(name)}/check`, { method: 'POST', body: '{}' }),
+    checkDownload: async (target) => apiRequest(`${API_BASE_URL}/agent/acp-agents/check-download`, { method: 'POST', body: JSON.stringify(target) }),
+  },
+
   // Claude Code and Codex sessions on this computer, and opening one as a chat.
   listExternalSessions: async ({ engine = 'all', limit = 30 } = {}) =>
     apiRequest(`${API_BASE_URL}/agent/external-sessions?engine=${encodeURIComponent(engine)}&limit=${limit}`),

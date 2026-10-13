@@ -81,6 +81,8 @@ export function relativeTime(iso, now = Date.now()) {
  * Claude Code only finds a session from the folder it ran in, so cd there first.
  */
 export function resumeCommand(engine, sessionId, folder, platform = typeof navigator !== 'undefined' ? navigator.platform : '') {
+  // Only Claude Code and Codex resume from a terminal; ACP agents don't.
+  if (engine !== 'claude-code' && engine !== 'codex') return null;
   const windows = /^win/i.test(platform || '');
   const quote = (value) => (windows ? `"${value}"` : `'${String(value).replace(/'/g, "'\\''")}'`);
   const run = engine === 'claude-code' ? `claude --resume ${sessionId}` : `codex resume ${sessionId}`;
