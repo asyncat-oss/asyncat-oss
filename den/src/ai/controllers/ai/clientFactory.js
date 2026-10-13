@@ -5,8 +5,10 @@ import OpenAI from 'openai';
 import { config } from 'dotenv';
 import db from '../../../db/client.js';
 import { getStatus as getLlamaStatus } from './llamaServerManager.js';
+import { getStatus as getMlxStatus } from './mlxServerManager.js';
 import {
   LLAMA_BASE_URL,
+  MLX_PROVIDER_ID,
   normalizeBaseUrl,
   parseSettings,
   providerRequiresBuiltinServer,
@@ -28,14 +30,26 @@ function isBuiltinLlamaBaseUrl(baseUrl) {
   return new RegExp(`^(https?:\\/\\/)?(127\\.0\\.0\\.1|localhost):${port}(\\/|$)`, 'i').test(baseUrl || '');
 }
 
+// Errors starting with this reach the user as-is instead of falling back to
+// the default client, which would only fail later with "Connection error".
+const LOCAL_NOT_READY = 'Local model is not ready';
+
 function assertLocalModelReady() {
   const status = getLlamaStatus();
-  if (status.status !== 'ready') {
-    throw new Error(
-      `Local model is not ready yet (status: ${status.status}${status.model ? `, model: ${status.model}` : ''}).`
-    );
+  if (status.status === 'ready') return status;
+  if (status.status === 'loading') {
+    throw new Error(`${LOCAL_NOT_READY}: ${status.model || 'the model'} is still loading. Try again in a moment.`);
   }
-  return status;
+  throw new Error(`${LOCAL_NOT_READY}: no downloaded model is loaded. Open Models → Local models and load one, or switch to another provider.`);
+}
+
+function assertMlxModelReady() {
+  const status = getMlxStatus();
+  if (status.status === 'ready') return status;
+  if (status.status === 'loading') {
+    throw new Error(`${LOCAL_NOT_READY}: the MLX model is still loading. Try again in a moment.`);
+  }
+  throw new Error(`${LOCAL_NOT_READY}: the MLX model isn't running. Load it again from Models → Local models, or switch to another model.`);
 }
 
 // Global fallback client (built-in llama server)
@@ -95,6 +109,7 @@ export function getAiClientForUser(userId) {
     const settings = parseSettings(row.settings);
     const supportsNativeTools = providerSupportsTools(row);
     const localStatus = requiresLocalServer ? assertLocalModelReady() : null;
+    if (row.provider_id === MLX_PROVIDER_ID) assertMlxModelReady();
     const apiKey = isLocal ? (row.api_key || 'local') : (row.api_key || GLOBAL_AI_API_KEY);
 
     if (row.provider_id === 'openai-codex') {
@@ -177,7 +192,7 @@ export function getAiClientForUser(userId) {
       },
     };
   } catch (err) {
-    if (err.message?.startsWith('Local model is not ready')) throw err;
+    if (err.message?.startsWith(LOCAL_NOT_READY)) throw err;
     console.warn('[clientFactory] Failed to load user AI config, using global defaults:', err.message);
     return { client: globalClient, model: GLOBAL_AI_MODEL, isLocal: false, requiresLocalServer: false, supportsNativeTools: true, providerInfo: null };
   }

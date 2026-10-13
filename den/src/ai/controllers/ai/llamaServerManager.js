@@ -149,6 +149,19 @@ export async function detectGpuInfo() {
   try {
     if (process.platform === 'linux') {
       const { stdout } = await execAsync('lspci', { timeout: 3000 });
+      // An NVIDIA card that nvidia-smi could not reach: the driver is the
+      // problem (commonly a kernel update without a reboot), not the hardware.
+      const nvidiaLine = stdout.split('\n').find(l => /vga|3d|display/i.test(l) && /nvidia/i.test(l));
+      if (nvidiaLine) {
+        const name = /\[([^\]]*(geforce|rtx|gtx|quadro)[^\]]*)\]/i.exec(nvidiaLine)?.[1]?.trim() || 'NVIDIA GPU';
+        return {
+          vendor: 'NVIDIA',
+          name,
+          vramGb: null,
+          driverIssue: true,
+          advice: `${name} is installed, but its driver is not responding (nvidia-smi failed), so models run on the CPU. After a kernel or driver update, restarting the computer usually fixes it.`,
+        };
+      }
       const line = stdout.split('\n').find(l => /vga|3d|display/i.test(l) && /intel/i.test(l));
       if (line) {
         const name = /(arc|iris|xe|uhd)[^\]]*/i.exec(line)?.[0]?.trim() || 'Intel GPU';
@@ -525,6 +538,19 @@ async function listEngineCandidates(currentEngine = null) {
 
 function buildEngineRecommendation(current, candidates, hardware) {
   const gpu = hardware.gpu;
+  // A GPU whose driver is not answering can't be used by any engine; installing
+  // another build would not help, so say what will.
+  if (gpu?.driverIssue) {
+    return {
+      kind: 'gpu_driver_issue',
+      state: 'needs_attention',
+      title: `${gpu.name} isn't available right now`,
+      body: `The ${gpu.vendor} driver is not responding, so models run on the CPU. After a kernel or driver update, restarting the computer usually brings the GPU back; Asyncat picks it up on the next start.`,
+      recommendedCandidateId: current?.id || null,
+      suggestedGpuLayers: 0,
+      recommendedInstallProfile: 'cpu_safe',
+    };
+  }
   const targetCapability = targetCapabilityForGpu(gpu);
   const kind = recommendationKindForGpu(gpu);
   const recommendedInstallProfile = gpu ? kind : 'cpu_safe';
@@ -691,7 +717,7 @@ export async function getEngineAdvisor() {
   const hardware = {
     platform: process.platform,
     arch: process.arch,
-    gpu: gpu ? { vendor: gpu.vendor, name: gpu.name, vramGb: gpu.vramGb ?? null } : null,
+    gpu: gpu ? { vendor: gpu.vendor, name: gpu.name, vramGb: gpu.vramGb ?? null, driverIssue: Boolean(gpu.driverIssue) } : null,
   };
   const recommendation = buildEngineRecommendation(current, candidates, hardware);
 

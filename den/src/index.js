@@ -209,6 +209,9 @@ seed().then(async () => {
     logger.info(`den running on port ${PORT}`);
     logger.info(`environment: ${process.env.NODE_ENV || 'development'}`);
     logger.info(`frontend: ${process.env.FRONTEND_URL || 'http://127.0.0.1:8717'}`);
+    import('./ai/controllers/ai/localModelRestore.js')
+      .then(({ restoreLocalModel }) => restoreLocalModel(logger))
+      .catch((err) => logger.warn('Local model restore unavailable:', err.message));
   });
   server.on('error', async (err) => {
     logError('HTTP server failed:', err);

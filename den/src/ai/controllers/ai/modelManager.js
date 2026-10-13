@@ -156,6 +156,49 @@ const GGUF_CACHE_TTL = 10000; // 10 seconds
 // Cache for metadata: path -> { mtime, meta }
 const metadataCache = new Map();
 
+// GGUF files people already downloaded with Hugging Face tools live in the hub
+// cache as snapshot symlinks. List them too, read-only: deleting would break
+// the cache for other apps.
+function huggingFaceHubDir() {
+  if (process.env.HF_HUB_CACHE) return process.env.HF_HUB_CACHE;
+  if (process.env.HF_HOME) return path.join(process.env.HF_HOME, 'hub');
+  return path.join(os.homedir(), '.cache', 'huggingface', 'hub');
+}
+
+// Vision projectors and tokenizer-only files are not chat models.
+const NON_MODEL_GGUF = /(^|[-_.])(mmproj|vocab)([-_.]|$)/i;
+
+function listHuggingFaceGgufFiles() {
+  const hubDir = huggingFaceHubDir();
+  let repos;
+  try {
+    repos = fs.readdirSync(hubDir).filter((entry) => entry.startsWith('models--'));
+  } catch {
+    return [];
+  }
+  const found = [];
+  for (const repo of repos) {
+    const snapshotsDir = path.join(hubDir, repo, 'snapshots');
+    let snapshots;
+    try { snapshots = fs.readdirSync(snapshotsDir); } catch { continue; }
+    for (const snapshot of snapshots) {
+      const dir = path.join(snapshotsDir, snapshot);
+      let files;
+      try { files = fs.readdirSync(dir); } catch { continue; }
+      for (const filename of files) {
+        if (!filename.toLowerCase().endsWith('.gguf') || NON_MODEL_GGUF.test(filename)) continue;
+        const filePath = path.join(dir, filename);
+        try {
+          const stat = fs.statSync(filePath); // follows the snapshot symlink to the blob
+          if (!stat.isFile()) continue;
+          found.push({ filePath, filename, stat, repoId: repo.replace(/^models--/, '').replace(/--/g, '/') });
+        } catch { /* broken symlink */ }
+      }
+    }
+  }
+  return found;
+}
+
 /**
  * List all GGUF models in the models directory.
  */
@@ -258,7 +301,39 @@ export function listModels() {
       }
     });
 
-    const results = [...diskModels, ...customModels].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const hubModels = listHuggingFaceGgufFiles().map(({ filePath, filename, stat, repoId }) => {
+      const cached = metadataCache.get(filePath);
+      let meta;
+      if (cached && cached.mtime === stat.mtimeMs) {
+        meta = cached.meta;
+      } else {
+        meta = extractGgufMetadata(filePath) || {};
+        metadataCache.set(filePath, { mtime: stat.mtimeMs, meta });
+      }
+      const modelInfo = {
+        id: filePath,
+        isExternal: true,
+        readOnly: true,
+        source: 'huggingface-cache',
+        repoId,
+        name: filename.replace(/\.gguf$/i, ''),
+        filename,
+        path: filePath,
+        sizeBytes: stat.size,
+        sizeGb: +(stat.size / 1024 ** 3).toFixed(2),
+        sizeFormatted: formatBytes(stat.size),
+        contextLength: getContextLength(meta),
+        architecture: meta['general.architecture'] || 'unknown',
+        createdAt: stat.mtime.toISOString(),
+        modifiedAt: stat.mtime.toISOString(),
+      };
+      return {
+        ...modelInfo,
+        capabilities: getModelCapabilities('llamacpp-builtin', filename, modelInfo),
+      };
+    });
+
+    const results = [...diskModels, ...customModels, ...hubModels].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     
     // Final check to deduplicate if diskModels and customModels overlap
     // diskModels use filename as id, customModels use UUID. We should prefer the custom model info (name/id).

@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { aiProviderApi, llamaServerApi } from "../../Settings/settingApi.js";
+import { aiProviderApi, llamaServerApi, mlxApi } from "../../Settings/settingApi.js";
+import { friendlyModelName } from "../../utils/modelNames.js";
 
 const PROVIDER_NAMES = {
   "llamacpp-builtin": "llama.cpp",
+  "mlx-builtin": "MLX",
   ollama: "Ollama",
   lmstudio: "LM Studio",
   openai: "OpenAI",
@@ -34,7 +36,8 @@ const PROVIDER_NAMES = {
 
 const shortModelName = (model, providerName = "") => {
   if (!model) return "";
-  let name = String(model).replace(/\.(gguf|bin)$/i, "").replace(/[-_]?Q\d+[_-]?[A-Z0-9]*$/i, "");
+  // Built-in engines report file paths; keep only the model's own name.
+  let name = friendlyModelName(model).replace(/\.(gguf|bin)$/i, "").replace(/[-_]?Q\d+[_-]?[A-Z0-9]*$/i, "");
   // Strip provider prefix from model name to avoid "MiniMax · MiniMax-M2.7" redundancy
   if (providerName) {
     const prefix = providerName.replace(/[^a-z0-9]/gi, "").toLowerCase();
@@ -49,6 +52,7 @@ const shortModelName = (model, providerName = "") => {
 export function useActiveBrainStatus({ pollMs = 30000 } = {}) {
   const [config, setConfig] = useState(null);
   const [localStatus, setLocalStatus] = useState(null);
+  const [mlxStatus, setMlxStatus] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -58,13 +62,15 @@ export function useActiveBrainStatus({ pollMs = 30000 } = {}) {
 
     const load = async () => {
       try {
-        const [configRes, localRes] = await Promise.all([
+        const [configRes, localRes, mlxRes] = await Promise.all([
           aiProviderApi.getConfig().catch(() => null),
           llamaServerApi.getStatus().catch(() => null),
+          mlxApi.getStatus().catch(() => null),
         ]);
         if (cancelled) return;
         setConfig(configRes);
         setLocalStatus(localRes);
+        setMlxStatus(mlxRes);
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -101,9 +107,12 @@ export function useActiveBrainStatus({ pollMs = 30000 } = {}) {
     const providerId = config?.provider_id || "llamacpp-builtin";
     const providerName = PROVIDER_NAMES[providerId] || providerId || "Provider";
     const isLocal = config?.provider_type === "local";
-    const isBuiltin = providerId === "llamacpp-builtin";
-    const status = isBuiltin ? (localStatus?.status || "idle") : "ready";
-    const rawModel = isBuiltin ? (localStatus?.model || config?.model) : config?.model;
+    // Both built-in engines only answer while their server is running.
+    const isMlx = providerId === "mlx-builtin";
+    const isBuiltin = providerId === "llamacpp-builtin" || isMlx;
+    const engineStatus = isMlx ? mlxStatus : localStatus;
+    const status = isBuiltin ? (engineStatus?.status || "idle") : "ready";
+    const rawModel = isBuiltin ? (engineStatus?.model || config?.model) : config?.model;
     const model = shortModelName(rawModel, providerName);
     const mode = providerId === "openai-codex"
       ? "Codex"
@@ -124,6 +133,7 @@ export function useActiveBrainStatus({ pollMs = 30000 } = {}) {
       providerId,
       providerName,
       model,
+      rawModel: rawModel || "",
       status,
       isLocal,
       isBuiltin,
@@ -134,7 +144,7 @@ export function useActiveBrainStatus({ pollMs = 30000 } = {}) {
       capabilities,
       label: model ? `${mode} · ${providerName} · ${model}` : `${mode} · ${providerName}`,
     };
-  }, [config, localStatus, loading]);
+  }, [config, localStatus, mlxStatus, loading]);
 }
 
 export default useActiveBrainStatus;
