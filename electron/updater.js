@@ -25,12 +25,11 @@ import {
 } from './update-policy.js';
 import {
   WINDOWS_INSTALLER_ARGS,
-  appImageStagingPath,
-  canWriteNextTo,
   detectAppImage,
   downloadFile,
   installStrategy,
   parseChecksums,
+  planDownload,
   replaceAppImage,
   verifyChecksum,
 } from './update-install.js';
@@ -40,6 +39,11 @@ const UPDATE_REPO = updateRepo();
 const RELEASES_URL = `https://github.com/${UPDATE_REPO}/releases`;
 const RELEASES_API_URL = `https://api.github.com/repos/${UPDATE_REPO}/releases?per_page=20`;
 if (UPDATE_REPO !== DEFAULT_UPDATE_REPO) console.info(`[updater] Checking ${UPDATE_REPO} for updates (ASYNCAT_UPDATE_REPO).`);
+
+/** The app's own folder for downloaded installers (not Downloads). */
+function updateDir() {
+  return path.join(app.getPath('temp'), 'asyncat-update');
+}
 
 let initialized = false;
 let currentUpdate = null;
@@ -173,17 +177,14 @@ async function startUpdate() {
     return { success: false, error };
   }
 
-  let strategy = update.strategy;
-  let destination;
-  if (strategy === 'replace-appimage' && canWriteNextTo(RUNNING_APPIMAGE)) {
-    destination = appImageStagingPath(RUNNING_APPIMAGE);
-  } else if (strategy === 'run-installer') {
-    destination = path.join(app.getPath('temp'), 'asyncat-update', update.assetName);
-  } else {
-    // An AppImage in a folder we can't write to is updated like a .deb.
-    strategy = 'open-installer';
-    destination = path.join(app.getPath('downloads'), update.assetName);
-  }
+  const { strategy, destination } = planDownload({
+    strategy: update.strategy,
+    assetName: update.assetName,
+    platform: process.platform,
+    appImagePath: RUNNING_APPIMAGE,
+    updateDir: updateDir(),
+    downloadsDir: app.getPath('downloads'),
+  });
 
   const abort = new AbortController();
   downloadAbort = abort;
@@ -211,7 +212,8 @@ async function startUpdate() {
         throw error;
       }
       if (strategy === 'replace-appimage') replaceAppImage(destination, RUNNING_APPIMAGE);
-      if (strategy === 'open-installer') shell.showItemInFolder(destination);
+      // A .deb is installed from Downloads by the user: show it there.
+      if (strategy === 'open-installer' && process.platform === 'linux') shell.showItemInFolder(destination);
       setDownload({ status: 'ready', file: strategy === 'replace-appimage' ? RUNNING_APPIMAGE : destination });
     } catch (error) {
       if (!error.cancelled) console.warn('[updater] download failed:', error.message);
@@ -248,6 +250,12 @@ async function finishUpdate() {
   return error ? { success: false, error } : { success: true };
 }
 
+/** Quit so the user can replace the app (macOS: drag the new one into Applications). */
+function quitForUpdate() {
+  setImmediate(() => app.quit());
+  return { success: true };
+}
+
 function showUpdateFile() {
   if (download.file) shell.showItemInFolder(download.file);
   return { success: Boolean(download.file) };
@@ -273,6 +281,7 @@ export function setupUpdaterIPC() {
   ipcMain.handle('update:cancel', cancelUpdate);
   ipcMain.handle('update:finish', finishUpdate);
   ipcMain.handle('update:show-file', showUpdateFile);
+  ipcMain.handle('update:quit', quitForUpdate);
   ipcMain.handle('update:download', openUpdateDownload);
   ipcMain.handle('update:install', openUpdateDownload);
   ipcMain.handle('update:open-releases', async (_event, requestedUrl) => {

@@ -4,8 +4,9 @@
 // How an update is applied depends on how Asyncat was installed:
 //   replace-appimage  Linux AppImage: the new file replaces the old one, then restart.
 //   run-installer     Windows: the downloaded installer runs silently, then reopens Asyncat.
-//   open-installer    macOS (.dmg) and Linux .deb: the file is saved to Downloads and
-//                     shown; the last step is the user's (unsigned builds, or root needed).
+//   open-installer    macOS (.dmg, kept in the app's own update folder) and Linux .deb
+//                     (saved to Downloads); the last step is the user's (unsigned
+//                     builds, or root needed).
 //   browser           Nothing to download for this platform: open the release page.
 
 import { createHash } from 'crypto';
@@ -43,6 +44,24 @@ export function installStrategy({ platform, appImagePath = null, assetName = nul
   if (platform === 'linux' && appImagePath && assetName.endsWith('.AppImage')) return 'replace-appimage';
   if (platform === 'win32' && assetName.endsWith('.exe')) return 'run-installer';
   return 'open-installer';
+}
+
+/**
+ * Where an update is downloaded, and the strategy that then applies.
+ * `updateDir` is the app's own folder for updates (in its temp folder):
+ * the Windows installer and the macOS disk image go there, so macOS doesn't
+ * ask for access to Downloads. A .deb goes to Downloads, where the user
+ * installs it from.
+ */
+export function planDownload({ strategy, assetName, platform, appImagePath = null, updateDir, downloadsDir, canWrite = canWriteNextTo }) {
+  if (strategy === 'replace-appimage' && appImagePath && canWrite(appImagePath)) {
+    return { strategy, destination: appImageStagingPath(appImagePath) };
+  }
+  if (strategy === 'run-installer' || (strategy === 'open-installer' && platform === 'darwin')) {
+    return { strategy, destination: path.join(updateDir, assetName) };
+  }
+  // An AppImage in a folder we can't write to is updated like a .deb.
+  return { strategy: 'open-installer', destination: path.join(downloadsDir, assetName) };
 }
 
 /** `sha256sum` output as a Map of file name → lowercase hex digest. */

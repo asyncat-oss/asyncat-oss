@@ -42,7 +42,7 @@ function ReadyStep({ download, platform, api }) {
     <>
       <p className="text-[13px] leading-5 text-fg-muted">
         {platform === 'darwin'
-          ? 'The update is in your Downloads folder. Open it, drag Asyncat into Applications and choose Replace. If macOS then says Asyncat can’t be opened, run the command below in Terminal once.'
+          ? 'The update is downloaded and checked. Open the installer, quit Asyncat, then drag Asyncat into Applications and choose Replace. If macOS then says Asyncat can’t be opened, run the command below in Terminal once.'
           : 'The update is in your Downloads folder. Quit Asyncat, then install it from that folder:'}
       </p>
       <button
@@ -61,8 +61,14 @@ function ReadyStep({ download, platform, api }) {
         {copied ? <span className="text-[11px] text-emerald-500">Copied</span> : null}
       </button>
       <div className="mt-5 flex justify-center gap-2">
-        {platform === 'darwin' ? <Button variant="primary" size="md" onClick={() => api.finishUpdate()}>Open installer</Button> : null}
-        <Button variant="secondary" size="md" icon={FolderOpen} onClick={() => api.showUpdateFile()}>Show in folder</Button>
+        {platform === 'darwin' ? (
+          <>
+            <Button variant="primary" size="md" onClick={() => api.finishUpdate()}>Open installer</Button>
+            <Button variant="secondary" size="md" onClick={() => api.quitForUpdate?.()}>Quit Asyncat</Button>
+          </>
+        ) : (
+          <Button variant="secondary" size="md" icon={FolderOpen} onClick={() => api.showUpdateFile()}>Show in folder</Button>
+        )}
       </div>
     </>
   );

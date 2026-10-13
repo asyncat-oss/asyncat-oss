@@ -14,6 +14,7 @@ import {
   downloadFile,
   installStrategy,
   parseChecksums,
+  planDownload,
   replaceAppImage,
   verifyChecksum,
 } from './update-install.js';
@@ -34,6 +35,26 @@ test('picks how to install for each platform and package', () => {
   assert.equal(installStrategy({ platform: 'win32', assetName: 'Asyncat-1.0.0-windows-x64.exe' }), 'run-installer');
   assert.equal(installStrategy({ platform: 'darwin', assetName: 'Asyncat-1.0.0-macos-arm64.dmg' }), 'open-installer');
   assert.equal(installStrategy({ platform: 'linux', assetName: null }), 'browser');
+});
+
+test('installers go to the app\'s own update folder; a .deb to Downloads', () => {
+  const dirs = { updateDir: '/tmp/asyncat-update', downloadsDir: '/home/u/Downloads' };
+  assert.deepEqual(
+    planDownload({ strategy: 'open-installer', assetName: 'Asyncat-1.0.0-macos-arm64.dmg', platform: 'darwin', ...dirs }),
+    { strategy: 'open-installer', destination: path.join('/tmp/asyncat-update', 'Asyncat-1.0.0-macos-arm64.dmg') },
+  );
+  assert.deepEqual(
+    planDownload({ strategy: 'run-installer', assetName: 'Asyncat-1.0.0-windows-x64.exe', platform: 'win32', ...dirs }),
+    { strategy: 'run-installer', destination: path.join('/tmp/asyncat-update', 'Asyncat-1.0.0-windows-x64.exe') },
+  );
+  assert.deepEqual(
+    planDownload({ strategy: 'open-installer', assetName: 'Asyncat-1.0.0-linux-x64.deb', platform: 'linux', ...dirs }),
+    { strategy: 'open-installer', destination: path.join('/home/u/Downloads', 'Asyncat-1.0.0-linux-x64.deb') },
+  );
+  assert.deepEqual(
+    planDownload({ strategy: 'replace-appimage', assetName: 'Asyncat-1.0.0-linux-x64.AppImage', platform: 'linux', appImagePath: '/home/u/Apps/Asyncat.AppImage', canWrite: () => true, ...dirs }),
+    { strategy: 'replace-appimage', destination: '/home/u/Apps/.Asyncat.AppImage.update' },
+  );
 });
 
 test('only an app running from its own AppImage is treated as an AppImage', () => {
