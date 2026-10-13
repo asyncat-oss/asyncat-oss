@@ -55,8 +55,6 @@ import { permissionManager } from './PermissionManager.js';
 import { ToolCallFormatter } from './ToolCallFormatter.js';
 import { loadSkills as loadAgentSkills, listSkills as listAgentSkills } from './skills.js';
 
-import { loadMcpTools } from './tools/mcpTools.js';
-import path from 'path';
 
 // ── Skills loader (Cerebellum) ────────────────────────────────────────────────
 export function loadSkills() {
@@ -126,10 +124,8 @@ export async function initializeAgent() {
     console.warn('[agent] Browser tools not available (puppeteer not installed):', err.message);
   }
 
-
-  // Load MCP tools
-  const mcpConfigPath = path.resolve(process.cwd(), 'data', 'mcp.json');
-  await loadMcpTools(mcpConfigPath);
+  // Connector (MCP) tools are added as their servers connect; see
+  // connectors/connectorManager.js, started with the server.
 
   // Load skills (Cerebellum)
   loadSkills();

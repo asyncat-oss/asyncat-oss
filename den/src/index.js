@@ -56,6 +56,10 @@ import eventsRouter from './events/eventsRouter.js';
 import catRouter from './cats/catRoutes.js';
 import { startCats } from './cats/index.js';
 
+// ─── Connectors: MCP servers the agent can use ───────────────────────────────
+import connectorRouter from './connectors/connectorRoutes.js';
+import { startConnectors } from './connectors/connectorManager.js';
+
 // ─── Database ─────────────────────────────────────────────────────────────────
 import db from './db/client.js';         // opens SQLite, applies schema
 import { seed } from './db/seed.js';     // creates the local profile on first boot
@@ -174,6 +178,9 @@ app.use('/api/events', eventsRouter);
 // Routes: Cats
 app.use('/api/cats', catRouter);
 
+// Routes: connectors (MCP servers)
+app.use('/api/connectors', connectorRouter);
+
 // ─── Routes: Training / Fine-Tuning ──────────────────────────────────────────
 app.use('/api/training', trainingRouter);
 
@@ -221,6 +228,8 @@ seed().then(async () => {
   hostToken();
   // The clock that wakes Cats (and moves old scheduled tasks over, once).
   startCats();
+  // Connectors start in the background; their tools appear as each connects.
+  startConnectors().catch((err) => logger.warn('Connectors failed to start:', err.message));
 
   const server = app.listen(PORT, '127.0.0.1', () => {
     logger.info(`den running on port ${PORT}`);
@@ -282,6 +291,10 @@ seed().then(async () => {
         stopMlx().catch(e => logger.warn('MLX stop error:', e.message)),
         stopSdCpp().catch(e => logger.warn('Image generation stop error:', e.message)),
         stopAllTraining().catch(e => logger.warn('Training stop error:', e.message)),
+        // Local connectors are programs too.
+        import('./connectors/connectorManager.js')
+          .then(({ stopConnectors }) => stopConnectors())
+          .catch(e => logger.warn('Connectors stop error:', e.message)),
       ]);
     } catch (err) {
       logger.warn('Error stopping child processes:', err.message);

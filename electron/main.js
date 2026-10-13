@@ -569,6 +569,8 @@ function setupHostBridge() {
   registerHostHandler('browser.command', (payload) => handleAgentCommand(payload));
   // A deleted Cat's browser profile (its tabs and sign-ins).
   registerHostHandler('browser.clearCat', (payload) => clearCatBrowserData(payload));
+  // Back to the app after signing in to a connector in the browser.
+  registerHostHandler('app.focus', () => bootApp(''));
 
   powerMonitor.on('resume', () => postHostEvent('power.resume'));
   powerMonitor.on('unlock-screen', () => postHostEvent('power.resume'));

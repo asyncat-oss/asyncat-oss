@@ -29,6 +29,8 @@ const SECRET_COLUMNS = [
   ['ai_provider_profiles', 'api_key'],
   ['user_integrations', 'access_token'],
   ['user_integrations', 'refresh_token'],
+  ['connector_oauth', 'client_info'],
+  ['connector_oauth', 'tokens'],
 ];
 
 const SECRET_CONFIG_SET = new Set(SECRET_CONFIG_KEYS);

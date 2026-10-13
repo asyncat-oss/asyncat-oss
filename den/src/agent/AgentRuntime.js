@@ -632,6 +632,8 @@ export class AgentRuntime {
       },
       // Backs tool_search; limited to the tools this run may already call.
       discoverTools: (query, limit) => this._discoverTools(query, limit, toolDefs),
+      // Stopping the run cancels tools that can stop (connector calls).
+      abortSignal: this.abortSignal,
     };
 
     const knownTools = toolDefs.map(t => t.name);
@@ -2283,6 +2285,10 @@ export class AgentRuntime {
 
   _isMutatingTool(toolName, args = {}) {
     if (MUTATING_FILE_TOOLS.has(toolName)) return true;
+    // A local connector may change files too; only its read-only tools run
+    // side by side.
+    const tool = toolRegistry.get(toolName);
+    if (tool?.category === 'mcp') return tool.permission !== 'safe';
     if (toolName === 'run_command') return !this._looksReadOnlyShellCommand(args.command || '');
     return MUTATING_SHELL_TOOLS.has(toolName);
   }
@@ -2435,7 +2441,9 @@ export class AgentRuntime {
 
   _toolResultMessage(toolCall, rawResult, nativeTools = false) {
     // Outside text is labelled so the model reads it as data, not orders.
-    const result = OUTSIDE_CONTENT_TOOLS.has(toolCall.tool_name) && rawResult && typeof rawResult === 'object' && rawResult.success !== false
+    // Connector results come from other apps and services, so they count.
+    const outside = OUTSIDE_CONTENT_TOOLS.has(toolCall.tool_name) || toolRegistry.get(toolCall.tool_name)?.category === 'mcp';
+    const result = outside && rawResult && typeof rawResult === 'object' && rawResult.success !== false
       ? { untrusted_content_notice: OUTSIDE_CONTENT_NOTICE, ...rawResult }
       : rawResult;
     // If the result contains a dataUrl (e.g. from preview_screenshot), pass the

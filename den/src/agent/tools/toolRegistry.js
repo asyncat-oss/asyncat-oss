@@ -24,6 +24,8 @@ class ToolRegistry {
       parameters: tool.parameters || { type: 'object', properties: {}, required: [] },
       permission: tool.permission || PermissionLevel.SAFE,
       category: tool.category || 'general',
+      // Connector tools (category 'mcp') name the connector they come from.
+      ...(tool.serverName ? { serverName: tool.serverName } : {}),
       execute: tool.execute,
     });
   }

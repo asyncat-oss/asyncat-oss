@@ -15,6 +15,8 @@ export const NO_PROJECT_TOOL_CATEGORIES = new Set([
   'memory',
   'notes',
   'schedule',
+  // Connectors: services and programs the user added on purpose.
+  'mcp',
 ]);
 
 export function noProjectToolNames() {

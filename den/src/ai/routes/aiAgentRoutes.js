@@ -28,7 +28,6 @@ import { getWorkspaceRoot, loadEntry, resolveWorkingDirectoryContext } from '../
 import { codeSearchTool, listDefinitionsTool, findDefinitionTool, findReferencesTool } from '../../agent/tools/codeSearchTools.js';
 import { listMemories, normalizeMemoryRow, searchMemories, hybridRecall, ALL_PROJECTS, ALL_CATS } from '../../agent/tools/memoryTools.js';
 import { embeddingStatus, embedText } from '../embeddings/embeddingService.js';
-import { getMcpStatus, listMcpServers, mergeMcpEnv, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
 import { toolRegistry } from '../../agent/tools/toolRegistry.js';
 import { formatMultimodalCapabilityPrompt, getMultimodalCapabilities } from '../../agent/multimodalCapabilities.js';
 import { normalizeApprovalDecision } from '../../agent/approvalDecisions.js';
@@ -54,7 +53,6 @@ import { getExternalUsage } from '../../agent/externalUsage.js';
 const router = express.Router();
 const pendingPermissions = new Map();
 const pendingUserQuestions = new Map();
-const MCP_CONFIG_PATH = path.resolve(process.cwd(), 'data', 'mcp.json');
 function normalizeConversationHistory(history = []) {
   return (Array.isArray(history) ? history : [])
     .filter(m => m?.role === 'user' || m?.role === 'assistant')
@@ -2196,70 +2194,6 @@ router.delete('/memory/:key', withWorkspaceContext, async (req, res) => {
     } else {
       res.status(404).json({ success: false, error: `No memory found with key: ${req.params.key}` });
     }
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// ── MCP management ────────────────────────────────────────────────────────────
-
-router.get('/mcp', withWorkspaceContext, (_req, res) => {
-  try {
-    res.json({ success: true, servers: listMcpServers(MCP_CONFIG_PATH), status: getMcpStatus() });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-router.post('/mcp', withWorkspaceContext, async (req, res) => {
-  try {
-    const { name, command, args = [], env = {}, disabled = false } = req.body || {};
-    if (!name || !command) return res.status(400).json({ success: false, error: 'name and command are required' });
-    const config = readMcpConfig(MCP_CONFIG_PATH);
-    const existingEnv = config.mcpServers[name]?.env;
-    config.mcpServers[name] = { command, args: Array.isArray(args) ? args : [], env: mergeMcpEnv(existingEnv, env), disabled: !!disabled };
-    writeMcpConfig(MCP_CONFIG_PATH, config);
-    const status = await reloadMcpTools(MCP_CONFIG_PATH);
-    res.json({ success: true, servers: listMcpServers(MCP_CONFIG_PATH), status });
-  } catch (err) {
-    res.status(400).json({ success: false, error: err.message });
-  }
-});
-
-router.patch('/mcp/:name', withWorkspaceContext, async (req, res) => {
-  try {
-    const config = readMcpConfig(MCP_CONFIG_PATH);
-    const server = config.mcpServers?.[req.params.name];
-    if (!server) return res.status(404).json({ success: false, error: 'MCP server not found' });
-    if (req.body?.disabled !== undefined) server.disabled = !!req.body.disabled;
-    if (req.body?.command) server.command = req.body.command;
-    if (Array.isArray(req.body?.args)) server.args = req.body.args;
-    if (req.body?.env && typeof req.body.env === 'object') server.env = mergeMcpEnv(server.env, req.body.env);
-    writeMcpConfig(MCP_CONFIG_PATH, config);
-    const status = await reloadMcpTools(MCP_CONFIG_PATH);
-    res.json({ success: true, server: req.params.name, status });
-  } catch (err) {
-    res.status(400).json({ success: false, error: err.message });
-  }
-});
-
-router.delete('/mcp/:name', withWorkspaceContext, async (req, res) => {
-  try {
-    const config = readMcpConfig(MCP_CONFIG_PATH);
-    if (!config.mcpServers?.[req.params.name]) return res.status(404).json({ success: false, error: 'MCP server not found' });
-    delete config.mcpServers[req.params.name];
-    writeMcpConfig(MCP_CONFIG_PATH, config);
-    const status = await reloadMcpTools(MCP_CONFIG_PATH);
-    res.json({ success: true, status });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-router.post('/mcp/reload', withWorkspaceContext, async (_req, res) => {
-  try {
-    const status = await reloadMcpTools(MCP_CONFIG_PATH);
-    res.json({ success: true, status, servers: listMcpServers(MCP_CONFIG_PATH) });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

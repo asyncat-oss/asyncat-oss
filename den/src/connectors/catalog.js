@@ -1,0 +1,138 @@
+// den/src/connectors/catalog.js
+// A short list of well-known connectors to add in one click. Remote ones are
+// run by the service itself; local ones are programs downloaded once (with
+// the user's OK and the size shown first). Anything else can be added by
+// address or command.
+
+export const CONNECTOR_CATALOG = [
+  {
+    id: 'github',
+    title: 'GitHub',
+    description: 'Issues, pull requests, code and Actions in your repositories.',
+    kind: 'remote',
+    url: 'https://api.githubcopilot.com/mcp/',
+    auth: 'token',
+    token: {
+      header: 'Authorization',
+      prefix: 'Bearer ',
+      label: 'Personal access token',
+      placeholder: 'github_pat_…',
+      help: 'https://github.com/settings/personal-access-tokens',
+    },
+    docs: 'https://github.com/github/github-mcp-server',
+  },
+  {
+    id: 'notion',
+    title: 'Notion',
+    description: 'Search, read and update your Notion pages and databases.',
+    kind: 'remote',
+    url: 'https://mcp.notion.com/mcp',
+    auth: 'oauth',
+    docs: 'https://developers.notion.com/docs/mcp',
+  },
+  {
+    id: 'linear',
+    title: 'Linear',
+    description: 'Find, create and update Linear issues and projects.',
+    kind: 'remote',
+    url: 'https://mcp.linear.app/mcp',
+    auth: 'oauth',
+    docs: 'https://linear.app/docs/mcp',
+  },
+  {
+    id: 'sentry',
+    title: 'Sentry',
+    description: 'Look into errors and performance problems in your Sentry projects.',
+    kind: 'remote',
+    url: 'https://mcp.sentry.dev/mcp',
+    auth: 'oauth',
+    docs: 'https://docs.sentry.io/product/sentry-mcp/',
+  },
+  {
+    id: 'supabase',
+    title: 'Supabase',
+    description: 'Query and manage your Supabase projects and databases.',
+    kind: 'remote',
+    url: 'https://mcp.supabase.com/mcp',
+    auth: 'oauth',
+    docs: 'https://supabase.com/docs/guides/getting-started/mcp',
+  },
+  {
+    id: 'stripe',
+    title: 'Stripe',
+    description: 'Look up customers, payments and invoices in your Stripe account.',
+    kind: 'remote',
+    url: 'https://mcp.stripe.com',
+    auth: 'oauth',
+    docs: 'https://docs.stripe.com/mcp',
+  },
+  {
+    id: 'huggingface',
+    title: 'Hugging Face',
+    description: 'Search models, datasets, Spaces and papers on the Hugging Face Hub.',
+    kind: 'remote',
+    url: 'https://huggingface.co/mcp',
+    auth: 'token',
+    optionalToken: true,
+    token: {
+      header: 'Authorization',
+      prefix: 'Bearer ',
+      label: 'Access token (optional)',
+      placeholder: 'hf_…',
+      help: 'https://huggingface.co/settings/tokens',
+    },
+    docs: 'https://huggingface.co/settings/mcp',
+  },
+  {
+    id: 'context7',
+    title: 'Context7',
+    description: 'Up-to-date documentation and code examples for libraries and frameworks.',
+    kind: 'remote',
+    url: 'https://mcp.context7.com/mcp',
+    auth: 'none',
+    docs: 'https://context7.com',
+  },
+  {
+    id: 'deepwiki',
+    title: 'DeepWiki',
+    description: 'Ask questions about public GitHub repositories and read their docs.',
+    kind: 'remote',
+    url: 'https://mcp.deepwiki.com/mcp',
+    auth: 'none',
+    docs: 'https://docs.devin.ai/work-with-devin/deepwiki-mcp',
+  },
+  {
+    id: 'chrome-devtools',
+    title: 'Chrome DevTools',
+    description: "Inspect and debug pages in your own Chrome: console, network and performance.",
+    kind: 'local',
+    command: 'npx',
+    args: ['-y', 'chrome-devtools-mcp'],
+    needs: 'Node.js and Google Chrome',
+    docs: 'https://github.com/ChromeDevTools/chrome-devtools-mcp',
+  },
+  {
+    id: 'git',
+    title: 'Git',
+    description: 'Read history, diffs and branches of a Git repository on this computer.',
+    kind: 'local',
+    command: 'uvx',
+    args: ['mcp-server-git'],
+    needs: 'uv (Python)',
+    docs: 'https://github.com/modelcontextprotocol/servers/tree/main/src/git',
+  },
+  {
+    id: 'everything',
+    title: 'MCP test server',
+    description: 'The MCP project\'s test server, with one of every kind of tool. Handy for trying connectors out.',
+    kind: 'local',
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-everything'],
+    needs: 'Node.js',
+    docs: 'https://github.com/modelcontextprotocol/servers/tree/main/src/everything',
+  },
+];
+
+export function catalogEntry(id) {
+  return CONNECTOR_CATALOG.find((entry) => entry.id === id) || null;
+}
