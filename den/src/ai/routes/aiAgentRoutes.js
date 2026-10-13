@@ -29,7 +29,7 @@ import { createWorkflowRouter } from './workflowRoutes.js';
 import { getWorkspaceRoot, loadEntry, resolveWorkingDirectoryContext } from '../../files/fileExplorerService.js';
 import { codeSearchTool, listDefinitionsTool, findDefinitionTool, findReferencesTool } from '../../agent/tools/codeSearchTools.js';
 import { publicProvider } from '../controllers/ai/providerCatalog.js';
-import { listMemories, normalizeMemoryRow, searchMemories, hybridRecall } from '../../agent/tools/memoryTools.js';
+import { listMemories, normalizeMemoryRow, searchMemories, hybridRecall, ALL_PROJECTS } from '../../agent/tools/memoryTools.js';
 import { embeddingStatus, resetEmbeddingStrategy, embedText } from '../embeddings/embeddingService.js';
 import { getMcpStatus, listMcpServers, mergeMcpEnv, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
 import { toolRegistry } from '../../agent/tools/toolRegistry.js';
@@ -1209,6 +1209,7 @@ router.get('/semantic/search', withWorkspaceContext, async (req, res) => {
       userId: req.user.id,
       workspaceId,
       profileId: null,
+      projectId: ALL_PROJECTS,
       computeEmbedding: (text) => embedText(text, { userId: req.user.id }),
     };
     const { memories, method } = await hybridRecall(context, { query: q, kind: 'all', limit });
@@ -1975,6 +1976,7 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
       userId: req.user.id,
       workspaceId: req.workspaceId,
       projectId: resolvedWorkingContext.projectId || chatProject?.id || null,
+      agentProfileId: profile?.id || null,
       workingDir: resolvedWorkingDir,
       workspaceRoot: resolvedWorkingContext.rootPath || resolvedWorkingDir,
       maxRounds: resolvedMaxRounds,
@@ -2527,6 +2529,7 @@ router.get('/memory', withWorkspaceContext, async (req, res) => {
       ? searchMemories({
         userId: req.user.id,
         workspaceId,
+        projectId: ALL_PROJECTS,
         query: q,
         kind,
         limit,
@@ -2535,10 +2538,17 @@ router.get('/memory', withWorkspaceContext, async (req, res) => {
       : listMemories({
         userId: req.user.id,
         workspaceId,
+        projectId: ALL_PROJECTS,
         kind,
         limit,
       });
-    res.json({ success: true, count: rows.length, memories: rows });
+    // Name the project a memory belongs to, for the Memory page.
+    const projectIds = [...new Set(rows.map(row => row.project_id).filter(Boolean))];
+    const projectNames = new Map(projectIds.length
+      ? db.prepare(`SELECT id, name FROM projects WHERE id IN (${projectIds.map(() => '?').join(',')})`).all(...projectIds).map(p => [p.id, p.name])
+      : []);
+    const memories = rows.map(row => ({ ...row, project_name: row.project_id ? (projectNames.get(row.project_id) || null) : null }));
+    res.json({ success: true, count: memories.length, memories });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -2663,9 +2673,10 @@ router.delete('/memory/:key', withWorkspaceContext, async (req, res) => {
       db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
     if (!workspaceId) return res.status(404).json({ success: false, error: 'Workspace not found' });
 
-    const result = db.prepare(
-      'DELETE FROM agent_memory WHERE user_id = ? AND workspace_id = ? AND key = ?'
-    ).run(req.user.id, workspaceId, req.params.key);
+    // The same key can exist in several projects; ?id= deletes just one.
+    const result = req.query.id
+      ? db.prepare('DELETE FROM agent_memory WHERE user_id = ? AND workspace_id = ? AND id = ?').run(req.user.id, workspaceId, String(req.query.id))
+      : db.prepare('DELETE FROM agent_memory WHERE user_id = ? AND workspace_id = ? AND key = ?').run(req.user.id, workspaceId, req.params.key);
 
     if (result.changes > 0) {
       res.json({ success: true, message: `Deleted memory: ${req.params.key}` });

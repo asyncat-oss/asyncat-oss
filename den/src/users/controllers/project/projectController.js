@@ -396,8 +396,10 @@ async function deleteProject(req, res) {
 			.eq("id", id);
 
 		if (projectDeleteError) throw projectDeleteError;
-		// Its chats stay (they move to Recents); its knowledge files go.
+		// Its chats stay (they move to Recents); its knowledge files and the
+		// things the agent remembered inside it go.
 		deleteOwnerKnowledge('project', id);
+		localDb.prepare('DELETE FROM agent_memory WHERE user_id = ? AND project_id = ?').run(user.id, id);
 
 		res.json({ success: true });
 	} catch (error) {

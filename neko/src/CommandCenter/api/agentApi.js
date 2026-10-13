@@ -290,8 +290,9 @@ export const agentApi = {
     return await apiRequest(`${API_BASE_URL}/agent/memory/consolidate`, { method: 'POST' });
   },
 
-  deleteMemory: async (key) => {
-    return await apiRequest(`${API_BASE_URL}/agent/memory/${encodeURIComponent(key)}`, {
+  deleteMemory: async (key, id = null) => {
+    const query = id ? `?id=${encodeURIComponent(id)}` : '';
+    return await apiRequest(`${API_BASE_URL}/agent/memory/${encodeURIComponent(key)}${query}`, {
       method: 'DELETE',
     });
   },

@@ -988,11 +988,11 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
     }
   }
 
-  async function deleteMemory(key) {
-    setDeletingKey(key);
+  async function deleteMemory(mem) {
+    setDeletingKey(mem.id);
     try {
-      await agentApi.deleteMemory(key);
-      setMemories(prev => prev.filter(m => m.key !== key));
+      await agentApi.deleteMemory(mem.key, mem.id);
+      setMemories(prev => prev.filter(m => m.id !== mem.id));
     } catch (err) {
       setErrorMemory(err.message || 'Failed to delete memory');
     } finally {
@@ -1686,7 +1686,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                 </div>
               )}
               {!loadingMemory && !errorMemory && memories.map(mem => (
-                <MemoryRow key={mem.key} mem={mem} onDelete={deleteMemory} deleting={deletingKey === mem.key} />
+                <MemoryRow key={mem.id || mem.key} mem={mem} onDelete={deleteMemory} deleting={deletingKey === mem.id} />
               ))}
             </div>
           </div>
@@ -1724,6 +1724,11 @@ function MemoryRow({ mem, onDelete, deleting }) {
           {mem.kind || mem.memory_type || 'fact'}
         </span>
         <span className="text-[11px] font-semibold text-gray-600 dark:text-gray-300 midnight:text-slate-300 font-mono truncate flex-1">{mem.key}</span>
+        {mem.project_id && (
+          <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-accent-soft text-fg-muted" title="Only chats in this project see this memory">
+            {mem.project_name || 'Project'}
+          </span>
+        )}
         {mem.source && mem.source !== 'agent' && (
           <span className={`text-[9px] px-1 py-0.5 rounded flex-shrink-0 ${
             mem.source === 'correction'
@@ -1742,7 +1747,7 @@ function MemoryRow({ mem, onDelete, deleting }) {
           ))}
         </span>
         <button
-          onClick={() => onDelete(mem.key)}
+          onClick={() => onDelete(mem)}
           disabled={deleting}
           className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-gray-400 hover:text-red-500 dark:hover:text-red-400 midnight:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 midnight:hover:bg-red-900/20 disabled:opacity-50"
           title="Delete memory"

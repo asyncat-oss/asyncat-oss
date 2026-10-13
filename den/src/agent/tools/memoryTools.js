@@ -22,6 +22,47 @@ const MEMORY_TTL_DAYS = {
   context: 30,
 };
 
+// Memories about the person (who they are, how they like to work) follow them
+// into every chat; the rest saved inside a project stays with that project.
+const PERSONAL_KINDS = new Set(['user', 'feedback', 'preference']);
+
+/** Pass as `projectId` to see memories from every project (the Memory page). */
+export const ALL_PROJECTS = 'all';
+
+/**
+ * The project a new memory belongs to: the chat's project, unless it is about
+ * the person or `scope` says 'everywhere'. Null means every chat can see it.
+ */
+export function memoryProjectFor({ kind, scope, projectId }) {
+  if (!projectId || scope === 'everywhere') return null;
+  if (scope === 'project') return projectId;
+  return PERSONAL_KINDS.has(kind) ? null : projectId;
+}
+
+/**
+ * SQL limiting memories to what one chat may see. An agent sees its own
+ * memories plus shared ones; a project chat sees that project's memories plus
+ * ones saved outside any project; a chat outside projects sees only the latter.
+ */
+export function memoryScope({ profileId = null, projectId = null } = {}, alias = '') {
+  const col = (name) => (alias ? `${alias}.${name}` : name);
+  const clauses = [];
+  const params = [];
+  if (profileId) {
+    clauses.push(`AND (${col('profile_id')} = ? OR ${col('profile_id')} IS NULL)`);
+    params.push(profileId);
+  }
+  if (projectId === ALL_PROJECTS) {
+    // no project filter
+  } else if (projectId) {
+    clauses.push(`AND (${col('project_id')} = ? OR ${col('project_id')} IS NULL)`);
+    params.push(projectId);
+  } else {
+    clauses.push(`AND ${col('project_id')} IS NULL`);
+  }
+  return { sql: clauses.join(' '), params };
+}
+
 function computeExpiresAt(kind) {
   const days = MEMORY_TTL_DAYS[kind];
   if (!days) return null;
@@ -75,7 +116,7 @@ export function enforceMemoryCap(userId, workspaceId) {
 
 const memoryColumnNames = [
   'id', 'key', 'content', 'memory_type', 'tags', 'importance',
-  'last_accessed_at', 'access_count', 'created_at', 'updated_at', 'source',
+  'last_accessed_at', 'access_count', 'created_at', 'updated_at', 'source', 'project_id',
 ];
 const memoryColumns = memoryColumnNames.join(', ');
 const prefixedMemoryColumns = memoryColumnNames.map(name => `m.${name}`).join(', ');
@@ -159,6 +200,7 @@ export function normalizeMemoryRow(row) {
     created_at: row.created_at,
     updated_at: row.updated_at,
     source: row.source || 'agent',
+    project_id: row.project_id || null,
     score: row.score === undefined ? undefined : Number(row.score),
   };
 }
@@ -192,13 +234,9 @@ function cosineSim(a, b) {
  * In-process vector search over all memories that have embeddings.
  * Safe for up to ~50,000 memories (O(n) cosine pass, well under 10ms at that scale).
  */
-function _vectorSearch({ userId, workspaceId, profileId, queryVec, queryModel, kind, limit = 10 }) {
-  const params = [userId, workspaceId];
-  let profileClause = '';
-  if (profileId) {
-    profileClause = 'AND (profile_id = ? OR profile_id IS NULL)';
-    params.push(profileId);
-  }
+function _vectorSearch({ userId, workspaceId, profileId, projectId, queryVec, queryModel, kind, limit = 10 }) {
+  const scope = memoryScope({ profileId, projectId });
+  const params = [userId, workspaceId, ...scope.params];
   let kindClause = '';
   if (kind && kind !== 'all') {
     kindClause = 'AND memory_type = ?';
@@ -217,7 +255,7 @@ function _vectorSearch({ userId, workspaceId, profileId, queryVec, queryModel, k
   const rows = db.prepare(`
     SELECT ${memoryColumns}, embedding
     FROM agent_memory
-    WHERE user_id = ? AND workspace_id = ? ${profileClause} ${kindClause} AND embedding IS NOT NULL ${modelClause}
+    WHERE user_id = ? AND workspace_id = ? ${scope.sql} ${kindClause} AND embedding IS NOT NULL ${modelClause}
     LIMIT 2000
   `).all(...params);
 
@@ -249,11 +287,10 @@ export function bumpMemoryAccess(rows) {
   tx();
 }
 
-export function searchMemories({ userId, workspaceId, profileId, query, kind = 'all', limit = 10, bumpAccess = false }) {
+export function searchMemories({ userId, workspaceId, profileId, projectId, query, kind = 'all', limit = 10, bumpAccess = false }) {
   const ftsQuery = buildFtsQuery(query);
-  const profileClause = profileId ? 'AND (m.profile_id = ? OR m.profile_id IS NULL)' : '';
-  const ftsParams = ftsQuery ? [ftsQuery, userId, workspaceId] : [];
-  if (ftsQuery && profileId) ftsParams.push(profileId);
+  const scope = memoryScope({ profileId, projectId }, 'm');
+  const ftsParams = ftsQuery ? [ftsQuery, userId, workspaceId, ...scope.params] : [];
   let kindClause = '';
   if (kind && kind !== 'all') {
     kindClause = 'AND m.memory_type = ?';
@@ -268,7 +305,7 @@ export function searchMemories({ userId, workspaceId, profileId, query, kind = '
         SELECT ${prefixedMemoryColumns}, bm25(agent_memory_fts) AS rank
         FROM agent_memory_fts fts
         JOIN agent_memory m ON m.id = fts.memory_id
-        WHERE fts.agent_memory_fts MATCH ? AND m.user_id = ? AND m.workspace_id = ? ${profileClause} ${kindClause}
+        WHERE fts.agent_memory_fts MATCH ? AND m.user_id = ? AND m.workspace_id = ? ${scope.sql} ${kindClause}
         ORDER BY rank
         LIMIT ?
       `).all(...ftsParams);
@@ -279,9 +316,8 @@ export function searchMemories({ userId, workspaceId, profileId, query, kind = '
 
   if (rows.length === 0) {
     const like = `%${query || ''}%`;
-    const fallbackParams = [userId, workspaceId];
-    const fallbackProfileClause = profileId ? 'AND (profile_id = ? OR profile_id IS NULL)' : '';
-    if (profileId) fallbackParams.push(profileId);
+    const fallbackScope = memoryScope({ profileId, projectId });
+    const fallbackParams = [userId, workspaceId, ...fallbackScope.params];
     let fallbackKind = '';
     if (kind && kind !== 'all') {
       fallbackKind = 'AND memory_type = ?';
@@ -291,7 +327,7 @@ export function searchMemories({ userId, workspaceId, profileId, query, kind = '
     rows = db.prepare(`
       SELECT ${memoryColumns}
       FROM agent_memory
-      WHERE user_id = ? AND workspace_id = ? ${fallbackProfileClause} ${fallbackKind}
+      WHERE user_id = ? AND workspace_id = ? ${fallbackScope.sql} ${fallbackKind}
         AND (key LIKE ? OR content LIKE ?)
       LIMIT ?
     `).all(...fallbackParams);
@@ -310,13 +346,9 @@ export function searchMemories({ userId, workspaceId, profileId, query, kind = '
   return scored.map(normalizeMemoryRow);
 }
 
-export function listMemories({ userId, workspaceId, profileId, limit = 50, kind = 'all' }) {
-  const params = [userId, workspaceId];
-  let profileClause = '';
-  if (profileId) {
-    profileClause = 'AND (profile_id = ? OR profile_id IS NULL)';
-    params.push(profileId);
-  }
+export function listMemories({ userId, workspaceId, profileId, projectId, limit = 50, kind = 'all' }) {
+  const scope = memoryScope({ profileId, projectId });
+  const params = [userId, workspaceId, ...scope.params];
   let kindClause = '';
   if (kind && kind !== 'all') {
     kindClause = 'AND memory_type = ?';
@@ -326,7 +358,7 @@ export function listMemories({ userId, workspaceId, profileId, limit = 50, kind 
   return db.prepare(`
     SELECT ${memoryColumns}
     FROM agent_memory
-    WHERE user_id = ? AND workspace_id = ? ${profileClause} ${kindClause}
+    WHERE user_id = ? AND workspace_id = ? ${scope.sql} ${kindClause}
     ORDER BY importance DESC, COALESCE(last_accessed_at, updated_at) DESC
     LIMIT ?
   `).all(...params).map(normalizeMemoryRow);
@@ -345,6 +377,7 @@ export const saveMemoryTool = {
       content: { type: 'string', description: 'The durable content to remember.' },
       tags: { type: 'array', items: { type: 'string' }, description: 'Optional short tags for filtering and review.' },
       importance: { type: 'number', description: '0.0 to 1.0 importance. Default 0.5.' },
+      scope: { type: 'string', enum: ['project', 'everywhere'], description: 'Only matters in a project chat. Default: memories about the user (user, feedback, preference) apply everywhere; the rest stay with the project.' },
     },
     required: ['kind', 'content'],
   },
@@ -356,10 +389,11 @@ export const saveMemoryTool = {
       const importance = normalizeImportance(args.importance);
 
       const profileId = context.profileId || null;
+      const projectId = memoryProjectFor({ kind, scope: args.scope, projectId: context.projectId });
 
       const existing = db.prepare(
-        'SELECT id FROM agent_memory WHERE user_id = ? AND workspace_id = ? AND key = ? AND (profile_id = ? OR (profile_id IS NULL AND ? IS NULL))'
-      ).get(context.userId, context.workspaceId, key, profileId, profileId);
+        'SELECT id FROM agent_memory WHERE user_id = ? AND workspace_id = ? AND key = ? AND profile_id IS ? AND project_id IS ?'
+      ).get(context.userId, context.workspaceId, key, profileId, projectId);
 
       let memoryId;
       let action;
@@ -377,9 +411,9 @@ export const saveMemoryTool = {
         const expiresAt = computeExpiresAt(kind);
         db.prepare(`
           INSERT INTO agent_memory
-            (id, user_id, workspace_id, memory_type, key, content, tags, importance, profile_id, expires_at, source)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'agent')
-        `).run(memoryId, context.userId, context.workspaceId, kind, key, args.content, tags, importance, profileId, expiresAt);
+            (id, user_id, workspace_id, memory_type, key, content, tags, importance, profile_id, project_id, expires_at, source)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'agent')
+        `).run(memoryId, context.userId, context.workspaceId, kind, key, args.content, tags, importance, profileId, projectId, expiresAt);
         action = 'stored';
         // Enforce cap asynchronously so the tool call doesn't block
         setImmediate(() => enforceMemoryCap(context.userId, context.workspaceId));
@@ -403,7 +437,7 @@ export const saveMemoryTool = {
         context.emitEvent({ type: 'memory_saved', data: { action, key, kind, importance } });
       }
 
-      return { success: true, action, key, kind, importance };
+      return { success: true, action, key, kind, importance, scope: projectId ? 'project' : 'everywhere' };
     } catch (err) {
       return { success: false, error: err.message };
     }
@@ -417,10 +451,12 @@ export const saveMemoryTool = {
  */
 export async function hybridRecall(context, { query, kind = 'all', limit = 10 } = {}) {
   const profileId = context.profileId || null;
+  const projectId = context.projectId || null;
   const bm25Results = searchMemories({
     userId: context.userId,
     workspaceId: context.workspaceId,
     profileId,
+    projectId,
     query,
     kind,
     limit,
@@ -437,6 +473,7 @@ export async function hybridRecall(context, { query, kind = 'all', limit = 10 } 
           userId: context.userId,
           workspaceId: context.workspaceId,
           profileId,
+          projectId,
           queryVec,
           queryModel,
           kind,
@@ -496,6 +533,7 @@ export const listMemoryTool = {
         userId: context.userId,
         workspaceId: context.workspaceId,
         profileId: context.profileId || null,
+        projectId: context.projectId || null,
         kind: args.kind || args.memory_type || 'all',
         limit: Math.max(1, Math.min(100, Number(args.limit || 50))),
       });
@@ -521,9 +559,10 @@ export const forgetMemoryTool = {
   execute: async (args, context) => {
     try {
       const profileId = context.profileId || null;
+      const scope = memoryScope({ projectId: context.projectId || null });
       const result = db.prepare(
-        'DELETE FROM agent_memory WHERE user_id = ? AND workspace_id = ? AND key = ? AND (profile_id = ? OR (profile_id IS NULL AND ? IS NULL))'
-      ).run(context.userId, context.workspaceId, args.key, profileId, profileId);
+        `DELETE FROM agent_memory WHERE user_id = ? AND workspace_id = ? AND key = ? AND profile_id IS ? ${scope.sql}`
+      ).run(context.userId, context.workspaceId, args.key, profileId, ...scope.params);
       return result.changes > 0
         ? { success: true, key: args.key, action: 'deleted' }
         : { success: false, error: `No memory found with key: ${args.key}` };

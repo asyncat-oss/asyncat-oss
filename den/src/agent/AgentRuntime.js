@@ -18,7 +18,7 @@ import { buildAgentSystemPrompt, loadSoul } from './prompts/agentSystemPrompt.js
 import { basalGanglia } from './BasalGanglia.js';
 import { Compactor } from './Compactor.js';
 import { normalizeTags, selectRelevantSkillsWithLlm, synthesizeSkillFromRun } from './skills.js';
-import { listMemories, searchMemories, enforceMemoryCap, decayMemoryImportance } from './tools/memoryTools.js';
+import { listMemories, searchMemories, enforceMemoryCap, decayMemoryImportance, memoryProjectFor } from './tools/memoryTools.js';
 import { memoryConsolidator } from './MemoryConsolidator.js';
 import { isGitDangerousAction, isGitReadOnlyAction } from './gitService.js';
 import { isReadOnlyPackageCommand, isReadOnlyShellCommand } from './shellSafety.js';
@@ -2636,6 +2636,8 @@ export class AgentRuntime {
         const rows = searchMemories({
           userId: this.userId,
           workspaceId: this.workspaceId,
+          profileId: this.agentProfileId,
+          projectId: this.projectId,
           query: goal,
           kind,
           limit: 6,
@@ -2656,6 +2658,8 @@ export class AgentRuntime {
         const fillRows = searchMemories({
           userId: this.userId,
           workspaceId: this.workspaceId,
+          profileId: this.agentProfileId,
+          projectId: this.projectId,
           query: goal,
           kind: 'all',
           limit: 15,
@@ -2679,6 +2683,8 @@ export class AgentRuntime {
         return listMemories({
           userId: this.userId,
           workspaceId: this.workspaceId,
+          profileId: this.agentProfileId,
+          projectId: this.projectId,
           kind: 'all',
           limit: 5,
         });
@@ -2785,10 +2791,12 @@ export class AgentRuntime {
         // Auto-extracted memories start at slightly lower importance so agent-stated ones win dedup
         const importance = Math.max(0, Math.min(1, Number(mem.importance || 0.45)));
 
+        const projectId = memoryProjectFor({ kind, projectId: this.projectId });
+
         // ── E: Key-based dedup ──────────────────────────────────────────────
         const existingByKey = db.prepare(
-          'SELECT id, importance FROM agent_memory WHERE user_id = ? AND workspace_id = ? AND key = ?'
-        ).get(this.userId, this.workspaceId, key);
+          'SELECT id, importance FROM agent_memory WHERE user_id = ? AND workspace_id = ? AND key = ? AND project_id IS ?'
+        ).get(this.userId, this.workspaceId, key, projectId);
 
         if (existingByKey) {
           db.prepare(
@@ -2816,9 +2824,9 @@ export class AgentRuntime {
               FROM agent_memory_fts fts
               JOIN agent_memory m ON m.id = fts.memory_id
               WHERE fts.agent_memory_fts MATCH ?
-                AND m.user_id = ? AND m.workspace_id = ? AND m.memory_type = ?
+                AND m.user_id = ? AND m.workspace_id = ? AND m.memory_type = ? AND m.project_id IS ?
               LIMIT 1
-            `).get(ftsTerms, this.userId, this.workspaceId, kind);
+            `).get(ftsTerms, this.userId, this.workspaceId, kind, projectId);
 
             if (dupRow) {
               db.prepare(
@@ -2839,8 +2847,8 @@ export class AgentRuntime {
         }
 
         db.prepare(
-          'INSERT OR IGNORE INTO agent_memory (id, user_id, workspace_id, memory_type, key, content, tags, importance, expires_at, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        ).run(randomUUID(), this.userId, this.workspaceId, kind, key, mem.content, '[]', importance, expiresAt, 'auto');
+          'INSERT OR IGNORE INTO agent_memory (id, user_id, workspace_id, memory_type, key, content, tags, importance, project_id, expires_at, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        ).run(randomUUID(), this.userId, this.workspaceId, kind, key, mem.content, '[]', importance, projectId, expiresAt, 'auto');
         saved++;
       }
 
