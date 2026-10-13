@@ -47,60 +47,6 @@ export const filesApi = {
     return await apiRequest(`${API_BASE_URL}/files/search?${params}`);
   },
 
-  createFolder: async (rootId, filePath, options = {}) => {
-    return await apiRequest(`${API_BASE_URL}/files/mkdir`, {
-      method: 'POST',
-      body: JSON.stringify({ rootId, path: filePath, overwrite: options.overwrite === true }),
-    });
-  },
-
-  writeFile: async (rootId, filePath, content = '', options = {}) => {
-    return await apiRequest(`${API_BASE_URL}/files/write`, {
-      method: 'POST',
-      body: JSON.stringify({ rootId, path: filePath, content, overwrite: options.overwrite !== false }),
-    });
-  },
-
-  copy: async (rootId, source, destination, options = {}) => {
-    return await apiRequest(`${API_BASE_URL}/files/copy`, {
-      method: 'POST',
-      body: JSON.stringify({ rootId, source, destination, overwrite: options.overwrite !== false }),
-    });
-  },
-
-  move: async (rootId, source, destination, options = {}) => {
-    return await apiRequest(`${API_BASE_URL}/files/move`, {
-      method: 'POST',
-      body: JSON.stringify({ rootId, source, destination, overwrite: options.overwrite !== false }),
-    });
-  },
-
-  delete: async (rootId, filePath, recursive = false) => {
-    return await apiRequest(`${API_BASE_URL}/files/delete`, {
-      method: 'POST',
-      body: JSON.stringify({ rootId, path: filePath, recursive }),
-    });
-  },
-
-  batchDelete: async (rootId, entries = []) => {
-    return await apiRequest(`${API_BASE_URL}/files/batch-delete`, {
-      method: 'POST',
-      body: JSON.stringify({ rootId, entries }),
-    });
-  },
-
-  batchCopy: async (rootId, entries = []) => {
-    return await apiRequest(`${API_BASE_URL}/files/batch-copy`, {
-      method: 'POST',
-      body: JSON.stringify({ rootId, entries }),
-    });
-  },
-
-  getRawUrl: (rootId, filePath) => {
-    const params = new URLSearchParams({ rootId, path: filePath });
-    return `${API_BASE_URL}/files/raw?${params}`;
-  },
-
   // Fetch raw file content and return a blob URL (for <audio>, <img>, etc.)
   fetchRawBlob: async (rootId, filePath) => {
     const params = new URLSearchParams({ rootId, path: filePath });
@@ -108,20 +54,6 @@ export const filesApi = {
     if (!res.ok) throw new Error(`Failed to fetch file: ${res.status}`);
     const blob = await res.blob();
     return URL.createObjectURL(blob);
-  },
-
-  extractArchive: async (rootId, filePath, destination = null) => {
-    return await apiRequest(`${API_BASE_URL}/files/archive/extract`, {
-      method: 'POST',
-      body: JSON.stringify({ rootId, path: filePath, destination }),
-    });
-  },
-
-  createArchive: async (rootId, paths = [], destination) => {
-    return await apiRequest(`${API_BASE_URL}/files/archive/create`, {
-      method: 'POST',
-      body: JSON.stringify({ rootId, paths, destination }),
-    });
   },
 
   upload: async (rootId, filePath, file, options = {}) => {

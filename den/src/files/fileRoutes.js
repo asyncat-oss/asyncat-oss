@@ -3,20 +3,11 @@ import fs from 'fs';
 import path from 'path';
 import multer from 'multer';
 import {
-  batchCopyEntries,
-  batchDeleteEntries,
-  copyEntry,
-  createArchive,
-  createDirectory,
-  deleteEntry,
-  extractArchive,
   listDirectory,
   loadEntry,
-  moveEntry,
   publicRoots,
   resolveExplorerPath,
   searchEntries,
-  writeFile,
 } from './fileExplorerService.js';
 
 const router = express.Router();
@@ -83,19 +74,6 @@ router.get('/entry', withWorkspaceContext, (req, res) => {
   }
 });
 
-router.get('/preview', withWorkspaceContext, (req, res) => {
-  try {
-    res.json(loadEntry({
-      rootId: req.query.rootId || 'workspace',
-      relativePath: req.query.path || '.',
-      ...projectAccess(req),
-      ...parseListOptions(req.query),
-    }));
-  } catch (err) {
-    sendRouteError(res, err);
-  }
-});
-
 // Serve a static site from one attached Project folder. Keeping the root ID in
 // the URL path lets relative CSS, JS, image, and link URLs resolve naturally,
 // while resolveExplorerPath enforces the same containment and symlink rules as
@@ -150,98 +128,6 @@ router.get('/search', withWorkspaceContext, (req, res) => {
   }
 });
 
-router.post('/mkdir', withWorkspaceContext, (req, res) => {
-  try {
-    res.json(createDirectory({
-      rootId: req.body.rootId || 'workspace',
-      relativePath: req.body.path,
-      overwrite: req.body.overwrite === true,
-      ...projectAccess(req),
-    }));
-  } catch (err) {
-    sendRouteError(res, err);
-  }
-});
-
-router.post('/write', withWorkspaceContext, (req, res) => {
-  try {
-    res.json(writeFile({
-      rootId: req.body.rootId || 'workspace',
-      relativePath: req.body.path,
-      content: req.body.content || '',
-      overwrite: req.body.overwrite !== false,
-      ...projectAccess(req),
-    }));
-  } catch (err) {
-    sendRouteError(res, err);
-  }
-});
-
-router.post('/copy', withWorkspaceContext, (req, res) => {
-  try {
-    res.json(copyEntry({
-      rootId: req.body.rootId || 'workspace',
-      source: req.body.source,
-      destination: req.body.destination,
-      overwrite: req.body.overwrite !== false,
-      ...projectAccess(req),
-    }));
-  } catch (err) {
-    sendRouteError(res, err);
-  }
-});
-
-router.post('/move', withWorkspaceContext, (req, res) => {
-  try {
-    res.json(moveEntry({
-      rootId: req.body.rootId || 'workspace',
-      source: req.body.source,
-      destination: req.body.destination,
-      overwrite: req.body.overwrite !== false,
-      ...projectAccess(req),
-    }));
-  } catch (err) {
-    sendRouteError(res, err);
-  }
-});
-
-router.post('/batch-delete', withWorkspaceContext, (req, res) => {
-  try {
-    res.json(batchDeleteEntries({
-      rootId: req.body.rootId || 'workspace',
-      entries: Array.isArray(req.body.entries) ? req.body.entries : [],
-      ...projectAccess(req),
-    }));
-  } catch (err) {
-    sendRouteError(res, err);
-  }
-});
-
-router.post('/batch-copy', withWorkspaceContext, (req, res) => {
-  try {
-    res.json(batchCopyEntries({
-      rootId: req.body.rootId || 'workspace',
-      entries: Array.isArray(req.body.entries) ? req.body.entries : [],
-      ...projectAccess(req),
-    }));
-  } catch (err) {
-    sendRouteError(res, err);
-  }
-});
-
-router.post('/delete', withWorkspaceContext, (req, res) => {
-  try {
-    res.json(deleteEntry({
-      rootId: req.body.rootId || 'workspace',
-      relativePath: req.body.path,
-      recursive: req.body.recursive === true,
-      ...projectAccess(req),
-    }));
-  } catch (err) {
-    sendRouteError(res, err);
-  }
-});
-
 // ── Raw file serving (images, video, audio, etc.) ────────────────────────────
 
 const MIME_TYPES = {
@@ -287,32 +173,6 @@ router.get('/raw', withWorkspaceContext, (req, res) => {
 });
 
 // ── Archive operations ───────────────────────────────────────────────────────
-
-router.post('/archive/extract', withWorkspaceContext, async (req, res) => {
-  try {
-    res.json(await extractArchive({
-      rootId: req.body.rootId || 'workspace',
-      relativePath: req.body.path,
-      destination: req.body.destination || null,
-      ...projectAccess(req),
-    }));
-  } catch (err) {
-    sendRouteError(res, err);
-  }
-});
-
-router.post('/archive/create', withWorkspaceContext, async (req, res) => {
-  try {
-    res.json(await createArchive({
-      rootId: req.body.rootId || 'workspace',
-      paths: Array.isArray(req.body.paths) ? req.body.paths : [],
-      destination: req.body.destination,
-      ...projectAccess(req),
-    }));
-  } catch (err) {
-    sendRouteError(res, err);
-  }
-});
 
 // ── File upload ──────────────────────────────────────────────────────────────
 
