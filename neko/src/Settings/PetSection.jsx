@@ -1,10 +1,10 @@
 // Settings/PetSection.jsx — on-screen companion ("pet") overlay controls
 import { useState, useEffect, useCallback } from "react";
 import PropTypes from "prop-types";
+import CatMascot from '../components/ui/Cat.jsx';
 import { Cat, Upload, RotateCcw, Check, Loader2 } from "lucide-react";
 
-// Mirrors the default sprite in electron/pet.js (file lives in neko/public).
-const DEFAULT_SPRITE = "/app-icon-512.png";
+// The default pet is the Asyncat cat, drawn by electron/pet.html.
 
 const cardClasses =
   "bg-white dark:bg-gray-900 midnight:bg-slate-950 p-5 rounded-xl border border-gray-200/80 dark:border-gray-800 midnight:border-slate-800";
@@ -16,7 +16,7 @@ const mutedClasses =
 const api = typeof window !== "undefined" ? window.electronAPI : undefined;
 const isSupported = !!(api && api.setPet);
 
-const Tile = ({ src, name, selected, onClick }) => (
+const Tile = ({ src, art = null, name, selected, onClick }) => (
   <button
     type="button"
     onClick={onClick}
@@ -28,12 +28,14 @@ const Tile = ({ src, name, selected, onClick }) => (
           : "border-transparent hover:border-gray-300 dark:hover:border-gray-600 midnight:hover:border-gray-600"
       }`}
   >
-    <span className="relative h-14 w-14">
-      <img
-        src={src}
-        alt={name}
-        className="h-14 w-14 rounded-2xl object-contain"
-      />
+    <span className="relative flex h-14 w-14 items-end justify-center">
+      {art || (
+        <img
+          src={src}
+          alt={name}
+          className="h-14 w-14 rounded-2xl object-contain"
+        />
+      )}
       {selected && (
         <span className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-indigo-500 text-white ring-2 ring-white dark:ring-gray-900">
           <Check size={11} />
@@ -47,7 +49,8 @@ const Tile = ({ src, name, selected, onClick }) => (
 );
 
 Tile.propTypes = {
-  src: PropTypes.string.isRequired,
+  src: PropTypes.string,
+  art: PropTypes.node,
   name: PropTypes.string.isRequired,
   selected: PropTypes.bool,
   onClick: PropTypes.func.isRequired,
@@ -179,8 +182,8 @@ const PetSection = () => {
           <>
             <div className="mt-4 flex flex-wrap items-start gap-2">
               <Tile
-                src={DEFAULT_SPRITE}
-                name="Asyncat"
+                art={<CatMascot pose="sit" className="h-14 w-auto" outline={6} />}
+                name="Asyncat cat"
                 selected={!isCustom}
                 onClick={() => !busy && chooseDefault()}
               />

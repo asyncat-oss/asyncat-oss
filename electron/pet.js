@@ -145,7 +145,10 @@ function pinAcrossSpaces() {
 
 function sendInit() {
   if (!pet || pet.isDestroyed()) return;
-  pet.webContents.send('pet:init', { sprite: spriteDataUrl(), status: lastStatus });
+  // No sprite means pet.html draws the Asyncat cat.
+  const cfg = readConfig();
+  const sprite = cfg.sprite === 'custom' ? spriteDataUrl(cfg) : null;
+  pet.webContents.send('pet:init', { sprite, status: lastStatus });
 }
 
 export function createPetWindow() {

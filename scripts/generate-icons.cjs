@@ -5,7 +5,6 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { createCanvas, loadImage } = require('canvas');
-const { appBuilderPath } = require('app-builder-bin');
 
 const root = path.resolve(__dirname, '..');
 const publicDir = path.join(root, 'neko', 'public');
@@ -131,7 +130,36 @@ function writeWindowsIco(image, outputPath) {
   fs.writeFileSync(outputPath, Buffer.concat([header, ...images.map(item => item.data)]));
 }
 
-function runAppBuilderIcns() {
+// ICNS chunk types that hold a PNG, with their pixel size.
+const icnsPngChunks = [
+  ['icp4', 16], ['icp5', 32], ['icp6', 64], ['ic07', 128], ['ic08', 256],
+  ['ic09', 512], ['ic10', 1024], ['ic11', 32], ['ic12', 64], ['ic13', 256], ['ic14', 512],
+];
+
+// Modern .icns files are a list of PNG chunks, so no external tool is needed.
+function writeIcnsDirect(image, outputPath) {
+  const chunks = icnsPngChunks.map(([type, size]) => {
+    const png = renderSquarePngBuffer(image, size);
+    const head = Buffer.alloc(8);
+    head.write(type, 0, 'ascii');
+    head.writeUInt32BE(png.length + 8, 4);
+    return Buffer.concat([head, png]);
+  });
+  const body = Buffer.concat(chunks);
+  const header = Buffer.alloc(8);
+  header.write('icns', 0, 'ascii');
+  header.writeUInt32BE(body.length + 8, 4);
+  fs.writeFileSync(outputPath, Buffer.concat([header, body]));
+}
+
+function runAppBuilderIcns(image, outputPath) {
+  let appBuilderPath;
+  try {
+    ({ appBuilderPath } = require('app-builder-bin'));
+  } catch {
+    writeIcnsDirect(image, outputPath);
+    return;
+  }
   const result = spawnSync(appBuilderPath, [
     'icon',
     '--format=icns',
@@ -175,7 +203,7 @@ function writeIcns(image, outputPath) {
     });
 
     if (result.status !== 0) {
-      runAppBuilderIcns();
+      runAppBuilderIcns(image, outputPath);
     }
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });

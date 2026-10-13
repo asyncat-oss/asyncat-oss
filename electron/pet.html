@@ -26,11 +26,50 @@
       box-sizing: border-box;
     }
     #sprite {
+      display: none;
       width: 104px;
       height: 104px;
       object-fit: contain;
       filter: drop-shadow(0 5px 9px rgba(0, 0, 0, 0.35));
       animation: bob 2.6s ease-in-out infinite;
+    }
+    #sprite.show { display: block; }
+
+    /* The Asyncat cat (same drawing as the app, neko/src/components/ui/catPoses.js).
+       It always keeps its light outline so it stays visible on dark wallpapers. */
+    #cat { display: none; filter: drop-shadow(0 5px 8px rgba(0, 0, 0, 0.3)); }
+    #cat.show { display: block; }
+    #cat svg { display: none; overflow: visible; }
+    #cat[data-pose="sit"] .pose-sit { display: block; width: 86px; }
+    #cat[data-pose="walk"] .pose-walk { display: block; width: 110px; }
+    .cat-f .s { fill: #121212; }
+    .cat-f .t { fill: none; stroke: #121212; stroke-width: 9; stroke-linecap: round; }
+    .cat-o .s { fill: #ece9e2; stroke: #ece9e2; stroke-width: 6px; stroke-linejoin: round; }
+    .cat-o .t { fill: none; stroke: #ece9e2; stroke-width: 15px; stroke-linecap: round; }
+    .eye { fill: #ffe5b4; }
+    .pupil { fill: #121212; }
+    .shine { fill: #fff; }
+    .nose { fill: #f2a7b8; }
+    .inner { fill: #3d3c3a; }
+    .whisker { fill: none; stroke: #bdb9b1; stroke-width: 1.2; stroke-linecap: round; }
+    .toe { fill: none; stroke: #3d3c3a; stroke-width: 1.4; stroke-linecap: round; }
+    .cat-eyes { transform-box: fill-box; transform-origin: center; animation: blink 4.6s infinite; }
+    .pose-sit .cat-tail { transform-origin: 82px 134px; animation: tail 3.2s ease-in-out infinite; }
+    .pose-sit .cat-head { transform-origin: 50px 76px; animation: head 9s ease-in-out infinite; }
+    .pose-sit .cat-ear-r { transform-origin: 68px 20px; animation: ear 7s ease-in-out infinite; }
+    .pose-walk .cat-tail { transform-origin: 26px 42px; animation: tail 1.28s ease-in-out infinite; }
+    .pose-walk .cat-leg { transform-box: fill-box; transform-origin: 50% 8%; }
+    .pose-walk .cat-leg-a { animation: step 0.64s ease-in-out infinite; }
+    .pose-walk .cat-leg-b { animation: step 0.64s ease-in-out -0.32s infinite; }
+    .pose-walk .cat-trunk { animation: trot 0.32s ease-in-out infinite alternate; }
+    @keyframes blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.1); } }
+    @keyframes tail { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(7deg); } }
+    @keyframes head { 0%, 70%, 100% { transform: rotate(0deg); } 78%, 90% { transform: rotate(-6deg); } }
+    @keyframes ear { 0%, 88%, 100% { transform: rotate(0deg); } 91% { transform: rotate(-12deg); } 94% { transform: rotate(4deg); } }
+    @keyframes step { 0%, 100% { transform: rotate(14deg); } 50% { transform: rotate(-14deg); } }
+    @keyframes trot { from { transform: translateY(0); } to { transform: translateY(-1.5px); } }
+    @media (prefers-reduced-motion: reduce) {
+      #cat *, #sprite { animation: none !important; }
     }
     @keyframes bob {
       0%, 100% { transform: translateY(0); }
@@ -65,12 +104,19 @@
   <div id="wrap">
     <div id="bubble"></div>
     <img id="sprite" alt="pet" />
+    <div id="cat" data-pose="sit" aria-label="Asyncat cat">
+      <svg class="pose-sit" viewBox="0 0 124 150" aria-hidden="true"><g class="cat-o"><g class="cat-tail"><path class="t" d="M82 134 C 104 136, 116 122, 110 106 C 106 96, 110 88, 118 90"></path></g><path class="s cat-body" d="M30 72 H70 L84 132 C 86 140 82 144 74 144 H26 C 18 144 14 140 16 132 Z"></path><rect class="s" x="28" y="132" width="16" height="12" rx="5"></rect><rect class="s" x="56" y="132" width="16" height="12" rx="5"></rect><g class="cat-head"><rect class="s" x="20" y="18" width="60" height="58" rx="6"></rect><g class="cat-ear-l"><polygon class="s" points="21,22 33,3 42,20"></polygon></g><g class="cat-ear-r"><polygon class="s" points="58,20 67,3 79,22"></polygon></g></g></g><g class="cat-f"><g class="cat-tail"><path class="t" d="M82 134 C 104 136, 116 122, 110 106 C 106 96, 110 88, 118 90"></path></g><path class="s cat-body" d="M30 72 H70 L84 132 C 86 140 82 144 74 144 H26 C 18 144 14 140 16 132 Z"></path><rect class="s" x="28" y="132" width="16" height="12" rx="5"></rect><rect class="s" x="56" y="132" width="16" height="12" rx="5"></rect><g class="cat-head"><rect class="s" x="20" y="18" width="60" height="58" rx="6"></rect><g class="cat-ear-l"><polygon class="s" points="21,22 33,3 42,20"></polygon></g><g class="cat-ear-r"><polygon class="s" points="58,20 67,3 79,22"></polygon></g></g></g><g class="cat-d"><path class="toe" d="M36 137v5M64 137v5"></path><g class="cat-head"><g class="cat-ear-l"><polygon class="inner" points="27,20 33,10 37,20"></polygon></g><g class="cat-ear-r"><polygon class="inner" points="63,20 67,10 73,20"></polygon></g><g class="cat-eyes"><rect class="eye" x="28" y="35" width="15" height="20" rx="3"></rect><rect class="eye" x="57" y="35" width="15" height="20" rx="3"></rect><g class="cat-pupils"><rect class="pupil" x="33.5" y="38" width="4" height="14" rx="2"></rect><rect class="pupil" x="62.5" y="38" width="4" height="14" rx="2"></rect></g><rect class="shine" x="31" y="39" width="3" height="3"></rect><rect class="shine" x="60" y="39" width="3" height="3"></rect></g><polygon class="nose" points="47,58 53,58 50,61.5"></polygon><path class="whisker" d="M40 60C31 58 22 59 13 62M40 65C31 64 22 66 14 70M60 60C69 58 78 59 87 62M60 65C69 64 78 66 86 70"></path></g></g></svg>
+      <svg class="pose-walk" viewBox="0 0 132 84" aria-hidden="true"><g class="cat-o"><g class="cat-tail"><path class="t" d="M26 42 C 14 40, 8 30, 12 18 C 14 12, 20 10, 22 14"></path></g><rect class="s cat-leg cat-leg-a" x="30" y="56" width="9" height="28" rx="3"></rect><rect class="s cat-leg cat-leg-b" x="42" y="56" width="9" height="28" rx="3"></rect><rect class="s cat-leg cat-leg-b" x="78" y="56" width="9" height="28" rx="3"></rect><rect class="s cat-leg cat-leg-a" x="90" y="56" width="9" height="28" rx="3"></rect><g class="cat-trunk"><rect class="s" x="22" y="34" width="76" height="32" rx="14"></rect><g class="cat-head"><rect class="s" x="90" y="16" width="36" height="32" rx="6"></rect><polygon class="s" points="92,19 99,5 106,18"></polygon><polygon class="s" points="110,18 118,5 124,19"></polygon></g></g></g><g class="cat-f"><g class="cat-tail"><path class="t" d="M26 42 C 14 40, 8 30, 12 18 C 14 12, 20 10, 22 14"></path></g><rect class="s cat-leg cat-leg-a" x="30" y="56" width="9" height="28" rx="3"></rect><rect class="s cat-leg cat-leg-b" x="42" y="56" width="9" height="28" rx="3"></rect><rect class="s cat-leg cat-leg-b" x="78" y="56" width="9" height="28" rx="3"></rect><rect class="s cat-leg cat-leg-a" x="90" y="56" width="9" height="28" rx="3"></rect><g class="cat-trunk"><rect class="s" x="22" y="34" width="76" height="32" rx="14"></rect><g class="cat-head"><rect class="s" x="90" y="16" width="36" height="32" rx="6"></rect><polygon class="s" points="92,19 99,5 106,18"></polygon><polygon class="s" points="110,18 118,5 124,19"></polygon></g></g></g><g class="cat-d cat-trunk"><g class="cat-head"><polygon class="inner" points="96,18 99,10 103,18"></polygon><polygon class="inner" points="113,18 118,10 121,18"></polygon><g class="cat-eyes"><rect class="eye" x="110" y="24" width="9" height="12" rx="2"></rect><rect class="pupil cat-pupils" x="114" y="25.5" width="3" height="9" rx="1.5"></rect><rect class="shine" x="111.5" y="26" width="2" height="2"></rect></g><polygon class="nose" points="124.5,35 126.5,38.5 122.5,38.5"></polygon><path class="whisker" d="M118 39C124 38 128 39 131 41M118 42C124 42 128 44 130 46"></path></g></g></svg>
+    </div>
   </div>
   <script>
     const sprite = document.getElementById('sprite');
+    const cat = document.getElementById('cat');
     const bubble = document.getElementById('bubble');
 
     function setStatus(s) {
+      // The cat walks while an agent is working and sits otherwise.
+      cat.dataset.pose = s === 'working' ? 'walk' : 'sit';
       if (s === 'working') {
         bubble.textContent = '⚙️';
         bubble.style.background = 'rgba(37, 99, 235, 0.95)';
@@ -89,7 +135,15 @@
     }
 
     window.petAPI?.onInit((d) => {
-      if (d && d.sprite) sprite.src = d.sprite;
+      // A custom image when one was uploaded; otherwise the Asyncat cat.
+      if (d && d.sprite) {
+        sprite.src = d.sprite;
+        sprite.className = 'show';
+        cat.className = '';
+      } else {
+        sprite.className = '';
+        cat.className = 'show';
+      }
       setStatus((d && d.status) || 'idle');
     });
     window.petAPI?.onStatus((s) => setStatus(s));
