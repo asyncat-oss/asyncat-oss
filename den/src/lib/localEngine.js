@@ -41,7 +41,7 @@ export function persistRuntimeConfigValue(key, value) {
 export const LLAMA_RELEASES_API = 'https://api.github.com/repos/ggml-org/llama.cpp/releases/latest';
 export const LLAMA_RELEASES_LIST_API = 'https://api.github.com/repos/ggml-org/llama.cpp/releases';
 export const LLAMA_RELEASES_URL = 'https://github.com/ggml-org/llama.cpp/releases';
-export const MISSING_ENGINE_MESSAGE = 'Local engine missing. Install one in Settings → Runtime, set LLAMA_BINARY_PATH, or choose Ollama, LM Studio, or a cloud provider.';
+export const MISSING_ENGINE_MESSAGE = 'Local engine missing. Install one in Models → Language → Local models → Engine, set LLAMA_BINARY_PATH, or choose Ollama, LM Studio, or a cloud provider.';
 export const MANAGED_ENGINE_METADATA_FILE = 'asyncat-engine.json';
 export const MANAGED_RUNTIME_METADATA_FILE = 'asyncat-runtime.json';
 export const LLAMA_ENGINE_PROFILES = ['cpu_safe', 'nvidia_gpu', 'apple_metal', 'amd_rocm', 'vulkan', 'intel_sycl'];
@@ -1664,6 +1664,8 @@ export const MANAGED_RUNTIME_SPECS = {
     installer: 'python',
     packageName: 'piper-tts',
     importName: 'piper',
+    // piper-tts with onnxruntime and its other wheels, roughly.
+    estimatedDownloadBytes: 60 * 1024 * 1024,
     projectUrl: 'https://github.com/OHF-Voice/piper1-gpl',
     license: 'GPL-3.0-or-later',
     dir: 'piper',
@@ -1983,27 +1985,20 @@ async function installManagedPythonRuntime(spec, report, signal = null, beforeSw
   };
 }
 
-export async function installManagedRuntime(runtimeId, { onProgress = null, capability = null, signal = null, beforeSwap = null } = {}) {
-  const spec = MANAGED_RUNTIME_SPECS[runtimeId];
-  if (!spec) throw new Error(`Unknown runtime: ${runtimeId}`);
-
-  const report = (phase, message, percent, extra = {}) =>
-    onProgress?.({ phase, message, percent, runtime: spec.id, ...extra });
-
-  if (spec.installer === 'python') {
-    return installManagedPythonRuntime(spec, report, signal, beforeSwap);
-  }
-
-  report('resolving', `Finding a ${spec.label} build for your system`, 2);
+/**
+ * The latest release of a binary runtime and the asset that suits this
+ * computer: an explicit capability, else the detected GPU when the engine
+ * ships GPU builds, else a portable CPU build.
+ */
+async function resolveRuntimeRelease(spec, capability = null, signal = null) {
+  const timeout = AbortSignal.timeout(20000);
   const res = await fetch(`https://api.github.com/repos/${spec.repo}/releases/latest`, {
     headers: githubApiHeaders(),
-    signal: AbortSignal.timeout(20000),
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
   });
   if (!res.ok) throw new Error(`GitHub releases API returned ${res.status} for ${spec.repo}`);
   const release = await res.json();
 
-  // Pick the best variant for this machine: an explicit capability, else the
-  // detected GPU when the engine ships GPU builds, else a portable CPU build.
   let targetCapability = capability || (spec.autoGpu ? runtimeCapabilityForGpu(detectGpu()) : 'cpu_safe');
   const rankFor = (cap) => (release.assets || [])
     .map(asset => ({ asset, score: scoreRuntimeAsset(asset.name, process.platform, process.arch, cap, spec.id) }))
@@ -2026,8 +2021,114 @@ export async function installManagedRuntime(runtimeId, { onProgress = null, capa
       `Install it with your package manager or set ${spec.envKey}.`
     );
   }
+  return { release, asset: ranked[0], capability: targetCapability };
+}
 
-  const asset = ranked[0];
+function estimatedPythonRuntimeBytes(spec) {
+  if (spec.id === 'mlx') {
+    if (process.platform === 'linux') return (detectGpu()?.vendor === 'NVIDIA' ? 1300 : 160) * 1024 * 1024;
+    return 120 * 1024 * 1024;
+  }
+  return spec.estimatedDownloadBytes || 50 * 1024 * 1024;
+}
+
+/**
+ * What installing a runtime would download, without downloading it: the
+ * release, the file and its size (binary runtimes ask GitHub, a few KB), or
+ * an estimate for the Python ones. Used to show the size before the user
+ * agrees to the download.
+ */
+export async function planManagedRuntimeInstall(runtimeId, { capability = null, signal = null } = {}) {
+  const spec = MANAGED_RUNTIME_SPECS[runtimeId];
+  if (!spec) throw new Error(`Unknown runtime: ${runtimeId}`);
+  const support = runtimePlatformSupport(spec);
+  if (!support.supported) throw new Error(support.reason);
+  if (spec.installer === 'python') {
+    const bytes = estimatedPythonRuntimeBytes(spec);
+    return {
+      runtime: spec.id,
+      label: spec.label,
+      installer: 'python',
+      packages: managedPythonPackages(spec),
+      downloadBytes: bytes,
+      downloadSize: formatByteSize(bytes),
+      estimated: true,
+      diskBytes: bytes * 3,
+      license: spec.license || null,
+    };
+  }
+  const { release, asset, capability: chosen } = await resolveRuntimeRelease(spec, capability, signal);
+  const bytes = Number(asset.size) || 0;
+  return {
+    runtime: spec.id,
+    label: spec.label,
+    installer: 'managed-binary',
+    version: release.tag_name || release.name || 'latest',
+    assetName: asset.name,
+    capability: chosen,
+    capabilityLabel: runtimeCapabilityLabel(chosen),
+    downloadBytes: bytes,
+    downloadSize: formatByteSize(bytes),
+    estimated: false,
+    // Unpacked engines take a few times their archive.
+    diskBytes: bytes * 3,
+    license: spec.license || null,
+  };
+}
+
+async function directoryBytes(dir, budget = { entries: 200_000 }) {
+  let total = 0;
+  const stack = [dir];
+  while (stack.length) {
+    const current = stack.pop();
+    let entries = [];
+    try {
+      entries = await fs.promises.readdir(current, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      budget.entries -= 1;
+      if (budget.entries < 0) return { bytes: total, partial: true };
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) stack.push(full);
+      else if (entry.isFile()) {
+        try { total += (await fs.promises.stat(full)).size; } catch { /* gone */ }
+      }
+    }
+  }
+  return { bytes: total, partial: false };
+}
+
+/** Disk space Asyncat's own engine copies use, per engine. */
+export async function managedEnginesDiskUsage() {
+  const targets = [
+    { id: 'llama', label: 'llama.cpp', dir: managedEngineRootDir() },
+    ...Object.values(MANAGED_RUNTIME_SPECS).map(spec => ({ id: spec.id, label: spec.label, dir: managedRuntimeRoot(spec) })),
+    { id: 'downloads', label: 'Unfinished downloads', dir: managedDownloadsDir() },
+  ];
+  const results = [];
+  for (const target of targets) {
+    const exists = fs.existsSync(target.dir);
+    const usage = exists ? await directoryBytes(target.dir) : { bytes: 0, partial: false };
+    results.push({ ...target, exists, bytes: usage.bytes, size: formatByteSize(usage.bytes), partial: usage.partial });
+  }
+  return results;
+}
+
+export async function installManagedRuntime(runtimeId, { onProgress = null, capability = null, signal = null, beforeSwap = null } = {}) {
+  const spec = MANAGED_RUNTIME_SPECS[runtimeId];
+  if (!spec) throw new Error(`Unknown runtime: ${runtimeId}`);
+
+  const report = (phase, message, percent, extra = {}) =>
+    onProgress?.({ phase, message, percent, runtime: spec.id, ...extra });
+
+  if (spec.installer === 'python') {
+    return installManagedPythonRuntime(spec, report, signal, beforeSwap);
+  }
+
+  report('resolving', `Finding a ${spec.label} build for your system`, 2);
+  const { release, asset, capability: targetCapability } = await resolveRuntimeRelease(spec, capability, signal);
   let archivePath = null;
   const targetDir = managedRuntimeRoot(spec);
   const stagingDir = assertManagedTarget(path.join(asyncatHome(), `.${spec.dir}.install-${randomUUID()}`));

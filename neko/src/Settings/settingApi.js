@@ -574,6 +574,16 @@ export const runtimeApi = {
     return apiCall(`${AI_API_BASE}/runtimes`);
   },
 
+  // What an install would download (file, version, size), before downloading.
+  plan: async (id) => {
+    return apiCall(`${AI_API_BASE}/runtimes/${encodeURIComponent(id)}/plan`);
+  },
+
+  // Disk space used by each engine Asyncat installed.
+  diskUsage: async () => {
+    return apiCall(`${AI_API_BASE}/runtimes/disk`);
+  },
+
   // Start a background install for one runtime ('piper' | 'whisper' | 'sd' | 'mlx').
   install: async (id) => {
     return apiCall(`${AI_API_BASE}/runtimes/${encodeURIComponent(id)}/install-jobs`, {

@@ -32,6 +32,7 @@ const TAB_ALIASES = {
   server: 'advanced',
   storage: 'advanced',
   updates: 'about',
+  engines: 'runtime',
 };
 
 const SettingsPage = () => {
@@ -79,8 +80,8 @@ const SettingsPage = () => {
     {
       id: 'runtime',
       group: 'System',
-      label: 'Runtime',
-      description: 'Managed local inference engines, updates, cleanup, and installation readiness.',
+      label: 'Engines',
+      description: 'The local engines Asyncat uses, their versions and the disk space they take.',
       icon: Cpu,
     },
     {

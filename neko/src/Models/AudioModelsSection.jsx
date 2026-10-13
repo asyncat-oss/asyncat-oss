@@ -121,8 +121,8 @@ const EngineStatusBanner = ({ type, status, binaryFound, onCheck }) => {
           <span className="font-medium text-gray-700 dark:text-gray-200 midnight:text-slate-200">{label} not found.</span>
           <span className="text-gray-500 dark:text-gray-400 midnight:text-slate-400 ml-1">
             {type === 'whisper'
-              ? 'Install whisper.cpp from Settings → Runtime or configure WHISPER_BINARY_PATH'
-              : 'Install piper-tts from Settings → Runtime or configure PIPER_BINARY_PATH'}
+              ? 'Install whisper.cpp above, or configure WHISPER_BINARY_PATH'
+              : 'Install Piper above, or configure PIPER_BINARY_PATH'}
           </span>
         </div>
         <button onClick={onCheck} className="text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-slate-400 hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-slate-200 transition-colors flex-shrink-0">Re-check</button>

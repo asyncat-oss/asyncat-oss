@@ -56,7 +56,7 @@ const LOAD_TIMEOUT_MS = 180_000; // 3 min — large models can take time
 const POLL_INTERVAL   = 700;     // ms between /health polls
 
 const MISSING_ENGINE_ERROR =
-  'MISSING_ENGINE: Local engine missing. Install one in Settings → Runtime, set LLAMA_BINARY_PATH, or choose Ollama, LM Studio, or a cloud provider.';
+  'MISSING_ENGINE: Local engine missing. Install one in Models → Language → Local models → Engine, set LLAMA_BINARY_PATH, or choose Ollama, LM Studio, or a cloud provider.';
 
 function asyncatHome() {
   return runtimeHome();
@@ -147,7 +147,7 @@ export async function detectGpuInfo() {
       vendor: 'Apple',
       name: 'Apple Silicon / Metal',
       vramGb: null,
-      advice: 'Apple Silicon detected. Use the managed macOS llama.cpp build first, then adjust GPU layers in Settings → Runtime if needed.',
+      advice: 'Apple Silicon detected. Use the managed macOS llama.cpp build first, then adjust GPU layers under Models → Language → Local models → Engine if needed.',
     };
   }
 
@@ -1638,7 +1638,7 @@ export async function checkBinary() {
   return withDiagnostics({
     found:    false,
     searched: [...absolutePaths, ...pathNames, ...pythonCommands.map(cmd => `${cmd} llama-cpp-python`)],
-    hint:     'Install a local engine in Settings → Runtime, set LLAMA_BINARY_PATH, or choose Ollama, LM Studio, or a cloud provider.',
+    hint:     'Install a local engine in Models → Language → Local models → Engine, set LLAMA_BINARY_PATH, or choose Ollama, LM Studio, or a cloud provider.',
   });
 }
 
@@ -1922,10 +1922,10 @@ function classifyError(logs, exitCode) {
     return 'CORRUPTED: The model file is incomplete or corrupted (the download was cut short). Delete it and re-download from Models.';
   }
   if (/error while loading shared libraries|cannot open shared object file/i.test(logs)) {
-    return 'ENGINE_LIBS: The local llama.cpp engine is missing its shared libraries. Reinstall it from Settings → Runtime.';
+    return 'ENGINE_LIBS: The local llama.cpp engine is missing its shared libraries. Reinstall it from Models → Language → Local models → Engine.';
   }
   if (/failed to create command queue|ggml_metal_init|backend_metal|failed to initialize the context: failed to initialize +backend/i.test(logs)) {
-    return 'BACKEND_INIT: llama.cpp backend initialization failed. If you are using GPU offload, select the CPU-safe runtime in Settings → Runtime. Otherwise try a newer llama.cpp build.';
+    return 'BACKEND_INIT: llama.cpp backend initialization failed. If you are using GPU offload, select the CPU build under Models → Language → Local models → Engine. Otherwise try a newer llama.cpp build.';
   }
   if (/out of memory|CUDA error.*out of memory|std::bad_alloc|cannot allocate memory|failed to allocate (buffer|tensor|memory)/i.test(logs)) {
     return 'OOM: Not enough VRAM/RAM to load this model. Try a smaller quantization (Q4_K_M) or a smaller model.';

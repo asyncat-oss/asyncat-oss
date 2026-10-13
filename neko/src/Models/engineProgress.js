@@ -1,4 +1,4 @@
-// Small helpers for showing engine install progress (Settings → Runtime).
+// Small helpers for showing engine install progress (Models → Voice, Images, Local models).
 
 export const formatBytes = (bytes) => {
   if (!bytes || bytes <= 0) return '0 B';

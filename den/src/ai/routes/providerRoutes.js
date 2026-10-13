@@ -100,7 +100,7 @@ import {
 } from '../controllers/ai/ttsServerManager.js';
 import db from '../../db/client.js';
 import { sealSecret } from '../../lib/secretBox.js';
-import { asyncatHome, listManagedRuntimes, removeManagedRuntime } from '../../lib/localEngine.js';
+import { asyncatHome, listManagedRuntimes, managedEnginesDiskUsage, planManagedRuntimeInstall, removeManagedRuntime } from '../../lib/localEngine.js';
 import { startRuntimeInstallJob, getRuntimeInstallJob, isRuntimeInstallActive, cancelRuntimeInstallJob } from '../../lib/runtimeInstallJobs.js';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
@@ -1795,6 +1795,26 @@ async function stopManagedRuntime(runtimeId) {
 // GET /runtimes — list installable managed runtimes.
 router.get('/runtimes', (_req, res) => {
   res.json({ success: true, root: asyncatHome(), runtimes: listManagedRuntimes() });
+});
+
+// GET /runtimes/disk — how much space each engine Asyncat installed uses.
+router.get('/runtimes/disk', async (_req, res) => {
+  try {
+    res.json({ success: true, root: asyncatHome(), engines: await managedEnginesDiskUsage() });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /runtimes/:id/plan — what an install would download and its size,
+// shown before the user agrees to download it.
+router.get('/runtimes/:id/plan', async (req, res) => {
+  try {
+    res.json({ success: true, plan: await planManagedRuntimeInstall(String(req.params.id || '').trim()) });
+  } catch (err) {
+    const status = /Unknown runtime/i.test(err.message) ? 404 : /not supported/i.test(err.message) ? 400 : 502;
+    res.status(status).json({ success: false, error: err.message });
+  }
 });
 
 /**

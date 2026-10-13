@@ -15,6 +15,8 @@ import CapabilityProvidersSection from './CapabilityProvidersSection.jsx';
 import ModelUsageSection from './ModelUsageSection.jsx';
 import ConfirmDeleteDialog from './ConfirmDeleteDialog.jsx';
 import ModelDownloadHub from './ModelDownloadHub.jsx';
+import ManagedEngineCard from './ManagedEngineCard.jsx';
+import LocalEnginePanel from './LocalEnginePanel.jsx';
 import {
   STATUS_META, conciseHardwareSummary, getModelContextLimit,
   providerLabel
@@ -39,6 +41,7 @@ const TAB_SUBTITLES = {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 const ModelsPage = () => {
+  const controller = useModelsPageController();
   const {
     modelContextConfig, serverStatus, setServerStatus, mlxStatus,
     models, engineData, setInstallJob,
@@ -58,7 +61,7 @@ const ModelsPage = () => {
     handleProviderActivate, handleProviderDeactivate, handleLoadProviderModels,
     handleStart, handleStop, handleDelete, confirmDelete,
     handleAddPath,
-  } = useModelsPageController();
+  } = controller;
 
   // ── Derived state ──────────────────────────────────────────────────────────
   const status = serverStatus?.status ?? 'idle';
@@ -406,6 +409,7 @@ const ModelsPage = () => {
 
                 {activeView === 'local' ? (
                   <div className="space-y-6">
+                    <LocalEnginePanel controller={controller} />
                     {downloadHub}
                     <LocalModelsPane
                       models={models}
@@ -472,6 +476,13 @@ const ModelsPage = () => {
                     <h2 className="flex items-center gap-2 text-[14px] font-semibold text-fg">
                       <Mic className="h-4 w-4 text-fg-subtle" /> Speech to text
                     </h2>
+                    <ManagedEngineCard
+                      runtimeId="whisper"
+                      name="whisper.cpp"
+                      purpose="Turns speech into text on this computer, for the mic and voice mode."
+                      icon={Mic}
+                      onChanged={refreshVoiceData}
+                    />
                     <CapabilityProvidersSection capability="stt" />
                     <AudioModelsSection mode="whisper" highlightedItem={highlightedItem} onModelsChange={setAudioModels} />
                   </div>
@@ -479,6 +490,13 @@ const ModelsPage = () => {
                     <h2 className="flex items-center gap-2 text-[14px] font-semibold text-fg">
                       <Volume2 className="h-4 w-4 text-fg-subtle" /> Text to speech
                     </h2>
+                    <ManagedEngineCard
+                      runtimeId="piper"
+                      name="Piper"
+                      purpose="Reads answers aloud on this computer, with natural voices."
+                      icon={Volume2}
+                      onChanged={refreshVoiceData}
+                    />
                     <CapabilityProvidersSection capability="tts" />
                     <AudioModelsSection mode="tts" highlightedItem={highlightedItem} onModelsChange={setAudioModels} />
                   </div>
@@ -488,6 +506,13 @@ const ModelsPage = () => {
 
             {activeTab === 'image' && (
               <>
+                <ManagedEngineCard
+                  runtimeId="sd"
+                  name="stable-diffusion.cpp"
+                  purpose="Makes images on this computer from downloaded models; uses your GPU when it can."
+                  icon={Image}
+                  onChanged={refreshVisualData}
+                />
                 {downloadHub}
                 <CapabilityProvidersSection capability="image" />
                 <VisualModelsSection highlightedItem={highlightedItem} onModelsChange={setVisualModels} />

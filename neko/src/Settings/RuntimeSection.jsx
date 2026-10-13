@@ -1,144 +1,133 @@
+// Settings → Engines: a read-only overview of the local engines Asyncat
+// uses, their versions and the disk space they take. Installing, updating and
+// removing happen on the Models page, next to what each engine runs.
+
 import { useCallback, useEffect, useState } from 'react';
-import { Cpu, RefreshCw } from 'lucide-react';
-import EngineRuntimeSection from '../Models/EngineRuntimeSection.jsx';
-import RuntimeSetupPanel from '../Models/RuntimeSetupPanel.jsx';
-import { useModelsPageController } from '../Models/useModelsPageController.js';
-import { installApi } from '../CommandCenter/api/installApi.js';
+import { useNavigate } from 'react-router-dom';
+import { ArrowUpRight, Cpu, HardDrive, Image as ImageIcon, Loader2, Mic, RefreshCw, Volume2 } from 'lucide-react';
+import Button from '../components/ui/Button.jsx';
+import { llamaServerApi, runtimeApi } from './settingApi.js';
+
+const ENGINES = [
+  { id: 'llama', name: 'llama.cpp', use: 'Runs downloaded language models', icon: Cpu, manage: '/models?view=local' },
+  { id: 'whisper', name: 'whisper.cpp', use: 'Speech to text', icon: Mic, manage: '/models?tab=audio' },
+  { id: 'piper', name: 'Piper', use: 'Text to speech', icon: Volume2, manage: '/models?tab=audio' },
+  { id: 'sd', name: 'stable-diffusion.cpp', use: 'Image generation', icon: ImageIcon, manage: '/models?tab=image' },
+  { id: 'mlx', name: 'MLX LM', use: 'Language models on Apple Silicon', icon: Cpu, manage: '/models?view=local' },
+];
+
+function sourceLabel(entry) {
+  if (!entry) return 'Not installed';
+  if (entry.managed) return 'Installed by Asyncat';
+  if (entry.found) return 'Found on this computer';
+  return 'Not installed';
+}
 
 const RuntimeSection = () => {
-  const {
-    serverStatus,
-    engineData,
-    engineCatalog,
-    installJob,
-    setInstallJob,
-    loadingStatus,
-    loadingEngines,
-    loadingCatalog,
-    switchingEngine,
-    installingEngine,
-    removingEngine,
-    switchError,
-    switchSuccess,
-    installError,
-    installSuccess,
-    installNotice,
-    removeEngineError,
-    removeEngineSuccess,
-    revertSelection,
-    pythonInstallJob,
-    pythonBuildError,
-    pythonBuildSuccess,
-    clearEngineActionMessages,
-    loadStatus,
-    loadEngineData,
-    loadEngineCatalog,
-    handleEngineSwitch,
-    handleManagedInstall,
-    handleCancelInstall,
-    handleCancelBuild,
-    handleBuildGpuRuntime,
-    handleRemoveManagedEngine,
-    mlxStatus,
-  } = useModelsPageController({ runtimeOnly: true });
+  const navigate = useNavigate();
+  const [state, setState] = useState({ loading: true, engines: {}, disk: [], root: '' });
 
-  const [installReadiness, setInstallReadiness] = useState(null);
-  const [runtimeRefreshing, setRuntimeRefreshing] = useState(false);
-
-  const loadInstallReadiness = useCallback(({ refresh = false } = {}) => (
-    installApi.getReadiness({ refresh })
-      .then(setInstallReadiness)
-      .catch(() => setInstallReadiness(null))
-  ), []);
-
-  useEffect(() => {
-    loadInstallReadiness();
-  }, [loadInstallReadiness]);
-
-  const refreshRuntime = useCallback(async () => {
-    setRuntimeRefreshing(true);
-    clearEngineActionMessages();
-    setInstallJob(null);
-    try {
-      await Promise.all([
-        loadStatus(),
-        loadEngineData({ clearActions: true }),
-        loadEngineCatalog(true),
-        loadInstallReadiness({ refresh: true }),
-      ]);
-    } finally {
-      setRuntimeRefreshing(false);
-    }
-  }, [clearEngineActionMessages, loadEngineCatalog, loadEngineData, loadInstallReadiness, loadStatus, setInstallJob]);
-
-  const refreshRuntimeCatalog = useCallback(async (refresh = false) => {
-    await Promise.all([
-      loadEngineCatalog(refresh),
-      loadInstallReadiness(),
+  const load = useCallback(async () => {
+    setState((current) => ({ ...current, loading: true }));
+    const [llama, runtimes, disk] = await Promise.allSettled([
+      llamaServerApi.getEngines(),
+      runtimeApi.list(),
+      runtimeApi.diskUsage(),
     ]);
-  }, [loadEngineCatalog, loadInstallReadiness]);
+    const engines = {};
+    const current = llama.status === 'fulfilled' ? llama.value?.current : null;
+    engines.llama = current
+      ? {
+        found: true,
+        managed: Boolean(current.managed),
+        version: current.version?.tag || (typeof current.version === 'string' ? current.version : ''),
+        variant: current.capabilityLabel || '',
+        path: current.path || '',
+      }
+      : { found: false };
+    for (const runtime of runtimes.status === 'fulfilled' ? runtimes.value?.runtimes || [] : []) {
+      engines[runtime.id] = {
+        found: Boolean(runtime.detected),
+        managed: Boolean(runtime.managedInstalled),
+        version: runtime.version || '',
+        variant: runtime.capability ? runtime.capability.replace('_safe', '').toUpperCase() : '',
+        path: runtime.managedPath || runtime.configuredPath || '',
+        supported: runtime.supported !== false,
+      };
+    }
+    setState({
+      loading: false,
+      engines,
+      disk: disk.status === 'fulfilled' ? disk.value?.engines || [] : [],
+      root: disk.status === 'fulfilled' ? disk.value?.root || '' : '',
+    });
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const diskFor = (id) => state.disk.find((entry) => entry.id === id);
+  const total = state.disk.reduce((sum, entry) => sum + (entry.bytes || 0), 0);
+  const downloads = diskFor('downloads');
+  const totalLabel = total > 0
+    ? (() => {
+      const mb = total / 1024 / 1024;
+      return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`;
+    })()
+    : '';
 
   return (
-    <div className="space-y-4 font-sans">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-50 text-gray-500 ring-1 ring-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700 midnight:bg-gray-800 midnight:ring-gray-700">
-            <Cpu size={16} />
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-gray-100">
-              Local Runtime
-            </h3>
-            <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400 midnight:text-gray-500">
-              Install and update app-isolated engines, switch CPU/GPU builds, and remove managed runtimes cleanly.
-            </p>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={refreshRuntime}
-          disabled={runtimeRefreshing || loadingStatus || loadingEngines || loadingCatalog}
-          className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800 midnight:border-gray-700 midnight:bg-gray-900 midnight:text-gray-200"
-        >
-          <RefreshCw size={13} className={runtimeRefreshing || loadingStatus || loadingEngines || loadingCatalog ? 'animate-spin' : ''} />
-          Refresh
-        </button>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[13px] leading-5 text-fg-muted">
+          Install, update or remove an engine on the Models page, next to what it runs.
+          {totalLabel ? <> Asyncat&apos;s own copies use <strong className="font-medium text-fg">{totalLabel}</strong>.</> : null}
+        </p>
+        <Button size="sm" variant="ghost" icon={RefreshCw} loading={state.loading} onClick={load}>Refresh</Button>
       </div>
 
-      <RuntimeSetupPanel showChatEngine={false} onRuntimeInstalled={refreshRuntime} />
+      <div className="divide-y divide-line rounded-xl border border-line bg-surface">
+        {ENGINES.map((engine) => {
+          const entry = state.engines[engine.id];
+          if (engine.id === 'mlx' && entry && entry.supported === false) return null;
+          const disk = diskFor(engine.id);
+          const Icon = engine.icon;
+          return (
+            <div key={engine.id} className="flex items-center gap-3 px-4 py-3" data-engine-row={engine.id}>
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-line bg-canvas text-fg-muted">
+                <Icon className="h-4 w-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] font-medium text-fg">
+                  {engine.name}
+                  <span className="ml-2 font-normal text-fg-subtle">{engine.use}</span>
+                </p>
+                <p className="truncate text-[12px] text-fg-muted" title={entry?.path || ''}>
+                  {state.loading && !entry
+                    ? 'Checking…'
+                    : [sourceLabel(entry), entry?.version, entry?.variant].filter(Boolean).join(' · ')}
+                </p>
+              </div>
+              <span className="shrink-0 text-right text-[12px] tabular-nums text-fg-muted">
+                {disk?.exists ? disk.size : '—'}
+              </span>
+              <Button size="xs" variant="ghost" icon={ArrowUpRight} onClick={() => navigate(engine.manage)} aria-label={`Manage ${engine.name}`}>
+                Manage
+              </Button>
+            </div>
+          );
+        })}
+      </div>
 
-      <EngineRuntimeSection
-        engineData={engineData}
-        mlxStatus={mlxStatus}
-        engineCatalog={engineCatalog}
-        loadingCatalog={loadingCatalog}
-        installJob={installJob}
-        loading={loadingEngines}
-        switchingKey={switchingEngine}
-        installingKey={installingEngine}
-        removingKey={removingEngine}
-        switchError={switchError}
-        switchSuccess={switchSuccess}
-        installError={installError}
-        installSuccess={installSuccess}
-        installNotice={installNotice}
-        removeError={removeEngineError}
-        removeSuccess={removeEngineSuccess}
-        revertSelection={revertSelection}
-        retryModel={serverStatus?.model || null}
-        pythonInstallJob={pythonInstallJob}
-        pythonBuildError={pythonBuildError}
-        pythonBuildSuccess={pythonBuildSuccess}
-        onRescan={loadEngineData}
-        onSwitch={handleEngineSwitch}
-        onInstall={handleManagedInstall}
-        onCancelInstall={handleCancelInstall}
-        onCancelBuild={handleCancelBuild}
-        onBuildGpuRuntime={handleBuildGpuRuntime}
-        onRemoveManagedEngine={handleRemoveManagedEngine}
-        onRefreshCatalog={refreshRuntimeCatalog}
-        installReadiness={installReadiness}
-      />
+      {downloads?.exists && downloads.bytes > 0 && (
+        <p className="flex items-center gap-2 text-[12px] text-fg-muted">
+          <HardDrive className="h-3.5 w-3.5" />
+          Unfinished downloads keep {downloads.size} so an interrupted install can continue.
+        </p>
+      )}
+      {state.root ? (
+        <p className="break-all font-mono text-[11px] text-fg-subtle">Engines folder: {state.root}</p>
+      ) : null}
+      {state.loading && !state.disk.length ? <Loader2 className="h-4 w-4 animate-spin text-fg-subtle" /> : null}
     </div>
   );
 };

@@ -134,7 +134,7 @@ export async function checkSdCpp() {
       binaryPath: null,
       models,
       modelsDir: path.join(MODELS_DIR, 'image'),
-      error: 'Simple image engine binary not found. Install it from Settings → Runtime, put sd on PATH, or configure IMAGEGEN_BINARY_PATH.',
+      error: 'Simple image engine binary not found. Install it from Models → Images, put sd on PATH, or configure IMAGEGEN_BINARY_PATH.',
     };
   }
 
