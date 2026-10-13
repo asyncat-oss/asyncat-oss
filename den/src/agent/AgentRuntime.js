@@ -327,6 +327,9 @@ export class AgentRuntime {
     this.initialImageUrls = Array.isArray(opts.initialImageUrls)
       ? opts.initialImageUrls.filter(url => typeof url === 'string' && url.startsWith('data:image/')).slice(0, 8)
       : [];
+    // Project and agent instructions + knowledge (see knowledge/chatContext.js).
+    this.knowledgeContext = typeof opts.knowledgeContext === 'string' ? opts.knowledgeContext : '';
+    this.knowledgeSources = Array.isArray(opts.knowledgeSources) ? opts.knowledgeSources : [];
     this.clientTimestamp = opts.clientTimestamp || null;
     this.clientTimezone = opts.clientTimezone || process.env.TZ || null;
     this.usageContext = opts.usageContext || {};
@@ -531,7 +534,7 @@ export class AgentRuntime {
       agentMode: this.agentMode,
       capabilitiesSection: this.capabilitiesSection,
       temporalContext: this._buildTemporalContext(),
-    });
+    }) + (this.knowledgeContext ? `\n\n${this.knowledgeContext}` : '');
 
     // Auto-detect and store corrections from user's latest message in continued conversations
     if (conversationHistory.length > 0) {
@@ -587,6 +590,7 @@ export class AgentRuntime {
       workspaceId: this.workspaceId,
       projectId: this.projectId,
       profileId: this.agentProfileId,
+      knowledgeSources: this.knowledgeSources,
       workingDir: this.workingDir,
       workspaceRoot: this.workspaceRoot,
       conversationId: this.usageContext?.conversationId || null,
@@ -2137,7 +2141,8 @@ export class AgentRuntime {
     if (withoutSearch.length <= limit) return withoutSearch;
 
     const picked = new Map();
-    for (const name of ESSENTIAL_TOOLS) {
+    const essentials = this.knowledgeSources?.length ? ['knowledge_search', ...ESSENTIAL_TOOLS] : ESSENTIAL_TOOLS;
+    for (const name of essentials) {
       if (byName.has(name)) picked.set(name, byName.get(name));
     }
     for (const tool of toolDefs) {

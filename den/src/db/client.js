@@ -248,6 +248,56 @@ function dropColumnIfPresent(table, column) {
 function ensureProjectSchema() {
   dropColumnIfPresent('projects', 'enabled_views');
   dropColumnIfPresent('projects', 'enabled_widgets');
+  // Instructions every chat in the project gets, like Claude/ChatGPT Projects.
+  if (!tableColumns('projects').has('instructions')) {
+    db.exec("ALTER TABLE projects ADD COLUMN instructions TEXT NOT NULL DEFAULT ''");
+  }
+}
+
+// Files given to a project or an agent as knowledge. Text is extracted once
+// and split into chunks with a full-text index, so knowledge too large for a
+// model's context window can still be searched.
+function ensureKnowledgeSchema() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS knowledge_files (
+      id               TEXT PRIMARY KEY,
+      owner_type       TEXT NOT NULL CHECK (owner_type IN ('project', 'agent')),
+      owner_id         TEXT NOT NULL,
+      user_id          TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name             TEXT NOT NULL,
+      mime_type        TEXT,
+      kind             TEXT NOT NULL,
+      size_bytes       INTEGER NOT NULL DEFAULT 0,
+      storage_path     TEXT NOT NULL,
+      text_content     TEXT,
+      token_estimate   INTEGER NOT NULL DEFAULT 0,
+      created_at       TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_knowledge_files_owner ON knowledge_files(owner_type, owner_id);
+
+    CREATE TABLE IF NOT EXISTS knowledge_chunks (
+      id              TEXT PRIMARY KEY,
+      file_id         TEXT NOT NULL REFERENCES knowledge_files(id) ON DELETE CASCADE,
+      owner_key       TEXT NOT NULL,
+      position        INTEGER NOT NULL,
+      content         TEXT NOT NULL,
+      token_estimate  INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_file ON knowledge_chunks(file_id);
+    CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_owner ON knowledge_chunks(owner_key);
+
+    CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_chunks_fts USING fts5(
+      chunk_id UNINDEXED,
+      owner_key UNINDEXED,
+      file_name,
+      content,
+      tokenize='porter unicode61'
+    );
+
+    CREATE TRIGGER IF NOT EXISTS knowledge_chunks_ad AFTER DELETE ON knowledge_chunks BEGIN
+      DELETE FROM knowledge_chunks_fts WHERE chunk_id = old.id;
+    END;
+  `);
 }
 
 function ensureLocalProfileSchema() {
@@ -290,6 +340,7 @@ function ensureModelPathsSchema() {
 cleanupDeadTables();
 ensureLocalProfileSchema();
 ensureProjectSchema();
+ensureKnowledgeSchema();
 ensureNotesSchema();
 ensureAgentMemorySchema();
 ensureModelPathsSchema();

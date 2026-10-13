@@ -35,6 +35,7 @@ import { getMcpStatus, listMcpServers, mergeMcpEnv, readMcpConfig, reloadMcpTool
 import { toolRegistry } from '../../agent/tools/toolRegistry.js';
 import { formatMultimodalCapabilityPrompt, getMultimodalCapabilities } from '../../agent/multimodalCapabilities.js';
 import { normalizeApprovalDecision } from '../../agent/approvalDecisions.js';
+import { buildChatContext, projectForChat } from '../../knowledge/chatContext.js';
 import { getModelCapabilities } from '../controllers/ai/modelCapabilities.js';
 import { getModelRuntimeStatus } from '../controllers/ai/modelRuntimeStatus.js';
 import { listProfiles, getProfile, getProfileByHandle, createProfile, updateProfile, deleteProfile, getDefaultProfile } from '../../agent/ProfileManager.js';
@@ -523,7 +524,14 @@ router.post('/chat/stream', withWorkspaceContext, async (req, res) => {
       error: `The active model (${model || 'unknown'}) does not support image input. Choose an image-capable language model first.`,
     });
   }
+  // Project instructions and knowledge apply to plain chats as well.
+  const chatProject = projectForChat(req.user.id, req.body?.projectId || req.body?.workingContext?.projectId || null);
+  const chatContext = buildChatContext({ project: chatProject, query: message, resolvedClient });
+  const currentContent = modelCapabilities.supportsImageInput
+    ? messageContentWithImages(message, req.body?.fileAttachments)
+    : message;
   const messages = [
+    ...(chatContext.prompt ? [{ role: 'system', content: chatContext.prompt }] : []),
     ...history.map(item => ({
       role: item.role,
       content: item.role === 'user' && modelCapabilities.supportsImageInput
@@ -532,9 +540,12 @@ router.post('/chat/stream', withWorkspaceContext, async (req, res) => {
     })),
     {
       role: 'user',
-      content: modelCapabilities.supportsImageInput
-        ? messageContentWithImages(message, req.body?.fileAttachments)
-        : message,
+      content: chatContext.images.length
+        ? [
+          ...(typeof currentContent === 'string' ? [{ type: 'text', text: currentContent }] : currentContent),
+          ...chatContext.images.map(url => ({ type: 'image_url', image_url: { url } })),
+        ]
+        : currentContent,
     },
   ];
 
@@ -1719,13 +1730,35 @@ async function runExternalEngineTurn(req, res, { engine, baseGoal, workingContex
 
   try {
     const hasProjectContext = Boolean(workingContext && typeof workingContext === 'object' && workingContext.rootId);
+    // A chat can belong to a project without using its folders: the project's
+    // instructions and knowledge still apply.
+    const chatProject = projectForChat(req.user.id, workingContext?.projectId || req.body?.projectId || null);
     const context = resolveAgentWorkingContext({
       workingContext: hasProjectContext ? workingContext : null,
       workingDir: hasProjectContext ? workingDir : null,
       profile: null,
       userId: req.user.id,
     });
-    const goal = injectFileAttachments(baseGoal, resolveFileAttachments(fileAttachments, context, req.user.id));
+    const taskGoal = injectFileAttachments(baseGoal, resolveFileAttachments(fileAttachments, context, req.user.id));
+    // A new Claude Code or Codex session gets the project's instructions and
+    // knowledge once; later turns resume that session, which already has them.
+    const projectPreamble = chatProject && !externalSessionId
+      ? buildChatContext({
+        project: chatProject,
+        query: baseGoal,
+        resolvedClient: {
+          model: engineModel || engine,
+          isLocal: false,
+          providerInfo: {
+            providerId: engine === 'claude-code' ? 'anthropic' : 'openai',
+            settings: { context_window: 200000, model_capabilities: { supportsImageInput: false } },
+          },
+        },
+      }).prompt
+      : '';
+    const goal = projectPreamble
+      ? `This task comes from the Asyncat project "${chatProject.name}". Read the project context first, then do the task.\n\n${projectPreamble}\n\n---\n\n## Task\n${taskGoal}`
+      : taskGoal;
     const runDir = hasProjectContext ? context.workingDir : externalFallbackFolder(externalCwd);
     approvals = engine === 'claude-code' && agentMode === 'action' && !autoApprove
       ? openExternalApprovals({
@@ -1861,6 +1894,9 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
     });
 
     const hasProjectContext = Boolean(workingContext && typeof workingContext === 'object' && workingContext.rootId);
+    // A chat can belong to a project without using its folders: the project's
+    // instructions and knowledge still apply.
+    const chatProject = projectForChat(req.user.id, workingContext?.projectId || req.body?.projectId || null);
     const resolvedWorkingContext = resolveAgentWorkingContext({
       workingContext: hasProjectContext ? workingContext : null,
       // A client-supplied or profile directory is never accepted as an
@@ -1882,10 +1918,19 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
     // Capabilities go into the system prompt via AgentRuntime — NOT prepended to the user's goal.
     const capabilitiesSection = [
       formatMultimodalCapabilityPrompt(multimodalCapabilities),
-      !hasProjectContext
+      !hasProjectContext && chatProject
+        ? `Project scope: this chat is in the project "${chatProject.name}", which has no folder selected for this chat, so local files, code, shell, Git and workspace tools are unavailable. The user can attach a folder on the project page.`
+        : '',
+      !hasProjectContext && !chatProject
         ? 'Project scope: No Project is selected for this conversation. Local files, code, shell, Git, artifacts, scheduled work, and workspace tools are unavailable. Ask the user to select a Project before attempting local-file work.'
         : '',
     ].filter(Boolean).join('\n\n');
+    const chatContext = buildChatContext({
+      project: chatProject,
+      agent: null,
+      query: baseGoal,
+      resolvedClient: { model, isLocal, supportsNativeTools, providerInfo },
+    });
     const goal = injectFileAttachments(baseGoal, resolvedFiles);
     const resolvedMaxRounds  = maxRounds  || profile?.max_rounds  || 25;
     const resolvedAutoApprove = resolvedAgentMode === 'action'
@@ -1909,7 +1954,7 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
       supportsNativeTools,
       userId: req.user.id,
       workspaceId: req.workspaceId,
-      projectId: resolvedWorkingContext.projectId || null,
+      projectId: resolvedWorkingContext.projectId || chatProject?.id || null,
       workingDir: resolvedWorkingDir,
       workspaceRoot: resolvedWorkingContext.rootPath || resolvedWorkingDir,
       maxRounds: resolvedMaxRounds,
@@ -1925,7 +1970,9 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
       enabledIntegrationTools: Array.isArray(enabledIntegrationTools) ? enabledIntegrationTools : null,
       mentionedAgents: mentionedAgentProfiles,
       capabilitiesSection,
-      initialImageUrls,
+      initialImageUrls: [...initialImageUrls, ...chatContext.images],
+      knowledgeContext: chatContext.prompt,
+      knowledgeSources: chatContext.sources,
       clientTimestamp,
       clientTimezone,
       abortSignal: abortController.signal,

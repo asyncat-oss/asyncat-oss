@@ -3,8 +3,9 @@ import fs from 'fs';
 import path from 'path';
 import localDb from '../../../db/client.js';
 import { sanitizeEmoji } from "./projectPermissionHelpers.js";
+import { deleteOwnerKnowledge } from "../../../knowledge/knowledgeStore.js";
 
-const PROJECT_FIELDS = "id, name, description, due_date, created_by, owner_id, created_at, updated_at, is_archived, team_id, emoji";
+const PROJECT_FIELDS = "id, name, description, due_date, created_by, owner_id, created_at, updated_at, is_archived, team_id, emoji, instructions";
 
 const projectFolderRootId = (folderId) => `project:${folderId}`;
 
@@ -22,14 +23,26 @@ const foldersForProject = (projectId) => localDb.prepare(`
 	ORDER BY is_primary DESC, position ASC, created_at ASC
 `).all(projectId).map(presentFolder);
 
+const projectCounts = (projectId) => localDb.prepare(`
+	SELECT
+		(SELECT COUNT(*) FROM conversations
+			WHERE deleted_at IS NULL AND is_archived = 0
+				AND EXISTS (SELECT 1 FROM json_each(conversations.project_ids) WHERE value = @id)) AS chat_count,
+		(SELECT COUNT(*) FROM knowledge_files WHERE owner_type = 'project' AND owner_id = @id) AS file_count
+`).get({ id: projectId });
+
 const presentProject = (project) => {
 	const folders = foldersForProject(project.id);
+	const counts = projectCounts(project.id) || {};
 	return {
 		...project,
+		instructions: project.instructions || '',
 		emoji: sanitizeEmoji(project.emoji),
 		folders,
 		folder_count: folders.length,
 		primary_folder: folders.find(folder => folder.is_primary) || folders[0] || null,
+		chat_count: counts.chat_count || 0,
+		file_count: counts.file_count || 0,
 	};
 };
 
@@ -383,6 +396,8 @@ async function deleteProject(req, res) {
 			.eq("id", id);
 
 		if (projectDeleteError) throw projectDeleteError;
+		// Its chats stay (they move to Recents); its knowledge files go.
+		deleteOwnerKnowledge('project', id);
 
 		res.json({ success: true });
 	} catch (error) {
