@@ -10,6 +10,8 @@ import {
 } from "./utils/agentEventUtils.js";
 
 import {
+  lazy,
+  Suspense,
   useState,
   useRef,
   useEffect,
@@ -21,7 +23,6 @@ import { MessageInputV2 } from "./components/input/MessageInputV2";
 import AgentRunFeed, { CurrentPlanPanel, buildEventSegments } from './components/agent/AgentRunFeed';
 import { extractLocalhostUrl } from './utils/localhostUrl.js';
 import CommandCenterSidePanel from './components/sidebars/CommandCenterSidePanel';
-import TerminalPanel from './components/sidebars/TerminalPanel';
 import ChatFloatingNav from './components/nav/ChatFloatingNav';
 import ConversationLoadingSkeleton from './components/loading/ConversationLoadingSkeleton';
 import DeleteConfirmationModal from "./components/modals/DeleteConfirmationModal";
@@ -68,6 +69,9 @@ import {
   buildConversationExportEntries,
   buildExportHtmlDocument,
 } from "./utils/exportUtils.js";
+
+// The terminal loads the first time its dock opens, not with the app.
+const TerminalPanel = lazy(() => import('./components/sidebars/TerminalPanel'));
 
 const EMPTY_AGENT_EVENTS = [];
 
@@ -3213,7 +3217,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                 <button type="button" onClick={() => { setShowTerminalDock(false); try { localStorage.setItem('asyncat_show_terminal_dock', 'false'); } catch { /* noop */ } }} className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200" title="Close terminal dock"><X className="h-3.5 w-3.5" /></button>
               </div>
               <div className="min-h-0 flex-1">
-                <TerminalPanel workingDir={workingContext?.workingDir || null} agentOutput={agentTerminalOutput} visible={showTerminalDock} />
+                <Suspense fallback={null}><TerminalPanel workingDir={workingContext?.workingDir || null} agentOutput={agentTerminalOutput} visible={showTerminalDock} /></Suspense>
               </div>
             </div>
           </section>
@@ -3287,7 +3291,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
               <div className="flex-1" />
               <button type="button" onClick={() => { setShowTerminalDock(false); try { localStorage.setItem('asyncat_show_terminal_dock', 'false'); } catch { /* noop */ } }} className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200" title="Close terminal dock"><X className="h-3.5 w-3.5" /></button>
             </div>
-            <div className="min-h-0 flex-1"><TerminalPanel workingDir={workingContext?.workingDir || null} agentOutput={agentTerminalOutput} visible={showTerminalDock} /></div>
+            <div className="min-h-0 flex-1"><Suspense fallback={null}><TerminalPanel workingDir={workingContext?.workingDir || null} agentOutput={agentTerminalOutput} visible={showTerminalDock} /></Suspense></div>
           </div>
         </aside>
       )}

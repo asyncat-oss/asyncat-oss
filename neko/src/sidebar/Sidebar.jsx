@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PropTypes from "prop-types";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -46,7 +46,8 @@ import { formatShortcut } from "../components/ui/shortcuts.js";
 import { avatarSrc } from "../assets/dp/avatars.js";
 import eventBus from "../utils/eventBus.js";
 import { loadKeyboardShortcuts } from "../utils/keyboardShortcutsUtils.js";
-import UniversalSearch from "./UniversalSearch";
+
+const UniversalSearch = lazy(() => import("./UniversalSearch"));
 
 // Below the sm breakpoint the rail always shows icons only.
 const labelVisibility = (collapsed) => (collapsed ? "hidden" : "hidden sm:block");
@@ -415,6 +416,9 @@ SectionHeader.propTypes = {
 };
 
 const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => {
+  // The search palette loads the first time it opens, then stays mounted.
+  const [searchLoaded, setSearchLoaded] = useState(Boolean(isSearchOpen));
+  useEffect(() => { if (isSearchOpen) setSearchLoaded(true); }, [isSearchOpen]);
   const navigate = useNavigate();
   const location = useLocation();
   const confirm = useConfirm();
@@ -926,7 +930,11 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
           </Menu>
         </div>
       </aside>
-      <UniversalSearch isOpen={isSearchOpen} onClose={() => onSearchOpen(false)} />
+      {searchLoaded && (
+        <Suspense fallback={null}>
+          <UniversalSearch isOpen={isSearchOpen} onClose={() => onSearchOpen(false)} />
+        </Suspense>
+      )}
     </>
   );
 };

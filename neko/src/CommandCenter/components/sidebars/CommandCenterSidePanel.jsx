@@ -1,10 +1,14 @@
-import { useMemo } from 'react';
+import { lazy, Suspense, useMemo } from 'react';
 import { Activity, Code2, Link2, X, BookMarked, Globe, FilePlus, ArrowLeft, List } from 'lucide-react';
 import AgentActivitySidebar from '../agent/AgentActivitySidebar';
-import ChatSourcesMediaSidebar from './ChatSourcesMediaSidebar';
 import ArtifactCard from '../renderers/ArtifactRenderer';
-import CodePanel from './CodePanel';
-import BrowserPanel from './BrowserPanel';
+
+// Loaded when their tab first opens, not with the app.
+const ChatSourcesMediaSidebar = lazy(() => import('./ChatSourcesMediaSidebar'));
+const CodePanel = lazy(() => import('./CodePanel'));
+const BrowserPanel = lazy(() => import('./BrowserPanel'));
+
+const panelLoading = <div className="flex flex-1 items-center justify-center text-[12px] text-fg-subtle">Loading…</div>;
 
 const panelMeta = {
   steps: { label: 'Steps', icon: Activity },
@@ -224,6 +228,7 @@ export default function CommandCenterSidePanel({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col">
+        <Suspense fallback={panelLoading}>
         {currentTab === 'steps' && (
           <AgentActivitySidebar items={stepsItems} isLoading={stepsLoading} isRunning={isRunning} />
         )}
@@ -257,6 +262,7 @@ export default function CommandCenterSidePanel({
         {currentTab === 'nav' && (
           <ChatNavPanel items={chatNavItems} />
         )}
+        </Suspense>
       </div>
     </div>
   );
