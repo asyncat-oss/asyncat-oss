@@ -34,6 +34,7 @@ import { embeddingStatus, resetEmbeddingStrategy, embedText } from '../embedding
 import { getMcpStatus, listMcpServers, mergeMcpEnv, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
 import { toolRegistry } from '../../agent/tools/toolRegistry.js';
 import { formatMultimodalCapabilityPrompt, getMultimodalCapabilities } from '../../agent/multimodalCapabilities.js';
+import { normalizeApprovalDecision } from '../../agent/approvalDecisions.js';
 import { getModelCapabilities } from '../controllers/ai/modelCapabilities.js';
 import { getModelRuntimeStatus } from '../controllers/ai/modelRuntimeStatus.js';
 import { listProfiles, getProfile, getProfileByHandle, createProfile, updateProfile, deleteProfile, getDefaultProfile } from '../../agent/ProfileManager.js';
@@ -2389,35 +2390,9 @@ router.post('/permissions/:requestId', withWorkspaceContext, (req, res) => {
     return res.json({ success: true, decision: req.body?.decision || 'deny', note: 'already_resolved' });
   }
 
-  const decision = ['allow', 'deny', 'allow_session', 'allow_always_tool', 'allow_always_command'].includes(req.body?.decision)
-    ? req.body.decision
-    : 'deny';
+  const decision = normalizeApprovalDecision(req.body?.decision);
 
   pendingPermissions.delete(req.params.requestId);
-  pending.resolve({
-    decision,
-    reason: req.body?.reason || null,
-  });
-
-  res.json({ success: true, decision });
-});
-
-router.post('/permission', withWorkspaceContext, (req, res) => {
-  const { sessionId } = req.body || {};
-  const found = [...pendingPermissions.entries()].find(([, pending]) =>
-    pending.userId === req.user.id && pending.sessionId === sessionId
-  );
-
-  if (!found) {
-    return res.json({ success: true, decision: req.body?.decision || 'deny', note: 'already_resolved' });
-  }
-
-  const [requestId, pending] = found;
-  const decision = ['allow', 'deny', 'allow_session', 'allow_always_tool', 'allow_always_command'].includes(req.body?.decision)
-    ? req.body.decision
-    : 'deny';
-
-  pendingPermissions.delete(requestId);
   pending.resolve({
     decision,
     reason: req.body?.reason || null,
@@ -2890,54 +2865,6 @@ router.get('/checkpoints', withWorkspaceContext, (_req, res) => {
 router.post('/checkpoints/restore', withWorkspaceContext, (req, res) => {
   const result = restoreCheckpoint(req.body?.id || null);
   res.status(result.success ? 200 : 404).json(result);
-});
-
-// ── Multi-agent ──────────────────────────────────────────────────────────────
-
-router.post('/multi', withWorkspaceContext, async (req, res) => {
-  try {
-    const { tasks, maxConcurrency = 3 } = req.body;
-
-    if (!Array.isArray(tasks) || tasks.length === 0) {
-      return res.status(400).json({ success: false, error: 'tasks must be a non-empty array' });
-    }
-    if (tasks.length > 10) {
-      return res.status(400).json({ success: false, error: 'Maximum 10 parallel tasks per request' });
-    }
-
-    const { client: aiClient, model, isLocal, supportsNativeTools, providerInfo } = getAiClientForUser(req.user.id);
-    const workspaceId = req.workspaceId ||
-      db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
-
-    const results = [];
-    for (let i = 0; i < tasks.length; i += maxConcurrency) {
-      const batch = tasks.slice(i, i + maxConcurrency);
-      const batchResults = await Promise.allSettled(
-        batch.map(async (task) => {
-          const agent = new AgentRuntime({
-            aiClient, model, isLocal, supportsNativeTools,
-            userId: req.user.id,
-            workspaceId,
-            workingDir: task.workingDir || defaultAgentWorkingDir(),
-            maxRounds: 15,
-            providerInfo,
-            usageContext: { operation: 'multi-agent' },
-          });
-          const answer = await agent.run(task.goal);
-          return { name: task.name || task.goal.slice(0, 40), goal: task.goal, answer, success: true };
-        })
-      );
-      for (const r of batchResults) {
-        if (r.status === 'fulfilled') results.push(r.value);
-        else results.push({ name: '(failed)', error: r.reason?.message || 'Unknown error', success: false });
-      }
-    }
-
-    res.json({ success: true, count: results.length, results });
-  } catch (err) {
-    console.error('Multi-agent error:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
 });
 
 // ─── Artifact Routes ────────────────────────────────────────────────────────

@@ -17,6 +17,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { promisify } from 'util';
 import { runtimeDataPath } from '../config/runtimeConfig.js';
+import { approvalAllows, approvalCoversRun } from './approvalDecisions.js';
 import { claudeUsageFromEvent, recordUsage } from './externalUsage.js';
 
 const execFileAsync = promisify(execFile);
@@ -523,8 +524,7 @@ export async function decideExternalApproval(runId, token, { toolName, input = {
     workingDir: run.workingDir,
     engine: 'claude-code',
   });
-  const name = decision?.decision || 'deny';
-  const allowed = name === 'allow' || name === 'allow_session' || name.startsWith('allow_always');
-  if (allowed && name !== 'allow') run.allowed.add(call.tool);
+  const allowed = approvalAllows(decision?.decision);
+  if (approvalCoversRun(decision?.decision)) run.allowed.add(call.tool);
   return allowed ? { behavior: 'allow' } : { behavior: 'deny', message: decision?.reason || 'The user declined this action.' };
 }

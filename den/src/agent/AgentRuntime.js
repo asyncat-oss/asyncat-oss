@@ -22,6 +22,7 @@ import { listMemories, searchMemories, enforceMemoryCap, decayMemoryImportance }
 import { memoryConsolidator } from './MemoryConsolidator.js';
 import { isGitDangerousAction, isGitReadOnlyAction } from './gitService.js';
 import { isReadOnlyPackageCommand, isReadOnlyShellCommand } from './shellSafety.js';
+import { approvalAllows, approvalCoversRun, normalizeApprovalDecision } from './approvalDecisions.js';
 import { getModelCapabilities, normalizeReasoningEffort } from '../ai/controllers/ai/modelCapabilities.js';
 import { cleanReasoningAnswer, combineReasoningParts, createStreamTextAccumulator, extractReasoningFromText, reasoningTextFromDelta } from './reasoningParser.js';
 import { resolveContextWindow } from '../ai/controllers/ai/modelContextResolver.js';
@@ -1489,11 +1490,10 @@ export class AgentRuntime {
 
       const decision = await this.requestPermission(request);
       this._throwIfAborted();
-      const decisionName = decision?.decision || 'deny';
-      const allowed = decisionName === 'allow'
-        || decisionName === 'allow_session';
+      const decisionName = normalizeApprovalDecision(decision?.decision);
+      const allowed = approvalAllows(decisionName);
 
-      if (decisionName === 'allow_session') {
+      if (approvalCoversRun(decisionName)) {
         this.sessionApprovedTools.add(toolCall.tool_name);
       }
 
@@ -1504,7 +1504,13 @@ export class AgentRuntime {
       };
     }
 
-    return { allowed: true, decision: 'local_auto' };
+    // No one to ask: a run without an approval handler gets safe tools and
+    // whatever it was explicitly given (auto-approve, pre-approved tools).
+    return {
+      allowed: false,
+      decision: 'no_approver',
+      reason: `Nobody can approve "${toolCall.tool_name}" for this run. Pre-approve the tool or enable auto-approve to allow it.`,
+    };
   }
   // ── Prompt caching ─────────────────────────────────────────────────────────
   // Caching is NOT uniform across providers, so we do the right thing per family
