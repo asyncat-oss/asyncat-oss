@@ -67,6 +67,9 @@ const installStatusTone = (status) => {
 
 const recommendationCopy = (recommendation, current, hardware) => {
   if (!recommendation) return 'Runtime detection has not finished yet.';
+  // The GPU's driver isn't answering: no runtime fixes that, so pass on the
+  // backend's explanation instead of suggesting an install.
+  if (recommendation.kind === 'gpu_driver_issue') return recommendation.body;
   if (recommendation.state === 'current_ok') {
     return current
       ? 'The selected runtime matches this machine.'
@@ -210,6 +213,8 @@ const EngineRuntimeSection = ({
   }, [installedManagedProfiles, managedAssetsByProfile]);
 
   const primaryAction = useMemo(() => {
+    // With a GPU driver problem the current engine already runs on the CPU.
+    if (recommendation?.kind === 'gpu_driver_issue' && current) return null;
     if (recommendationCandidate && !recommendationCandidate.isCurrent) {
       return {
         key: engineKey(recommendationCandidate),
@@ -234,7 +239,7 @@ const EngineRuntimeSection = ({
       };
     }
     return null;
-  }, [bestManagedAsset, installProfile, onInstall, onSwitch, recommendation?.state, recommendationCandidate]);
+  }, [bestManagedAsset, current, installProfile, onInstall, onSwitch, recommendation?.kind, recommendation?.state, recommendationCandidate]);
 
   const selectableCandidates = candidates.length > 0 ? candidates : (current ? [current] : []);
   const currentKey = engineKey(current);
