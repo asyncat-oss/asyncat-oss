@@ -2,8 +2,8 @@
 // End-to-end smoke test. Starts a throwaway Asyncat (its own data folder,
 // ports and settings, so your real data is never touched) with a fake
 // OpenAI-compatible model, then drives the app in a headless browser through
-// the main flows: chat, a project with instructions, agents, a scheduled task,
-// a note made by the agent, and the main pages.
+// the main flows: chat, a project with instructions, agents, Cats, a note made
+// by the agent, and the main pages.
 //
 // Needs a Chromium-based browser (Chrome, Chromium, Edge or Brave), found the
 // same way PDF export finds one; PUPPETEER_EXECUTABLE_PATH picks another.
@@ -31,6 +31,8 @@ function log(message) {
   process.stdout.write(`${message}\n`);
 }
 
+let currentPage = null;
+
 async function check(name, fn) {
   const started = Date.now();
   try {
@@ -41,6 +43,9 @@ async function check(name, fn) {
     failed = true;
     results.push({ name, ok: false, error: err.message });
     log(`  ✗ ${name}: ${err.message}`);
+    // What the page showed, to see why.
+    const shown = await currentPage?.evaluate(() => `${location.pathname} · ${document.body.innerText.replace(/\s+/g, ' ').slice(0, 400)}`).catch(() => null);
+    if (shown) log(`      page: ${shown}`);
   }
 }
 
@@ -206,6 +211,7 @@ async function main() {
   const { launchBrowser } = await import(path.join(ROOT, 'den/src/lib/browserLauncher.js'));
   const browser = await launchBrowser({ headless: !HEADED, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
   const page = await browser.newPage();
+  currentPage = page;
   await page.setViewport({ width: 1280, height: 860 });
   const pageErrors = [];
   page.on('pageerror', (err) => pageErrors.push(err.message));
@@ -220,7 +226,7 @@ async function main() {
   log('Running checks:');
 
   await check('the home screen opens', async () => {
-    await page.goto(`${app}/home`, { waitUntil: 'networkidle2' });
+    await page.goto(`${app}/home`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('textarea', { timeout: 20000 });
     await noCrash();
   });
@@ -238,7 +244,7 @@ async function main() {
     projectId = project.data?.id || project.project?.id || project.id;
     assert(projectId, 'no project id returned');
     await api('PATCH', `/api/projects/${projectId}/instructions`, { instructions: 'Always answer in metric units.' });
-    await page.goto(`${app}/projects/${projectId}`, { waitUntil: 'networkidle2' });
+    await page.goto(`${app}/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
     await textAppears('Smoke garden');
     await textAppears('Always answer in metric units.');
     const before = requests.length;
@@ -265,37 +271,67 @@ async function main() {
   });
 
   await check('the Agents page lists templates and saves a new agent', async () => {
-    await page.goto(`${app}/agents`, { waitUntil: 'networkidle2' });
+    await page.goto(`${app}/agents`, { waitUntil: 'domcontentloaded' });
     await textAppears('Start from a template');
     const agent = await api('POST', '/api/agent/profiles', { name: 'Smoke helper', instructions: 'Be brief.', capabilities: ['web', 'memory'] });
     assert(agent.success !== false, 'agent was not created');
-    await page.reload({ waitUntil: 'networkidle2' });
+    await page.reload({ waitUntil: 'domcontentloaded' });
     await textAppears('Smoke helper');
     await noCrash();
   });
 
-  await check('a scheduled task runs and answers in its chat', async () => {
-    const parsed = await api('POST', '/api/agent/scheduled-tasks/parse-schedule', { text: 'every day at 7am', timezone: 'UTC' });
-    const created = await api('POST', '/api/agent/scheduled-tasks', {
-      name: 'Smoke morning check', prompt: 'Say good morning.', schedule: parsed.schedule, timezone: 'UTC', enabled: true,
+  let catId = null;
+  await check('a Cat with a timer runs, reports in its chat and inbox', async () => {
+    const parsed = await api('POST', '/api/cats/parse-schedule', { text: 'every day at 7am', timezone: 'UTC' });
+    assert(parsed.scheduleText === 'Daily at 7:00', `parsed as ${parsed.scheduleText}`);
+    const created = await api('POST', '/api/cats', {
+      name: 'Smoke morning Cat', mission: 'Say good morning.', timezone: 'UTC',
+      triggers: [{ kind: 'schedule', config: { schedule: parsed.schedule } }],
     });
-    const task = created.task || created.data;
-    assert(task?.id, 'no task id returned');
-    await api('POST', `/api/agent/scheduled-tasks/${task.id}/run`);
+    catId = created.cat?.id;
+    assert(catId, 'no Cat id returned');
+    assert(created.cat.conversationId, 'the Cat has no chat');
+    await api('POST', `/api/cats/${catId}/wake`, {});
     const finished = await waitFor(async () => {
-      const runs = await api('GET', `/api/agent/scheduled-tasks/${task.id}/runs`);
-      const latest = (runs.runs || runs.data || [])[0];
-      return latest && latest.status !== 'running' ? latest : null;
-    }, { timeout: 30000, what: 'the scheduled run to finish' });
-    assert(finished.status === 'success' || finished.status === 'succeeded', `the run ended as ${finished.status}`);
-    await page.goto(`${app}/scheduled`, { waitUntil: 'networkidle2' });
-    await textAppears('Smoke morning check');
+      const { runs } = await api('GET', `/api/cats/${catId}/runs`);
+      return runs[0] && !['running', 'waiting'].includes(runs[0].status) ? runs[0] : null;
+    }, { timeout: 30000, what: 'the Cat to finish' });
+    assert(finished.status === 'succeeded', `the run ended as ${finished.status}: ${finished.error}`);
+    const { items } = await api('GET', `/api/cats/inbox?catId=${catId}`);
+    assert(items.some((item) => item.kind === 'result'), 'no result in the inbox');
+    const { conversation } = await api('GET', `/api/ai/chats/${created.cat.conversationId}`);
+    assert(conversation.messages.some((message) => message.type === 'assistant' && message.content.includes(ANSWER)), 'the report is not in its chat');
+    await page.goto(`${app}/scheduled`, { waitUntil: 'domcontentloaded' });
+    await textAppears('Smoke morning Cat');
+    assert(page.url().endsWith('/cats'), `/scheduled went to ${page.url()}`);
   });
 
-  for (const [label, route] of [['Models', '/models'], ['Settings → Profile', '/settings/profile'], ['Settings → Connections', '/settings/connections'], ['Settings → Background', '/settings/background'], ['Tools & Skills', '/tools']]) {
+  await check("a message in a Cat's chat goes to the Cat", async () => {
+    const { cat } = await api('GET', `/api/cats/${catId}`);
+    await page.goto(`${app}/conversations/${cat.conversationId}`, { waitUntil: 'domcontentloaded' });
+    await textAppears('To Smoke morning Cat');
+    const before = requests.length;
+    const composer = await page.waitForSelector('textarea');
+    await composer.click();
+    await page.keyboard.type('Any news?');
+    await page.keyboard.press('Enter');
+    await waitFor(() => requests.slice(before).some((r) => JSON.stringify(r.messages || []).includes('Any news?')), { timeout: 20000, what: 'the message to reach the Cat' });
+    await waitFor(async () => {
+      const { runs } = await api('GET', `/api/cats/${catId}/runs`);
+      return runs[0]?.triggerKind === 'chat' && runs[0].status === 'succeeded';
+    }, { timeout: 20000, what: 'the Cat to answer' });
+    await page.goto(`${app}/cats/${catId}`, { waitUntil: 'domcontentloaded' });
+    await textAppears('Say good morning.');
+    await noCrash();
+  });
+
+  for (const [label, route] of [['Models', '/models'], ['Models → Voice', '/models?tab=audio'], ['Settings → Profile', '/settings/profile'], ['Settings → Connections', '/settings/connections'], ['Settings → Background', '/settings/background'], ['Settings → Engines', '/settings/runtime'], ['Tools & Skills', '/tools']]) {
     await check(`${label} opens`, async () => {
-      await page.goto(`${app}${route}`, { waitUntil: 'networkidle2' });
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await page.goto(`${app}${route}`, { waitUntil: 'domcontentloaded' });
+      // Pages keep live connections open (/api/events), so the network never
+      // goes idle: wait for the page itself instead.
+      await page.waitForSelector('main, [data-models-page], h1', { timeout: 20000 });
+      await new Promise((resolve) => setTimeout(resolve, 800));
       await noCrash();
     });
   }
