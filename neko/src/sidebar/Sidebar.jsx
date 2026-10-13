@@ -11,9 +11,7 @@ import {
   Folder,
   FolderKanban,
   FolderOpen,
-  History,
   Info,
-  KanbanSquare,
   Loader2,
   Monitor,
   Moon,
@@ -24,6 +22,7 @@ import {
   Pencil,
   Search,
   Settings,
+  SlidersHorizontal,
   SquarePen,
   Sun,
   Trash2,
@@ -99,18 +98,95 @@ NavRow.propTypes = {
   badge: PropTypes.node,
 };
 
-const NavGroupLabel = ({ collapsed, children }) => (
-  <>
-    <div className={`mx-auto my-2 h-px w-6 bg-line ${collapsed ? "" : "sm:hidden"}`} />
-    {collapsed ? null : (
-      <div className="hidden px-2.5 pb-1 pt-3 text-[11px] font-medium text-fg-subtle sm:block">{children}</div>
-    )}
-  </>
-);
+const GROUP_OPEN_KEY = "asyncat_sidebar_customize_open";
 
-NavGroupLabel.propTypes = {
+// "Customize": Models, Agents and Tools & Skills behind one row. Expands in
+// place in the full sidebar and opens a small menu from the collapsed rail.
+const NavGroup = ({ icon: Icon, label, items, collapsed, onNavigate }) => {
+  const anyActive = items.some((item) => item.active);
+  const [open, setOpen] = useState(() => {
+    try { return localStorage.getItem(GROUP_OPEN_KEY) === "true"; } catch { return false; }
+  });
+  const [menuOpen, setMenuOpen] = useState(false);
+  const buttonRef = useRef(null);
+  const expanded = open || anyActive;
+  const toggle = () => setOpen((value) => {
+    try { localStorage.setItem(GROUP_OPEN_KEY, String(!value)); } catch { /* localStorage may be unavailable */ }
+    return !value;
+  });
+
+  if (collapsed) {
+    return (
+      <>
+        <Tooltip label={label} disabled={menuOpen} className="w-full">
+          <button
+            ref={buttonRef}
+            type="button"
+            onClick={() => setMenuOpen((value) => !value)}
+            aria-label={label}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            className={`flex h-9 w-full items-center justify-center rounded-lg outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/40 ${
+              anyActive ? "bg-selected text-fg" : "text-fg-muted hover:bg-hover hover:text-fg"
+            }`}
+          >
+            <Icon className="h-[17px] w-[17px]" strokeWidth={1.75} />
+          </button>
+        </Tooltip>
+        <Menu anchorRef={buttonRef} open={menuOpen} onClose={() => setMenuOpen(false)} placement="right-start" width={200} label={label}>
+          {items.map((item) => (
+            <MenuItem key={item.key} icon={item.icon} label={item.label} hint={item.hint} checked={item.active} onSelect={() => onNavigate(item)} />
+          ))}
+        </Menu>
+      </>
+    );
+  }
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={toggle}
+        aria-expanded={expanded}
+        className={`group flex h-8 w-full items-center gap-2.5 rounded-lg text-[13px] outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-accent/40 ${rowLayout(false)} text-fg-muted hover:bg-hover hover:text-fg`}
+      >
+        <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+          <Icon className="h-[17px] w-[17px]" strokeWidth={1.75} />
+        </span>
+        <span className={`min-w-0 flex-1 truncate text-left ${labelVisibility(false)}`}>{label}</span>
+        <ChevronRight className={`hidden h-3.5 w-3.5 shrink-0 text-fg-subtle transition-transform sm:block ${expanded ? "rotate-90" : ""}`} />
+      </button>
+      {expanded ? (
+        <div className="mt-px space-y-px sm:pl-[26px]">
+          {items.map((item) => (
+            <NavRow
+              key={item.key}
+              icon={item.icon}
+              label={item.label}
+              hint={item.hint}
+              onClick={() => onNavigate(item)}
+              isActive={item.active}
+              collapsed={false}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
+NavGroup.propTypes = {
+  icon: PropTypes.elementType.isRequired,
+  label: PropTypes.string.isRequired,
+  items: PropTypes.arrayOf(PropTypes.shape({
+    key: PropTypes.string.isRequired,
+    label: PropTypes.string.isRequired,
+    icon: PropTypes.elementType.isRequired,
+    active: PropTypes.bool,
+    hint: PropTypes.string,
+  })).isRequired,
   collapsed: PropTypes.bool,
-  children: PropTypes.node,
+  onNavigate: PropTypes.func.isRequired,
 };
 
 function conversationProjectId(conversation) {
@@ -521,8 +597,6 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
   }, [navigate, onNewChat, onSearchOpen, openCommandCenter, shortcuts]);
 
   const isOnProjects = basePage === "projects";
-  const isOnTasks = ["workspace", "tasks"].includes(basePage);
-  const isOnChats = basePage === "all-chats";
   const isOnModels = basePage === "models";
   const isOnAgent = location.pathname === "/agent"
     || location.pathname.startsWith("/agent/profiles")
@@ -531,7 +605,7 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
   const isOnTools = location.pathname.startsWith("/tools");
   const routeConversationId = location.pathname.match(/^\/conversations\/([^/]+)/)?.[1] || null;
   const activeRecentConversationId = routeConversationId;
-  const routeProjectId = location.pathname.match(/^\/(?:projects|tasks)\/([^/]+)/)?.[1] || null;
+  const routeProjectId = location.pathname.match(/^\/projects\/([^/]+)/)?.[1] || null;
   const activeConversationProjectId = useMemo(() => (
     conversationProjectId(conversationCatalog.find((conversation) => conversation.id === routeConversationId))
   ), [conversationCatalog, routeConversationId]);
@@ -599,15 +673,15 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
   const showProjectsTree = !collapsed && navItemsVisibility.projects !== false;
 
   const workspaceItems = [
-    { key: "projects", label: "Projects", path: "/projects", active: isOnProjects, icon: FolderKanban, hint: shortcutHint("navWorkspace") },
-    { key: "tasks", label: "Tasks", path: "/tasks", active: isOnTasks, icon: KanbanSquare },
     // Workflows, Schedules and Activity; reopens the one used last.
     { key: "automations", label: "Automations", path: lastAutomationPath, active: isOnAutomations, icon: Zap },
+    // The full sidebar lists projects below; the rail needs a way in.
+    { key: "projects", label: "Projects", path: "/projects", active: isOnProjects, icon: FolderKanban, hint: shortcutHint("navWorkspace") },
   ].filter((item) => navItemsVisibility[item.key] !== false && (collapsed || item.key !== "projects"));
 
   const configureItems = [
-    { key: "agent", label: "Agents", path: "/agent/profiles", active: isOnAgent, icon: BrainCircuit, hint: shortcutHint("navAgent") },
     { key: "models", label: "Models", path: "/models", active: isOnModels, icon: Cpu, hint: shortcutHint("navModels") },
+    { key: "agent", label: "Agents", path: "/agent/profiles", active: isOnAgent, icon: BrainCircuit, hint: shortcutHint("navAgent") },
     { key: "tools", label: "Tools & Skills", path: "/tools", active: isOnTools, icon: Wrench, hint: shortcutHint("navTools") },
   ].filter((item) => navItemsVisibility[item.key] !== false);
 
@@ -681,20 +755,17 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
           <div className="space-y-px">
             <NavRow icon={SquarePen} label="New chat" hint={shortcutHint("newChat")} onClick={onNewChat} collapsed={collapsed} />
             <NavRow icon={Search} label="Search" hint={shortcutHint("openSearch")} onClick={() => onSearchOpen(true)} collapsed={collapsed} />
-            <NavRow icon={History} label="All chats" hint={shortcutHint("navChat")} onClick={() => navigate("/all-chats")} isActive={isOnChats} collapsed={collapsed} />
+            {renderItems(workspaceItems)}
+            {configureItems.length ? (
+              <NavGroup
+                icon={SlidersHorizontal}
+                label="Customize"
+                items={configureItems}
+                collapsed={collapsed}
+                onNavigate={(item) => navigate(typeof item.path === "function" ? item.path() : item.path)}
+              />
+            ) : null}
           </div>
-          {workspaceItems.length ? (
-            <>
-              <NavGroupLabel collapsed={collapsed}>Workspace</NavGroupLabel>
-              <div className="space-y-px">{renderItems(workspaceItems)}</div>
-            </>
-          ) : null}
-          {configureItems.length ? (
-            <>
-              <NavGroupLabel collapsed={collapsed}>Configure</NavGroupLabel>
-              <div className="space-y-px">{renderItems(configureItems)}</div>
-            </>
-          ) : null}
         </nav>
 
         <div className={`min-h-0 flex-1 overflow-y-auto px-3 pb-3 ${collapsed ? "hidden" : "hidden sm:block"}`}>
