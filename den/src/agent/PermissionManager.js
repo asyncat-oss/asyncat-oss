@@ -125,6 +125,8 @@ export class PermissionManager {
       git_stash: () => `Git stash action: ${args.action}`,
       git_remote: () => `Git remote action: ${args.action}`,
       package_manager: () => `Run package manager command: ${args.command}`,
+      generate_image: () => `Make a picture: ${String(args.prompt || '').slice(0, 300)}`,
+      edit_image: () => `Change the picture ${args.path}: ${String(args.prompt || '').slice(0, 300)}`,
     };
 
     const fn = descriptions[toolName];

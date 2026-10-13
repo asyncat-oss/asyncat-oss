@@ -60,6 +60,9 @@ import { startCats } from './cats/index.js';
 import connectorRouter from './connectors/connectorRoutes.js';
 import { startConnectors } from './connectors/connectorManager.js';
 
+// ─── Voice and pictures: guided setup and the gallery ────────────────────────
+import mediaRouter from './media/mediaRoutes.js';
+
 // ─── Database ─────────────────────────────────────────────────────────────────
 import db from './db/client.js';         // opens SQLite, applies schema
 import { seed } from './db/seed.js';     // creates the local profile on first boot
@@ -180,6 +183,9 @@ app.use('/api/cats', catRouter);
 
 // Routes: connectors (MCP servers)
 app.use('/api/connectors', connectorRouter);
+
+// Routes: voice and image setup, gallery
+app.use('/api/media', mediaRouter);
 
 // ─── Routes: Training / Fine-Tuning ──────────────────────────────────────────
 app.use('/api/training', trainingRouter);

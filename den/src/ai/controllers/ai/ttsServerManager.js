@@ -190,20 +190,41 @@ export async function stopTts() {
  * @param {object} options - { speakerId?, lengthScale?, noiseScale? }
  * @returns {Promise<Buffer>}
  */
+function voiceSampleRate(modelPath) {
+  try {
+    const config = JSON.parse(fs.readFileSync(`${modelPath}.json`, 'utf8'));
+    const rate = Number(config?.audio?.sample_rate || config?.audio?.sampleRate);
+    if (Number.isFinite(rate) && rate >= 8000 && rate <= 192000) return rate;
+  } catch { /* legacy voices: Piper's usual rate */ }
+  return 22050;
+}
+
+/** Have this voice loaded, loading it if another one (or none) is. */
+export async function ensureTts(modelPath) {
+  if (state.status === 'ready' && currentModelPath === modelPath) return getStatus();
+  return startTts(modelPath);
+}
+
+/**
+ * `options.modelPath` speaks with another voice for this one sentence (a
+ * preview) without changing the loaded one.
+ */
 export async function synthesize(text, options = {}) {
-  if (state.status !== 'ready' || !currentModelPath) {
+  const modelPath = options.modelPath || currentModelPath;
+  if (!options.modelPath && (state.status !== 'ready' || !currentModelPath)) {
     throw new Error('TTS is not loaded. Start a voice model first.');
   }
+  if (!modelPath || !fs.existsSync(modelPath)) throw new Error('That voice is not on this computer.');
 
   const binary = await findPiperBinary();
   if (!binary.found) {
     throw new Error('Piper binary not found.');
   }
 
-  const sampleRate = currentSampleRate;
+  const sampleRate = options.modelPath ? voiceSampleRate(modelPath) : currentSampleRate;
   return new Promise((resolve, reject) => {
     const args = [
-      '--model', currentModelPath,
+      '--model', modelPath,
       '--output_raw',
     ];
 

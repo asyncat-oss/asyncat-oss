@@ -17,15 +17,16 @@ import {
   getStatus as getTtsStatus,
   synthesize,
 } from '../../ai/controllers/ai/ttsServerManager.js';
+import { synthesizeWithCloudProvider, transcribeWithCloudProvider } from '../../ai/controllers/ai/cloudSpeech.js';
+import { ensureLocalListening, ensureLocalSpeaking, speechProvider } from '../../media/voiceService.js';
 
 // ── transcribe_audio ─────────────────────────────────────────────────────────
 
 export const transcribeAudioTool = {
   name: 'transcribe_audio',
   description:
-    'Transcribe an audio file to text using the local Whisper speech-to-text model. ' +
+    'Transcribe an audio file to text with the listening model chosen in Models → Voice (on this computer or a cloud service). ' +
     'Supports WAV, MP3, OGG, FLAC, and other common audio formats. ' +
-    'The Whisper STT model must be loaded (check the Models page → Audio tab). ' +
     'Returns the transcribed text.',
   category: 'audio',
   permission: PermissionLevel.SAFE,
@@ -44,14 +45,15 @@ export const transcribeAudioTool = {
     required: ['path'],
   },
   execute: async (args, context) => {
-    // Check whisper is running
-    const whisperStatus = getWhisperStatus();
-    if (whisperStatus.status !== 'ready') {
-      return {
-        success: false,
-        error: 'Whisper STT model is not loaded. Load a Whisper model from the Models page → Audio tab before using transcription.',
-      };
+    const provider = speechProvider('stt');
+    if (provider === 'local') {
+      try {
+        await ensureLocalListening();
+      } catch (err) {
+        return { success: false, error: `Listening isn't set up: ${err.message}` };
+      }
     }
+    const whisperStatus = getWhisperStatus();
 
     const filePath = safePath(args.path, context.workingDir);
     if (!fs.existsSync(filePath)) {
@@ -65,9 +67,10 @@ export const transcribeAudioTool = {
 
     try {
       const audioBuffer = fs.readFileSync(filePath);
-      const result = await transcribe(audioBuffer, {
-        language: args.language || undefined,
-      });
+      const options = { language: args.language || undefined };
+      const result = provider === 'local'
+        ? await transcribe(audioBuffer, options)
+        : await transcribeWithCloudProvider(provider, audioBuffer, options);
 
       return {
         success: true,
@@ -75,7 +78,7 @@ export const transcribeAudioTool = {
         text: result.text,
         language: result.language,
         segments: result.segments?.length || 0,
-        model: whisperStatus.model,
+        model: provider === 'local' ? whisperStatus.model : provider,
       };
     } catch (err) {
       return {
@@ -91,9 +94,8 @@ export const transcribeAudioTool = {
 export const speakTextTool = {
   name: 'speak_text',
   description:
-    'Convert text to speech using the local Piper TTS model. ' +
-    'Generates a WAV audio file from the given text. ' +
-    'The TTS voice model must be loaded (check the Models page → Audio tab). ' +
+    'Convert text to speech with the voice chosen in Models → Voice (on this computer or a cloud service). ' +
+    'Generates an audio file from the given text. ' +
     'Returns the path to the generated audio file.',
   category: 'audio',
   permission: PermissionLevel.SAFE,
@@ -112,14 +114,15 @@ export const speakTextTool = {
     required: ['text'],
   },
   execute: async (args, context) => {
-    // Check TTS is running
-    const ttsStatus = getTtsStatus();
-    if (ttsStatus.status !== 'ready') {
-      return {
-        success: false,
-        error: 'TTS voice model is not loaded. Load a voice model from the Models page → Audio tab before using text-to-speech.',
-      };
+    const provider = speechProvider('tts');
+    if (provider === 'local') {
+      try {
+        await ensureLocalSpeaking();
+      } catch (err) {
+        return { success: false, error: `Speaking isn't set up: ${err.message}` };
+      }
     }
+    const ttsStatus = provider === 'local' ? getTtsStatus() : { model: provider };
 
     if (!args.text || args.text.trim().length === 0) {
       return { success: false, error: 'Text cannot be empty.' };
@@ -130,7 +133,15 @@ export const speakTextTool = {
     }
 
     try {
-      const audioBuffer = await synthesize(args.text);
+      let audioBuffer;
+      let ext = 'wav';
+      if (provider === 'local') {
+        audioBuffer = await synthesize(args.text);
+      } else {
+        const spoken = await synthesizeWithCloudProvider(provider, args.text, {});
+        audioBuffer = spoken.buffer;
+        ext = /mpeg|mp3/.test(spoken.contentType || '') ? 'mp3' : 'wav';
+      }
 
       // Save to artifacts dir so the UI can display it inline
       const artifactsDir = getArtifactsDir(context.workingDir);
@@ -140,7 +151,7 @@ export const speakTextTool = {
       const baseName = args.output_path
         ? path.basename(args.output_path, path.extname(args.output_path))
         : `speech_${Date.now()}`;
-      const artifactFilename = `${baseName}_${id}.wav`;
+      const artifactFilename = `${baseName}_${id}.${ext}`;
       const artifactPath = path.join(artifactsDir, artifactFilename);
       fs.writeFileSync(artifactPath, audioBuffer);
 
@@ -167,14 +178,14 @@ export const speakTextTool = {
           size: audioBuffer.length,
           createdAt: new Date().toISOString(),
           voice: ttsStatus.model,
-          format: 'WAV',
+          format: ext.toUpperCase(),
           textLength: args.text.length,
         },
         text_length: args.text.length,
         audio_size: formatSize(audioBuffer.length),
         audio_bytes: audioBuffer.length,
         voice: ttsStatus.model,
-        format: 'WAV (16-bit PCM, 22050 Hz, mono)',
+        format: ext === 'wav' ? 'WAV (16-bit PCM, mono)' : 'MP3',
       };
     } catch (err) {
       return {

@@ -9,6 +9,7 @@ import { promisify } from 'util';
 import { MODELS_DIR } from './modelManager.js';
 import { listVisualModels } from './visualModelManager.js';
 import { runtimeGeneratedImagesPath, runtimeHome } from '../../../config/runtimeConfig.js';
+import { imageModelDefaults } from '../../../media/imageCatalog.js';
 
 const execFileAsync = promisify(execFile);
 const IS_WIN = process.platform === 'win32';
@@ -170,10 +171,12 @@ export async function generateSdCppImage(options = {}) {
   if (!modelPath) throw new Error('modelPath is required');
   if (!fs.existsSync(modelPath)) throw new Error(`Image model not found: ${modelPath}`);
 
-  const width = clampInt(options.width, 512, 256, 2048);
-  const height = clampInt(options.height, 512, 256, 2048);
-  const steps = clampInt(options.steps, 24, 1, 100);
-  const cfg = clampFloat(options.cfg, 7, 1, 20);
+  // Settings that suit the model (turbo models want few steps, SDXL more pixels).
+  const defaults = imageModelDefaults(modelPath);
+  const width = clampInt(options.width, defaults.width, 256, 2048);
+  const height = clampInt(options.height, defaults.height, 256, 2048);
+  const steps = clampInt(options.steps, defaults.steps, 1, 100);
+  const cfg = clampFloat(options.cfg, defaults.cfg, 1, 20);
   const seed = options.seed === undefined || options.seed === null || options.seed === ''
     ? Math.floor(Math.random() * 1_000_000_000)
     : clampInt(options.seed, 1, 0, Number.MAX_SAFE_INTEGER);
@@ -193,8 +196,19 @@ export async function generateSdCppImage(options = {}) {
   const negativePrompt = String(options.negativePrompt || '').trim();
   if (negativePrompt) args.push('-n', negativePrompt);
 
-  const sampler = String(options.sampler || '').trim();
+  const sampler = String(options.sampler || defaults.sampler || '').trim();
   if (sampler) args.push('--sampling-method', sampler);
+
+  // Image to image: start from a picture and change it by `strength`.
+  const initImage = String(options.initImage || '').trim();
+  let strength = null;
+  if (initImage) {
+    if (!fs.existsSync(initImage)) throw new Error(`Starting image not found: ${initImage}`);
+    strength = clampFloat(options.strength, 0.55, 0.05, 1);
+    // Older builds need the mode named; newer ones pick it from --init-img.
+    if (await needsImg2ImgMode(binary.path)) args.push('-M', 'img2img');
+    args.push('-i', initImage, '--strength', String(strength));
+  }
 
   let stderr = '';
   const running = execFileAsync(binary.path, args, {
@@ -229,5 +243,22 @@ export async function generateSdCppImage(options = {}) {
     height,
     steps,
     cfg,
+    ...(initImage ? { strength, initImage } : {}),
   };
+}
+
+const modeSupport = new Map(); // binary path → whether it wants -M img2img
+
+async function needsImg2ImgMode(binaryPath) {
+  if (modeSupport.has(binaryPath)) return modeSupport.get(binaryPath);
+  let help = '';
+  try {
+    const { stdout, stderr } = await execFileAsync(binaryPath, ['--help'], { timeout: 5000 });
+    help = `${stdout || ''}${stderr || ''}`;
+  } catch (err) {
+    help = `${err.stdout || ''}${err.stderr || ''}`;
+  }
+  const wants = /txt2img\s+or\s+img2img|img2img\s+or\s+convert|\(txt2img/i.test(help);
+  modeSupport.set(binaryPath, wants);
+  return wants;
 }

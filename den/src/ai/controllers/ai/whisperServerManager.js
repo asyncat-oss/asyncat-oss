@@ -110,7 +110,7 @@ export function subscribe(fn) {
 
 export async function startWhisper(modelPath) {
   if (state.status === 'loading' || state.status === 'ready') {
-    if (state.model === modelPath) return state;
+    if (state.modelPath === modelPath) return state;
     await stopWhisper();
   }
 
@@ -244,6 +244,63 @@ export async function stopWhisper() {
   setState({ status: 'idle', model: null, error: null, pid: null });
 }
 
+/** Wait until the server is ready; rejects when it fails or stops first. */
+export function waitUntilReady(timeoutMs = 60_000) {
+  if (state.status === 'ready') return Promise.resolve(getStatus());
+  return new Promise((resolve, reject) => {
+    let unsubscribe = () => {};
+    const timer = setTimeout(() => {
+      unsubscribe();
+      reject(new Error('Speech recognition took too long to start.'));
+    }, timeoutMs);
+    timer.unref?.();
+    const check = (next) => {
+      if (next.status === 'ready') {
+        clearTimeout(timer);
+        unsubscribe();
+        resolve(next);
+      } else if (next.status === 'error' || next.status === 'idle') {
+        clearTimeout(timer);
+        unsubscribe();
+        reject(new Error(next.error || "Speech recognition didn't start."));
+      }
+    };
+    unsubscribe = subscribe(check);
+    check(getStatus());
+  });
+}
+
+/** Have the server running with this model, starting it if needed. */
+export async function ensureWhisper(modelPath, { timeoutMs = 60_000 } = {}) {
+  if (state.status === 'ready' && state.modelPath === modelPath) return getStatus();
+  await startWhisper(modelPath);
+  return waitUntilReady(timeoutMs);
+}
+
+/**
+ * True for audio whisper-server takes as it is: a 16 kHz mono 16-bit PCM
+ * WAV, which Asyncat's own mic records. Anything else goes through ffmpeg.
+ */
+export function isWhisperReadyWav(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 44) return false;
+  if (buffer.toString('ascii', 0, 4) !== 'RIFF' || buffer.toString('ascii', 8, 12) !== 'WAVE') return false;
+  let offset = 12;
+  while (offset + 8 <= buffer.length) {
+    const id = buffer.toString('ascii', offset, offset + 4);
+    const size = buffer.readUInt32LE(offset + 4);
+    if (id === 'fmt ') {
+      if (offset + 24 > buffer.length) return false;
+      const format = buffer.readUInt16LE(offset + 8);
+      const channels = buffer.readUInt16LE(offset + 10);
+      const rate = buffer.readUInt32LE(offset + 12);
+      const bits = buffer.readUInt16LE(offset + 22);
+      return format === 1 && channels === 1 && rate === 16000 && bits === 16;
+    }
+    offset += 8 + size + (size % 2);
+  }
+  return false;
+}
+
 /**
  * Convert arbitrary audio (WebM, MP3, OGG, etc.) to 16 kHz mono 16-bit PCM WAV
  * using ffmpeg. This ensures whisper-server always receives valid WAV data.
@@ -300,13 +357,15 @@ export async function transcribe(audioBuffer, options = {}) {
     throw new Error('Whisper server is not running. Start a model first.');
   }
 
-  // Convert any input format to standard WAV so whisper-server receives valid PCM.
-  let wavBuffer;
-  try {
-    wavBuffer = await convertToWav(audioBuffer);
-  } catch (convErr) {
-    console.error('[whisper] ffmpeg conversion failed:', convErr.message);
-    throw new Error(`Audio conversion failed. Ensure ffmpeg is installed: ${convErr.message}`);
+  // Other formats are converted to the WAV whisper-server wants.
+  let wavBuffer = audioBuffer;
+  if (!isWhisperReadyWav(audioBuffer)) {
+    try {
+      wavBuffer = await convertToWav(audioBuffer);
+    } catch (convErr) {
+      console.error('[whisper] ffmpeg conversion failed:', convErr.message);
+      throw new Error(`This recording needs ffmpeg to be converted, and that failed: ${convErr.message}`);
+    }
   }
 
   const boundary = `----WhisperBoundary${Date.now()}${Math.random().toString(16).slice(2)}`;

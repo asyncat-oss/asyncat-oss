@@ -1,0 +1,269 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import http from 'node:http';
+import net from 'node:net';
+import os from 'node:os';
+import path from 'node:path';
+import { once } from 'node:events';
+
+// Voice and image setup (den/src/media/): the catalogs, the gallery, a
+// whole "Set up voice" run and the voice engines, against fakes on this
+// computer: a fake Hugging Face server (HF_ENDPOINT), a fake whisper-server
+// and a fake piper. Nothing is downloaded from the internet.
+
+const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'asyncat-media-'));
+const bin = path.join(scratch, 'bin');
+fs.mkdirSync(bin, { recursive: true });
+
+async function freePort() {
+  const server = net.createServer();
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const { port } = server.address();
+  await new Promise((resolve) => server.close(resolve));
+  return port;
+}
+
+// A whisper-server stand-in: says it is listening, answers /health and
+// /inference (with how many bytes it got).
+const whisperPort = await freePort();
+const fakeWhisper = path.join(bin, 'whisper-server');
+fs.writeFileSync(fakeWhisper, `#!/usr/bin/env node
+const http = require('node:http');
+const port = Number(process.argv[process.argv.indexOf('--port') + 1]);
+http.createServer((req, res) => {
+  if (req.url === '/health') { res.end('{"status":"ok"}'); return; }
+  if (req.url.startsWith('/inference')) {
+    let size = 0;
+    req.on('data', (chunk) => { size += chunk.length; });
+    req.on('end', () => { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ text: ' heard you' , size })); });
+    return;
+  }
+  res.statusCode = 404; res.end();
+}).listen(port, '127.0.0.1', () => console.error('server is listening on port ' + port));
+`, { mode: 0o755 });
+
+// A piper stand-in: reads the text and writes 0.1 s of silence (raw PCM).
+const fakePiper = path.join(bin, 'piper');
+fs.writeFileSync(fakePiper, `#!/usr/bin/env node
+let text = '';
+process.stdin.on('data', (d) => { text += d; });
+process.stdin.on('end', () => { process.stdout.write(Buffer.alloc(text.length ? 3200 : 0)); });
+`, { mode: 0o755 });
+
+process.env.WHISPER_SERVER_PORT = String(whisperPort);
+process.env.WHISPER_BINARY_PATH = fakeWhisper;
+process.env.PIPER_BINARY_PATH = fakePiper;
+
+// A Hugging Face stand-in with the files "Set up voice" asks for.
+const FILES = {
+  'ggerganov/whisper.cpp/ggml-base.en-q5_1.bin': Buffer.alloc(2048, 1),
+  'rhasspy/piper-voices/en/en_US/lessac/medium/en_US-lessac-medium.onnx': Buffer.alloc(4096, 2),
+  'rhasspy/piper-voices/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json': Buffer.from(JSON.stringify({ audio: { sample_rate: 16000 } })),
+  'rhasspy/piper-voices/en/en_US/lessac/medium/samples/speaker_0.mp3': Buffer.from('ID3fake-mp3'),
+};
+const requests = [];
+const hf = http.createServer((req, res) => {
+  requests.push(req.url);
+  const tree = /^\/api\/models\/([^/]+\/[^/]+)\/tree\/main\/?(.*)$/.exec(req.url);
+  if (tree) {
+    const [, repo, dir] = tree;
+    const prefix = `${repo}/${dir ? `${decodeURIComponent(dir)}/` : ''}`;
+    const list = Object.entries(FILES)
+      .filter(([key]) => key.startsWith(prefix) && !key.slice(prefix.length).includes('/'))
+      .map(([key, body]) => ({ type: 'file', path: key.slice(repo.length + 1), size: body.length }));
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify(list));
+    return;
+  }
+  const file = /^\/([^/]+\/[^/]+)\/resolve\/main\/(.+)$/.exec(req.url);
+  const body = file ? FILES[`${file[1]}/${decodeURIComponent(file[2])}`] : null;
+  if (!body) { res.statusCode = 404; res.end('missing'); return; }
+  res.setHeader('content-length', body.length);
+  res.end(body);
+});
+hf.listen(0, '127.0.0.1');
+await once(hf, 'listening');
+process.env.HF_ENDPOINT = `http://127.0.0.1:${hf.address().port}`;
+
+const { default: db } = await import('../src/db/client.js');
+const whisper = await import('../src/ai/controllers/ai/whisperServerManager.js');
+const voiceCatalog = await import('../src/media/voiceCatalog.js');
+const imageCatalog = await import('../src/media/imageCatalog.js');
+const gallery = await import('../src/media/gallery.js');
+const voice = await import('../src/media/voiceService.js');
+const setupJobs = await import('../src/media/setupJobs.js');
+
+test.after(async () => {
+  await whisper.stopWhisper().catch(() => {});
+  hf.close();
+  db.close();
+  fs.rmSync(scratch, { recursive: true, force: true });
+});
+
+function wav({ rate = 16000, channels = 1, bits = 16, samples = 1600 } = {}) {
+  const data = Buffer.alloc(samples * channels * (bits / 8));
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0);
+  header.writeUInt32LE(36 + data.length, 4);
+  header.write('WAVE', 8);
+  header.write('fmt ', 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(channels, 22);
+  header.writeUInt32LE(rate, 24);
+  header.writeUInt32LE(rate * channels * (bits / 8), 28);
+  header.writeUInt16LE(channels * (bits / 8), 32);
+  header.writeUInt16LE(bits, 34);
+  header.write('data', 36);
+  header.writeUInt32LE(data.length, 40);
+  return Buffer.concat([header, data]);
+}
+
+async function until(check, ms = 15_000) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    const value = await check();
+    if (value) return value;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  return null;
+}
+
+// ── Catalogs ─────────────────────────────────────────────────────────────────
+
+test('16 kHz mono WAV goes to whisper as it is; other audio needs converting', () => {
+  assert.equal(whisper.isWhisperReadyWav(wav()), true);
+  assert.equal(whisper.isWhisperReadyWav(wav({ rate: 44100 })), false);
+  assert.equal(whisper.isWhisperReadyWav(wav({ channels: 2 })), false);
+  assert.equal(whisper.isWhisperReadyWav(Buffer.from('\x1aE\xdf\xa3webm-ish data that is long enough to check')), false);
+  assert.equal(whisper.isWhisperReadyWav(Buffer.alloc(10)), false);
+});
+
+test('Piper voices map to their files and samples in the repo', () => {
+  assert.equal(voiceCatalog.piperVoiceBase('en_GB-jenny_dioco-medium'), 'en/en_GB/jenny_dioco/medium/en_GB-jenny_dioco-medium');
+  assert.equal(voiceCatalog.piperSamplePath('en_US-lessac-medium'), 'en/en_US/lessac/medium/samples/speaker_0.mp3');
+  assert.equal(voiceCatalog.recommendedVoiceSetup('de-DE').voice.id, 'de_DE-thorsten-medium');
+  assert.equal(voiceCatalog.recommendedVoiceSetup('en-GB').voice.locale, 'en-GB');
+  assert.equal(voiceCatalog.recommendedVoiceSetup('xx').voice.id, 'en_US-lessac-medium', 'unknown languages get the default voice');
+  assert.equal(voiceCatalog.recommendedVoiceSetup('en').whisper.chosenFile, 'ggml-base.en-q5_1.bin');
+  assert.equal(voiceCatalog.recommendedVoiceSetup('fr').whisper.chosenFile, 'ggml-base-q5_1.bin', 'other languages get the multilingual model');
+});
+
+test('image models get settings that suit them, and a fit for the graphics card', () => {
+  assert.deepEqual(imageCatalog.imageModelDefaults('/m/sd_xl_turbo_1.0.q8_0.gguf'), { width: 512, height: 512, steps: 4, cfg: 1, sampler: 'euler_a' });
+  assert.equal(imageCatalog.imageModelDefaults('/m/sd_xl_base_1.0.safetensors').width, 1024);
+  assert.equal(imageCatalog.imageModelDefaults('/m/stable-diffusion-v1-5-pruned-emaonly-Q8_0.gguf').steps, 24);
+  const [sd15, sdxl] = imageCatalog.IMAGE_MODELS;
+  const rtx4050 = { vendor: 'NVIDIA', name: 'RTX 4050 Laptop', vramGb: 6 };
+  assert.equal(imageCatalog.fitForGpu(sd15, rtx4050), 'fits');
+  assert.equal(imageCatalog.fitForGpu(sdxl, rtx4050), 'fits');
+  assert.equal(imageCatalog.fitForGpu(sdxl, { vendor: 'NVIDIA', vramGb: 4 }), 'too_big');
+  assert.equal(imageCatalog.fitForGpu(sd15, null), 'cpu');
+  assert.equal(imageCatalog.fitForGpu(sd15, { vendor: 'AMD', vramGb: null }), 'unknown');
+  assert.equal(imageCatalog.fitForGpu(sdxl, { vendor: 'Apple', vramGb: null }, { ramGb: 16 }), 'fits');
+});
+
+// ── Gallery ──────────────────────────────────────────────────────────────────
+
+test('the gallery lists pictures newest first, with what they were made from', () => {
+  const dir = gallery.galleryDir();
+  fs.mkdirSync(dir, { recursive: true });
+  const older = path.join(dir, 'asyncat_old.png');
+  const newer = path.join(dir, 'agent_new.png');
+  fs.writeFileSync(older, 'png');
+  fs.utimesSync(older, new Date(Date.now() - 60_000), new Date(Date.now() - 60_000));
+  fs.writeFileSync(newer, 'png');
+  gallery.recordGalleryImage(newer, { prompt: 'a cat on a balcony', runtime: 'openai', model: '/x/model.gguf', width: 1024, height: 1024 });
+  gallery.recordGalleryImage('/etc/passwd', { prompt: 'nope' });
+
+  const { images, total } = gallery.listGallery();
+  assert.equal(total, 2);
+  assert.equal(images[0].name, 'agent_new.png');
+  assert.equal(images[0].prompt, 'a cat on a balcony');
+  assert.equal(images[0].model, 'model.gguf');
+  assert.equal(images[0].url, '/api/media/gallery/file/agent_new.png');
+  assert.equal(gallery.galleryFile('../asyncat.db'), null, 'only pictures in the gallery folder');
+  assert.equal(gallery.galleryFile('agent_new.png'), newer);
+
+  assert.equal(gallery.deleteGalleryImage('agent_new.png'), true);
+  assert.equal(fs.existsSync(`${newer}.json`), false);
+  assert.equal(gallery.listGallery().total, 1);
+});
+
+// ── Set up voice ─────────────────────────────────────────────────────────────
+
+test('the voice plan shows what downloads and how big, before anything starts', async () => {
+  const plan = await voice.planVoiceSetup({ language: 'en' });
+  const byKey = Object.fromEntries(plan.steps.map((step) => [step.key, step]));
+  assert.equal(byKey['whisper-engine'].done, true, 'the engines are found, nothing to install');
+  assert.equal(byKey['whisper-model'].bytes, 2048, 'sizes come from the repo listing');
+  assert.equal(byKey.voice.bytes, 4096);
+  assert.equal(plan.totalBytes, 2048 + 4096 + FILES['rhasspy/piper-voices/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json'].length);
+  assert.equal(requests.some((url) => url.includes('/resolve/')), false, 'planning downloads nothing');
+});
+
+test('"Set up voice" downloads the models, then listening and speaking are ready', async () => {
+  const before = await voice.voiceStatus();
+  assert.equal(before.stt.reason, 'needs_model');
+  assert.equal(before.tts.reason, 'needs_voice');
+
+  const job = await voice.startVoiceSetup({ language: 'en' });
+  const done = await until(() => {
+    const now = setupJobs.getSetupJob(job.id);
+    return now.status !== 'running' ? now : null;
+  });
+  assert.equal(done.status, 'complete', JSON.stringify(done.steps.map((step) => [step.key, step.status, step.error])));
+  assert.deepEqual(done.steps.filter((step) => step.type === 'engine').map((step) => step.status), ['skipped', 'skipped']);
+  assert.ok(fs.existsSync(path.join(voice.WHISPER_DIR, 'ggml-base.en-q5_1.bin')));
+  assert.ok(fs.existsSync(path.join(voice.VOICES_DIR, 'en_US-lessac-medium.onnx.json')));
+  assert.equal(fs.readdirSync(voice.WHISPER_DIR).some((name) => name.endsWith('.part')), false, 'no half files left');
+
+  const after = await voice.voiceStatus();
+  assert.equal(after.setUp, true);
+  assert.equal(after.stt.model.name, 'Base (English)');
+  assert.equal(after.tts.voice.name, 'Lessac (English (US))');
+  assert.equal(process.env.ASYNCAT_STT_MODEL, path.join(voice.WHISPER_DIR, 'ggml-base.en-q5_1.bin'), 'the choice is saved');
+
+  const again = await voice.startVoiceSetup({ language: 'en' });
+  const second = await until(() => {
+    const now = setupJobs.getSetupJob(again.id);
+    return now.status !== 'running' ? now : null;
+  });
+  assert.ok(second.steps.every((step) => step.status === 'skipped'), 'a second run downloads nothing');
+});
+
+test('listening starts on first use and takes the mic recording without ffmpeg', async () => {
+  assert.equal(whisper.getStatus().status, 'idle');
+  await voice.ensureLocalListening();
+  assert.equal(whisper.getStatus().status, 'ready');
+  const result = await whisper.transcribe(wav());
+  assert.equal(result.text, ' heard you');
+});
+
+test('a voice can be heard before choosing it, and a sample comes from the repo once', async () => {
+  const preview = await voice.previewVoice({ provider: 'local', voice: 'en_US-lessac-medium', text: 'Hello there' });
+  assert.equal(preview.mime, 'audio/wav');
+  assert.equal(preview.buffer.toString('ascii', 0, 4), 'RIFF');
+  assert.equal(preview.buffer.readUInt32LE(24), 16000, 'at the voice’s own sample rate');
+
+  const first = await voice.voiceSample('en_US-lessac-medium');
+  const fetched = requests.filter((url) => url.includes('speaker_0.mp3')).length;
+  const second = await voice.voiceSample('en_US-lessac-medium');
+  assert.equal(first.toString(), 'ID3fake-mp3');
+  assert.equal(second.toString(), 'ID3fake-mp3');
+  assert.equal(requests.filter((url) => url.includes('speaker_0.mp3')).length, fetched, 'played again from the cache');
+  await assert.rejects(voice.voiceSample('xx_XX-nobody-low'), /No such voice/);
+});
+
+test('cloud speech needs its key; choosing it saves the voice', async () => {
+  const status = await voice.chooseVoice({ tts: { provider: 'openai', voice: 'nova' } });
+  assert.equal(status.tts.provider, 'openai');
+  assert.equal(status.tts.ready, false);
+  assert.equal(status.tts.reason, 'needs_key');
+  assert.equal(process.env.OPENAI_TTS_VOICE, 'nova');
+  await assert.rejects(voice.previewVoice({ provider: 'openai', voice: 'nova' }), /Add your OpenAI key/);
+  await voice.chooseVoice({ tts: { provider: 'local' } });
+  assert.equal((await voice.voiceStatus()).tts.ready, true);
+});
