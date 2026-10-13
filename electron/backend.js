@@ -15,6 +15,7 @@ import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import { app } from 'electron';
+import { createLaunchToken } from './hostBridge.js';
 import { DEN_ENTRY, DEN_CWD, BACKEND_PORT, HEALTH_URL, IS_DEV, USE_EXTERNAL_BACKEND } from './constants.js';
 
 let backendProcess = null;
@@ -217,6 +218,10 @@ export function startBackend() {
       ELECTRON_RUN_AS_NODE: undefined,
       // In packaged builds, logger.js resolves log path from __dirname inside
       // the read-only app bundle. Override to a writable OS location.
+      // A per-launch secret for the backend ↔ desktop bridge, and a clean
+      // shutdown over stdin (Windows has no SIGTERM to catch).
+      ASYNCAT_HOST_TOKEN: createLaunchToken(),
+      ASYNCAT_STDIN_CONTROL: '1',
       ...(app.isPackaged && {
         ASYNCAT_LOG_DIR: path.join(DEN_CWD, 'logs'),
         ASYNCAT_ENV_PATH: path.join(DEN_CWD, '.env'),
@@ -296,21 +301,26 @@ export function stopBackend() {
     const proc = backendProcess;
     backendProcess = null;
 
+    // Ask for a clean stop first so the backend stops the local model
+    // servers it started; then SIGTERM, then SIGKILL.
+    const terminate = setTimeout(() => {
+      try { proc.kill('SIGTERM'); } catch {}
+    }, 6000);
     const forceKill = setTimeout(() => {
       try { proc.kill('SIGKILL'); } catch {}
       resolve();
-    }, 5000);
+    }, 9000);
 
     proc.once('exit', () => {
+      clearTimeout(terminate);
       clearTimeout(forceKill);
       resolve();
     });
 
     try {
-      proc.kill('SIGTERM');
+      proc.stdin?.write('shutdown\n');
     } catch {
-      clearTimeout(forceKill);
-      resolve();
+      try { proc.kill('SIGTERM'); } catch {}
     }
   });
 }

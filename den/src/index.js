@@ -43,6 +43,8 @@ import trainingRouter from './ai/routes/trainingRoutes.js';
 
 // Local browser history (cookies/cache remain in Electron sessions)
 import browserRouter from './browser/browserRouter.js';
+import hostBridgeRouter from './lib/hostBridgeRouter.js';
+import { hostToken } from './lib/hostBridge.js';
 
 // ─── Integrations ─────────────────────────────────────────────────────────────
 import integrationsRouter from './integrations/integrationsRouter.js';
@@ -107,6 +109,8 @@ app.use(cors({
 app.use(compression());
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'tiny', {
   stream: morganStream,
+  // The desktop app long-polls /api/host/next all day; don't log every poll.
+  skip: (req) => req.path === '/api/host/next',
 }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -153,6 +157,9 @@ app.use('/api/search', searchRouter);
 // Routes: Browser
 app.use('/api/browser', browserRouter);
 
+// Routes: desktop app bridge (notifications, desktop-only commands)
+app.use('/api/host', hostBridgeRouter);
+
 // ─── Routes: Training / Fine-Tuning ──────────────────────────────────────────
 app.use('/api/training', trainingRouter);
 
@@ -197,6 +204,7 @@ seed().then(async () => {
     logger.warn('Storage initialization warning:', err.message);
   }
 
+  hostToken();
   const server = app.listen(PORT, '127.0.0.1', () => {
     logger.info(`den running on port ${PORT}`);
     logger.info(`environment: ${process.env.NODE_ENV || 'development'}`);
@@ -259,6 +267,14 @@ seed().then(async () => {
   };
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT',  () => shutdown('SIGINT'));
+  // The desktop app asks for a clean stop over stdin: on Windows a "SIGTERM"
+  // ends the process at once, which left llama-server and friends running.
+  if (process.env.ASYNCAT_STDIN_CONTROL === '1') {
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', (chunk) => {
+      if (String(chunk).split('\n').some((line) => line.trim() === 'shutdown')) shutdown('desktop app');
+    });
+  }
 }).catch(async (err) => {
   logError('Startup failed:', err);
   await flushLogs();

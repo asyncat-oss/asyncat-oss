@@ -6,7 +6,7 @@
 // 3. Sets up system tray, native menu, and global shortcuts
 // 4. Manages the full app lifecycle
 //
-import { app, ipcMain, globalShortcut, Notification, dialog, shell, clipboard, desktopCapturer, nativeImage, session, webContents } from 'electron';
+import { app, ipcMain, globalShortcut, Notification, dialog, shell, clipboard, desktopCapturer, nativeImage, session, webContents, powerMonitor } from 'electron';
 import { IS_MAC, IS_WIN, IS_DEV, APP_NAME, WINDOWS_APP_ID, ICONS, BACKEND_URL, BACKEND_PORT, NEKO_DIST, FRONTEND_PORT, USER_DATA } from './constants.js';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
@@ -14,6 +14,7 @@ import { togglePopup, closePopup } from './popup.js';
 import { setupAutoUpdater, setupUpdaterIPC } from './updater.js';
 import { initShortcuts, registerShortcutIPC } from './shortcuts.js';
 import { startBackend, stopBackend, isBackendRunning } from './backend.js';
+import { postHostEvent, registerHostHandler, startHostBridge, stopHostBridge } from './hostBridge.js';
 import http from 'http';
 import net from 'net';
 import fs from 'fs';
@@ -761,6 +762,49 @@ async function bootApp() {
   });
 
   refreshTray();
+  setupHostBridge();
+}
+
+// ─── Backend ↔ desktop bridge ─────────────────────────────────────────────────
+// Lets the backend show notifications while the window is closed and ask the
+// desktop app for things only it can do. See hostBridge.js.
+
+let hostBridgeReady = false;
+
+function setupHostBridge() {
+  if (hostBridgeReady) return;
+  hostBridgeReady = true;
+
+  registerHostHandler('notify', ({ title, body, route } = {}) => {
+    if (!Notification.isSupported()) return;
+    const icon = nativeImage.createFromPath(ICONS.window);
+    const notification = new Notification({
+      title: String(title || APP_NAME).slice(0, 120),
+      body: String(body || '').slice(0, 400),
+      ...(icon.isEmpty() ? {} : { icon }),
+    });
+    notification.on('click', () => {
+      let win = getMainWindow();
+      if (!win) {
+        bootApp();
+        win = getMainWindow();
+      }
+      if (!win) return;
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+      // Only in-app paths, e.g. /conversations/<id>.
+      if (typeof route === 'string' && /^\/[\w\-/?=&.%]*$/.test(route)) {
+        win.webContents.send('app:navigate', route);
+      }
+    });
+    notification.show();
+  });
+
+  powerMonitor.on('resume', () => postHostEvent('power.resume'));
+  powerMonitor.on('unlock-screen', () => postHostEvent('power.resume'));
+
+  startHostBridge();
 }
 
 // ─── Quit Handler ─────────────────────────────────────────────────────────────
@@ -777,6 +821,7 @@ async function quitApp() {
   globalShortcut.unregisterAll();
 
   // Stop servers gracefully
+  stopHostBridge();
   await stopFrontendServer();
   await stopBackend();
 

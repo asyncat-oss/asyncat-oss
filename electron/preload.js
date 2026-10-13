@@ -26,6 +26,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   closeWindow:    () => ipcRenderer.send('window:close'),
   toggleFullscreen: () => ipcRenderer.send('window:toggle-fullscreen'),
 
+  // ─── Navigation from the desktop (e.g. clicking a notification) ───────
+  onNavigate: (callback) => subscribe('app:navigate', (_event, route) => callback(route)),
+
   // ─── Backend Status ───────────────────────────────────────────────────
   getBackendStatus: () => ipcRenderer.invoke('backend:status'),
   restartBackend:   () => ipcRenderer.invoke('backend:restart'),

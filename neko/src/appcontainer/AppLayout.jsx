@@ -108,6 +108,15 @@ const AppLayout = () => {
     invalidateProjectsCache,
   } = useWorkspace();
   
+  // Clicking a desktop notification (e.g. a finished scheduled task) opens
+  // the page it is about.
+  useEffect(() => {
+    const unsubscribe = window.electronAPI?.onNavigate?.((route) => {
+      if (typeof route === 'string' && route.startsWith('/')) navigate(route);
+    });
+    return () => unsubscribe?.();
+  }, [navigate]);
+
   // UI state
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const { pageTransitionsEnabled, sidebarState } = useUiPreferences();
