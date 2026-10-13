@@ -99,48 +99,55 @@ function removeManagedEntry(target) {
   return true;
 }
 
-function swapManagedDirectory(stagingDir, targetDir) {
+/**
+ * Put a verified staging directory in place of `targetDir`.
+ *
+ * The live copy is first renamed to a backup, then the staging directory is
+ * renamed into place. `targetDir` is never deleted: if the first rename fails
+ * it is still the live copy, and if the second fails the backup is renamed
+ * back. Only after the staging directory is in place is the backup removed.
+ * `rename` is replaceable for tests.
+ */
+export function swapManagedDirectory(stagingDir, targetDir, { rename = fs.renameSync } = {}) {
   const staging = assertManagedTarget(stagingDir);
   const target = assertManagedTarget(targetDir);
   const backup = assertManagedTarget(`${target}.backup-${randomUUID()}`);
   let movedExisting = false;
-  let preserveBackup = false;
   try {
     if (fs.existsSync(target)) {
-      fs.renameSync(target, backup);
+      try {
+        rename(target, backup);
+      } catch (error) {
+        // Nothing has changed yet: the current copy is still live.
+        const inUse = ['EBUSY', 'EPERM', 'EACCES'].includes(error.code)
+          ? ' Something is still using it; close it (or stop the model) and try again.'
+          : '';
+        throw Object.assign(new Error(`Couldn't replace ${path.basename(target)}: ${error.message}.${inUse}`), { code: error.code });
+      }
       movedExisting = true;
     }
-    fs.renameSync(staging, target);
-  } catch (error) {
-    if (fs.existsSync(target)) {
-      try {
-        removeManagedEntry(target);
-      } catch (cleanupError) {
-        preserveBackup = movedExisting;
-        const recovery = movedExisting
-          ? ` The previous runtime remains at ${backup}.`
-          : '';
-        throw new Error(`${error.message} The incomplete replacement could not be removed: ${cleanupError.message}.${recovery}`);
+    try {
+      rename(staging, target);
+    } catch (error) {
+      if (movedExisting && !fs.existsSync(target)) {
+        try {
+          rename(backup, target);
+        } catch (restoreError) {
+          throw new Error(`${error.message} The previous copy is safe at ${backup}, but putting it back failed: ${restoreError.message}`);
+        }
       }
+      throw error;
     }
-    if (movedExisting && fs.existsSync(backup)) {
-      try {
-        fs.renameSync(backup, target);
-      } catch (restoreError) {
-        preserveBackup = true;
-        throw new Error(`${error.message} The previous runtime remains at ${backup} because rollback failed: ${restoreError.message}`);
-      }
-    }
-    throw error;
   } finally {
     if (fs.existsSync(staging)) removeManagedEntry(staging);
   }
-  if (!preserveBackup && fs.existsSync(backup)) {
+  if (movedExisting && fs.existsSync(backup)) {
     try {
       removeManagedEntry(backup);
     } catch (cleanupError) {
       // The verified replacement is already live. Keep the old backup if the OS
-      // has it locked instead of turning a successful update into data loss.
+      // has it locked instead of turning a successful update into data loss;
+      // startup clean-up removes it later.
       console.warn(`[runtime] Could not remove the previous runtime backup at ${backup}: ${cleanupError.message}`);
     }
   }
