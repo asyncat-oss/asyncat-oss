@@ -26,6 +26,7 @@ import { approvalAllows, approvalCoversRun, normalizeApprovalDecision } from './
 import { getModelCapabilities, normalizeReasoningEffort } from '../ai/controllers/ai/modelCapabilities.js';
 import { cleanReasoningAnswer, combineReasoningParts, createStreamTextAccumulator, extractReasoningFromText, reasoningTextFromDelta } from './reasoningParser.js';
 import { resolveContextWindow } from '../ai/controllers/ai/modelContextResolver.js';
+import { getProviderPreset } from '../ai/controllers/ai/providerCatalog.js';
 import { embedText } from '../ai/embeddings/embeddingService.js';
 import { normalizeUsage, recordModelUsage } from '../ai/controllers/ai/modelUsageService.js';
 import { getSnapshotsDir } from './workspacePaths.js';
@@ -356,9 +357,10 @@ export class AgentRuntime {
     // Priority: user settings > model metadata > model registry > provider preset > fallback
     const resolvedCtx = this._resolveContextWindow();
     const modelContextWindow = resolvedCtx.contextWindow;
-    const defaultBudget = this.isLocal
-      ? Math.min(modelContextWindow * 0.75, opts.tokenBudget ?? 6000)  // local: 75% or user-set
-      : Math.floor(modelContextWindow * 0.7);  // cloud: 70% of context
+    // Leave room for the system prompt, tool definitions and the answer.
+    // Local models used to be held to 6,000 tokens whatever their window, so
+    // a 32k-context model forgot the start of a chat after a few turns.
+    const defaultBudget = Math.floor(modelContextWindow * (this.isLocal ? 0.6 : 0.7));
 
     this.modelContextWindow = modelContextWindow; // expose for usage events
     this.contextWindowSource = resolvedCtx.source;
@@ -1963,6 +1965,7 @@ export class AgentRuntime {
         providerId,
         model: this.model,
         settings,
+        preset: getProviderPreset(providerId),
         fallback: this.isLocal ? 8192 : 128000,
       });
     } catch {

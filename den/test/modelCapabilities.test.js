@@ -32,3 +32,10 @@ test('does not advertise images for adapters that currently flatten multimodal i
   assert.equal(getModelCapabilities('codex-cli', 'gpt-5.5').supportsImageInput, false);
 });
 
+
+test('current Claude model names are recognised as seeing images', async () => {
+  const { getModelCapabilities } = await import('../src/ai/controllers/ai/modelCapabilities.js');
+  for (const model of ['claude-sonnet-4-5', 'claude-opus-4-1', 'claude-haiku-4-5', 'claude-3-5-sonnet-latest', 'claude-fable-5-1']) {
+    assert.equal(getModelCapabilities('anthropic', model).supportsImageInput, true, model);
+  }
+});

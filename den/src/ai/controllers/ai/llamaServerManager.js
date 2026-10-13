@@ -1353,6 +1353,8 @@ const state = {
   proc:      null,     // ChildProcess handle
   ctxSize:   null,     // context window size used when starting
   ctxTrain:  null,     // model's n_ctx_train from /props (max supported ctx)
+  vision:    false,    // true when a vision projector (mmproj) is loaded
+  mmproj:    null,     // filename of that projector
 };
 
 const subscribers = new Set();
@@ -1413,6 +1415,8 @@ function snapshot() {
     baseUrl:    state.status === 'ready' ? `http://${LLAMA_HOST}:${LLAMA_PORT}/v1` : null,
     ctxSize:    state.ctxSize ?? normalizeCtxSize(process.env.LLAMA_CTX_SIZE),
     ctxTrain:   state.ctxTrain ?? null,
+    vision:     Boolean(state.vision),
+    mmproj:     state.mmproj || null,
     logs:       state.status === 'loading' || state.status === 'error'
       ? state.logLines.slice(-20)
       : [],
@@ -1582,6 +1586,9 @@ export async function startServer(modelFilename, modelsDir, ctxSizeOverride) {
   // This avoids startup failures on builds without a working Metal/CUDA backend.
   const nGpuLayers = process.env.LLAMA_GPU_LAYERS ?? '0';
   const ctxSize    = String(normalizeCtxSize(ctxSizeOverride ?? process.env.LLAMA_CTX_SIZE));
+  // Vision models ship a separate projector file; without it llama-server
+  // can't read images. Only the native server takes it.
+  const projector  = binInfo.isPython ? null : findVisionProjector(modelPath);
 
   emit({
     status:    'loading',
@@ -1593,8 +1600,11 @@ export async function startServer(modelFilename, modelsDir, ctxSizeOverride) {
       `[asyncat] Starting ${binInfo.binary}`,
       `[asyncat] Model: ${modelPath}`,
       `[asyncat] GPU layers: ${nGpuLayers}`,
+      ...(projector ? [`[asyncat] Vision projector: ${path.basename(projector)}`] : []),
     ],
     ctxSize:   parseInt(ctxSize, 10),
+    vision:    false,
+    mmproj:    projector ? path.basename(projector) : null,
   });
 
   let proc;
@@ -1626,6 +1636,7 @@ export async function startServer(modelFilename, modelsDir, ctxSizeOverride) {
       '--ctx-size', ctxSize,
       '-ngl',       nGpuLayers,
       '--threads',  nThreads,
+      ...(projector ? ['--mmproj', projector] : []),
       // Note: intentionally NOT passing --log-disable so we capture startup errors
     ], { stdio: ['ignore', 'pipe', 'pipe'], detached: false, windowsHide: IS_WIN });
   }
@@ -1690,7 +1701,7 @@ async function waitUntilReady() {
         const json = await res.json().catch(() => ({}));
         // llama-server: { status: 'ok' } = ready, { status: 'loading model' } = still loading
         if (json.status === 'ok' || !json.status) {
-          emit({ status: 'ready', ctxTrain: await readCtxTrain() });
+          emit({ status: 'ready', ...(await readServerProps()) });
           return;
         }
         // Still loading weights — keep waiting
@@ -1720,7 +1731,7 @@ async function waitUntilReady() {
             });
             clearTimeout(wTimer);
           } catch { /* warmup failed — server may still serve real requests fine */ }
-          emit({ status: 'ready', ctxTrain: await readCtxTrain() });
+          emit({ status: 'ready', ...(await readServerProps()) });
           return;
         }
       }
@@ -1734,7 +1745,9 @@ async function waitUntilReady() {
   await stopServer({ preserveState: true }).catch(() => {});
 }
 
-async function readCtxTrain() {
+/** What the running server reports: its trained context and image support. */
+async function readServerProps() {
+  const facts = { ctxTrain: null, vision: Boolean(state.mmproj) };
   try {
     const propsCtrl  = new AbortController();
     const propsTimer = setTimeout(() => propsCtrl.abort(), 2500);
@@ -1742,10 +1755,37 @@ async function readCtxTrain() {
     clearTimeout(propsTimer);
     if (propsRes.ok) {
       const props = await propsRes.json().catch(() => ({}));
-      return props.n_ctx_train || null;
+      facts.ctxTrain = props.n_ctx_train || props.default_generation_settings?.n_ctx_train || null;
+      if (typeof props.modalities?.vision === 'boolean') facts.vision = props.modalities.vision;
     }
   } catch { /* non-critical — older llama-server versions may not expose /props */ }
-  return null;
+  return facts;
+}
+
+/**
+ * The vision projector (mmproj) that belongs to a model file, if one sits
+ * next to it. With several, the one whose name shares the longest start with
+ * the model's name wins.
+ */
+export function findVisionProjector(modelPath) {
+  try {
+    const dir = path.dirname(modelPath);
+    const modelName = path.basename(modelPath).toLowerCase();
+    const candidates = fs.readdirSync(dir)
+      .filter((name) => /mmproj/i.test(name) && /\.gguf$/i.test(name) && name.toLowerCase() !== modelName);
+    if (!candidates.length) return null;
+    const stem = modelName.replace(/[-_.](q\d|iq\d|f16|bf16|f32)[\w.-]*\.gguf$/i, '').replace(/\.gguf$/i, '');
+    const shared = (name) => {
+      const other = name.toLowerCase().replace(/^mmproj[-_.]?/, '');
+      let i = 0;
+      while (i < stem.length && i < other.length && stem[i] === other[i]) i++;
+      return i;
+    };
+    candidates.sort((a, b) => shared(b) - shared(a) || a.length - b.length);
+    return path.join(dir, candidates[0]);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -1759,7 +1799,7 @@ export async function stopServer(options = {}) {
   if (preserveState) {
     emit({ pid: null });
   } else {
-    emit({ status: 'idle', model: null, pid: null, error: null, ctxTrain: null, ctxSize: null });
+    emit({ status: 'idle', model: null, pid: null, error: null, ctxTrain: null, ctxSize: null, vision: false, mmproj: null });
   }
 
   if (!proc) return;

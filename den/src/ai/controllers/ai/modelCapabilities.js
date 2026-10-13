@@ -19,7 +19,7 @@ const CAPABILITIES_REGISTRY = [
 const IMAGE_INPUT_PATTERNS = [
   /(?:^|[\W_])(gpt-4o|gpt-4\.1|gpt-4\.5|gpt-4-(?:turbo|vision)|gpt-5(?:[.-]|$)|o1(?:[.-]|$)|o3(?:[.-]|$)|o4(?:[.-]|$))/i,
   /(?:^|[\W_])gemini(?:[.-]|$)/i,
-  /(?:^|[\W_])claude-(?:3|4)(?:[.-]|$)/i,
+  /(?:^|[\W_])claude-(?:(?:opus|sonnet|haiku|fable)-)?(?:3|4|5)(?:[.-]|$)/i,
   /(?:^|[\W_])grok-(?:2-vision|4)(?:[.-]|$)/i,
   /(?:^|[\W_])(?:llava|bakllava|moondream|pixtral|paligemma|molmo|smolvlm|internvl)(?:[.-]|$)/i,
   /(?:^|[\W_])(?:qwen\d*(?:\.\d+)?[-_.]?(?:vl|omni)|qwen[-_.]?(?:vl|omni))(?:[.-]|$)/i,

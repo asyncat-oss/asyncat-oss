@@ -51,6 +51,9 @@ const CONTEXT_KEYS = [
   'n_ctx',
   'max_input_tokens',
   'maxInputTokens',
+  'max_model_len',      // vLLM
+  'loaded_context_length', // LM Studio
+  'max_context_length',    // LM Studio
 ];
 
 function toPositiveInt(value) {

@@ -43,6 +43,22 @@ function assertLocalModelReady() {
   throw new Error(`${LOCAL_NOT_READY}: no downloaded model is loaded. Open Models → Local models and load one, or switch to another provider.`);
 }
 
+/**
+ * The built-in llama.cpp server knows its real context size and whether a
+ * vision projector is loaded; those beat any guess from the model's name.
+ */
+function withLocalServerFacts(settings, localStatus) {
+  if (!localStatus) return settings;
+  const next = { ...settings };
+  if (localStatus.ctxSize) next.context_window = localStatus.ctxSize;
+  if (localStatus.ctxTrain) next.max_context_window = localStatus.ctxTrain;
+  next.model_capabilities = {
+    ...(settings.model_capabilities || {}),
+    supportsImageInput: Boolean(localStatus.vision),
+  };
+  return next;
+}
+
 function assertMlxModelReady() {
   const status = getMlxStatus();
   if (status.status === 'ready') return status;
@@ -106,9 +122,9 @@ export function getAiClientForUser(userId) {
     const isLocal = row.provider_type === 'local';
     const requiresLocalServer = providerRequiresBuiltinServer(row);
     const baseUrl = normalizeBaseUrl(row.base_url, row.provider_id);
-    const settings = parseSettings(row.settings);
     const supportsNativeTools = providerSupportsTools(row);
     const localStatus = requiresLocalServer ? assertLocalModelReady() : null;
+    const settings = withLocalServerFacts(parseSettings(row.settings), localStatus);
     if (row.provider_id === MLX_PROVIDER_ID) assertMlxModelReady();
     const apiKey = isLocal ? (row.api_key || 'local') : (row.api_key || GLOBAL_AI_API_KEY);
 
@@ -202,9 +218,9 @@ function clientFromProviderRow(row, { allowGlobalApiKeyFallback = true } = {}) {
   const isLocal = row.provider_type === 'local';
   const requiresLocalServer = providerRequiresBuiltinServer(row);
   const baseUrl = normalizeBaseUrl(row.base_url, row.provider_id);
-  const settings = parseSettings(row.settings);
   const supportsNativeTools = providerSupportsTools(row);
   const localStatus = requiresLocalServer ? assertLocalModelReady() : null;
+  const settings = withLocalServerFacts(parseSettings(row.settings), localStatus);
   if (requiresLocalServer && row.model && localStatus?.model && localStatus.model !== row.model) {
     throw new Error(`Local model mismatch: scheduled job expects ${row.model}, but ${localStatus.model} is loaded.`);
   }
