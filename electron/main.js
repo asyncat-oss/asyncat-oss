@@ -21,14 +21,14 @@ import path from 'path';
 import { randomUUID } from 'crypto';
 
 /** Check if something is already listening on a port */
-function isPortListening(port) {
+function isPortListening(port, host = '127.0.0.1') {
   return new Promise((resolve) => {
     const socket = new net.Socket();
     socket.setTimeout(500);
     socket.once('connect', () => { socket.destroy(); resolve(true); });
     socket.once('error', () => { socket.destroy(); resolve(false); });
     socket.once('timeout', () => { socket.destroy(); resolve(false); });
-    socket.connect(port, '127.0.0.1');
+    socket.connect(port, host);
   });
 }
 import { createWindow, getMainWindow, showLoadingScreen } from './window.js';
@@ -707,8 +707,9 @@ async function bootApp() {
     }
   }
 
-  // 3. Start the frontend server if no dev server is running on the frontend port
-  const viteRunning = await isPortListening(FRONTEND_PORT);
+  // 3. Start the frontend server if no dev server is running on the frontend port.
+  // Vite binds to whatever "localhost" resolves to, which is ::1 on many Linux systems.
+  const viteRunning = await isPortListening(FRONTEND_PORT, 'localhost');
   if (!viteRunning) {
     console.log('[Asyncat] No Vite dev server detected, starting static frontend server...');
     await startFrontendServer();
