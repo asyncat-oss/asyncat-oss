@@ -94,15 +94,6 @@ export const profileApi = {
 // ===========================================
 
 export const integrationsApi = {
-	github: {
-		fetchStatus: async () => apiCall(`${MAIN_URL}/api/integrations/github/status`),
-		getConnectUrl: async () => apiCall(`${MAIN_URL}/api/integrations/github/connect`),
-		disconnect: async () => apiCall(`${MAIN_URL}/api/integrations/github/disconnect`, { method: 'DELETE' }),
-	},
-	obsidian: {
-		fetchStatus: async () => apiCall(`${MAIN_URL}/api/integrations/obsidian/status`),
-		listVault: async () => apiCall(`${MAIN_URL}/api/integrations/obsidian/vault`),
-	},
 	rss: {
 		fetchStatus: async () => apiCall(`${MAIN_URL}/api/integrations/rss/status`),
 		listFeeds: async () => apiCall(`${MAIN_URL}/api/integrations/rss/feeds`),

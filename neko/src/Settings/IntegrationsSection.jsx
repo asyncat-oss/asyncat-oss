@@ -1,10 +1,9 @@
 // Settings/IntegrationsSection.jsx
 import { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
-import { useSearchParams } from 'react-router-dom';
 import {
   CheckCircle2, ExternalLink, Loader2, Plug, Unplug,
-  AlertTriangle, ChevronDown, ChevronUp, Save, Github,
+  AlertTriangle, ChevronDown, ChevronUp, Save,
   Rss, Mail, Bookmark, RefreshCw, Plus, Trash2, Bell,
 } from 'lucide-react';
 import { integrationsApi, configApi, apiUtils } from './settingApi';
@@ -262,20 +261,6 @@ function IntegrationCard({
 
 // ── Logos ──────────────────────────────────────────────────────────────────────
 
-const GitHubLogo = () => (
-  <Github size={22} className="text-gray-800 dark:text-gray-200 midnight:text-gray-200" />
-);
-
-const ObsidianLogo = () => (
-  <svg viewBox="0 0 24 24" className="w-6 h-6" aria-hidden="true">
-    <path fill="#7C3AED" d="M12 2L4 7v10l8 5 8-5V7L12 2z" opacity="0.15" />
-    <path fill="#7C3AED" d="M12 2L4 7l8 3 8-3L12 2z" />
-    <path fill="#6D28D9" d="M4 7v10l8 5V10L4 7z" />
-    <path fill="#8B5CF6" d="M20 7v10l-8 5V10l8-3z" />
-    <path fill="#A78BFA" d="M12 10l-8-3 8 3 8-3-8 3z" />
-  </svg>
-);
-
 const RssLogo = () => (
   <Rss size={22} className="text-orange-500 dark:text-orange-400 midnight:text-orange-400" />
 );
@@ -531,19 +516,7 @@ RssReadLaterManager.propTypes = {
 };
 
 export default function IntegrationsSection() {
-  const [searchParams, setSearchParams] = useSearchParams();
   const [message, setMessage] = useState(null);
-
-  // ── GitHub ──────────────────────────────────────────────────────────────────
-  const [ghStatus,        setGhStatus]        = useState(null);
-  const [ghLoading,       setGhLoading]       = useState(true);
-  const [ghConnecting,    setGhConnecting]    = useState(false);
-  const [ghDisconnecting, setGhDisconnecting] = useState(false);
-
-  // ── Obsidian ────────────────────────────────────────────────────────────────
-  const [obStatus,        setObStatus]        = useState(null);
-  const [obLoading,       setObLoading]       = useState(true);
-  const [obDisconnecting, setObDisconnecting] = useState(false);
 
   // ── RSS / Read Later ───────────────────────────────────────────────────────
   const [rssStatus,       setRssStatus]       = useState(null);
@@ -580,18 +553,6 @@ export default function IntegrationsSection() {
 
   // ── Load all statuses ───────────────────────────────────────────────────────
 
-  const loadGhStatus = useCallback(async () => {
-    try { setGhStatus(await integrationsApi.github.fetchStatus()); }
-    catch { setGhStatus({ connected: false, configured: false }); }
-    finally { setGhLoading(false); }
-  }, []);
-
-  const loadObStatus = useCallback(async () => {
-    try { setObStatus(await integrationsApi.obsidian.fetchStatus()); }
-    catch { setObStatus({ connected: false, configured: false }); }
-    finally { setObLoading(false); }
-  }, []);
-
   const loadRssStatus = useCallback(async () => {
     try { setRssStatus(await integrationsApi.rss.fetchStatus()); }
     catch { setRssStatus({ connected: false, configured: false }); }
@@ -622,73 +583,11 @@ export default function IntegrationsSection() {
   }, []);
 
   useEffect(() => {
-    loadGhStatus();
-    loadObStatus();
     loadRssStatus();
     loadMailStatus();
     loadNotifyStatus();
     loadHfStatus();
-  }, [loadGhStatus, loadObStatus, loadRssStatus, loadMailStatus, loadNotifyStatus, loadHfStatus]);
-
-  // ── Handle OAuth redirect-back params ───────────────────────────────────────
-
-  useEffect(() => {
-    const ghConnected  = searchParams.get('github_connected');
-    const ghError      = searchParams.get('github_error');
-
-    if (ghConnected) {
-      flash({ type: 'success', text: 'GitHub connected successfully.' });
-      loadGhStatus();
-    } else if (ghError) {
-      flash({ type: 'error', text: `GitHub OAuth failed: ${ghError}` });
-    }
-
-    if (ghConnected || ghError) {
-      setSearchParams({}, { replace: true });
-    }
-  }, [searchParams, setSearchParams, flash, loadGhStatus]);
-
-  // ── GitHub actions ──────────────────────────────────────────────────────────
-
-  const handleGhConnect = async () => {
-    setGhConnecting(true);
-    try {
-      const res = await integrationsApi.github.getConnectUrl();
-      if (!res.success || !res.url) throw new Error(res.error || 'No OAuth URL returned');
-      window.location.href = res.url;
-    } catch (err) {
-      flash({ type: 'error', text: apiUtils.handleError(err, 'Failed to start GitHub sign-in') });
-      setGhConnecting(false);
-    }
-  };
-
-  const handleGhDisconnect = async () => {
-    setGhDisconnecting(true);
-    try {
-      await integrationsApi.github.disconnect();
-      await loadGhStatus();
-      flash({ type: 'success', text: 'GitHub disconnected.' });
-    } catch (err) {
-      flash({ type: 'error', text: apiUtils.handleError(err, 'Failed to disconnect') });
-    } finally {
-      setGhDisconnecting(false);
-    }
-  };
-
-  // ── Obsidian actions ────────────────────────────────────────────────────────
-
-  const handleObDisconnect = async () => {
-    setObDisconnecting(true);
-    try {
-      await configApi.updateConfig('OBSIDIAN_VAULT_PATH', '');
-      await loadObStatus();
-      flash({ type: 'success', text: 'Obsidian vault disconnected.' });
-    } catch (err) {
-      flash({ type: 'error', text: apiUtils.handleError(err, 'Failed to disconnect') });
-    } finally {
-      setObDisconnecting(false);
-    }
-  };
+  }, [loadRssStatus, loadMailStatus, loadNotifyStatus, loadHfStatus]);
 
   // ── Mail actions ────────────────────────────────────────────────────────────
 
@@ -852,59 +751,6 @@ export default function IntegrationsSection() {
       </p>
 
       <div className="space-y-3">
-        {/* GitHub */}
-        <IntegrationCard
-          logo={<GitHubLogo />}
-          name="GitHub"
-          description="Connect your GitHub account so Asyncat can reach your repositories."
-          status={ghStatus}
-          configured={ghStatus?.configured ?? false}
-          loading={ghLoading}
-          onConnect={handleGhConnect}
-          onDisconnect={handleGhDisconnect}
-          connecting={ghConnecting}
-          disconnecting={ghDisconnecting}
-          onCredsSaved={loadGhStatus}
-          setupHelpUrl="https://github.com/settings/developers"
-          setupHelpText="Create OAuth App"
-          setupFields={[
-            {
-              key: 'GITHUB_CLIENT_ID',
-              label: 'Client ID',
-              configType: 'secret',
-              placeholder: 'Ov23li…',
-            },
-            {
-              key: 'GITHUB_CLIENT_SECRET',
-              label: 'Client Secret',
-              configType: 'secret',
-              placeholder: '…',
-            },
-          ]}
-        />
-
-        {/* Obsidian */}
-        <IntegrationCard
-          logo={<ObsidianLogo />}
-          name="Obsidian"
-          description="Browse your local Obsidian vault notes directly inside Asyncat. No OAuth needed — just point to your vault folder."
-          status={obStatus}
-          configured={obStatus?.configured ?? false}
-          loading={obLoading}
-          onDisconnect={handleObDisconnect}
-          disconnecting={obDisconnecting}
-          onCredsSaved={loadObStatus}
-          noOAuth
-          setupFields={[
-            {
-              key: 'OBSIDIAN_VAULT_PATH',
-              label: 'Vault path',
-              configType: 'config',
-              placeholder: '/Users/you/Documents/MyVault',
-            },
-          ]}
-        />
-
         {/* RSS / Read Later */}
         <IntegrationCard
           logo={<RssLogo />}

@@ -239,7 +239,11 @@ function cleanupDeadTables() {
     DROP TABLE IF EXISTS mcp_access_tokens;
     DROP TABLE IF EXISTS TaskDependencies;
     DROP TABLE IF EXISTS agent_eval_runs;
-    DELETE FROM user_integrations WHERE provider IN ('google_calendar', 'outlook');
+    DELETE FROM user_integrations WHERE provider IN ('google_calendar', 'outlook', 'github');
+    DELETE FROM app_config WHERE key IN (
+      'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET',
+      'MICROSOFT_CLIENT_ID', 'MICROSOFT_CLIENT_SECRET', 'REPLICATE_API_TOKEN', 'OBSIDIAN_VAULT_PATH'
+    );
   `);
 }
 
