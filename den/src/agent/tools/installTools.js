@@ -15,7 +15,7 @@ export const asyncatInstallReadinessTool = {
   parameters: { type: 'object', properties: {}, required: [] },
   execute: async () => {
     try {
-      return { success: true, ...inspectSystemDependencies() };
+      return { success: true, ...(await inspectSystemDependencies()) };
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -39,11 +39,15 @@ export const asyncatInstallCommandsTool = {
   },
   execute: async (args = {}) => {
     try {
-      const report = inspectSystemDependencies();
+      const report = await inspectSystemDependencies();
       return {
         success: true,
         manager: args.manager || report.packageManagers.preferred?.id || null,
-        commands: recommendedInstallCommands(report.checks, args.manager || report.packageManagers.preferred?.id || null),
+        commands: await recommendedInstallCommands(
+          report.checks,
+          args.manager || report.packageManagers.preferred?.id || null,
+          { managers: report.packageManagers.available },
+        ),
       };
     } catch (error) {
       return { success: false, error: error.message };

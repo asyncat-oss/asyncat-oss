@@ -45,8 +45,8 @@ const RuntimeSection = () => {
   const [installReadiness, setInstallReadiness] = useState(null);
   const [runtimeRefreshing, setRuntimeRefreshing] = useState(false);
 
-  const loadInstallReadiness = useCallback(() => (
-    installApi.getReadiness()
+  const loadInstallReadiness = useCallback(({ refresh = false } = {}) => (
+    installApi.getReadiness({ refresh })
       .then(setInstallReadiness)
       .catch(() => setInstallReadiness(null))
   ), []);
@@ -64,7 +64,7 @@ const RuntimeSection = () => {
         loadStatus(),
         loadEngineData({ clearActions: true }),
         loadEngineCatalog(true),
-        loadInstallReadiness(),
+        loadInstallReadiness({ refresh: true }),
       ]);
     } finally {
       setRuntimeRefreshing(false);

@@ -3,8 +3,9 @@ import { API_BASE_URL, apiRequest } from './client.js';
 const INSTALL_API_BASE = `${API_BASE_URL}/install`;
 
 export const installApi = {
-  getReadiness: async () => {
-    return apiRequest(`${INSTALL_API_BASE}/readiness`);
+  // `refresh` checks again instead of using the report from the last minute.
+  getReadiness: async ({ refresh = false } = {}) => {
+    return apiRequest(`${INSTALL_API_BASE}/readiness${refresh ? '?refresh=1' : ''}`);
   },
 
   getCommands: async (manager = '') => {

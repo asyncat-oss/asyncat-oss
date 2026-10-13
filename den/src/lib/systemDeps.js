@@ -1,41 +1,72 @@
+// den/src/lib/systemDeps.js — which system tools this machine has, for the
+// installer readiness report (GET /api/install/readiness) and the agent's
+// install tools.
+//
+// About 40 probes run here (versions, Python's venv and pip, MLX imports).
+// They run as child processes awaited in parallel, never on the request
+// thread, and the report is cached for a minute; ?refresh=1 (Recheck) and
+// finished installs ask again.
+
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
-import { execFileSync } from 'child_process';
+import { execFile } from 'child_process';
 import { runtimeHome } from '../config/runtimeConfig.js';
+import { findOnPath } from './engineArchive.js';
 
 const isWin = process.platform === 'win32';
 const isDesktopRuntime = process.env.ASYNCAT_DESKTOP === '1';
+const REPORT_TTL_MS = 60 * 1000;
 
 function run(cmd, args = [], options = {}) {
-  try {
-    return {
-      ok: true,
-      stdout: execFileSync(cmd, args, {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-        timeout: options.timeout || 8000,
-        windowsHide: true,
-        ...options,
-      }).trim(),
-    };
-  } catch (error) {
-    return { ok: false, stdout: '', error: error.message };
-  }
+  return new Promise((resolve) => {
+    execFile(cmd, args, {
+      encoding: 'utf8',
+      timeout: options.timeout || 8000,
+      windowsHide: true,
+      maxBuffer: 1024 * 1024,
+      ...options,
+    }, (error, stdout) => {
+      if (error) resolve({ ok: false, stdout: '', error: error.message });
+      else resolve({ ok: true, stdout: String(stdout || '').trim() });
+    });
+  });
 }
 
-export function commandExists(command) {
-  if (!command) return false;
-  const probe = isWin ? run('where', [command]) : run('sh', ['-lc', `command -v ${quoteShell(command)}`]);
-  return probe.ok && Boolean(probe.stdout);
+// Apps started from a desktop launcher often miss PATH entries the user's
+// shell profile adds (Homebrew, ~/.local/bin). Ask a login shell for its PATH
+// once, instead of starting a login shell for every command.
+let loginPathPromise = null;
+function loginShellPath() {
+  if (isWin) return Promise.resolve('');
+  loginPathPromise ||= run('sh', ['-lc', 'printf %s "$PATH"'], { timeout: 5000 })
+    .then(result => (result.ok ? result.stdout : ''));
+  return loginPathPromise;
 }
 
-function quoteShell(value) {
-  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+async function searchPath() {
+  const parts = [process.env.PATH || process.env.Path || '', await loginShellPath()]
+    .join(path.delimiter)
+    .split(path.delimiter)
+    .filter(Boolean);
+  return [...new Set(parts)].join(path.delimiter);
 }
 
-function firstExisting(commands) {
-  return commands.find(commandExists) || null;
+/** The full path of `command` (on PATH, or an absolute path that exists), or null. */
+export async function findCommand(command) {
+  if (!command) return null;
+  if (path.isAbsolute(command)) return fs.existsSync(command) ? command : null;
+  return findOnPath(command, { ...process.env, PATH: await searchPath() });
+}
+
+export async function commandExists(command) {
+  return Boolean(await findCommand(command));
+}
+
+async function firstExisting(commands) {
+  const found = await Promise.all(commands.map(command => findCommand(command)));
+  const index = found.findIndex(Boolean);
+  return index === -1 ? null : { name: commands[index], path: found[index] };
 }
 
 function parseSemver(text) {
@@ -65,8 +96,8 @@ function nodeVersionSupported(version) {
   return (parsed.major === 22 && parsed.minor >= 13) || parsed.major >= 24;
 }
 
-function versionFor(command, args = ['--version']) {
-  const probe = run(command, args);
+async function versionFor(command, args = ['--version']) {
+  const probe = await run(command, args);
   if (!probe.ok) return null;
   return parseSemver(probe.stdout)?.raw || probe.stdout.split(/\r?\n/)[0] || null;
 }
@@ -151,76 +182,86 @@ function sdCandidates() {
   return list.filter(Boolean);
 }
 
-export function detectPython() {
-  let fallback = null;
-  for (const command of pythonCandidates()) {
-    if (!commandExists(command)) continue;
-    const probe = run(command, ['--version']);
-    const version = parseSemver(probe.stdout);
-    const hasVenv = run(command, ['-m', 'venv', '--help'], { timeout: 12000 }).ok;
-    const hasPip = run(command, ['-m', 'pip', '--version'], { timeout: 12000 }).ok;
-    const result = {
-      found: true,
-      command,
-      version: version?.raw || probe.stdout || null,
-      ok: versionAtLeast(version, '3.10.0') && hasVenv && hasPip,
-      hasVenv,
-      hasPip,
-      minVersion: '3.10',
-    };
-    if (result.ok) return result;
-    fallback ||= result;
-  }
-  return fallback || {
-    found: false,
-    command: null,
-    version: null,
-    ok: false,
-    hasVenv: false,
-    hasPip: false,
+async function probePython(command) {
+  const resolved = await findCommand(command);
+  if (!resolved) return null;
+  const [probe, venv, pip] = await Promise.all([
+    run(resolved, ['--version']),
+    run(resolved, ['-m', 'venv', '--help'], { timeout: 12000 }),
+    run(resolved, ['-m', 'pip', '--version'], { timeout: 12000 }),
+  ]);
+  const version = parseSemver(probe.stdout);
+  return {
+    found: true,
+    command,
+    version: version?.raw || probe.stdout || null,
+    ok: versionAtLeast(version, '3.10.0') && venv.ok && pip.ok,
+    hasVenv: venv.ok,
+    hasPip: pip.ok,
     minVersion: '3.10',
   };
 }
 
-export function detectPackageManagers() {
-  const managers = [];
-  const add = (id, command, label) => {
-    if (commandExists(command)) managers.push({ id, command, label, available: true });
-  };
+export async function detectPython() {
+  // All candidates at once; the first one (in order of preference) that works wins.
+  const results = await Promise.all(pythonCandidates().map(probePython));
+  return results.find(result => result?.ok)
+    || results.find(Boolean)
+    || {
+      found: false,
+      command: null,
+      version: null,
+      ok: false,
+      hasVenv: false,
+      hasPip: false,
+      minVersion: '3.10',
+    };
+}
 
-  if (process.platform === 'darwin') {
-    add('brew', 'brew', 'Homebrew');
-  } else if (process.platform === 'linux') {
-    add('apt', 'apt-get', 'APT');
-    add('dnf', 'dnf', 'DNF');
-    add('pacman', 'pacman', 'Pacman');
-    add('zypper', 'zypper', 'Zypper');
-    add('apk', 'apk', 'APK');
-    add('brew', 'brew', 'Homebrew on Linux');
-  } else if (isWin) {
-    add('winget', 'winget', 'Windows Package Manager');
-    add('choco', 'choco', 'Chocolatey');
-    add('scoop', 'scoop', 'Scoop');
-  }
+const PACKAGE_MANAGERS = {
+  darwin: [['brew', 'brew', 'Homebrew']],
+  linux: [
+    ['apt', 'apt-get', 'APT'],
+    ['dnf', 'dnf', 'DNF'],
+    ['pacman', 'pacman', 'Pacman'],
+    ['zypper', 'zypper', 'Zypper'],
+    ['apk', 'apk', 'APK'],
+    ['brew', 'brew', 'Homebrew on Linux'],
+  ],
+  win32: [
+    ['winget', 'winget', 'Windows Package Manager'],
+    ['choco', 'choco', 'Chocolatey'],
+    ['scoop', 'scoop', 'Scoop'],
+  ],
+};
 
+export async function detectPackageManagers() {
+  const known = PACKAGE_MANAGERS[process.platform] || [];
+  const found = await Promise.all(known.map(([, command]) => commandExists(command)));
+  const managers = known
+    .filter((_, index) => found[index])
+    .map(([id, command, label]) => ({ id, command, label, available: true }));
   return {
     available: managers,
     preferred: managers[0] || null,
   };
 }
 
-function compilerStatus() {
-  const command = isWin ? firstExisting(['cl', 'clang++', 'g++']) : firstExisting(['clang++', 'g++', 'c++']);
+async function compilerStatus() {
+  const found = await firstExisting(isWin ? ['cl', 'clang++', 'g++'] : ['clang++', 'g++', 'c++']);
   return {
-    found: Boolean(command),
-    command,
+    found: Boolean(found),
+    command: found?.name || null,
+    path: found?.path || null,
     requiredFor: 'Compiling llama-cpp-python GPU runtimes from source',
   };
 }
 
-function binaryCheck(name, commands, options = {}) {
-  const command = firstExisting(commands) || existingFile(options.paths || []);
-  const version = command ? versionFor(command, options.versionArgs || ['--version']) : null;
+async function binaryCheck(name, commands, options = {}) {
+  const onPath = await firstExisting(commands);
+  const file = onPath ? null : existingFile(options.paths || []);
+  const command = onPath?.name || file;
+  const version = command ? await versionFor(onPath?.path || file, options.versionArgs || ['--version']) : null;
   return {
     id: name,
     found: Boolean(command),
@@ -230,7 +271,7 @@ function binaryCheck(name, commands, options = {}) {
     required: Boolean(options.required),
     scope: options.scope || 'optional',
     reason: options.reason || '',
-    source: commands.includes(command) ? 'PATH' : (command ? 'file' : null),
+    source: onPath ? 'PATH' : (file ? 'file' : null),
   };
 }
 
@@ -262,7 +303,7 @@ function npmCheck() {
   });
 }
 
-function mlxRuntimeCheck() {
+async function mlxRuntimeCheck() {
   const supported = (process.platform === 'darwin' && process.arch === 'arm64')
     || (process.platform === 'linux' && ['x64', 'arm64'].includes(process.arch));
   if (!supported) {
@@ -272,21 +313,23 @@ function mlxRuntimeCheck() {
       reason: 'MLX LM is supported on Apple Silicon and Linux (CPU or NVIDIA CUDA).',
     };
   }
-  const candidates = [
+  const candidates = [...new Set([
     (process.env.MLX_PYTHON_PATH || '').trim(),
     path.join(asyncatHome(), 'mlx', 'python', 'bin', 'python'),
     path.join(asyncatHome(), 'training', 'python', 'bin', 'python'),
     'python3',
-  ].filter(Boolean);
-  for (const command of candidates) {
-    const probe = run(command, ['-c', 'import mlx_lm'], { timeout: 10000 });
-    if (probe.ok) {
-      return {
-        id: 'mlx-lm', found: true, ok: true, command, version: null,
-        required: false, supported: true, scope: 'mlx',
-        reason: 'Runs MLX language models on Apple Silicon or Linux.',
-      };
-    }
+  ].filter(Boolean))];
+  const probes = await Promise.all(candidates.map(async (command) => {
+    if (path.isAbsolute(command) && !fs.existsSync(command)) return false;
+    return (await run(command, ['-c', 'import mlx_lm'], { timeout: 10000 })).ok;
+  }));
+  const index = probes.findIndex(Boolean);
+  if (index !== -1) {
+    return {
+      id: 'mlx-lm', found: true, ok: true, command: candidates[index], version: null,
+      required: false, supported: true, scope: 'mlx',
+      reason: 'Runs MLX language models on Apple Silicon or Linux.',
+    };
   }
   return {
     id: 'mlx-lm', found: false, ok: false, command: null, version: null,
@@ -295,8 +338,8 @@ function mlxRuntimeCheck() {
   };
 }
 
-function pythonCheck() {
-  const python = detectPython();
+async function pythonCheck() {
+  const python = await detectPython();
   return {
     id: 'python',
     found: python.found,
@@ -314,7 +357,7 @@ function pythonCheck() {
   };
 }
 
-function archiveChecks() {
+async function archiveChecks() {
   if (isWin) {
     return [
       {
@@ -329,7 +372,7 @@ function archiveChecks() {
       },
     ];
   }
-  return [
+  return Promise.all([
     binaryCheck('tar', ['tar'], {
       scope: 'managed-engine',
       reason: 'Extracts tar/tgz llama.cpp release assets.',
@@ -338,27 +381,43 @@ function archiveChecks() {
       scope: 'managed-engine',
       reason: 'Extracts zip llama.cpp release assets.',
     }),
-  ];
+  ]);
 }
 
-function gpuStatus() {
-  if (commandExists('nvidia-smi')) return { vendor: 'NVIDIA', command: 'nvidia-smi' };
-  if (commandExists('rocm-smi')) return { vendor: 'AMD', command: 'rocm-smi' };
+async function gpuStatus() {
+  const [nvidia, rocm] = await Promise.all([commandExists('nvidia-smi'), commandExists('rocm-smi')]);
+  if (nvidia) return { vendor: 'NVIDIA', command: 'nvidia-smi' };
+  if (rocm) return { vendor: 'AMD', command: 'rocm-smi' };
   if (process.platform === 'darwin' && process.arch === 'arm64') return { vendor: 'Apple', command: 'system' };
   // Best-effort Intel GPU probe (checked last so a discrete NVIDIA/AMD wins).
   if (process.platform === 'linux') {
-    const probe = run('sh', ['-lc', 'lspci 2>/dev/null | grep -iE "vga|3d|display" | grep -i intel'], { timeout: 3000 });
-    if (probe.ok && probe.stdout) return { vendor: 'Intel', command: 'lspci' };
+    const probe = await run('lspci', [], { timeout: 3000 });
+    if (probe.ok && probe.stdout.split('\n').some(line => /vga|3d|display/i.test(line) && /intel/i.test(line))) {
+      return { vendor: 'Intel', command: 'lspci' };
+    }
   } else if (isWin) {
-    const probe = run('wmic', ['path', 'win32_VideoController', 'get', 'name'], { timeout: 4000 });
+    const probe = await run('wmic', ['path', 'win32_VideoController', 'get', 'name'], { timeout: 4000 });
     if (probe.ok && /intel/i.test(probe.stdout)) return { vendor: 'Intel', command: 'wmic' };
   }
   return null;
 }
 
-export function inspectSystemDependencies() {
-  const checks = [
-    nodeCheck(),
+async function buildReport() {
+  const [
+    npm,
+    git,
+    python,
+    mlx,
+    archives,
+    ffmpeg,
+    llamaServer,
+    whisperServer,
+    piper,
+    sd,
+    compiler,
+    packageManagers,
+    gpu,
+  ] = await Promise.all([
     npmCheck(),
     binaryCheck('git', ['git'], {
       required: !isDesktopRuntime,
@@ -367,7 +426,7 @@ export function inspectSystemDependencies() {
     }),
     pythonCheck(),
     mlxRuntimeCheck(),
-    ...archiveChecks(),
+    archiveChecks(),
     binaryCheck('ffmpeg', ['ffmpeg'], {
       scope: 'speech-to-text',
       reason: 'Audio conversion support for local Whisper workflows.',
@@ -391,15 +450,18 @@ export function inspectSystemDependencies() {
       scope: 'image-generation',
       reason: 'Local stable-diffusion.cpp image runtime.',
     }),
-  ];
+    compilerStatus(),
+    detectPackageManagers(),
+    gpuStatus(),
+  ]);
 
-  const compiler = compilerStatus();
+  const checks = [nodeCheck(), npm, git, python, mlx, ...archives, ffmpeg, llamaServer, whisperServer, piper, sd];
   checks.push({
     id: 'cxx-compiler',
     found: compiler.found,
     ok: compiler.found,
     command: compiler.command,
-    version: compiler.command ? versionFor(compiler.command) : null,
+    version: compiler.path ? await versionFor(compiler.path) : null,
     required: false,
     scope: 'gpu-build',
     reason: compiler.requiredFor,
@@ -411,23 +473,53 @@ export function inspectSystemDependencies() {
     && !check.ok
     && !(isDesktopRuntime && check.scope === 'source-development')
   ));
-  const packageManagers = detectPackageManagers();
 
   return {
     platform: process.platform,
     arch: process.arch,
     home: os.homedir(),
     packageManagers,
-    gpu: gpuStatus(),
+    gpu,
     checks,
     requiredMissing,
     optionalMissing,
     ready: requiredMissing.length === 0,
-    commands: recommendedInstallCommands(
+    commands: await recommendedInstallCommands(
       isDesktopRuntime ? checks.filter(check => check.scope !== 'source-development') : checks,
       packageManagers.preferred?.id,
+      { managers: packageManagers.available },
     ),
   };
+}
+
+let cachedReport = null;
+let cachedAt = 0;
+let pendingReport = null;
+
+/** Forget the cached report (after an install changed what is on this machine). */
+export function invalidateSystemDependencyCache() {
+  cachedReport = null;
+  cachedAt = 0;
+}
+
+/**
+ * The readiness report. Reused for a minute unless `refresh` is set; callers
+ * arriving while it is being built share that one build.
+ */
+export async function inspectSystemDependencies({ refresh = false } = {}) {
+  if (!refresh && cachedReport && Date.now() - cachedAt < REPORT_TTL_MS) return cachedReport;
+  if (!pendingReport) {
+    pendingReport = buildReport()
+      .then((report) => {
+        cachedReport = report;
+        cachedAt = Date.now();
+        return report;
+      })
+      .finally(() => {
+        pendingReport = null;
+      });
+  }
+  return pendingReport;
 }
 
 function packageSetsFor(manager) {
@@ -618,8 +710,12 @@ function packageSetsFor(manager) {
   return sets[manager] || null;
 }
 
-export function recommendedInstallCommands(checks, managerId = null) {
-  const detectedManagers = detectPackageManagers().available;
+/**
+ * Package-manager commands for what is missing. `managers` is the list
+ * detectPackageManagers() found (it is looked up when not given).
+ */
+export async function recommendedInstallCommands(checks, managerId = null, { managers: detected = null } = {}) {
+  const detectedManagers = detected || (await detectPackageManagers()).available;
   const managers = managerId
     ? [{ id: managerId, command: detectedManagers.find(item => item.id === managerId)?.command || null }]
     : detectedManagers;
@@ -649,7 +745,8 @@ export function recommendedInstallCommands(checks, managerId = null) {
     if (checks.some(check => !check.ok && check.id === 'cxx-compiler') && sets.compiler) {
       commands.push({ manager: manager.id, kind: 'compiler', command: sets.compiler });
     }
-    if (manager.command && !commandExists(manager.command) && sets.bootstrap) {
+    // Asked for a package manager this machine doesn't have: how to get it.
+    if (!manager.command && sets.bootstrap) {
       commands.push({ manager: manager.id, kind: 'package-manager', command: sets.bootstrap });
     }
   }

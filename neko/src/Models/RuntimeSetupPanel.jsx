@@ -242,11 +242,11 @@ const RuntimeSetupPanel = ({ compact = false, showChatEngine = true, onReadyChan
   const engineInstalled = installDone || Boolean(engines?.current);
   const recommendedProfile = profileForGpu(readiness?.gpu);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async ({ refresh = false } = {}) => {
     setLoadError('');
     try {
       const [readinessRes, enginesRes, runtimesRes] = await Promise.allSettled([
-        installApi.getReadiness(),
+        installApi.getReadiness({ refresh }),
         llamaServerApi.getEngines(),
         runtimeApi.list(),
       ]);
@@ -409,7 +409,7 @@ const RuntimeSetupPanel = ({ compact = false, showChatEngine = true, onReadyChan
               managedRuntime={runtimeById.get(engine.runtime)}
               ffmpegMissing={engine.runtime === 'whisper' && ffmpegMissing}
               onChanged={async () => {
-                await load();
+                await load({ refresh: true });
                 await onRuntimeInstalled?.();
               }}
             />
@@ -459,7 +459,7 @@ const RuntimeSetupPanel = ({ compact = false, showChatEngine = true, onReadyChan
         {!compact && (
           <button
             type="button"
-            onClick={load}
+            onClick={() => load({ refresh: true })}
             className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-medium text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 midnight:border-slate-700"
           >
             <RefreshCw className="h-3 w-3" /> Recheck

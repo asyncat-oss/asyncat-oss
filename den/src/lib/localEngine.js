@@ -498,15 +498,6 @@ export async function cleanupManagedEngineLeftovers({ now = Date.now(), tmpDir =
   return report;
 }
 
-export function commandExists(cmd) {
-  try {
-    execSync(`${isWin ? 'where' : 'command -v'} ${cmd}`, { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function expandWildcardPath(pattern) {
   if (!pattern.includes('*')) return [pattern];
 

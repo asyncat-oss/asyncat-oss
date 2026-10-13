@@ -3,6 +3,7 @@
 // pattern: start returns immediately, the client polls for progress.
 import { randomUUID } from 'crypto';
 import { installManagedRuntime, MANAGED_RUNTIME_SPECS } from './localEngine.js';
+import { invalidateSystemDependencyCache } from './systemDeps.js';
 
 const jobs = new Map();            // jobId -> job
 const activeByRuntime = new Map(); // runtimeId -> jobId
@@ -81,6 +82,7 @@ export function startRuntimeInstallJob(runtimeId, { beforeSwap = null, afterFini
       job.error = err.message || 'Install failed';
     })
     .finally(() => {
+      invalidateSystemDependencyCache();
       Promise.resolve(afterFinish?.()).catch((error) => {
         console.warn(`[runtime] Could not start ${runtimeId} again after its install:`, error.message);
       });
