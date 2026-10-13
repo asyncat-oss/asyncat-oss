@@ -11,6 +11,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { updateApi } from './settingApi';
+import { openUpdateScreen } from '../components/updateEvents.js';
 
 const RELEASES_URL = 'https://github.com/asyncat-oss/asyncat-oss/releases';
 const isPackaged = window.electronAPI?.isPackaged === true;
@@ -19,16 +20,6 @@ const settingsFontBase = 'font-sans';
 function publishUpdateFlag(available) {
   sessionStorage.setItem('asyncatUpdateAvailable', available ? 'true' : 'false');
   window.dispatchEvent(new CustomEvent('asyncat:update-flag', { detail: available }));
-}
-
-function installInstructions(platform) {
-  if (platform === 'darwin') {
-    return 'Quit Asyncat, open the downloaded DMG, drag Asyncat to Applications, choose Replace, and relaunch.';
-  }
-  if (platform === 'linux') {
-    return 'Quit Asyncat, then replace your AppImage or install the downloaded DEB over the current version.';
-  }
-  return 'Quit Asyncat and run the downloaded installer over your current installation.';
 }
 
 const UpdateSection = () => {
@@ -87,17 +78,7 @@ const UpdateSection = () => {
     }
   };
 
-  const handleDownloadUpdate = async () => {
-    setStatus('opening');
-    setError(null);
-    const result = await window.electronAPI?.downloadUpdate();
-    if (result && !result.success) {
-      setStatus('error');
-      setError(result.error || 'Could not open the installer download.');
-      return;
-    }
-    setStatus('available');
-  };
+  const handleDownloadUpdate = () => openUpdateScreen();
 
   const openReleaseNotes = () => {
     window.electronAPI?.openReleasesPage(updateInfo?.releaseUrl || RELEASES_URL);
@@ -193,7 +174,9 @@ const UpdateSection = () => {
               <span>Version <strong>v{updateInfo?.version}</strong> is available</span>
             </div>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              {installInstructions(platform)} Your settings and local data are kept.
+              {platform === 'darwin'
+                ? 'Asyncat downloads and checks the update; you then drag it into Applications.'
+                : 'Asyncat downloads the update, checks it and installs it.'} Your settings and local data are kept.
             </p>
             {!updateInfo?.assetUrl && (
               <p className="text-xs text-amber-600 dark:text-amber-400">
@@ -207,8 +190,8 @@ const UpdateSection = () => {
                 onClick={handleDownloadUpdate}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white transition-colors"
               >
-                {status === 'opening' ? <Loader2 size={14} className="animate-spin" /> : <ExternalLink size={14} />}
-                {status === 'opening' ? 'Opening download…' : 'Download installer'}
+                <ArrowUpCircle size={14} />
+                Update…
               </button>
               <button
                 type="button"

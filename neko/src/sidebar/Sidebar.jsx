@@ -40,6 +40,7 @@ import { useConfirm } from "../components/confirmContext.js";
 import { useToast, errorDetail } from "../components/toastContext.js";
 import AsyncatMark from "../components/ui/AsyncatMark.jsx";
 import ExternalSessionsSection from "./ExternalSessionsSection.jsx";
+import { isSkippedUpdate, openUpdateScreen } from "../components/updateEvents.js";
 import Tooltip from "../components/ui/Tooltip.jsx";
 import { Menu, MenuItem, MenuSeparator } from "../components/ui/Menu.jsx";
 import { formatShortcut } from "../components/ui/shortcuts.js";
@@ -465,13 +466,13 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
     };
     const handleFlag = (event) => markAvailable(Boolean(event.detail));
     const cleanups = [
-      api.onUpdateAvailable(() => markAvailable(true)),
+      api.onUpdateAvailable((info) => markAvailable(!isSkippedUpdate(info?.version))),
       api.onUpdateNotAvailable(() => markAvailable(false)),
     ];
     window.addEventListener("asyncat:update-flag", handleFlag);
     // The launch check may have finished before this page loaded.
     api.getUpdateState?.()
-      .then((state) => { if (state?.checked) markAvailable(Boolean(state.updateInfo)); })
+      .then((state) => { if (state?.checked) markAvailable(Boolean(state.updateInfo) && !isSkippedUpdate(state.updateInfo.version)); })
       .catch(() => {});
     return () => {
       cleanups.forEach((cleanup) => {
@@ -820,7 +821,7 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
           >
             {updateAvailable ? (
               <>
-                <MenuItem icon={CircleArrowUp} label={<span className="text-accent">Update available</span>} onSelect={() => navigate("/settings/about")} />
+                <MenuItem icon={CircleArrowUp} label={<span className="text-accent">Update available</span>} onSelect={openUpdateScreen} />
                 <MenuSeparator />
               </>
             ) : null}

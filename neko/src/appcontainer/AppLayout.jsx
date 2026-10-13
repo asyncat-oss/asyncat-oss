@@ -12,6 +12,7 @@ import { useNetworkStatus } from '../hooks/useNetworkStatus.js';
 import Sidebar from '../sidebar/Sidebar.jsx';
 import Button from '../components/ui/Button.jsx';
 import Cat from '../components/ui/Cat.jsx';
+import UpdateScreen from '../components/UpdateScreen.jsx';
 
 const ConnectionNotice = () => {
   const network = useNetworkStatus({ pollMs: 6000 });
@@ -345,6 +346,7 @@ const AppLayout = () => {
         </div>
       </main>
 
+      <UpdateScreen />
     </div>
   );
 };

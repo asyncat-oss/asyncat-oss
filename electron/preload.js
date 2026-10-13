@@ -73,6 +73,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ─── Auto-update ──────────────────────────────────────────────────────
   checkForUpdates:   () => ipcRenderer.invoke('update:check'),
   getUpdateState:    () => ipcRenderer.invoke('update:get-state'),
+  startUpdate:       () => ipcRenderer.invoke('update:start'),
+  cancelUpdate:      () => ipcRenderer.invoke('update:cancel'),
+  finishUpdate:      () => ipcRenderer.invoke('update:finish'),
+  showUpdateFile:    () => ipcRenderer.invoke('update:show-file'),
   downloadUpdate:    () => ipcRenderer.invoke('update:download'),
   installUpdate:     () => ipcRenderer.invoke('update:install'),
   openReleasesPage:  (url) => ipcRenderer.invoke('update:open-releases', url),
@@ -84,6 +88,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUpdateAvailable:    (cb) => subscribe('update:available', (_e, info) => cb(info)),
   onUpdateNotAvailable: (cb) => subscribe('update:not-available', (_e, info) => cb(info)),
   onUpdateError:        (cb) => subscribe('update:error', (_e, msg) => cb(msg)),
+  onUpdateDownloadState: (cb) => subscribe('update:download-state', (_e, state) => cb(state)),
 
   // ─── Terminal ─────────────────────────────────────────────────────────────
   terminalCreate:    (opts) => ipcRenderer.invoke('terminal:create', opts),
