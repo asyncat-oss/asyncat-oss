@@ -385,7 +385,10 @@ export default function AgentEditor({ agentId = null, template = null, onClose }
 
             <section>
               <h2 className="mb-1 text-[13px] font-semibold text-fg">Capabilities</h2>
-              <p className="mb-2.5 text-[12px] leading-5 text-fg-muted">What this agent may do. Anything switched off is not available to it at all.</p>
+              <p className="mb-2.5 text-[12px] leading-5 text-fg-muted">
+                What this agent may do. Anything switched off is not available to it at all.
+                {savedId ? <> <button type="button" onClick={() => navigate(`/tools?tab=memory&scope=agent:${savedId}`)} className="text-accent hover:underline">See its memories</button></> : null}
+              </p>
               <div className="grid gap-2 sm:grid-cols-2">
                 {capabilityOptions.map((cap) => (
                   <label key={cap.id} className={`flex cursor-pointer items-start gap-2.5 rounded-xl border px-3 py-2.5 transition-colors ${capabilityOn(cap.id) ? 'border-line-strong bg-surface' : 'border-line hover:bg-hover'}`}>

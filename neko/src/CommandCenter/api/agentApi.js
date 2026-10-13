@@ -251,10 +251,20 @@ export const agentApi = {
     return await apiRequest(`${API_BASE_URL}/agent/souls`);
   },
 
-  getMemories: async ({ q = '', kind = 'all', limit = 50 } = {}) => {
+  getMemories: async ({ q = '', kind = 'all', limit = 50, scope = 'all' } = {}) => {
     const params = new URLSearchParams({ kind, limit: String(limit) });
     if (q) params.set('q', q);
+    if (scope && scope !== 'all') params.set('scope', scope);
     return await apiRequest(`${API_BASE_URL}/agent/memory?${params}`);
+  },
+
+  /** A memory written by hand: { content, kind, scope: shared | project:<id> | agent:<id> | cat:<id> }. */
+  addMemory: async (memory) => {
+    return await apiRequest(`${API_BASE_URL}/agent/memory`, { method: 'POST', body: JSON.stringify(memory) });
+  },
+
+  updateMemory: async (id, patch) => {
+    return await apiRequest(`${API_BASE_URL}/agent/memory/by-id/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) });
   },
 
   getMemoryStats: async () => {

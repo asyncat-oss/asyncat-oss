@@ -5,6 +5,7 @@
 
 import { useRef, useState } from 'react';
 import PropTypes from 'prop-types';
+import { Link } from 'react-router-dom';
 import { Brain, FolderOpen, Globe, ImagePlus, X } from 'lucide-react';
 import Button from '../components/ui/Button.jsx';
 import { Field, Input, Select } from '../components/ui/Field.jsx';
@@ -243,6 +244,7 @@ export function SpaceSection({ form, set, cat = null }) {
         <div className="rounded-xl border border-line px-3.5 py-3">
           <p className="flex items-center gap-2 text-[13px] font-medium text-fg"><Brain className="h-4 w-4 text-fg-subtle" />Its own memories</p>
           <p className="mt-1 text-[12px] leading-5 text-fg-muted">What it learns, and your 👍 / 👎 and &ldquo;next time&rdquo; notes, stay with it. Your chats don&apos;t see them.</p>
+          {cat?.id ? <Link to={`/tools?tab=memory&scope=cat:${cat.id}`} className="mt-1 inline-block text-[12px] text-accent hover:underline">See and edit its memories</Link> : null}
         </div>
       </div>
     </div>
