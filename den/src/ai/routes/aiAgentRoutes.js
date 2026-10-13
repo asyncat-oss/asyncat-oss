@@ -46,7 +46,10 @@ import fs from 'fs';
 import { execSync } from 'child_process';
 import { getArtifactsDir, getLegacyArtifactsDir } from '../../agent/workspacePaths.js';
 import { shellSessionManager } from '../../agent/ShellSessionManager.js';
-import { decideExternalApproval, detectExternalEngines, isExternalEngine, openExternalApprovals, runExternalAgent, scratchWorkspace } from '../../agent/externalAgents.js';
+import { decideExternalApproval, detectExternalEngines, isAcpEngine, isExternalEngine, openExternalApprovals, runExternalAgent, scratchWorkspace } from '../../agent/externalAgents.js';
+import { ACP_CATALOG, acpNameFromEngine, checkAcpAgent, getAcpAgent, listAcpAgents, removeAcpAgent, saveAcpAgent } from '../../agent/acp/acpAgents.js';
+import { runAcpAgent } from '../../agent/acp/acpRunner.js';
+import { downloadSize } from '../../connectors/launchers.js';
 import { listExternalSessions, readExternalSession } from '../../agent/externalSessions.js';
 import { getExternalUsage } from '../../agent/externalUsage.js';
 
@@ -1257,6 +1260,18 @@ router.get('/engines', async (_req, res) => {
   try {
     const usage = getExternalUsage();
     const engines = (await detectExternalEngines()).map((engine) => ({ ...engine, usage: usage[engine.id] || null }));
+    // Agents spoken to over the Agent Client Protocol.
+    for (const agent of listAcpAgents()) {
+      engines.push({
+        id: agent.engine,
+        name: agent.title,
+        acp: true,
+        installed: agent.installed && !agent.needsDownload,
+        signedIn: null,
+        description: agent.needsDownload ? `Needs your OK to download ${agent.download?.name} (Customize → Agents)` : 'An ACP agent on this computer',
+        models: [{ id: null, label: 'Default', hint: "The agent's own choice" }],
+      });
+    }
     res.json({ success: true, engines });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -1447,6 +1462,122 @@ async function runExternalEngineTurn(req, res, { engine, baseGoal, workingContex
   }
 }
 
+// One turn with an ACP agent (agent/acp/): same folder rules and approval
+// cards as the other engines.
+async function runAcpEngineTurn(req, res, { engine, baseGoal, workingContext, workingDir, fileAttachments, externalSessionId, externalCwd, conversationHistory, agentMode, autoApprove, abortSignal }) {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Content-Encoding', 'identity');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders?.();
+  req.socket?.setTimeout?.(0);
+  const heartbeat = setInterval(() => writeAgentSseComment(res, 'ping'), 15000);
+  try {
+    const agent = getAcpAgent(acpNameFromEngine(engine));
+    if (!agent) throw new Error('That ACP agent was removed. Pick another in the composer.');
+    const hasProjectContext = Boolean(workingContext && typeof workingContext === 'object' && workingContext.rootId);
+    const chatProject = projectForChat(req.user.id, workingContext?.projectId || req.body?.projectId || null);
+    const context = resolveAgentWorkingContext({
+      workingContext: hasProjectContext ? workingContext : null,
+      workingDir: hasProjectContext ? workingDir : null,
+      profile: null,
+      userId: req.user.id,
+    });
+    const taskGoal = injectFileAttachments(baseGoal, resolveFileAttachments(fileAttachments, context, req.user.id));
+    const projectPreamble = chatProject && !externalSessionId
+      ? buildChatContext({
+        project: chatProject,
+        agent: null,
+        query: baseGoal,
+        resolvedClient: { model: engine, isLocal: false, providerInfo: { providerId: 'acp', settings: { context_window: 200000, model_capabilities: { supportsImageInput: false } } } },
+      }).prompt
+      : '';
+    const goal = projectPreamble
+      ? `This task comes from the Asyncat project "${chatProject.name}". Read the context first, then do the task.\n\n${projectPreamble}\n\n---\n\n## Task\n${taskGoal}`
+      : taskGoal;
+    const runDir = hasProjectContext ? context.workingDir : externalFallbackFolder(externalCwd);
+    const result = await runAcpAgent({
+      agent,
+      goal,
+      history: normalizeConversationHistory(conversationHistory),
+      workingDir: runDir,
+      externalSessionId,
+      agentMode,
+      autoApprove,
+      requestPermission: createPermissionRequest(req, res),
+      emit: (type, data) => writeAgentSse(res, { type, data }),
+      abortSignal,
+    });
+    writeAgentSse(res, {
+      type: 'done',
+      data: { answer: result.answer, stopReason: result.stopReason, engine, externalSessionId: result.externalSessionId, workingDir: runDir, rounds: 1 },
+    });
+  } catch (err) {
+    writeAgentSse(res, { type: 'error', data: { message: err.message } });
+    writeAgentSse(res, { type: 'done', data: { answer: '', stopReason: 'error', engine, externalSessionId: err.externalSessionId || externalSessionId } });
+  } finally {
+    clearInterval(heartbeat);
+    if (!res.writableEnded) res.end();
+  }
+}
+
+// ── ACP agents (Customize → Agents → Coding agents) ──────────────────────────
+
+router.get('/acp-agents', withWorkspaceContext, (_req, res) => {
+  try {
+    res.json({ success: true, agents: listAcpAgents(), catalog: ACP_CATALOG });
+  } catch (err) {
+    res.status(Number(err.status) || 500).json({ success: false, error: err.message });
+  }
+});
+
+// What a command downloads before it first runs, and its size: { command, args, deep }.
+router.post('/acp-agents/check-download', withWorkspaceContext, async (req, res) => {
+  try {
+    const command = String(req.body?.command || '').trim();
+    if (!command) return res.status(400).json({ success: false, error: 'Give the command.' });
+    res.json({ success: true, download: await downloadSize(command, Array.isArray(req.body?.args) ? req.body.args.map(String) : [], { deep: Boolean(req.body?.deep) }) });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/acp-agents', withWorkspaceContext, (req, res) => {
+  try {
+    res.status(201).json({ success: true, agent: saveAcpAgent(req.body || {}) });
+  } catch (err) {
+    res.status(Number(err.status) || 500).json({ success: false, error: err.message });
+  }
+});
+
+router.patch('/acp-agents/:name', withWorkspaceContext, (req, res) => {
+  try {
+    if (!getAcpAgent(req.params.name)) return res.status(404).json({ success: false, error: 'No ACP agent by that name.' });
+    res.json({ success: true, agent: saveAcpAgent(req.body || {}, { existing: req.params.name }) });
+  } catch (err) {
+    res.status(Number(err.status) || 500).json({ success: false, error: err.message });
+  }
+});
+
+router.delete('/acp-agents/:name', withWorkspaceContext, (req, res) => {
+  try {
+    if (!removeAcpAgent(req.params.name)) return res.status(404).json({ success: false, error: 'No ACP agent by that name.' });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(Number(err.status) || 500).json({ success: false, error: err.message });
+  }
+});
+
+// Start it and introduce Asyncat, to see that it answers.
+router.post('/acp-agents/:name/check', withWorkspaceContext, async (req, res) => {
+  try {
+    res.json({ success: true, check: await checkAcpAgent(req.params.name, { cwd: scratchWorkspace() }) });
+  } catch (err) {
+    res.status(Number(err.status) || 502).json({ success: false, error: err.message });
+  }
+});
+
 router.post('/run', withWorkspaceContext, async (req, res) => {
   let heartbeatInterval = null;
   const abortController = new AbortController();
@@ -1493,6 +1624,22 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
 
     if (!baseGoal) {
       return res.status(400).json({ success: false, error: 'Goal is required' });
+    }
+    if (isAcpEngine(engine)) {
+      await runAcpEngineTurn(req, res, {
+        engine,
+        baseGoal,
+        workingContext,
+        workingDir,
+        fileAttachments,
+        externalSessionId,
+        externalCwd,
+        conversationHistory,
+        agentMode: resolvedAgentMode,
+        autoApprove: resolvedAgentMode === 'action' && (autoApprove === true || autoApprove === 'all'),
+        abortSignal: abortController.signal,
+      });
+      return;
     }
     if (isExternalEngine(engine)) {
       await runExternalEngineTurn(req, res, {

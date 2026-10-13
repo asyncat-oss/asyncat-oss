@@ -43,9 +43,14 @@ export function isExternalEngine(engine) {
   return Object.prototype.hasOwnProperty.call(EXTERNAL_ENGINES, engine);
 }
 
+/** Agents spoken to over the Agent Client Protocol are engines "acp:<name>". */
+export function isAcpEngine(engine) {
+  return typeof engine === 'string' && /^acp:[A-Za-z0-9][A-Za-z0-9._-]{0,39}$/.test(engine);
+}
+
 // Apps started from a desktop launcher often get a minimal PATH without the
 // folders these CLIs install into.
-function agentPath() {
+export function agentPath() {
   const home = os.homedir();
   const extra = [
     path.join(home, '.local', 'bin'),
@@ -59,7 +64,7 @@ function agentPath() {
   return [...current, ...extra.filter((dir) => !current.includes(dir))].join(path.delimiter);
 }
 
-function agentEnv() {
+export function agentEnv() {
   const env = { ...process.env, PATH: agentPath(), NO_COLOR: '1' };
   // A FORCE_COLOR inherited from a dev runner would override NO_COLOR and put
   // colour codes into command output.
@@ -67,7 +72,7 @@ function agentEnv() {
   return env;
 }
 
-function findBinary(command) {
+export function findBinary(command) {
   const names = process.platform === 'win32' ? [`${command}.cmd`, `${command}.exe`, command] : [command];
   for (const dir of agentPath().split(path.delimiter)) {
     for (const name of names) {
