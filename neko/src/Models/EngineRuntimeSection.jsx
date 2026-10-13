@@ -457,7 +457,7 @@ const EngineRuntimeSection = ({
           const detail = installed
             ? (behind > 0 ? `${installedDetail} · ${assetInfo.release.tagName} is out, ${buildsNewerText(behind)}` : installedDetail)
             : assetInfo
-              ? `${assetInfo.release.tagName} / ${formatBytes(assetInfo.asset.size)} / ${assetInfo.asset.name}`
+              ? `${assetInfo.release.tagName} / ${formatBytes(assetInfo.asset.sizeBytes ?? assetInfo.asset.size)} / ${assetInfo.asset.name}`
               : 'Installed manually or from an older Asyncat layout.';
           return (
             <SettingRow
