@@ -34,7 +34,7 @@ import { modelManagementTools } from './tools/modelManagementTools.js';
 import { datasetTools } from './tools/datasetTools.js';
 import { trainingTools } from './tools/trainingTools.js';
 import { hardwareTools } from './tools/hardwareTools.js';
-import { schedulerTools } from './tools/schedulerTools.js';
+import { catTools } from './tools/catTools.js';
 import { codeSearchTools } from './tools/codeSearchTools.js';
 import { apiExplorerTools } from './tools/apiExplorerTools.js';
 import { localRagTools } from './tools/localRagTools.js';
@@ -103,7 +103,7 @@ export async function initializeAgent() {
   toolRegistry.registerAll(datasetTools);
   toolRegistry.registerAll(trainingTools);
   toolRegistry.registerAll(hardwareTools);
-  toolRegistry.registerAll(schedulerTools);
+  toolRegistry.registerAll(catTools);
   toolRegistry.registerAll(codeSearchTools);
   toolRegistry.registerAll(apiExplorerTools);
   toolRegistry.registerAll(localRagTools);

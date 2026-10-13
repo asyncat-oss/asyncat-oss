@@ -52,6 +52,10 @@ import integrationsRouter from './integrations/integrationsRouter.js';
 // Live updates for open windows (Server-Sent Events)
 import eventsRouter from './events/eventsRouter.js';
 
+// ─── Cats: agents that work on their own ─────────────────────────────────────
+import catRouter from './cats/catRoutes.js';
+import { startCats } from './cats/index.js';
+
 // ─── Database ─────────────────────────────────────────────────────────────────
 import db from './db/client.js';         // opens SQLite, applies schema
 import { seed } from './db/seed.js';     // creates the local profile on first boot
@@ -167,6 +171,9 @@ app.use('/api/host', hostBridgeRouter);
 // Routes: live updates for open windows
 app.use('/api/events', eventsRouter);
 
+// Routes: Cats
+app.use('/api/cats', catRouter);
+
 // ─── Routes: Training / Fine-Tuning ──────────────────────────────────────────
 app.use('/api/training', trainingRouter);
 
@@ -212,6 +219,9 @@ seed().then(async () => {
   }
 
   hostToken();
+  // The clock that wakes Cats (and moves old scheduled tasks over, once).
+  startCats();
+
   const server = app.listen(PORT, '127.0.0.1', () => {
     logger.info(`den running on port ${PORT}`);
     logger.info(`environment: ${process.env.NODE_ENV || 'development'}`);
@@ -278,11 +288,11 @@ seed().then(async () => {
     }
 
     try {
-      // Record scheduled tasks still running as interrupted.
-      const { stopScheduler } = await import('./agent/Scheduler.js');
-      stopScheduler();
+      // Record Cats still working as interrupted.
+      const { stopCatEngine } = await import('./cats/catEngine.js');
+      stopCatEngine();
     } catch (err) {
-      logger.warn('Scheduler stop error:', err.message);
+      logger.warn('Cats stop error:', err.message);
     }
 
     try {

@@ -69,7 +69,7 @@ function parseDate(value) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
-function parseFeedXml(xml, sourceUrl) {
+export function parseFeedXml(xml, sourceUrl) {
   const dom = new JSDOM(xml, { contentType: 'text/xml' });
   const doc = dom.window.document;
   if (doc.querySelector('parsererror')) {
@@ -130,7 +130,8 @@ async function fetchText(url, timeoutMs, accept) {
   return { text: await res.text(), finalUrl: res.url, contentType: res.headers.get('content-type') || '' };
 }
 
-async function fetchAndParseFeed(url) {
+/** Fetch a feed and read its posts (also used by Cats watching a feed). */
+export async function fetchAndParseFeed(url) {
   const normalized = normalizeUrl(url);
   const fetched = await fetchText(
     normalized,

@@ -23,13 +23,10 @@ import {
 import { loadSkills, reloadSkills, listSkills, normalizeTags, createSkill, updateSkill, deleteSkill } from '../../agent/skills.js';
 import { loadSoul, readSoulRaw, writeSoul, listSouls } from '../../agent/prompts/agentSystemPrompt.js';
 import { getAiClientForScheduledProvider, getAiClientForUser } from '../controllers/ai/clientFactory.js';
-import { startScheduler } from '../../agent/Scheduler.js';
-import { runScheduledTask } from '../../agent/scheduledRunner.js';
 import { noProjectToolNames } from '../../agent/toolScopes.js';
-import { createScheduledTaskRouter } from './scheduledTaskRoutes.js';
 import { getWorkspaceRoot, loadEntry, resolveWorkingDirectoryContext } from '../../files/fileExplorerService.js';
 import { codeSearchTool, listDefinitionsTool, findDefinitionTool, findReferencesTool } from '../../agent/tools/codeSearchTools.js';
-import { listMemories, normalizeMemoryRow, searchMemories, hybridRecall, ALL_PROJECTS } from '../../agent/tools/memoryTools.js';
+import { listMemories, normalizeMemoryRow, searchMemories, hybridRecall, ALL_PROJECTS, ALL_CATS } from '../../agent/tools/memoryTools.js';
 import { embeddingStatus, embedText } from '../embeddings/embeddingService.js';
 import { getMcpStatus, listMcpServers, mergeMcpEnv, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
 import { toolRegistry } from '../../agent/tools/toolRegistry.js';
@@ -311,8 +308,6 @@ function clientForAgent(userId, profile) {
   return getAiClientForUser(userId);
 }
 
-// Scheduled tasks: one clock for every task (agent/Scheduler.js).
-startScheduler({ runTask: runScheduledTask });
 
 // ══════════════════════════════════════════════════════════════════════════════
 // CONVERSATION ROUTES — /api/ai/*
@@ -805,7 +800,6 @@ function createAskUserRequest(req, res) {
 
 // ── Agent tools / skills / souls ─────────────────────────────────────────────
 
-router.use('/scheduled-tasks', createScheduledTaskRouter({ withWorkspaceContext }));
 
 router.get('/tools', withWorkspaceContext, async (req, res) => {
   const { toolRegistry } = await import('../../agent/index.js');
@@ -853,6 +847,7 @@ router.get('/semantic/search', withWorkspaceContext, async (req, res) => {
       workspaceId,
       profileId: null,
       projectId: ALL_PROJECTS,
+      catId: ALL_CATS,
       computeEmbedding: (text) => embedText(text, { userId: req.user.id }),
     };
     const { memories, method } = await hybridRecall(context, { query: q, kind: 'all', limit });
@@ -2041,6 +2036,7 @@ router.get('/memory', withWorkspaceContext, async (req, res) => {
         userId: req.user.id,
         workspaceId,
         projectId: ALL_PROJECTS,
+        catId: ALL_CATS,
         query: q,
         kind,
         limit,
@@ -2050,15 +2046,21 @@ router.get('/memory', withWorkspaceContext, async (req, res) => {
         userId: req.user.id,
         workspaceId,
         projectId: ALL_PROJECTS,
+        catId: ALL_CATS,
         kind,
         limit,
       });
-    // Name the project a memory belongs to, for the Memory page.
-    const projectIds = [...new Set(rows.map(row => row.project_id).filter(Boolean))];
-    const projectNames = new Map(projectIds.length
-      ? db.prepare(`SELECT id, name FROM projects WHERE id IN (${projectIds.map(() => '?').join(',')})`).all(...projectIds).map(p => [p.id, p.name])
+    // Name the project and Cat a memory belongs to, for the Memory page.
+    const namesFor = (table, ids) => new Map(ids.length
+      ? db.prepare(`SELECT id, name FROM ${table} WHERE id IN (${ids.map(() => '?').join(',')})`).all(...ids).map(p => [p.id, p.name])
       : []);
-    const memories = rows.map(row => ({ ...row, project_name: row.project_id ? (projectNames.get(row.project_id) || null) : null }));
+    const projectNames = namesFor('projects', [...new Set(rows.map(row => row.project_id).filter(Boolean))]);
+    const catNames = namesFor('cats', [...new Set(rows.map(row => row.cat_id).filter(Boolean))]);
+    const memories = rows.map(row => ({
+      ...row,
+      project_name: row.project_id ? (projectNames.get(row.project_id) || null) : null,
+      cat_name: row.cat_id ? (catNames.get(row.cat_id) || null) : null,
+    }));
     res.json({ success: true, count: memories.length, memories });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
