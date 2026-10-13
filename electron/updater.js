@@ -9,12 +9,12 @@
 // shown for the last step (unsigned builds, or root needed). userData is
 // never touched.
 
-import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { app, ipcMain, net, shell } from 'electron';
 import { IS_DEV } from './constants.js';
 import { getMainWindow } from './window.js';
+import { startBackend, stopBackend } from './backend.js';
 import {
   DEFAULT_UPDATE_REPO,
   isTrustedReleaseUrl,
@@ -28,6 +28,8 @@ import {
   detectAppImage,
   downloadFile,
   installStrategy,
+  isPerMachineInstall,
+  launchDetached,
   makeExecutable,
   parseChecksums,
   planDownload,
@@ -189,7 +191,17 @@ async function startUpdate() {
 
   const abort = new AbortController();
   downloadAbort = abort;
-  setDownload({ status: 'downloading', version: update.version, strategy, received: 0, total: update.assetSize || 0, file: null, error: null });
+  setDownload({
+    status: 'downloading',
+    version: update.version,
+    strategy,
+    received: 0,
+    total: update.assetSize || 0,
+    file: null,
+    error: null,
+    // Installed for all users: Windows will ask for permission to update.
+    perMachine: strategy === 'run-installer' ? isPerMachineInstall() : false,
+  });
   (async () => {
     try {
       const [result, sums] = await Promise.all([
@@ -249,9 +261,24 @@ async function finishUpdate() {
     return { success: true, quitting: true };
   }
   if (download.strategy === 'run-installer') {
-    spawn(download.file, WINDOWS_INSTALLER_ARGS, { detached: true, stdio: 'ignore' }).unref();
-    app.quit();
-    return { success: true };
+    if (!download.file || !fs.existsSync(download.file)) {
+      const error = 'The downloaded installer is missing. Download the update again.';
+      setDownload({ status: 'error', error });
+      return { success: false, error };
+    }
+    // Stop the backend (and the local model servers it started) first: its
+    // bundled Node.js lives in the install folder, and the installer has to
+    // replace it while Asyncat is closing.
+    await stopBackend();
+    try {
+      await launchDetached(download.file, WINDOWS_INSTALLER_ARGS);
+    } catch (error) {
+      console.warn('[updater] installer did not start:', error.message);
+      startBackend().catch((restartError) => console.warn('[updater] backend restart failed:', restartError.message));
+      return { success: false, error: `The installer couldn't be started (${error.message}). Try again, or download the update from the release page.` };
+    }
+    setImmediate(() => app.quit());
+    return { success: true, quitting: true };
   }
   // macOS / .deb: open the installer for the user.
   const error = await shell.openPath(download.file);

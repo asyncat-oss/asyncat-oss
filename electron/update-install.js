@@ -12,6 +12,7 @@
 //                     builds, or root needed).
 //   browser           Nothing to download for this platform: open the release page.
 
+import { spawn } from 'child_process';
 import { createHash } from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -215,3 +216,57 @@ export function replaceAppImage(downloaded, appImagePath) {
 
 /** Arguments for electron-builder's NSIS installer: silent update, then start the app. */
 export const WINDOWS_INSTALLER_ARGS = ['--updated', '/S', '--force-run'];
+
+/**
+ * Whether Asyncat is installed for all users (Program Files). Then Windows
+ * asks for permission (UAC) before the installer can update it.
+ */
+export function isPerMachineInstall({ execPath = process.execPath, env = process.env, canWrite = canWriteNextTo } = {}) {
+  const win = path.win32;
+  const exe = win.resolve(execPath).toLowerCase();
+  const roots = [env.ProgramFiles, env.ProgramW6432, env['ProgramFiles(x86)']]
+    .filter(Boolean)
+    .map((root) => win.resolve(root).toLowerCase());
+  if (roots.some((root) => exe.startsWith(`${root}\\`))) return true;
+  return !canWrite(execPath);
+}
+
+/**
+ * Start a program on its own and wait until it is really running. Rejects
+ * when the file is missing or can't be started, so the caller can stay
+ * open and say so instead of quitting into nothing.
+ */
+export function launchDetached(file, args = [], { spawnImpl = spawn, existsImpl = fs.existsSync, timeoutMs = 15000 } = {}) {
+  return new Promise((resolve, reject) => {
+    if (!file || !existsImpl(file)) {
+      reject(new Error('The downloaded installer is missing. Download the update again.'));
+      return;
+    }
+    let child;
+    try {
+      child = spawnImpl(file, args, { detached: true, stdio: 'ignore' });
+    } catch (error) {
+      reject(error);
+      return;
+    }
+    let timer = null;
+    const onSpawn = () => finish(null);
+    const onError = (error) => finish(error);
+    function finish(error) {
+      clearTimeout(timer);
+      child.removeListener('spawn', onSpawn);
+      child.removeListener('error', onError);
+      // A late error must never become an uncaught exception in the app.
+      child.on('error', () => {});
+      if (error) {
+        reject(error);
+      } else {
+        child.unref();
+        resolve(child);
+      }
+    }
+    child.once('spawn', onSpawn);
+    child.once('error', onError);
+    timer = setTimeout(() => finish(new Error('The installer did not start.')), timeoutMs);
+  });
+}

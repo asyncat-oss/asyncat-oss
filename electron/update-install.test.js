@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'crypto';
+import { EventEmitter } from 'events';
 import fs from 'fs';
 import http from 'http';
 import os from 'os';
@@ -13,6 +14,8 @@ import {
   digestSha256,
   downloadFile,
   installStrategy,
+  isPerMachineInstall,
+  launchDetached,
   makeExecutable,
   parseChecksums,
   planDownload,
@@ -62,6 +65,38 @@ test('installers go to the app\'s own update folder; a .deb to Downloads', () =>
     planDownload({ strategy: 'replace-appimage', assetName: 'Asyncat-1.0.0-linux-x64.AppImage', platform: 'linux', appImagePath: '/opt/Asyncat.AppImage', canWrite: () => false, ...dirs }),
     { strategy: 'save-appimage', destination: path.join('/home/u/Downloads', 'Asyncat-1.0.0-linux-x64.AppImage') },
   );
+});
+
+test('a Program Files install is recognised as installed for all users', () => {
+  const env = { ProgramFiles: 'C:\\Program Files', 'ProgramFiles(x86)': 'C:\\Program Files (x86)' };
+  const writable = () => true;
+  assert.equal(isPerMachineInstall({ execPath: 'C:\\Program Files\\Asyncat\\Asyncat.exe', env, canWrite: writable }), true);
+  assert.equal(isPerMachineInstall({ execPath: 'c:\\program files\\Asyncat\\Asyncat.exe', env, canWrite: writable }), true);
+  assert.equal(isPerMachineInstall({ execPath: 'C:\\Users\\u\\AppData\\Local\\Programs\\Asyncat\\Asyncat.exe', env, canWrite: writable }), false);
+  assert.equal(isPerMachineInstall({ execPath: 'D:\\Apps\\Asyncat\\Asyncat.exe', env, canWrite: () => false }), true);
+  assert.equal(isPerMachineInstall({ execPath: 'C:\\Program Files Extra\\Asyncat.exe', env, canWrite: writable }), false);
+});
+
+test('the installer is started and confirmed running before Asyncat quits', async () => {
+  // A real program that starts fine: Node itself.
+  const child = await launchDetached(process.execPath, ['-e', '0']);
+  assert.ok(child.pid > 0);
+
+  await assert.rejects(launchDetached(path.join(os.tmpdir(), 'no-such-installer.exe')), /missing/);
+
+  // A file that exists but can't be run reports the failure instead of quitting.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'asyncat-installer-'));
+  try {
+    const notRunnable = path.join(dir, 'Asyncat-setup.exe');
+    fs.writeFileSync(notRunnable, 'not a program', { mode: 0o644 });
+    await assert.rejects(launchDetached(notRunnable), (error) => ['EACCES', 'ENOEXEC', 'UNKNOWN', 'EFTYPE'].includes(error.code) || /spawn/.test(error.message));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+
+  // A spawn that never confirms times out instead of hanging.
+  const silent = () => Object.assign(new EventEmitter(), { unref() {} });
+  await assert.rejects(launchDetached('x', [], { spawnImpl: silent, existsImpl: () => true, timeoutMs: 20 }), /did not start/);
 });
 
 test('a saved AppImage is made executable', () => {

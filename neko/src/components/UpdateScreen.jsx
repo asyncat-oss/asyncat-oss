@@ -54,6 +54,11 @@ function ReadyStep({ download, platform, api }) {
             ? 'Asyncat will close, install the update and open again. Your chats and settings stay.'
             : 'Asyncat will close and open again on the new version. Your chats and settings stay.'}
         </p>
+        {download.strategy === 'run-installer' && download.perMachine ? (
+          <p className="mt-2 text-[13px] leading-5 text-fg-muted">
+            Asyncat is installed for everyone on this computer, so Windows will ask for permission before it installs the update.
+          </p>
+        ) : null}
         <div className="mt-5 flex justify-center gap-2">
           <Button variant="primary" size="md" disabled={finishing} onClick={onFinish}>{finishing ? 'Restarting…' : 'Restart now'}</Button>
         </div>
@@ -115,7 +120,7 @@ function ReadyStep({ download, platform, api }) {
 }
 
 ReadyStep.propTypes = {
-  download: PropTypes.shape({ strategy: PropTypes.string, file: PropTypes.string }).isRequired,
+  download: PropTypes.shape({ strategy: PropTypes.string, file: PropTypes.string, perMachine: PropTypes.bool }).isRequired,
   platform: PropTypes.string,
   api: PropTypes.object.isRequired,
 };
