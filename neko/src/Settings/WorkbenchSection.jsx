@@ -213,10 +213,10 @@ export default function WorkbenchSection() {
         )}
       </SectionCard>
 
-      <SectionCard icon={Globe2} title="Browser" description="The embedded browser is isolated from the Asyncat app and your system browser.">
+      <SectionCard icon={Globe2} title="Browser" description="The built-in browser is kept apart from the Asyncat app and your system browser. Its tabs stay open while Asyncat runs, even with the panel closed.">
         <ChoiceRow icon={Ghost} label="Default browsing mode" description="You can also switch modes from the browser toolbar. Incognito pages never enter local history or restored tabs." value={prefs.browserProfile} onChange={(value) => setPreference('browserProfile', value)} options={[
           { value: 'incognito', label: 'Incognito', description: 'Ephemeral cookies and no browsing history' },
-          { value: 'persistent', label: 'Standard', description: 'Remember Asyncat-only site logins and cookies' },
+          { value: 'persistent', label: 'Standard', description: 'Remember site logins and cookies. Tabs Asyncat opens always use this' },
         ]} />
         <ChoiceRow icon={Search} label="Search engine" value={prefs.browserSearchEngine} onChange={(value) => setPreference('browserSearchEngine', value)} compact options={[
           { value: 'brave', label: 'Brave' }, { value: 'google', label: 'Google' }, { value: 'duckduckgo', label: 'DuckDuckGo' }, { value: 'bing', label: 'Bing' },
@@ -225,11 +225,10 @@ export default function WorkbenchSection() {
           { value: 'internal', label: 'Asyncat browser', description: 'Open links in the built-in browser panel' },
           { value: 'system', label: 'System browser', description: 'Use your operating system’s default browser' },
         ]} />
-        <ToggleRow icon={RotateCcw} label="Restore browser tabs" description="Available in Standard mode. Incognito tabs are always discarded." checked={prefs.browserRestoreTabs} onChange={(value) => setPreference('browserRestoreTabs', value)} />
         <ToggleRow icon={History} label="Save browsing history" description="Standard-mode page titles and URLs are stored locally. Incognito overrides this setting." checked={prefs.browserHistoryEnabled} onChange={(value) => setPreference('browserHistoryEnabled', value)} />
         <ToggleRow icon={Wrench} label="Developer tools" description="Show page inspection actions in the compact browser menu." checked={prefs.browserDeveloperTools} onChange={(value) => setPreference('browserDeveloperTools', value)} />
         <div className={row}>
-          <span className="flex min-w-0 items-start gap-3"><DatabaseZap className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" /><span><span className="block text-sm font-medium text-gray-800 dark:text-gray-200">Browsing data</span><span className="block text-xs leading-5 text-gray-500 dark:text-gray-400">Clear history, cache, saved tabs, cookies, and site storage. Incognito data is also cleared whenever its browser closes.</span>{clearMessage && <span className="mt-1 block text-xs text-indigo-500">{clearMessage}</span>}</span></span>
+          <span className="flex min-w-0 items-start gap-3"><DatabaseZap className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" /><span><span className="block text-sm font-medium text-gray-800 dark:text-gray-200">Browsing data</span><span className="block text-xs leading-5 text-gray-500 dark:text-gray-400">Clear history, cache, cookies, and site storage. Incognito data is also cleared when you leave Incognito or close its last tab.</span>{clearMessage && <span className="mt-1 block text-xs text-indigo-500">{clearMessage}</span>}</span></span>
           <button type="button" onClick={clearBrowserData} disabled={clearing} className="shrink-0 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 shadow-sm transition-colors hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:bg-gray-950 dark:text-red-400 dark:hover:bg-red-950/20">{clearing ? 'Clearing…' : 'Clear data'}</button>
         </div>
         <div className="flex items-start gap-2 rounded-lg bg-gray-50 px-3 py-2.5 text-xs leading-5 text-gray-500 dark:bg-gray-950/50 dark:text-gray-400 midnight:bg-slate-950/60 midnight:text-slate-400">
