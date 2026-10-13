@@ -1236,6 +1236,12 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
       setConversationHistory(optimisticConversationHistory);
     }
 
+    // Show the chat's engine from the first message on; otherwise the composer
+    // falls back to Asyncat's model until the first answer is saved.
+    if (runConversationId === currentConversationIdRef.current && conversationMetadata?.engine !== runEngine) {
+      setConversationMetadata({ ...(conversationMetadata || {}), engine: runEngine });
+    }
+
     if (!isGhostMode) {
       try {
         const saveResult = await saveCurrentConversation({
