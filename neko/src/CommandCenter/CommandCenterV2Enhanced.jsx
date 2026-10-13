@@ -28,6 +28,7 @@ import DeleteConfirmationModal from "./components/modals/DeleteConfirmationModal
 import { useAudioStatus } from "./hooks/useAudioStatus";
 import { useAgentNotifications } from './hooks/useAgentNotifications';
 import { useCommandCenter } from "./context/CommandCenterContextEnhanced";
+import useActiveBrainStatus from "./hooks/useActiveBrainStatus.js";
 import { useUiPreferences } from '../contexts/UiPreferencesContext.jsx';
 import { useToast, errorDetail } from '../components/toastContext.js';
 import { chatApi, agentApi, gitApi } from "./api";
@@ -36,7 +37,6 @@ import { cleanReasoningAnswer } from "./utils/reasoningParser.js";
 import {
   AlertCircle,
   ArrowLeft,
-  ArrowRight,
   Bot,
   Code2,
   Edit2,
@@ -44,8 +44,6 @@ import {
   X,
   Ghost,
   Download,
-  Loader2,
-  MessageSquare,
   PanelRightOpen,
   GitBranch,
   BookMarked,
@@ -53,10 +51,13 @@ import {
   Sparkles,
   Globe,
   Link2,
-  Lock,
   SquareTerminal,
   FolderOpen,
+  Lightbulb,
+  PenLine,
+  Search,
 } from "lucide-react";
+import Cat from "../components/ui/Cat.jsx";
 
 import {
   getTaskRunDisplayStatus,
@@ -223,7 +224,7 @@ function SkillLearnedToast({ toast, onDismiss }) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }) => {
+const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
   const commandCenterContext = useCommandCenter();
   const { workbenchPreferences, setWorkbenchPreference } = useUiPreferences();
   const navigate = useNavigate();
@@ -280,15 +281,38 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   const [editingBranchId, setEditingBranchId] = useState(null);
   const [branchNameDraft, setBranchNameDraft] = useState('');
 
-  const [experienceMode, setExperienceMode] = useState(() => {
-    if (initialMode === 'agent') return 'work';
+  // Chat and Work are one conversation type now. The screen always offers the
+  // full surface; each message picks direct chat or the agent (pickRunMode).
+  const experienceMode = 'work';
+  const [toolsPreference, setToolsPreferenceState] = useState(() => {
     try {
-      return localStorage.getItem('asyncat_experience_mode') === 'work' ? 'work' : 'chat';
+      const saved = localStorage.getItem('asyncat_tools_preference');
+      return ['auto', 'on', 'off'].includes(saved) ? saved : 'auto';
     } catch {
-      return 'chat';
+      return 'auto';
     }
   });
-  const [continuingMode, setContinuingMode] = useState(null);
+  const activeBrain = useActiveBrainStatus();
+  // Which agent answers: Asyncat's own, or an installed Claude Code / Codex CLI.
+  const [selectedEngine, setSelectedEngineState] = useState(() => {
+    try { return localStorage.getItem('asyncat_engine') || 'asyncat'; } catch { return 'asyncat'; }
+  });
+  const [engines, setEngines] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    agentApi.getEngines()
+      .then(res => { if (!cancelled) setEngines(res?.engines || []); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  const setSelectedEngine = useCallback((value) => {
+    setSelectedEngineState(value);
+    try { localStorage.setItem('asyncat_engine', value); } catch { /* localStorage may be unavailable */ }
+  }, []);
+  const setToolsPreference = useCallback((value) => {
+    setToolsPreferenceState(value);
+    try { localStorage.setItem('asyncat_tools_preference', value); } catch { /* localStorage may be unavailable */ }
+  }, []);
   const [showActivitySidebar, setShowActivitySidebar] = useState(() => {
     try {
       return workbenchPreferences.restoreOpenPanels && localStorage.getItem('asyncat_show_command_side_panel') === 'true';
@@ -394,7 +418,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
   }, []);
   const skillToastTimerRef = useRef(null);
   // Brain stats (welcome screen ambient indicator)
-  const [brainStats, setBrainStats] = useState(null);
   const currentRunKey = currentConversationId || '__draft__';
   const currentRun = chatRuns[currentRunKey] || {};
   const agentMode = selectedAgentMode || (toolsEnabled ? 'action' : 'plan');
@@ -435,57 +458,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     setToolsEnabled(mode !== 'plan');
     try { localStorage.setItem('asyncat_agent_mode', mode); } catch { /* localStorage may be unavailable */ }
   }, [setToolsEnabled]);
-  const handleExperienceModeChange = useCallback((nextMode) => {
-    if (currentConversationId || messages.length > 0) return;
-    const mode = nextMode === 'work' ? 'work' : 'chat';
-    setExperienceMode(mode);
-    setConversationMetadata({ ...(conversationMetadata || {}), experienceMode: mode });
-    if (mode === 'chat') {
-      setShowTerminalDock(false);
-      if (sidePanelTab !== 'preview') {
-        setShowActivitySidebar(false);
-        setSidePanelTab('steps');
-      }
-    }
-    try { localStorage.setItem('asyncat_experience_mode', mode); } catch { /* localStorage may be unavailable */ }
-  }, [conversationMetadata, currentConversationId, messages.length, setConversationMetadata, sidePanelTab]);
-  const handleContinueInExperienceMode = useCallback(async (targetMode) => {
-    if (!currentConversationId || agentRunning || continuingMode || isGhostMode) return;
-    const mode = targetMode === 'work' ? 'work' : 'chat';
-    if (mode === experienceMode) return;
-
-    setContinuingMode(mode);
-    setError(null);
-    try {
-      const result = await chatApi.continueConversation(currentConversationId, mode);
-      if (!result?.conversationId) throw new Error('The continued conversation was not created');
-      setShowActivitySidebar(false);
-      setShowTerminalDock(false);
-      setSelectedArtifact(null);
-      triggerConversationRefresh();
-      navigate(`/conversations/${result.conversationId}`);
-    } catch (error) {
-      console.error('Continue conversation error:', error);
-      setError(error.message || `Failed to continue in ${mode === 'work' ? 'Work' : 'Chat'}`);
-    } finally {
-      setContinuingMode(null);
-    }
-  }, [
-    agentRunning,
-    continuingMode,
-    currentConversationId,
-    experienceMode,
-    isGhostMode,
-    navigate,
-    setError,
-    triggerConversationRefresh,
-  ]);
-  useEffect(() => {
-    const savedMode = conversationMetadata?.experienceMode;
-    if (!['chat', 'work'].includes(savedMode)) return;
-    setExperienceMode(savedMode);
-    try { localStorage.setItem('asyncat_experience_mode', savedMode); } catch { /* localStorage may be unavailable */ }
-  }, [conversationMetadata?.experienceMode, currentConversationId]);
   const latestAskUser = useMemo(() => {
     for (let i = agentEvents.length - 1; i >= 0; i--) {
       if (agentEvents[i]?.type === 'ask_user') return agentEvents[i].data;
@@ -573,22 +545,6 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     };
   }, [loadRuntimeStatus, showActivitySidebar, sidePanelTab]);
 
-  // Brain stats — fetch counts, refresh after each run completes
-  useEffect(() => {
-    let cancelled = false;
-    const fetchStats = () => {
-      agentApi.getBrainStats()
-        .then(res => { if (!cancelled && res?.success) setBrainStats(res); })
-        .catch(() => {});
-    };
-    fetchStats();
-    const handler = () => { if (!cancelled) fetchStats(); };
-    window.addEventListener('agent-run-complete', handler);
-    return () => {
-      cancelled = true;
-      window.removeEventListener('agent-run-complete', handler);
-    };
-  }, []);
 
   // Clean up skill toast timer on unmount
   useEffect(() => {
@@ -1162,7 +1118,10 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     if (!goal?.trim() || agentRunning) return;
     const submittedGoal = goal.trim();
     const runExperienceMode = runOptions.experienceMode || experienceMode;
-    const isDirectChat = runExperienceMode === 'chat';
+    // A conversation keeps the engine it started with; new ones use the picker.
+    const runEngine = runOptions.engine || conversationMetadata?.engine || (messages.length > 0 ? 'asyncat' : selectedEngine);
+    const isExternalEngine = runEngine !== 'asyncat';
+    const isDirectChat = runExperienceMode === 'chat' && !isExternalEngine;
     const agentMentions = isDirectChat ? [] : (Array.isArray(messageObj?.agentMentions) ? messageObj.agentMentions : []);
     const fileAttachments = Array.isArray(messageObj?.fileAttachments) ? messageObj.fileAttachments : [];
     const requestedIntegrationTools = Array.isArray(runOptions.enabledIntegrationTools)
@@ -1270,6 +1229,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
             ...(runMetadata || {}),
             activeBranchId: runBranchId,
             experienceMode: runExperienceMode,
+            engine: runEngine,
           },
         });
 
@@ -1327,6 +1287,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     let sawErrorEvent = false;
     let sawDoneWithoutAnswer = false;
     let runSessionId = isDirectChat ? null : agentCurrentSessionId;
+    let doneExternalSessionId = null;
     const runEvents = [
       { type: 'user_goal', data: userGoalEventData },
     ];
@@ -1354,6 +1315,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         assistantMessageId,
         clientTimestamp: submittedAt,
         clientTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+        engine: runEngine,
+        externalSessionId: isExternalEngine ? (runMetadata?.externalSessions?.[runEngine] || null) : null,
       });
       for await (const event of eventStream) {
         if (controller.signal.aborted) break;
@@ -1382,6 +1345,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
             runSessionId = event.data.sessionId;
             updateChatRun(runKey, { sessionId: event.data.sessionId });
           }
+          if (event.data?.externalSessionId) doneExternalSessionId = event.data.externalSessionId;
           const doneAnswer = String(event.data?.answer || '').trim();
           const stopReason = event.data?.stopReason || 'answer';
           if (doneAnswer) {
@@ -1638,6 +1602,16 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           };
         }
         const finalMessages = [...optimisticMessages, assistantMsg];
+        const finalMetadata = {
+          ...(runMetadata || {}),
+          activeBranchId: runBranchId,
+          experienceMode: runExperienceMode,
+          engine: runEngine,
+          ...(doneExternalSessionId
+            ? { externalSessions: { ...(runMetadata?.externalSessions || {}), [runEngine]: doneExternalSessionId } }
+            : {}),
+          ...(shouldPersistCompactedHistory ? { compactedConversationHistory: nextHistory } : {}),
+        };
         if (runConversationId === currentConversationIdRef.current) {
           setMessages(finalMessages);
         }
@@ -1652,13 +1626,11 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
             messages: finalMessages,
             conversationId: runConversationId,
             mode: runExperienceMode,
-            metadata: {
-              ...(runMetadata || {}),
-              activeBranchId: runBranchId,
-              experienceMode: runExperienceMode,
-              ...(shouldPersistCompactedHistory ? { compactedConversationHistory: nextHistory } : {}),
-            },
+            metadata: finalMetadata,
           });
+        }
+        if (runConversationId === currentConversationIdRef.current) {
+          setConversationMetadata(finalMetadata);
         }
 
         // Generate an AI title after the first exchange of a new conversation
@@ -1710,6 +1682,8 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
     }
   }, [
     toast,
+    selectedEngine,
+    setConversationMetadata,
     agentRunning,
     currentRunKey,
     agentConversationHistory,
@@ -1749,9 +1723,23 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
 
   // The composer's submit: on a failed save it gets the error back (see
   // handleAgentRun), so it keeps the typed message instead of clearing it.
+  // Each message goes to the agent when it can help (a project is open, the
+  // model can call tools, a profile is mentioned or a file is attached) and to
+  // direct chat otherwise, which small local models handle far better.
+  const pickRunMode = useCallback((messageObj) => {
+    if ((conversationMetadata?.engine || (messages.length > 0 ? 'asyncat' : selectedEngine)) !== 'asyncat') return 'work';
+    const attachments = Array.isArray(messageObj?.fileAttachments) ? messageObj.fileAttachments : [];
+    if (attachments.some(file => file?.type && file.type !== 'image')) return 'work';
+    if (toolsPreference === 'on') return 'work';
+    if (toolsPreference === 'off') return 'chat';
+    if (workingContext?.workingDir) return 'work';
+    if (Array.isArray(messageObj?.agentMentions) && messageObj.agentMentions.length > 0) return 'work';
+    return activeBrain.supportsTools ? 'work' : 'chat';
+  }, [activeBrain.supportsTools, conversationMetadata?.engine, messages.length, selectedEngine, toolsPreference, workingContext?.workingDir]);
+
   const handleComposerSubmit = useCallback(
-    (messageObj) => handleAgentRun(messageObj, { fromComposer: true }),
-    [handleAgentRun],
+    (messageObj) => handleAgentRun(messageObj, { fromComposer: true, experienceMode: pickRunMode(messageObj) }),
+    [handleAgentRun, pickRunMode],
   );
 
   const handleEditConversationTurn = useCallback(async (messageId, nextContent) => {
@@ -2508,80 +2496,17 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
 
   const getGreeting = () => {
     if (isGhostMode) return 'Ghost Mode — this conversation stays off the record';
-    return experienceMode === 'chat'
-      ? "What's on your mind today?"
-      : 'What should we work on?';
+    return "What's on your mind today?";
   };
-  const modeSwitcher = (
-    <div
-      className="inline-flex items-center gap-6 border-b border-gray-200 dark:border-gray-800 midnight:border-slate-800"
-      role="tablist"
-      aria-label="Conversation mode"
-    >
-      {['chat', 'work'].map(mode => {
-        const active = experienceMode === mode;
-        const description = mode === 'chat'
-          ? 'Direct model conversation without agent tools'
-          : 'Agent conversation with planning and tools; a Project is optional';
-        return (
-          <button
-            key={mode}
-            type="button"
-            role="tab"
-            aria-selected={active}
-            aria-label={`${mode}: ${description}`}
-            title={description}
-            onClick={() => handleExperienceModeChange(mode)}
-            disabled={agentRunning}
-            className={`relative flex h-9 items-center gap-2 px-0.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-              active
-                ? 'text-gray-950 dark:text-white midnight:text-slate-100'
-                : 'text-gray-400 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200 midnight:text-slate-500 midnight:hover:text-slate-200'
-            }`}
-          >
-            <span className={`h-1.5 w-1.5 rounded-[2px] transition-colors ${active ? 'bg-indigo-500 dark:bg-indigo-300' : 'bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700'}`} aria-hidden="true" />
-            <span className="capitalize">{mode}</span>
-            <span
-              className={`absolute inset-x-0 -bottom-px h-px transition-opacity ${active ? 'bg-indigo-500 opacity-100 dark:bg-indigo-300' : 'opacity-0'}`}
-              aria-hidden="true"
-            />
-          </button>
-        );
-      })}
-    </div>
-  );
+  // Starter prompts under the welcome composer; clicking one fills the box.
+  const starterPrompts = [
+    { icon: Lightbulb, label: 'Explain something', text: 'Explain how large language models work, in simple terms.' },
+    { icon: PenLine, label: 'Write an email', text: 'Help me write a friendly email turning down a meeting invite.' },
+    { icon: Search, label: 'Review a project', text: 'Look through this project and tell me what could be improved first.' },
+    { icon: Globe, label: 'Research a topic', text: 'Research the current state of WebGPU support and write me a short summary.' },
+  ];
   const hasConversationContent = messages.length > 0 || persistedAgentEvents.length > 0 || agentRunning;
-  const targetExperienceMode = experienceMode === 'chat' ? 'work' : 'chat';
-  const currentModeLabel = experienceMode === 'chat' ? 'Chat' : 'Work';
-  const targetModeLabel = targetExperienceMode === 'chat' ? 'Chat' : 'Work';
-  const CurrentModeIcon = experienceMode === 'chat' ? MessageSquare : Code2;
-  const lockedModeControl = (
-    <div className="inline-flex shrink-0 items-center gap-2.5">
-      <span
-        className="inline-flex h-8 items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-slate-400"
-        title={`${currentModeLabel} is fixed for this conversation`}
-      >
-        <CurrentModeIcon className="h-3.5 w-3.5" />
-        {currentModeLabel}
-        <Lock className="h-3 w-3 text-gray-300 dark:text-gray-600" />
-      </span>
-      {currentConversationId && !isGhostMode && (
-        <button
-          type="button"
-          onClick={() => handleContinueInExperienceMode(targetExperienceMode)}
-          disabled={agentRunning || Boolean(continuingMode)}
-          className="inline-flex h-8 items-center gap-1 text-xs font-medium text-gray-400 transition-colors hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-500 dark:hover:text-indigo-300 midnight:text-slate-500 midnight:hover:text-indigo-300"
-          title={`Create a new ${targetModeLabel} conversation with this transcript`}
-        >
-          {continuingMode === targetExperienceMode
-            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            : <ArrowRight className="h-3.5 w-3.5" />}
-          <span className="hidden sm:inline">Continue in {targetModeLabel}</span>
-          <span className="sm:hidden">{targetModeLabel}</span>
-        </button>
-      )}
-    </div>
-  );
+  const conversationEngine = conversationMetadata?.engine || (hasConversationContent ? 'asyncat' : selectedEngine);
   const shouldRenderSidePanel = showActivitySidebar && (
     sidePanelTab === 'preview'
     || (experienceMode === 'work' && (
@@ -2673,14 +2598,13 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
         </div>
         <div className="flex flex-col items-center justify-center flex-1 px-6 py-8">
           <div className="max-w-3xl w-full">
-            <div className="flex flex-col items-center gap-3 mb-6 text-center">
-              <h1 className="text-xl font-medium text-gray-900 dark:text-white midnight:text-slate-100">
+            <div className="mb-7 flex flex-col items-center text-center">
+              <Cat pose={isGhostMode ? 'sleep' : 'sit'} className={isGhostMode ? 'w-24' : 'w-12'} outline={7} />
+              <h1 className="mt-4 text-[28px] font-semibold tracking-[-0.025em] text-fg">
                 {getGreeting()}
               </h1>
-              <p className="max-w-lg text-sm text-gray-400 dark:text-gray-500 midnight:text-slate-500">
-                {experienceMode === 'chat'
-                  ? 'Chat talks directly to the model and does not use agent tools.'
-                  : 'Work runs the agent. Select a Project for local-file access, or use No project for non-file work.'}
+              <p className="mt-2 max-w-lg text-[13px] leading-5 text-fg-subtle">
+                Ask anything. Open a project when you want Asyncat to work with your files.
               </p>
             </div>
 
@@ -2693,37 +2617,17 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
               </div>
             )}
 
-            {!isGhostMode && experienceMode === 'work' && brainStats && (brainStats.memoryCount > 0 || brainStats.skillCount > 0) && (
-              <div className="flex justify-center mb-5">
-                <div className="inline-flex items-center gap-3 text-[11px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">
-                  {brainStats.memoryCount > 0 && (
-                    <span>{brainStats.memoryCount} {brainStats.memoryCount === 1 ? 'memory' : 'memories'}</span>
-                  )}
-                  {brainStats.memoryCount > 0 && brainStats.skillCount > 0 && (
-                    <span className="text-gray-200 dark:text-gray-700">·</span>
-                  )}
-                  {brainStats.skillCount > 0 && (
-                    <span>{brainStats.skillCount} skill{brainStats.skillCount !== 1 ? 's' : ''}</span>
-                  )}
-                  {brainStats.autoSkillCount > 0 && (
-                    <>
-                      <span className="text-gray-200 dark:text-gray-700">·</span>
-                      <span className="text-emerald-500 dark:text-emerald-500">{brainStats.autoSkillCount} auto-learned</span>
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-
-            <div className="flex px-4 sm:px-6">
-              {modeSwitcher}
-            </div>
 
             <MessageInputV2
               prefillValue={composerRestore?.text}
               key={`welcome-input-${currentConversationId || 'draft'}`}
               onSubmit={handleComposerSubmit}
               experienceMode={experienceMode}
+              toolsPreference={toolsPreference}
+              onToolsPreferenceChange={setToolsPreference}
+              engine={conversationEngine}
+              engines={engines}
+              onEngineChange={hasConversationContent ? undefined : setSelectedEngine}
               sttReady={sttReady}
               ttsReady={ttsReady}
               voiceMode={voiceMode}
@@ -2740,9 +2644,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                   : getVoicePlaceholder(
                       sttReady,
                       ttsReady,
-                      experienceMode === 'chat'
-                        ? 'Message the model...'
-                        : 'Ask anything, or describe what you want done...'
+                      'Ask anything…'
                     )
               }
               hasMessages={hasConversationContent}
@@ -2768,6 +2670,21 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 runtimePanelOpen={experienceMode === 'work' && showActivitySidebar && sidePanelTab === 'runtime'}
               />
 
+            {!isGhostMode && (
+              <div className="mx-auto mt-2 flex max-w-3xl flex-wrap justify-center gap-2 px-4 sm:px-6">
+                {starterPrompts.map(({ icon: PromptIcon, label, text }) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => setComposerRestore({ text })}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-line px-3 text-[13px] text-fg-muted outline-none transition-colors hover:border-line-strong hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/40"
+                  >
+                    <PromptIcon className="h-3.5 w-3.5" strokeWidth={1.75} />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -2775,7 +2692,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
 
   // Chat Layout
   return (
-    <div data-command-center className="flex h-full min-h-0 bg-white dark:bg-gray-900 midnight:bg-slate-950">
+    <div data-command-center className="flex h-full min-h-0 bg-canvas">
       <div className="flex min-h-0 flex-1 min-w-0 flex-col h-full transition-all duration-300">
         {TopBar}
         {isConversationLoading ? (
@@ -2784,14 +2701,11 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
           welcomeScreenJSX
         ) : (
           <>
-            <div className="shrink-0 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950">
+            <div className="shrink-0 border-b border-line bg-canvas">
               <div className={`mx-auto px-3 sm:px-4 md:px-6 ${shouldRenderSidePanel ? 'max-w-[min(100vw,96rem)]' : 'max-w-5xl'}`}>
 
                 {/* ── Row 1: Title + conversation-level actions ──────────────── */}
                 <div className="flex min-w-0 items-center gap-2 py-2">
-                  {lockedModeControl}
-                  <div className="h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700" />
-
                   {/* Title */}
                   <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
                     {isEditingTitle ? (
@@ -2807,14 +2721,14 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                     ) : currentConversationId && conversationTitle ? (
                       <button
                         onClick={handleStartRename}
-                        className="group flex min-w-0 max-w-full flex-1 items-center gap-1.5 overflow-hidden rounded-md px-1 py-1 text-left text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800/60 dark:hover:text-white midnight:text-gray-300 midnight:hover:bg-slate-800/60"
+                        className="group flex min-w-0 max-w-full flex-1 items-center gap-1.5 overflow-hidden rounded-lg px-1.5 py-1 text-left text-[14px] font-medium text-fg transition-colors hover:bg-hover"
                         title="Click to rename"
                       >
                         <span className="block min-w-0 flex-1 truncate">{conversationTitle}</span>
                         <Edit2 className="w-3 h-3 opacity-0 group-hover:opacity-40 transition-opacity shrink-0" />
                       </button>
                     ) : (
-                      <h1 className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-700 dark:text-gray-300 midnight:text-gray-300">
+                      <h1 className="min-w-0 flex-1 truncate text-[14px] font-medium text-fg">
                         {conversationTitle || "Untitled Chat"}
                       </h1>
                     )}
@@ -2979,8 +2893,9 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 </div>
 
                 {/* ── Row 2: Panel openers (scrollable) ─────────────────────── */}
-                {experienceMode === 'work' && (
-                <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800">
+                {/* Only when there is agent work to look at; plain chats don't need it. */}
+                {(workingContext?.workingDir || persistedAgentEvents.length > 0 || agentEvents.length > 0) && (
+                <div className="border-t border-line">
                   <div className="-mx-1 flex min-w-0 items-center gap-1 overflow-x-auto px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     {workingContext?.workingDir && <>
                     <button
@@ -3113,7 +3028,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                         </div>
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">
+                            <span className="text-sm font-semibold text-fg">
                               Task agent run
                             </span>
                             <span className={`rounded-md border px-2 py-0.5 text-xs font-medium ${agentTaskRunStatus.className}`}>
@@ -3178,7 +3093,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 className="h-full min-h-0 overflow-y-auto relative"
                 style={{ maxHeight: '100%' }}
               >
-                <div className="max-w-5xl mx-auto px-4 md:px-8 pt-8 pb-12 min-h-full">
+                <div className="max-w-5xl mx-auto px-4 md:px-8 pt-10 pb-16 min-h-full">
                   <AgentRunFeed
                     events={persistedAgentEvents}
                     isRunning={agentRunning}
@@ -3221,6 +3136,11 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 key={`conversation-input-${currentConversationId || 'draft'}`}
                 onSubmit={handleComposerSubmit}
                 experienceMode={experienceMode}
+                toolsPreference={toolsPreference}
+                onToolsPreferenceChange={setToolsPreference}
+                engine={conversationEngine}
+                engines={engines}
+                onEngineChange={hasConversationContent ? undefined : setSelectedEngine}
                 sttReady={sttReady}
                 ttsReady={ttsReady}
                 voiceMode={voiceMode}
@@ -3232,7 +3152,7 @@ const CommandCenterV2Enhanced = ({ initialMode = 'chat', agentSessionId = null }
                 onReset={handleClearConversation}
                 placeholder={
                   agentRunning
-                    ? experienceMode === 'chat' ? 'Model is responding...' : 'Agent is working...'
+                    ? 'Working…'
                     : agentTaskRun
                     ? `Reply to the task agent about "${agentTaskRun.cardTitle || 'this task'}"...`
                     : isGhostMode

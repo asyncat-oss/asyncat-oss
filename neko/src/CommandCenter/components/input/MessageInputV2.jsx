@@ -1,7 +1,10 @@
 // MessageInputV2.jsx
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, Bookmark, ChevronDown, ClipboardPen, Cloud, Cpu, Headphones, ImagePlus, Loader2, Mail, MessageCircle, Mic, Paperclip, Rss, Send, ShieldAlert, ShieldOff, Square, Wrench, X, Zap, Plus, Check, Folder } from "lucide-react";
+import PropTypes from "prop-types";
+import { ArrowUp, Bell, Bookmark, ChevronDown, Hammer, ClipboardPen, Cloud, Cpu, Headphones, ImagePlus, Loader2, Mail, MessageCircle, Mic, Paperclip, Rss, Send, ShieldAlert, ShieldOff, Square, Wrench, X, Zap, Plus, Check, Folder } from "lucide-react";
+import { Menu, MenuItem, MenuLabel } from "../../../components/ui/Menu.jsx";
+import { ProviderGlyph } from "../../../Models/modelLogos.jsx";
 import eventBus from "../../../utils/eventBus.js";
 import ConfirmModal from "../modals/ConfirmModal.jsx";
 import { WorkingContextModal } from "../modals/WorkingContextModal.jsx";
@@ -177,7 +180,7 @@ function TokenBar({ usage }) {
   const totalTokens = usage.cumulativeTotalTokens || usage.totalTokens || usage.lastTotalTokens || 0;
   const pct = Math.min((contextTokens / ctx) * 100, 100);
   const color = pct >= 90 ? 'bg-red-400' : pct >= 80 ? 'bg-amber-400' : pct >= 70 ? 'bg-yellow-300' : 'bg-emerald-400';
-  const textColor = pct >= 90 ? 'text-red-400' : pct >= 80 ? 'text-amber-400' : 'text-gray-400 dark:text-gray-500 midnight:text-slate-500';
+  const textColor = pct >= 90 ? 'text-red-400' : pct >= 80 ? 'text-amber-400' : 'text-fg-subtle';
   const label = `${usage.estimated ? '~' : ''}${(contextTokens / 1000).toFixed(1)}k`;
   const tooltip = `${usage.estimated ? 'Estimated — ' : ''}${(contextTokens / 1000).toFixed(1)}k current context · ${(totalTokens / 1000).toFixed(1)}k total used · ${pct.toFixed(0)}% of ${(ctx / 1000).toFixed(0)}k context (${usage.contextWindowSource || 'unknown'})`;
 
@@ -430,7 +433,7 @@ function PendingInteractionInput({ interaction, onPermissionDecision, onAskUserA
                 </div>
               )}
               {data.workingDir && (
-                <p className="mt-1 truncate text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">{data.workingDir}</p>
+                <p className="mt-1 truncate text-[10px] text-fg-subtle">{data.workingDir}</p>
               )}
               {data.error && (
                 <p role="alert" className="mt-1.5 text-xs text-red-600 dark:text-red-400 midnight:text-red-400">
@@ -522,6 +525,128 @@ function RecordingWaveform() {
   );
 }
 
+const ENGINE_DESCRIPTIONS = {
+  asyncat: "Asyncat's own agent, with the model you chose",
+  "claude-code": "Claude Code on this computer, with your Claude sign-in",
+  codex: "Codex on this computer, with your ChatGPT sign-in",
+};
+
+// Picks which agent answers this conversation. Fixed once the conversation has
+// messages, because each engine keeps its own memory of the chat.
+function EnginePicker({ engine, engines, onChange, disabled }) {
+  const buttonRef = useRef(null);
+  const [open, setOpen] = useState(false);
+  const options = [{ id: "asyncat", name: "Asyncat", installed: true, signedIn: true }, ...engines];
+  const current = options.find(option => option.id === engine) || options[0];
+  const locked = !onChange;
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={() => !locked && setOpen(isOpen => !isOpen)}
+        disabled={disabled}
+        aria-haspopup={locked ? undefined : "menu"}
+        aria-expanded={locked ? undefined : open}
+        title={locked ? `${current.name} answers this conversation` : ENGINE_DESCRIPTIONS[current.id]}
+        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium text-fg-muted transition-colors disabled:cursor-not-allowed ${locked ? "cursor-default" : "hover:bg-hover hover:text-fg"}`}
+      >
+        <ProviderGlyph providerId={current.id} className="h-3.5 w-3.5" />
+        <span>{current.name}</span>
+        {!locked && <ChevronDown className="h-3 w-3 opacity-50" />}
+      </button>
+      {!locked && (
+        <Menu anchorRef={buttonRef} open={open} onClose={() => setOpen(false)} placement="top-start" width={300} label="Agent">
+          <MenuLabel>Who answers</MenuLabel>
+          {options.map(option => {
+            const unavailable = !option.installed;
+            const hint = unavailable
+              ? "Not installed on this computer"
+              : option.signedIn === false
+                ? `Not signed in. Run \`${option.signInCommand}\` in a terminal.`
+                : ENGINE_DESCRIPTIONS[option.id];
+            return (
+              <MenuItem
+                key={option.id}
+                icon={() => <ProviderGlyph providerId={option.id} className="h-4 w-4 shrink-0" />}
+                label={(
+                  <span className="flex flex-col py-0.5">
+                    <span className="text-fg">{option.name}</span>
+                    <span className="whitespace-normal text-[11px] leading-4 text-fg-subtle">{hint}</span>
+                  </span>
+                )}
+                checked={engine === option.id}
+                disabled={unavailable}
+                onSelect={() => onChange(option.id)}
+              />
+            );
+          })}
+        </Menu>
+      )}
+    </>
+  );
+}
+
+EnginePicker.propTypes = {
+  engine: PropTypes.string.isRequired,
+  engines: PropTypes.arrayOf(PropTypes.object).isRequired,
+  onChange: PropTypes.func,
+  disabled: PropTypes.bool,
+};
+
+const TOOLS_PREFERENCE_OPTIONS = [
+  { value: "auto", short: "Auto", label: "Auto", hint: "Uses agent tools when a project is open or the model supports them" },
+  { value: "on", short: "On", label: "Always use tools", hint: "Every message runs the agent" },
+  { value: "off", short: "Off", label: "Just chat", hint: "Talks to the model directly, without tools" },
+];
+
+// Chooses whether messages run the agent (with tools) or go straight to the model.
+function ToolsPreferenceControl({ value, onChange, disabled }) {
+  const buttonRef = useRef(null);
+  const [open, setOpen] = useState(false);
+  const current = TOOLS_PREFERENCE_OPTIONS.find(option => option.value === value) || TOOLS_PREFERENCE_OPTIONS[0];
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={() => setOpen(isOpen => !isOpen)}
+        disabled={disabled}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={current.hint}
+        className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-fg-muted transition-colors hover:bg-hover hover:text-fg disabled:opacity-60"
+      >
+        <Hammer className="h-3.5 w-3.5 shrink-0" />
+        <span>Tools: {current.short}</span>
+        <ChevronDown className="h-3 w-3 opacity-60" />
+      </button>
+      <Menu anchorRef={buttonRef} open={open} onClose={() => setOpen(false)} placement="top-start" width={280} label="Agent tools">
+        <MenuLabel>Agent tools</MenuLabel>
+        {TOOLS_PREFERENCE_OPTIONS.map(option => (
+          <MenuItem
+            key={option.value}
+            label={(
+              <span className="flex flex-col py-0.5">
+                <span className="text-fg">{option.label}</span>
+                <span className="whitespace-normal text-[11px] leading-4 text-fg-subtle">{option.hint}</span>
+              </span>
+            )}
+            checked={value === option.value}
+            onSelect={() => onChange(option.value)}
+          />
+        ))}
+      </Menu>
+    </>
+  );
+}
+
+ToolsPreferenceControl.propTypes = {
+  value: PropTypes.oneOf(["auto", "on", "off"]),
+  onChange: PropTypes.func.isRequired,
+  disabled: PropTypes.bool,
+};
+
 export const MessageInputV2 = ({
   onSubmit,
   disabled,
@@ -546,6 +671,11 @@ export const MessageInputV2 = ({
   onNativeFileAttach = null,
   workingContext = null,
   onWorkingContextChange,
+  toolsPreference = "auto",
+  onToolsPreferenceChange,
+  engine = "asyncat",
+  engines = [],
+  onEngineChange,
   reasoningEffort = "auto",
   onReasoningEffortChange,
   tokenUsage = null,
@@ -708,17 +838,21 @@ export const MessageInputV2 = ({
 
   const ctxSize = localModel.ctxSize || modelContextConfig.ctx_size || (activeBrain.isLocal ? 8192 : 128000);
 
+  const usesExternalEngine = Boolean(engine && engine !== "asyncat");
+
   const localModelSendBlockReason = useMemo(() => {
-    if (!activeBrain.isBuiltin) return null;
-    if (activeBrain.loading) return "Checking model status...";
+    // Claude Code and Codex answer on their own; Asyncat's model doesn't matter.
+    if (usesExternalEngine || !activeBrain.isBuiltin) return null;
+    if (activeBrain.loading) return "Checking which model is ready…";
     if (activeBrain.isLoadingModel) {
       return activeBrain.model
         ? `Model ${activeBrain.model} is still loading.`
         : "Model is still loading.";
     }
     if (activeBrain.isReady) return null;
-    if (activeBrain.status === "error") return "Model failed to load. Choose another model or provider before sending.";
-    return "Choose a model or provider before sending a message.";
+    if (activeBrain.status === "error") return "The model failed to load. Pick another one to keep chatting.";
+    if (activeBrain.rawModel) return `${activeBrain.model || "The chosen model"} isn't loaded right now.`;
+    return "No model yet. Choose one to start chatting.";
   }, [
     activeBrain.isBuiltin,
     activeBrain.loading,
@@ -726,6 +860,8 @@ export const MessageInputV2 = ({
     activeBrain.isReady,
     activeBrain.status,
     activeBrain.model,
+    activeBrain.rawModel,
+    usesExternalEngine,
   ]);
 
   useEffect(() => {
@@ -1456,7 +1592,7 @@ export const MessageInputV2 = ({
   }, [value, inlineMentions]);
 
   const getBorderColor = () => {
-    return "border-gray-200/90 dark:border-gray-800 midnight:border-slate-800 focus-within:border-gray-300 dark:focus-within:border-gray-700 midnight:focus-within:border-slate-700";
+    return "border-line-strong focus-within:border-fg-subtle/70";
   };
 
   if (pendingInteraction?.type) {
@@ -1484,10 +1620,8 @@ export const MessageInputV2 = ({
       <div className={`w-full max-w-3xl mx-auto px-4 sm:px-6 ${isWorkExperience ? "py-3" : "py-2.5"}`}>
         <form onSubmit={handleSubmit}>
             <div
-              className={`bg-white px-4 border transition-all dark:bg-gray-900 midnight:bg-slate-900 ${getBorderColor()} ${
-                isWorkExperience
-                  ? "rounded-[1.4rem] pb-3 pt-3.5 shadow-[0_10px_32px_rgba(15,23,42,0.06)] dark:shadow-[0_10px_32px_rgba(0,0,0,0.18)] midnight:shadow-[0_10px_32px_rgba(0,0,0,0.2)]"
-                  : "rounded-[1.5rem] pb-2.5 pt-3.5 shadow-[0_10px_35px_rgba(15,23,42,0.06)] dark:shadow-[0_10px_35px_rgba(0,0,0,0.16)] midnight:shadow-[0_10px_35px_rgba(0,0,0,0.2)]"
+              className={`border bg-surface px-4 transition-[border-color,box-shadow] shadow-[0_2px_8px_rgba(15,23,42,0.04),0_12px_32px_-8px_rgba(15,23,42,0.08)] dark:shadow-[0_12px_32px_-8px_rgba(0,0,0,0.45)] ${getBorderColor()} ${
+                isWorkExperience ? "rounded-[1.4rem] pb-3 pt-3.5" : "rounded-[1.5rem] pb-2.5 pt-3.5"
               }`}
             >
               {(error || modelSwitchError) && (
@@ -1506,7 +1640,7 @@ export const MessageInputV2 = ({
               )}
 
               {localModelSendBlockReason && !disabled && (
-                <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-200 midnight:border-amber-900/50 midnight:bg-amber-900/20 midnight:text-amber-200">
+                <div className="mb-3 flex items-center justify-between gap-3 rounded-xl bg-hover py-1.5 pl-3 pr-1.5 text-[13px] text-fg-muted">
                   <div className="flex min-w-0 items-center gap-2">
                     {activeBrain.isLoadingModel || activeBrain.loading ? (
                       <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
@@ -1516,13 +1650,33 @@ export const MessageInputV2 = ({
                     <span className="min-w-0 truncate">{localModelSendBlockReason}</span>
                   </div>
                   {!(activeBrain.isLoadingModel || activeBrain.loading) && (
-                    <button
-                      type="button"
-                      onClick={() => navigate('/models')}
-                      className="shrink-0 rounded-md border border-amber-300 bg-white px-2.5 py-1 text-xs font-medium text-amber-900 transition-colors hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100 dark:hover:bg-amber-900/40 midnight:border-amber-800 midnight:bg-amber-950/40 midnight:text-amber-100 midnight:hover:bg-amber-900/40"
-                    >
-                      Set up a model
-                    </button>
+                    <div className="flex shrink-0 items-center gap-1">
+                      {activeBrain.providerId === "llamacpp-builtin" && activeBrain.rawModel && activeBrain.status !== "error" && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              await llamaServerApi.start(activeBrain.rawModel, 8192);
+                            } catch (err) {
+                              setModelSwitchError(err.message || "Couldn't load the model");
+                            }
+                            window.dispatchEvent(new CustomEvent("asyncat-model-runtime-updated"));
+                          }}
+                          className="rounded-lg bg-fg px-2.5 py-1 text-[12px] font-medium text-canvas transition-opacity hover:opacity-90"
+                        >
+                          Load it
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => navigate('/models')}
+                        className={activeBrain.providerId === "llamacpp-builtin" && activeBrain.rawModel && activeBrain.status !== "error"
+                          ? "rounded-lg px-2.5 py-1 text-[12px] font-medium text-fg-muted transition-colors hover:bg-selected hover:text-fg"
+                          : "rounded-lg bg-fg px-2.5 py-1 text-[12px] font-medium text-canvas transition-opacity hover:opacity-90"}
+                      >
+                        {activeBrain.rawModel ? "Change model" : "Choose a model"}
+                      </button>
+                    </div>
                   )}
                 </div>
               )}
@@ -1701,7 +1855,7 @@ export const MessageInputV2 = ({
                           }}
                           className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800"
                         >
-                          <Paperclip className="h-4 w-4 text-gray-400 dark:text-gray-500 midnight:text-slate-500" />
+                          <Paperclip className="h-4 w-4 text-fg-subtle" />
                           <span className="flex-1 font-medium">
                             {isWorkExperience ? (supportsImageInput ? 'Add photos & files' : 'Add files') : 'Add photos'}
                           </span>
@@ -1723,7 +1877,7 @@ export const MessageInputV2 = ({
                           }}
                           className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800"
                         >
-                          <Folder className="h-4 w-4 text-gray-400 dark:text-gray-500 midnight:text-slate-500" />
+                          <Folder className="h-4 w-4 text-fg-subtle" />
                           <span className="flex-1 font-medium">Browse with Finder</span>
                         </button>
                       )}
@@ -1733,10 +1887,10 @@ export const MessageInputV2 = ({
                       {voiceConversationAvailable && onToggleVoiceMode && (
                         <div className="flex items-center justify-between rounded-md px-3 py-2 transition-colors">
                           <div className="flex items-center gap-3">
-                            <Headphones className="h-4 w-4 text-gray-400 dark:text-gray-500 midnight:text-slate-500" />
+                            <Headphones className="h-4 w-4 text-fg-subtle" />
                             <div className="text-left">
                               <span className="block text-xs font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300">Voice mode</span>
-                              <span className="block text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+                              <span className="block text-[10px] text-fg-subtle">
                                 {voiceConversationActive ? "Hands-free conversation active" : "Enable hands-free conversation"}
                               </span>
                             </div>
@@ -1750,12 +1904,12 @@ export const MessageInputV2 = ({
                       )}
 
                       {(supportsReasoningControl || onEnabledIntegrationToolsChange) && (
-                        <div className="my-1 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800" />
+                        <div className="my-1 border-t border-line" />
                       )}
 
                       {onReasoningEffortChange && supportsReasoningControl && (
                         <div className="px-3 py-2">
-                          <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 midnight:text-slate-500 mb-1.5">
+                          <span className="block text-[10px] font-semibold uppercase tracking-wider text-fg-subtle mb-1.5">
                             Reasoning effort
                           </span>
                           <div className="flex flex-wrap gap-1">
@@ -1778,12 +1932,12 @@ export const MessageInputV2 = ({
                       )}
 
                       {onEnabledIntegrationToolsChange && allowWorkspaceAccess && supportsReasoningControl && (
-                        <div className="my-1 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800" />
+                        <div className="my-1 border-t border-line" />
                       )}
 
                       {onEnabledIntegrationToolsChange && allowWorkspaceAccess && (
                         <div className="px-3 py-2">
-                          <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 midnight:text-slate-500 mb-1">
+                          <span className="block text-[10px] font-semibold uppercase tracking-wider text-fg-subtle mb-1">
                             Plugins
                           </span>
                           <div className="space-y-0.5">
@@ -1797,7 +1951,7 @@ export const MessageInputV2 = ({
                                   onClick={() => toggleIntegrationPack(pack)}
                                   className={`flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors ${
                                     isEnabled
-                                      ? "text-gray-900 dark:text-gray-100 midnight:text-slate-100"
+                                      ? "text-fg"
                                       : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800 midnight:hover:text-slate-100"
                                   }`}
                                 >
@@ -1818,7 +1972,11 @@ export const MessageInputV2 = ({
                   )}
                 </div>
 
-                <div className="relative">
+                {(engines.some(item => item.installed) || usesExternalEngine) && (
+                  <EnginePicker engine={engine} engines={engines} onChange={onEngineChange} disabled={disabled} />
+                )}
+
+                <div className={usesExternalEngine ? "hidden" : "relative"}>
                   <button
                     type="button"
                     onClick={() => setOpenMenu((current) => (current === "model" ? null : "model"))}
@@ -1831,7 +1989,7 @@ export const MessageInputV2 = ({
                           ? activeBrain.isLocal
                             ? "text-emerald-600 hover:text-emerald-700 hover:bg-gray-100 dark:text-emerald-400 dark:hover:text-emerald-300 dark:hover:bg-gray-800 midnight:text-emerald-400 midnight:hover:text-emerald-300 midnight:hover:bg-slate-800"
                             : "text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-gray-100 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:text-slate-100 midnight:hover:bg-slate-800"
-                          : "text-gray-400 dark:text-gray-500 midnight:text-slate-500"
+                          : "text-fg-subtle"
                     }`}
                   >
                     {activeBrain.isLoadingModel || activeBrain.loading || isSwitchingModel ? (
@@ -1843,22 +2001,23 @@ export const MessageInputV2 = ({
                     <ChevronDown className="w-3 h-3 opacity-50" />
                   </button>
                   {openMenu === "model" && (
-                    <div className="absolute left-0 bottom-full z-30 mb-2 w-80 max-w-[calc(100vw-3rem)] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950 midnight:border-slate-700 midnight:bg-slate-900">
+                    <div className="absolute left-0 bottom-full z-30 mb-2 w-80 max-w-[calc(100vw-3rem)] overflow-hidden rounded-xl border border-line bg-elevated shadow-xl shadow-black/10 dark:shadow-black/40">
                       <div className="max-h-72 overflow-y-auto p-1">
                         {allModelOptions.length === 0 ? (
-                          <div className="px-2.5 py-4 text-center text-xs text-gray-400 dark:text-gray-500 midnight:text-slate-500">
-                            No models configured
+                          <div className="px-3 py-4 text-center">
+                            <p className="text-[13px] font-medium text-fg">No models to switch to yet</p>
+                            <p className="mt-0.5 text-[12px] text-fg-subtle">Connect a provider or download a model on the Models page.</p>
                           </div>
                         ) : allModelOptions.map((item, i) => {
                           if (item.type === "section") {
                             return (
-                              <div key={`s-${i}`} className="px-2.5 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+                              <div key={`s-${i}`} className="px-2.5 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-fg-subtle">
                                 {item.label}
                               </div>
                             );
                           }
                           if (item.type === "divider") {
-                            return <div key={`d-${i}`} className="my-1 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800" />;
+                            return <div key={`d-${i}`} className="my-1 border-t border-line" />;
                           }
                           return (
                             <button
@@ -1882,7 +2041,7 @@ export const MessageInputV2 = ({
                                 )}
                               </span>
                               {item.detail && (
-                                <span className="block truncate text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500 mt-0.5">{item.detail}</span>
+                                <span className="block truncate text-[10px] text-fg-subtle mt-0.5">{item.detail}</span>
                               )}
                             </button>
                           );
@@ -1958,10 +2117,11 @@ export const MessageInputV2 = ({
                     <button
                       type="button"
                       onClick={onStop}
-                      className="flex h-6 w-6 items-center justify-center rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-500 dark:hover:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-500 midnight:hover:text-slate-300 midnight:hover:bg-slate-800 transition-colors"
+                      className="flex h-8 w-8 items-center justify-center rounded-full bg-fg text-canvas transition-[opacity,transform] hover:opacity-90 active:scale-95"
                       title="Stop generating"
+                      aria-label="Stop generating"
                     >
-                      <Square className="h-2.5 w-2.5 fill-current" />
+                      <Square className="h-3 w-3 fill-current" />
                     </button>
                   </div>
                 ) : (
@@ -1970,14 +2130,15 @@ export const MessageInputV2 = ({
                     <button
                       type="submit"
                       disabled={!canSubmit}
-                      className={`flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 ${
+                      className={`flex h-8 w-8 items-center justify-center rounded-full transition-[background-color,color,opacity,transform] duration-200 ${
                         canSubmit
-                          ? "bg-gray-900 text-white hover:bg-gray-800 active:scale-95 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white midnight:bg-slate-100 midnight:text-slate-900 midnight:hover:bg-white"
-                          : "bg-gray-50 text-gray-300 dark:bg-gray-800/50 dark:text-gray-600 midnight:bg-slate-800/50 midnight:text-slate-600 cursor-not-allowed"
+                          ? "bg-fg text-canvas hover:opacity-90 active:scale-95"
+                          : "cursor-not-allowed bg-hover text-fg-subtle"
                       }`}
                       title={localModelSendBlockReason || (canSubmit ? "Send" : "Type a message")}
+                      aria-label="Send"
                     >
-                      <Send className="w-3.5 h-3.5" />
+                      <ArrowUp className="h-4 w-4" strokeWidth={2.25} />
                     </button>
                   </div>
                 )}
@@ -2018,8 +2179,12 @@ export const MessageInputV2 = ({
               </button>
             )}
 
+            {onToolsPreferenceChange && !usesExternalEngine && (
+              <ToolsPreferenceControl value={toolsPreference} onChange={onToolsPreferenceChange} disabled={disabled} />
+            )}
+
             {/* Mode Selector Dropdown */}
-            {(onAgentModeChange || onToggleAgentMode || onToggleTools) && (
+            {(usesExternalEngine || toolsPreference !== "off") && (onAgentModeChange || onToggleAgentMode || onToggleTools) && (
               <div ref={modeMenuRef} className="relative">
                 <button
                   type="button"

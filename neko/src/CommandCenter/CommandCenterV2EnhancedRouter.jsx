@@ -11,9 +11,6 @@ const CommandCenterV2Enhanced = () => {
   const loadedRouteConversationRef = useRef(null);
   const handledProjectStartRef = useRef(null);
 
-  const isAgentRoute = location.pathname.startsWith('/agents');
-  const initialMode = isAgentRoute ? 'agent' : 'chat';
-
   useEffect(() => {
     if (!conversationId) {
       loadedRouteConversationRef.current = null;
@@ -49,10 +46,7 @@ const CommandCenterV2Enhanced = () => {
   }, [conversationId, handleNewConversation, location.key, location.pathname, location.state, navigate]);
 
   return (
-    <CommandCenterV2EnhancedOriginal
-      initialMode={initialMode}
-      agentSessionId={sessionId || null}
-    />
+    <CommandCenterV2EnhancedOriginal agentSessionId={sessionId || null} />
   );
 };
 
