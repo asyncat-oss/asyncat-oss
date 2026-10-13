@@ -23,6 +23,7 @@ import {
   BrainCircuit,
   CalendarPlus,
   GraduationCap,
+  LayoutGrid,
   Cat as CatIcon,
 } from 'lucide-react';
 import { useWorkspace } from '../contexts/WorkspaceContext';
@@ -75,6 +76,7 @@ const COMMANDS = [
   { id: 'cmd-models',    label: 'Go to Models',         to: '/models',       icon: Cpu },
   { id: 'cmd-training',  label: 'Go to Training',       to: '/models?tab=training', icon: GraduationCap },
   { id: 'cmd-tools',     label: 'Go to Tools & Skills', to: '/tools',        icon: Wrench },
+  { id: 'cmd-made',      label: 'Go to Gallery (made by agents)', to: '/made', icon: LayoutGrid },
   { id: 'cmd-projects',  label: 'Go to Projects',       to: '/projects',     icon: SquareCheck },
   { id: 'cmd-settings',  label: 'Go to Settings',       to: '/settings',     icon: Settings },
 ];

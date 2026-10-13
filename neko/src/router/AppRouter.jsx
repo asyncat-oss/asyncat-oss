@@ -27,6 +27,7 @@ const ToolsSkillsPage = lazy(() => import('../Tools/ToolsSkillsPage'));
 const AgentPage = lazy(() => import('../Agent/AgentPage'));
 const CatsPage = lazy(() => import('../Cats/CatsPage'));
 const CatPage = lazy(() => import('../Cats/CatPage'));
+const MadePage = lazy(() => import('../made/MadePage'));
 
 // Old /workspace and task-board (/tasks) links open the project instead.
 const LegacyProjectRedirect = () => {
@@ -179,6 +180,11 @@ const createRouter = () => createBrowserRouter([
       {
         path: "cats",
         element: <CatsPage />,
+        errorElement: <RouteErrorElement />
+      },
+      {
+        path: "made",
+        element: <MadePage />,
         errorElement: <RouteErrorElement />
       },
       {

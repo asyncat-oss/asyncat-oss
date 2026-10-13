@@ -418,7 +418,7 @@ async function main() {
     await noCrash();
   });
 
-  for (const [label, route] of [['Models', '/models'], ['Models → Voice', '/models?tab=audio'], ['Settings → Profile', '/settings/profile'], ['Settings → Connections', '/settings/connections'], ['Settings → Notifications', '/settings/notifications'], ['Settings → Background', '/settings/background'], ['Settings → Engines', '/settings/runtime'], ['Tools & Skills', '/tools']]) {
+  for (const [label, route] of [['Models', '/models'], ['Models → Voice', '/models?tab=audio'], ['Settings → Profile', '/settings/profile'], ['Settings → Connections', '/settings/connections'], ['Settings → Notifications', '/settings/notifications'], ['Settings → Background', '/settings/background'], ['Settings → Engines', '/settings/runtime'], ['Tools & Skills', '/tools'], ['Gallery (made by agents)', '/made']]) {
     await check(`${label} opens`, async () => {
       await page.goto(`${app}${route}`, { waitUntil: 'domcontentloaded' });
       // Pages keep live connections open (/api/events), so the network never
