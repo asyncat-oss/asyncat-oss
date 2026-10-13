@@ -31,6 +31,7 @@ import {
   removeManagedLlamaPython,
   writeManagedPythonEngineMetadata,
 } from '../../../lib/localEngine.js';
+import { ensureFreeSpace } from '../../../lib/engineDownload.js';
 import { runtimeHome } from '../../../config/runtimeConfig.js';
 
 const execAsync = promisify(exec);
@@ -1165,6 +1166,10 @@ async function installPythonEngine({ profile, retryModel, ctxSize, modelsDir, on
   }
 
   const pythonCmd = await findPythonCmd();
+  // A from-source GPU build needs room for the environment, pip's downloads
+  // and the compiler's build tree (the temp folder).
+  await ensureFreeSpace(path.join(asyncatHome(), 'llama.cpp'), 3 * 1024 * 1024 * 1024, 'the GPU runtime build');
+  await ensureFreeSpace(os.tmpdir(), 2 * 1024 * 1024 * 1024, 'the GPU runtime build (temporary files)');
   const capabilityHint = PYTHON_GPU_CAPABILITY[profile] || 'cpu_safe';
   const pythonVenvDir = path.join(asyncatHome(), 'llama.cpp', 'python');
   const backupVenvDir = `${pythonVenvDir}.backup-${randomUUID()}`;

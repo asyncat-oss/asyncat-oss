@@ -8,7 +8,10 @@ import path from 'node:path';
 import {
   digestSha256,
   downloadWithResume,
+  ensureFreeSpace,
   findChecksumAssets,
+  freeBytes,
+  installSpaceNeeded,
   parseChecksumFile,
   sha256File,
   verifyDownloadedAsset,
@@ -189,6 +192,25 @@ test('downloads are checked against GitHub\'s digest or a published checksum fil
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('an install stops before writing anything when the disk is too full', async () => {
+  const gb = 1024 * 1024 * 1024;
+  const statfs = async () => ({ bavail: 512, bsize: 1024 * 1024 }); // 512 MB free
+  await assert.rejects(
+    ensureFreeSpace(path.join(os.tmpdir(), 'not', 'made', 'yet'), gb, 'llama-b6500-bin-win-cuda-12.4-x64.zip', { statfs }),
+    (error) => error.code === 'NO_SPACE' && /needs about 1\.0 GB, and 512 MB is free/.test(error.message),
+  );
+  assert.equal(await ensureFreeSpace(os.tmpdir(), 100, 'x', { statfs }), 512 * 1024 * 1024);
+  // Free space that can't be read never blocks an install.
+  assert.equal(await ensureFreeSpace(os.tmpdir(), gb, 'x', { statfs: async () => { throw new Error('ENOSYS'); } }), null);
+  // The real call works on this machine.
+  assert.ok(await freeBytes(os.tmpdir()) > 0);
+
+  // Download what is left, plus about three times the archive once unpacked.
+  const mb = 1024 * 1024;
+  assert.equal(installSpaceNeeded(100 * mb), 100 * mb + 300 * mb + 100 * mb);
+  assert.equal(installSpaceNeeded(100 * mb, 60 * mb), 40 * mb + 300 * mb + 100 * mb);
 });
 
 test('checksum files in the usual formats are read', () => {

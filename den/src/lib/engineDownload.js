@@ -217,6 +217,57 @@ export async function sha256File(file) {
   return hash.digest('hex');
 }
 
+// ─── Free space ───────────────────────────────────────────────────────────────
+
+export function formatBytes(bytes) {
+  const value = Number(bytes) || 0;
+  if (value < 1024 * 1024) return `${Math.max(1, Math.round(value / 1024))} KB`;
+  if (value < 1024 * 1024 * 1024) return `${Math.round(value / (1024 * 1024))} MB`;
+  return `${(value / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+/** Free bytes for this user on the disk holding `dir` (or its nearest existing parent). */
+export async function freeBytes(dir, { statfs = fs.promises.statfs } = {}) {
+  let current = path.resolve(dir);
+  while (!fs.existsSync(current)) {
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  const stats = await statfs(current);
+  return Number(stats.bavail) * Number(stats.bsize);
+}
+
+/**
+ * Room an engine install needs at its peak: the rest of the download, the
+ * unpacked files (archives here unpack to about three times their size) and
+ * some headroom.
+ */
+export function installSpaceNeeded(archiveBytes, alreadyDownloaded = 0) {
+  const size = Math.max(0, Number(archiveBytes) || 0);
+  return Math.max(0, size - (Number(alreadyDownloaded) || 0)) + size * 3 + 100 * 1024 * 1024;
+}
+
+/**
+ * Stop before writing anything when the disk can't hold `neededBytes`. When
+ * free space can't be read (an unusual filesystem), the install goes ahead.
+ */
+export async function ensureFreeSpace(dir, neededBytes, what, { statfs } = {}) {
+  let free;
+  try {
+    free = await freeBytes(dir, statfs ? { statfs } : undefined);
+  } catch {
+    return null;
+  }
+  if (free < neededBytes) {
+    throw Object.assign(
+      new Error(`There isn't enough free disk space for ${what}: it needs about ${formatBytes(neededBytes)}, and ${formatBytes(free)} is free on the disk that holds ${dir}. Free up some space and try again.`),
+      { code: 'NO_SPACE', neededBytes, freeBytes: free },
+    );
+  }
+  return free;
+}
+
 // ─── Checksums ────────────────────────────────────────────────────────────────
 
 /** GitHub's asset `digest` ("sha256:<hex>") as lowercase hex, or null. */

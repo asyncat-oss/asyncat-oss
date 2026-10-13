@@ -7,7 +7,12 @@ import { ENV_FILE, readEnv, setKey } from './env.js';
 import { setConfigValue } from '../config/appConfig.js';
 import { AUTO_DETECT, runtimeHome } from '../config/runtimeConfig.js';
 import { cudaVersionFromReleaseAsset, isCudaRuntimeCompanionAsset } from './releaseAssetUtils.js';
-import { downloadWithResume, verifyDownloadedAsset } from './engineDownload.js';
+import {
+  downloadWithResume,
+  ensureFreeSpace,
+  installSpaceNeeded,
+  verifyDownloadedAsset,
+} from './engineDownload.js';
 import { extractArchive } from './engineArchive.js';
 
 // Persist a runtime path. These used to be written to a source-tree .env; they now
@@ -86,6 +91,10 @@ function managedDownloadPath(repo, tag, assetName) {
  */
 async function downloadReleaseAsset({ repo, release, asset, onProgress = null, signal = null }) {
   const destination = managedDownloadPath(repo, release.tag_name || release.name, asset.name);
+  let partial = 0;
+  try { partial = fs.statSync(`${destination}.part`).size; } catch { /* nothing yet */ }
+  // Before anything is written: room for the download and the unpacked files.
+  await ensureFreeSpace(managedDownloadsDir(), installSpaceNeeded(asset.size, partial), asset.name);
   await downloadWithResume(asset.browser_download_url, destination, {
     onProgress,
     signal,
@@ -1044,6 +1053,7 @@ async function installCudartCompanion(release, mainAssetName, targetDir, onProgr
   try {
     onProgress?.({ phase: 'installing', message: `Downloading CUDA runtime (${companion.name})`, percent: 90 });
     ({ file: archivePath } = await downloadReleaseAsset({ repo, release, asset: companion, signal }));
+    await ensureFreeSpace(extractDir, fs.statSync(archivePath).size * 3, companion.name);
     await extractArchive(archivePath, extractDir, { signal });
     // Upstream usually puts these DLLs at the archive root, but flatten them
     // deliberately so a future wrapper directory cannot leave Windows showing
@@ -1099,6 +1109,7 @@ export async function installManagedAsset(asset, release, profile = 'cpu_safe', 
     });
     // Unpack straight into the staging folder (no copy), off the event loop.
     await fs.promises.mkdir(path.dirname(stagingDir), { recursive: true });
+    await ensureFreeSpace(stagingDir, fs.statSync(archivePath).size * 3, asset.name);
     await extractArchive(archivePath, stagingDir, { signal });
     await discardDownload(archivePath);
     archivePath = null;
@@ -1915,6 +1926,8 @@ async function installManagedPythonRuntime(spec, report) {
       fs.renameSync(venvDir, backupVenv);
       movedExisting = true;
     }
+    // pip downloads and unpacks the packages; MLX with CUDA is the largest.
+    await ensureFreeSpace(root, (spec.id === 'mlx' ? 3 : 1) * 1024 * 1024 * 1024, spec.label);
     report('preparing', `Creating an isolated Python environment for ${spec.label}`, 10);
     await runManagedCommand(systemPython, ['-m', 'venv', venvDir], { timeoutMs: 180000 });
     const python = pythonInVenv(venvDir);
@@ -2055,6 +2068,7 @@ export async function installManagedRuntime(runtimeId, { onProgress = null, capa
     report('extracting', `Extracting ${asset.name}`, 80, { assetName: asset.name });
     // Unpack straight into the staging folder (no copy), off the event loop.
     await fs.promises.mkdir(path.dirname(stagingDir), { recursive: true });
+    await ensureFreeSpace(stagingDir, fs.statSync(archivePath).size * 3, asset.name);
     await extractArchive(archivePath, stagingDir, { signal });
     await discardDownload(archivePath);
     archivePath = null;
