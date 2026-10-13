@@ -697,7 +697,17 @@ function PreviewPanel({ initialUrl, navigationKey = null, browserExecutorRef, ag
           return webview.executeJavaScript(`(function(){
             var sel=${JSON.stringify(selector)},el=document.querySelector(sel);
             if(!el)return{success:false,error:'Element not found: '+sel};
-            el.focus();el.value=${JSON.stringify(value)};
+            var val=${JSON.stringify(value)};
+            el.focus();
+            if(el.isContentEditable){
+              document.execCommand('selectAll',false,null);document.execCommand('insertText',false,val);
+              return{success:true};
+            }
+            // Set the value through the element type's own setter: frameworks
+            // such as React ignore a plain el.value assignment.
+            var proto=el instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:el instanceof HTMLSelectElement?HTMLSelectElement.prototype:HTMLInputElement.prototype;
+            var desc=Object.getOwnPropertyDescriptor(proto,'value');
+            if(desc&&desc.set)desc.set.call(el,val);else el.value=val;
             el.dispatchEvent(new Event('input',{bubbles:true}));
             el.dispatchEvent(new Event('change',{bubbles:true}));
             return{success:true};
@@ -710,6 +720,16 @@ function PreviewPanel({ initialUrl, navigationKey = null, browserExecutorRef, ag
         case 'evaluate': {
           const result = await webview.executeJavaScript(code);
           return { success: true, result: JSON.stringify(result)?.slice(0, 4000) };
+        }
+        case 'wait_for_load': {
+          // Unlike wait_for_reload, return at once if nothing is loading.
+          if (webview.isLoading?.()) {
+            await new Promise(resolve => {
+              const t = setTimeout(resolve, 15000);
+              webview.addEventListener('did-stop-loading', () => { clearTimeout(t); resolve(); }, { once: true });
+            });
+          }
+          return { success: true, url: webview.getURL?.() || '', title: webview.getTitle?.() || '' };
         }
         case 'wait_for_reload':
           await new Promise(resolve => {

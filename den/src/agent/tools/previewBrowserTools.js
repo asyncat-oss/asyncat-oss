@@ -51,9 +51,14 @@ Prefers localhost URLs for dev servers started by the agent.`,
       if (typeof context?.emitEvent === 'function') {
         context.emitEvent({ type: 'preview_url', data: { url, title: url } });
       }
-      // Give React time to render the tab and mount the webview (~1s)
-      await new Promise(r => setTimeout(r, 1000));
-      return { success: true, url, message: `Preview navigated to ${url}` };
+      // Give React time to render the tab and mount the webview, then wait
+      // until the page has actually finished loading.
+      await new Promise(r => setTimeout(r, 800));
+      const loaded = await execBrowserCommand('wait_for_load', {}, context, 17000).catch(() => null);
+      if (loaded?.success) {
+        return { success: true, url: loaded.url || url, title: loaded.title || '', message: `Preview loaded ${loaded.url || url}` };
+      }
+      return { success: true, url, message: `Preview navigated to ${url} (it may still be loading)` };
     },
   },
 
