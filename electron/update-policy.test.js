@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  DEFAULT_UPDATE_REPO,
   compareVersions,
   isTrustedReleaseUrl,
+  updateRepo,
   selectLatestRelease,
   selectReleaseAsset,
 } from './update-policy.js';
@@ -56,7 +58,18 @@ test('installer selection requires the correct platform and architecture', () =>
 });
 
 test('only this repository release URLs may be opened on renderer request', () => {
-  assert.equal(isTrustedReleaseUrl('https://github.com/asyncat-oss/asyncat-oss/releases/tag/v0.8.0'), true);
-  assert.equal(isTrustedReleaseUrl('https://example.com/asyncat-oss/asyncat-oss/releases/tag/v0.8.0'), false);
-  assert.equal(isTrustedReleaseUrl('javascript:alert(1)'), false);
+  assert.equal(isTrustedReleaseUrl('https://github.com/asyncat-oss/asyncat-oss/releases/tag/v0.8.0', DEFAULT_UPDATE_REPO), true);
+  assert.equal(isTrustedReleaseUrl('https://example.com/asyncat-oss/asyncat-oss/releases/tag/v0.8.0', DEFAULT_UPDATE_REPO), false);
+  assert.equal(isTrustedReleaseUrl('https://github.com/someone/asyncat-oss/releases/tag/v0.8.0', DEFAULT_UPDATE_REPO), false);
+  assert.equal(isTrustedReleaseUrl('javascript:alert(1)', DEFAULT_UPDATE_REPO), false);
+});
+
+test('ASYNCAT_UPDATE_REPO points the updater at a fork for hand-testing', () => {
+  assert.equal(updateRepo({}), 'asyncat-oss/asyncat-oss');
+  assert.equal(updateRepo({ ASYNCAT_UPDATE_REPO: 'me/asyncat-test' }), 'me/asyncat-test');
+  for (const bad of ['me', 'me/repo/extra', '../x', 'me/..', 'https://github.com/me/repo', 'me/re po']) {
+    assert.equal(updateRepo({ ASYNCAT_UPDATE_REPO: bad }), 'asyncat-oss/asyncat-oss', bad);
+  }
+  assert.equal(isTrustedReleaseUrl('https://github.com/me/asyncat-test/releases/download/v9.0.0/a.AppImage', 'me/asyncat-test'), true);
+  assert.equal(isTrustedReleaseUrl('https://github.com/asyncat-oss/asyncat-oss/releases/tag/v0.8.0', 'me/asyncat-test'), false);
 });

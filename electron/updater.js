@@ -16,10 +16,12 @@ import { app, ipcMain, net, shell } from 'electron';
 import { IS_DEV } from './constants.js';
 import { getMainWindow } from './window.js';
 import {
+  DEFAULT_UPDATE_REPO,
   isTrustedReleaseUrl,
   parseVersion,
   selectLatestRelease,
   selectReleaseAsset,
+  updateRepo,
 } from './update-policy.js';
 import {
   WINDOWS_INSTALLER_ARGS,
@@ -33,8 +35,11 @@ import {
   verifyChecksum,
 } from './update-install.js';
 
-const RELEASES_URL = 'https://github.com/asyncat-oss/asyncat-oss/releases';
-const RELEASES_API_URL = 'https://api.github.com/repos/asyncat-oss/asyncat-oss/releases?per_page=20';
+// ASYNCAT_UPDATE_REPO=owner/repo checks a fork instead (see README.md).
+const UPDATE_REPO = updateRepo();
+const RELEASES_URL = `https://github.com/${UPDATE_REPO}/releases`;
+const RELEASES_API_URL = `https://api.github.com/repos/${UPDATE_REPO}/releases?per_page=20`;
+if (UPDATE_REPO !== DEFAULT_UPDATE_REPO) console.info(`[updater] Checking ${UPDATE_REPO} for updates (ASYNCAT_UPDATE_REPO).`);
 
 let initialized = false;
 let currentUpdate = null;

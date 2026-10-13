@@ -97,12 +97,27 @@ export function selectReleaseAsset(assets, platform, arch, preferredExtension = 
   }) || null;
 }
 
-export function isTrustedReleaseUrl(value) {
+export const DEFAULT_UPDATE_REPO = 'asyncat-oss/asyncat-oss';
+
+/**
+ * The GitHub repository updates come from: owner/repo. ASYNCAT_UPDATE_REPO
+ * overrides it so a packaged build can be tested against a fork that
+ * publishes a fake higher version. Anything that isn't a plain owner/repo
+ * falls back to the official repository.
+ */
+export function updateRepo(env = process.env) {
+  const value = String(env?.ASYNCAT_UPDATE_REPO || '').trim();
+  const parts = value.split('/');
+  const valid = parts.length === 2 && parts.every((part) => /^[A-Za-z0-9_.-]+$/.test(part) && part !== '.' && part !== '..');
+  return valid ? value : DEFAULT_UPDATE_REPO;
+}
+
+export function isTrustedReleaseUrl(value, repo = updateRepo()) {
   try {
     const url = new URL(value);
     return url.protocol === 'https:'
       && url.hostname === 'github.com'
-      && url.pathname.startsWith('/asyncat-oss/asyncat-oss/releases/');
+      && url.pathname.toLowerCase().startsWith(`/${repo.toLowerCase()}/releases/`);
   } catch {
     return false;
   }
