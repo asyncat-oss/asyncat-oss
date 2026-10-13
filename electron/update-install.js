@@ -12,6 +12,30 @@ import { createHash } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
+function isInside(child, parent) {
+  const relative = path.relative(path.resolve(parent), path.resolve(child));
+  return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
+}
+
+/**
+ * The AppImage this process runs from, or null. APPIMAGE alone can't be
+ * trusted: an app started from a terminal inside another AppImage inherits
+ * that app's APPIMAGE and APPDIR. So require that this executable really
+ * lives in the mounted APPDIR and that APPIMAGE is an existing file.
+ */
+export function detectAppImage({ env = process.env, execPath = process.execPath, platform = process.platform, statImpl = fs.statSync } = {}) {
+  if (platform !== 'linux') return null;
+  const appImage = String(env.APPIMAGE || '');
+  const appDir = String(env.APPDIR || '');
+  if (!appImage || !appDir || !path.isAbsolute(appImage) || !path.isAbsolute(appDir)) return null;
+  if (!execPath || !isInside(execPath, appDir)) return null;
+  try {
+    return statImpl(appImage).isFile() ? appImage : null;
+  } catch {
+    return null;
+  }
+}
+
 export function installStrategy({ platform, appImagePath = null, assetName = null }) {
   if (!assetName) return 'browser';
   if (platform === 'linux' && appImagePath && assetName.endsWith('.AppImage')) return 'replace-appimage';

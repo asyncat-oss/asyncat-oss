@@ -8,6 +8,7 @@ import path from 'path';
 
 import {
   appImageStagingPath,
+  detectAppImage,
   downloadFile,
   installStrategy,
   parseChecksums,
@@ -31,6 +32,26 @@ test('picks how to install for each platform and package', () => {
   assert.equal(installStrategy({ platform: 'win32', assetName: 'Asyncat-1.0.0-windows-x64.exe' }), 'run-installer');
   assert.equal(installStrategy({ platform: 'darwin', assetName: 'Asyncat-1.0.0-macos-arm64.dmg' }), 'open-installer');
   assert.equal(installStrategy({ platform: 'linux', assetName: null }), 'browser');
+});
+
+test('only an app running from its own AppImage is treated as an AppImage', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'asyncat-appimage-'));
+  try {
+    const appImage = path.join(dir, 'Asyncat.AppImage');
+    fs.writeFileSync(appImage, 'x');
+    const env = { APPIMAGE: appImage, APPDIR: '/tmp/.mount_AsyncaXYZ' };
+    const own = { env, execPath: '/tmp/.mount_AsyncaXYZ/asyncat', platform: 'linux' };
+    assert.equal(detectAppImage(own), appImage);
+    // A .deb install started from a terminal inside another AppImage app
+    // inherits that app's variables; its executable is elsewhere.
+    assert.equal(detectAppImage({ ...own, execPath: '/opt/Asyncat/asyncat' }), null);
+    assert.equal(detectAppImage({ ...own, env: { APPIMAGE: path.join(dir, 'gone.AppImage'), APPDIR: env.APPDIR } }), null);
+    assert.equal(detectAppImage({ ...own, env: { APPIMAGE: dir, APPDIR: env.APPDIR } }), null, 'a folder is not an AppImage');
+    assert.equal(detectAppImage({ ...own, env: { APPIMAGE: appImage } }), null);
+    assert.equal(detectAppImage({ ...own, platform: 'darwin' }), null);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('reads sha256sum output', () => {

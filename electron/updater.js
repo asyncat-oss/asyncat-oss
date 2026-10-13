@@ -24,6 +24,7 @@ import {
   WINDOWS_INSTALLER_ARGS,
   appImageStagingPath,
   canWriteNextTo,
+  detectAppImage,
   downloadFile,
   installStrategy,
   parseChecksums,
@@ -44,10 +45,14 @@ let hasChecked = false;
 
 const RECHECK_MS = 6 * 60 * 60 * 1000;
 
+// The AppImage this app runs from (null for .deb, Windows, macOS, or an app
+// that merely inherited another AppImage's environment).
+const RUNNING_APPIMAGE = detectAppImage();
+
 function toUpdateInfo(release) {
   const parsed = parseVersion(release.tag_name);
   const linuxPreference = process.platform === 'linux'
-    ? (process.env.APPIMAGE ? '.AppImage' : '.deb')
+    ? (RUNNING_APPIMAGE ? '.AppImage' : '.deb')
     : null;
   const asset = selectReleaseAsset(release.assets, process.platform, process.arch, linuxPreference);
   const checksums = (release.assets || []).find((item) => item?.name === 'SHA256SUMS.txt');
@@ -60,7 +65,7 @@ function toUpdateInfo(release) {
     assetUrl: asset?.browser_download_url || null,
     assetSize: asset?.size || null,
     checksumUrl: checksums?.browser_download_url || null,
-    strategy: installStrategy({ platform: process.platform, appImagePath: process.env.APPIMAGE || null, assetName: asset?.name || null }),
+    strategy: installStrategy({ platform: process.platform, appImagePath: RUNNING_APPIMAGE, assetName: asset?.name || null }),
     platform: process.platform,
     arch: process.arch,
   };
@@ -156,8 +161,8 @@ async function startUpdate() {
 
   let strategy = update.strategy;
   let destination;
-  if (strategy === 'replace-appimage' && canWriteNextTo(process.env.APPIMAGE)) {
-    destination = appImageStagingPath(process.env.APPIMAGE);
+  if (strategy === 'replace-appimage' && canWriteNextTo(RUNNING_APPIMAGE)) {
+    destination = appImageStagingPath(RUNNING_APPIMAGE);
   } else if (strategy === 'run-installer') {
     destination = path.join(app.getPath('temp'), 'asyncat-update', update.assetName);
   } else {
@@ -185,9 +190,9 @@ async function startUpdate() {
         fs.rmSync(destination, { force: true });
         throw error;
       }
-      if (strategy === 'replace-appimage') replaceAppImage(destination, process.env.APPIMAGE);
+      if (strategy === 'replace-appimage') replaceAppImage(destination, RUNNING_APPIMAGE);
       if (strategy === 'open-installer') shell.showItemInFolder(destination);
-      setDownload({ status: 'ready', file: strategy === 'replace-appimage' ? process.env.APPIMAGE : destination });
+      setDownload({ status: 'ready', file: strategy === 'replace-appimage' ? RUNNING_APPIMAGE : destination });
     } catch (error) {
       console.warn('[updater] download failed:', error.message);
       setDownload({ status: error.cancelled ? 'idle' : 'error', error: error.cancelled ? null : error.message });
@@ -207,7 +212,7 @@ function cancelUpdate() {
 async function finishUpdate() {
   if (download.status !== 'ready') return { success: false, error: 'The update has not finished downloading.' };
   if (download.strategy === 'replace-appimage') {
-    app.relaunch({ execPath: process.env.APPIMAGE, args: process.argv.slice(1) });
+    app.relaunch({ execPath: RUNNING_APPIMAGE, args: process.argv.slice(1) });
     app.quit();
     return { success: true };
   }
