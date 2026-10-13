@@ -187,8 +187,10 @@ export const agentTools = [
     execute: async (args, context) => {
       const { AgentRuntime } = await import('../AgentRuntime.js');
       const { getAiClientForUser } = await import('../../ai/controllers/ai/clientFactory.js');
-      const { getProfile, getProfileByHandle } = await import('../ProfileManager.js');
+      const { getProfile, getProfileByHandle, toolsForCapabilities } = await import('../ProfileManager.js');
       const { loadSoul } = await import('../prompts/agentSystemPrompt.js');
+      const { buildChatContext } = await import('../../knowledge/chatContext.js');
+      const { toolRegistry } = await import('./toolRegistry.js');
 
       const profile = args.profileId
         ? getProfile(args.profileId, context.userId)
@@ -205,12 +207,11 @@ export const agentTools = [
         return { success: false, error: 'Could not initialize AI client for delegated agent.' };
       }
 
-      let resolvedSoul = null;
-      if (profile.soul_override) {
-        resolvedSoul = profile.soul_override.replace(/^---[\s\S]*?---\n?/, '').trim() || null;
-      } else if (profile.soul_name && profile.soul_name !== 'default') {
-        resolvedSoul = loadSoul(profile.soul_name);
-      }
+      const resolvedSoul = profile.soul_name && profile.soul_name !== 'default' ? loadSoul(profile.soul_name) : null;
+      // The delegated agent brings its own instructions, knowledge and
+      // capabilities, but works in the parent's folder (never its own).
+      const agentContext = buildChatContext({ agent: profile, query: args.task, resolvedClient: providerInfo });
+      const capabilityTools = toolsForCapabilities(profile.capabilities, toolRegistry.all());
 
       const subGoal = [
         `You are running as @${profile.handle} (${profile.name}).`,
@@ -241,8 +242,12 @@ export const agentTools = [
         supportsNativeTools: providerInfo.supportsNativeTools,
         userId: context.userId,
         workspaceId: context.workspaceId,
-        workingDir: profile.working_dir || context.workingDir,
+        workingDir: context.workingDir,
         maxRounds: profile.max_rounds || 15,
+        knowledgeContext: agentContext.prompt,
+        knowledgeSources: agentContext.sources,
+        initialImageUrls: agentContext.images,
+        ...(capabilityTools ? { allowedTools: capabilityTools } : {}),
         autoApprove: profile.auto_approve || false,
         requestPermission: context.requestPermission,
         askUser: context.askUser,

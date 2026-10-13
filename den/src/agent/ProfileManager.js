@@ -37,6 +37,81 @@ if (!columnExists('agent_profiles', 'handle')) {
 
 db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_profiles_user_handle ON agent_profiles(user_id, handle)').run();
 
+// Agents work like GPTs and Gems: instructions, a picture, conversation
+// starters, knowledge files (knowledge_files with owner_type 'agent'), an
+// optional model of their own and the capabilities they may use.
+const AGENT_COLUMNS = {
+  instructions: "TEXT NOT NULL DEFAULT ''",
+  avatar_image: 'TEXT',
+  starter_prompts: "TEXT NOT NULL DEFAULT '[]'",
+  model_profile_id: 'TEXT',
+  capabilities: 'TEXT',
+};
+for (const [column, definition] of Object.entries(AGENT_COLUMNS)) {
+  if (!columnExists('agent_profiles', column)) {
+    db.prepare(`ALTER TABLE agent_profiles ADD COLUMN ${column} ${definition}`).run();
+  }
+}
+
+// A custom "soul" text was the old way to give an agent instructions.
+db.prepare(`
+  UPDATE agent_profiles SET instructions = trim(soul_override), updated_at = datetime('now')
+  WHERE (instructions IS NULL OR instructions = '') AND soul_override IS NOT NULL AND trim(soul_override) != ''
+`).run();
+
+/**
+ * What an agent may do, as switches. Each maps to tool categories; an agent
+ * with no capabilities list may use everything.
+ */
+export const AGENT_CAPABILITIES = {
+  web: { label: 'Web search and browsing', categories: ['search', 'browser', 'general'] },
+  files: { label: 'Files and code', categories: ['file', 'shell', 'git', 'code', 'dev', 'workspace', 'data', 'rag'] },
+  documents: { label: 'Documents and images', categories: ['artifact', 'notes', 'visual', 'design', 'audio'] },
+  memory: { label: 'Memory', categories: ['memory'] },
+  integrations: { label: 'Email and feeds', categories: ['integrations'] },
+  computer: { label: 'This computer and Asyncat', categories: ['screen', 'desktop', 'system', 'ai', 'schedule', 'agent'] },
+};
+// Planning, asking the user and searching the agent's own knowledge are
+// always allowed.
+const ALWAYS_ALLOWED_CATEGORIES = ['planning', 'plan', 'interaction'];
+const ALWAYS_ALLOWED_TOOLS = ['knowledge_search', 'tool_search'];
+
+/**
+ * Tool names an agent may use, or null for no limit. `tools` is the full
+ * registry list ({ name, category }).
+ */
+export function toolsForCapabilities(capabilities, tools) {
+  if (!Array.isArray(capabilities)) return null;
+  const categories = new Set(ALWAYS_ALLOWED_CATEGORIES);
+  for (const key of capabilities) {
+    for (const category of AGENT_CAPABILITIES[key]?.categories || []) categories.add(category);
+  }
+  return tools
+    .filter((tool) => categories.has(tool.category) || ALWAYS_ALLOWED_TOOLS.includes(tool.name))
+    .map((tool) => tool.name);
+}
+
+const MAX_STARTERS = 4;
+const MAX_AVATAR_CHARS = 400_000;
+
+function cleanStarters(value) {
+  const list = Array.isArray(value) ? value : [];
+  return list.map((s) => String(s || '').trim().slice(0, 200)).filter(Boolean).slice(0, MAX_STARTERS);
+}
+
+function cleanCapabilities(value) {
+  if (value === null || value === undefined) return null;
+  if (!Array.isArray(value)) return null;
+  return [...new Set(value.filter((key) => Object.hasOwn(AGENT_CAPABILITIES, key)))];
+}
+
+function cleanAvatar(value) {
+  if (!value) return null;
+  const text = String(value);
+  if (!/^data:image\/(png|jpeg|webp|gif);base64,[a-z0-9+/=]+$/i.test(text)) return null;
+  return text.length <= MAX_AVATAR_CHARS ? text : null;
+}
+
 function slugifyHandle(value) {
   const base = String(value || 'agent')
     .toLowerCase()
@@ -73,13 +148,24 @@ function backfillHandles() {
 
 backfillHandles();
 
+function parseJson(value, fallback) {
+  try {
+    return value === null || value === undefined ? fallback : JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
 function parseProfile(row) {
   if (!row) return null;
   return {
     ...row,
+    instructions: row.instructions || '',
     auto_approve: Boolean(row.auto_approve),
     is_default: Boolean(row.is_default),
-    always_allowed_tools: JSON.parse(row.always_allowed_tools || '[]'),
+    always_allowed_tools: parseJson(row.always_allowed_tools, []),
+    starter_prompts: parseJson(row.starter_prompts, []),
+    capabilities: parseJson(row.capabilities, null),
   };
 }
 
@@ -101,27 +187,46 @@ export function getProfileByHandle(handle, userId) {
   );
 }
 
-export function createProfile({ userId, name, handle = null, description = '', icon = '🤖', color = 'indigo', soulName = 'default', soulOverride = null, workingDir = null, maxRounds = 25, autoApprove = false, alwaysAllowedTools = [], isDefault = false }) {
+export function createProfile({
+  userId, name, handle = null, description = '', icon = '🤖', color = 'indigo', soulName = 'default',
+  soulOverride = null, workingDir = null, maxRounds = 25, autoApprove = false, alwaysAllowedTools = [],
+  isDefault = false, instructions = '', avatarImage = null, starterPrompts = [], modelProfileId = null,
+  capabilities = null,
+}) {
   const id = randomUUID();
   const resolvedHandle = uniqueHandle(userId, handle || name, id);
   if (isDefault) {
     db.prepare('UPDATE agent_profiles SET is_default = 0 WHERE user_id = ?').run(userId);
   }
+  const cleanCaps = cleanCapabilities(capabilities);
   db.prepare(`
-    INSERT INTO agent_profiles (id, user_id, handle, name, description, icon, color, soul_name, soul_override, working_dir, max_rounds, auto_approve, always_allowed_tools, is_default)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO agent_profiles (
+      id, user_id, handle, name, description, icon, color, soul_name, soul_override, working_dir, max_rounds,
+      auto_approve, always_allowed_tools, is_default, instructions, avatar_image, starter_prompts,
+      model_profile_id, capabilities
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id, userId, resolvedHandle, name, description, icon, color,
     soulName, soulOverride || null, workingDir || null,
     maxRounds, autoApprove ? 1 : 0,
     JSON.stringify(alwaysAllowedTools),
-    isDefault ? 1 : 0
+    isDefault ? 1 : 0,
+    String(instructions || '').slice(0, 20000),
+    cleanAvatar(avatarImage),
+    JSON.stringify(cleanStarters(starterPrompts)),
+    modelProfileId || null,
+    cleanCaps === null ? null : JSON.stringify(cleanCaps),
   );
   return getProfile(id, userId);
 }
 
 export function updateProfile(id, userId, updates) {
-  const allowed = ['name', 'handle', 'description', 'icon', 'color', 'soul_name', 'soul_override', 'working_dir', 'max_rounds', 'auto_approve', 'always_allowed_tools', 'is_default'];
+  const allowed = [
+    'name', 'handle', 'description', 'icon', 'color', 'soul_name', 'soul_override', 'working_dir', 'max_rounds',
+    'auto_approve', 'always_allowed_tools', 'is_default', 'instructions', 'avatar_image', 'starter_prompts',
+    'model_profile_id', 'capabilities',
+  ];
   const fields = [];
   const values = [];
 
@@ -135,6 +240,12 @@ export function updateProfile(id, userId, updates) {
     fields.push(`${col} = ?`);
     if (col === 'handle') values.push(uniqueHandle(userId, v, id));
     else if (col === 'always_allowed_tools') values.push(JSON.stringify(Array.isArray(v) ? v : []));
+    else if (col === 'starter_prompts') values.push(JSON.stringify(cleanStarters(v)));
+    else if (col === 'capabilities') {
+      const caps = cleanCapabilities(v);
+      values.push(caps === null ? null : JSON.stringify(caps));
+    } else if (col === 'avatar_image') values.push(cleanAvatar(v));
+    else if (col === 'instructions') values.push(String(v || '').slice(0, 20000));
     else if (col === 'auto_approve' || col === 'is_default') values.push(v ? 1 : 0);
     else values.push(v ?? null);
   }
@@ -150,10 +261,11 @@ export function deleteProfile(id, userId) {
   db.prepare('DELETE FROM agent_profiles WHERE id = ? AND user_id = ?').run(id, userId);
 }
 
+
 export function getDefaultProfile(userId) {
   return parseProfile(
     db.prepare('SELECT * FROM agent_profiles WHERE user_id = ? AND is_default = 1 LIMIT 1').get(userId)
   );
 }
 
-export default { listProfiles, getProfile, getProfileByHandle, createProfile, updateProfile, deleteProfile, getDefaultProfile };
+export default { listProfiles, getProfile, getProfileByHandle, createProfile, updateProfile, deleteProfile, getDefaultProfile, toolsForCapabilities, AGENT_CAPABILITIES };

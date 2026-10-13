@@ -38,7 +38,11 @@ import { normalizeApprovalDecision } from '../../agent/approvalDecisions.js';
 import { buildChatContext, projectForChat } from '../../knowledge/chatContext.js';
 import { getModelCapabilities } from '../controllers/ai/modelCapabilities.js';
 import { getModelRuntimeStatus } from '../controllers/ai/modelRuntimeStatus.js';
-import { listProfiles, getProfile, getProfileByHandle, createProfile, updateProfile, deleteProfile, getDefaultProfile } from '../../agent/ProfileManager.js';
+import { listProfiles, getProfile, getProfileByHandle, createProfile, updateProfile, deleteProfile, getDefaultProfile, toolsForCapabilities, AGENT_CAPABILITIES } from '../../agent/ProfileManager.js';
+import { addKnowledgeFile, deleteKnowledgeFile, deleteOwnerKnowledge, listKnowledgeFiles, MAX_FILE_BYTES } from '../../knowledge/knowledgeStore.js';
+import { knowledgeFitReport } from '../../knowledge/contextBuilder.js';
+import { describeModel } from '../controllers/ai/modelProfile.js';
+import multer from 'multer';
 import { branchGit, commitGit, discardGitFiles, getGitBranches, getGitCommit, getGitCommitMessageContext, getGitDiff, getGitState, getGitLog, pullGit, pushGit, stageGitFiles, stashGit, unstageGitFiles } from '../../agent/gitService.js';
 import { createHash, randomUUID } from 'crypto';
 import path from 'path';
@@ -430,6 +434,21 @@ const withWorkspaceContext = (req, _res, next) => {
 await initializeAgent();
 markStaleActiveSessions();
 
+/**
+ * The model client for a chat: the agent's own model when it has one and it
+ * can be used, otherwise the user's current model.
+ */
+function clientForAgent(userId, profile) {
+  if (profile?.model_profile_id) {
+    try {
+      return getAiClientForScheduledProvider(userId, profile.model_profile_id);
+    } catch (err) {
+      console.warn(`[agent] ${profile.name}'s model is unavailable, using the current one: ${err.message}`);
+    }
+  }
+  return getAiClientForUser(userId);
+}
+
 const runScheduledAgent = async ({ goal, userId, workspaceId, workingDir, profileId, providerProfileId, providerSnapshot }) => {
   const { client: aiClient, model, isLocal, supportsNativeTools, providerInfo } = getAiClientForScheduledProvider(userId, providerProfileId, providerSnapshot);
   const profile = profileId ? getProfile(profileId, userId) : getDefaultProfile(userId);
@@ -494,9 +513,10 @@ router.post('/chat/stream', withWorkspaceContext, async (req, res) => {
   }
 
   const history = normalizeConversationHistory(req.body?.conversationHistory);
+  const chatAgent = req.body?.profileId ? getProfile(String(req.body.profileId), req.user.id) : null;
   let resolvedClient;
   try {
-    resolvedClient = getAiClientForUser(req.user.id);
+    resolvedClient = clientForAgent(req.user.id, chatAgent);
   } catch (error) {
     return res.status(400).json({ success: false, error: error.message || 'Could not load the active model' });
   }
@@ -526,7 +546,7 @@ router.post('/chat/stream', withWorkspaceContext, async (req, res) => {
   }
   // Project instructions and knowledge apply to plain chats as well.
   const chatProject = projectForChat(req.user.id, req.body?.projectId || req.body?.workingContext?.projectId || null);
-  const chatContext = buildChatContext({ project: chatProject, query: message, resolvedClient });
+  const chatContext = buildChatContext({ project: chatProject, agent: chatAgent, query: message, resolvedClient });
   const currentContent = modelCapabilities.supportsImageInput
     ? messageContentWithImages(message, req.body?.fileAttachments)
     : message;
@@ -1742,9 +1762,11 @@ async function runExternalEngineTurn(req, res, { engine, baseGoal, workingContex
     const taskGoal = injectFileAttachments(baseGoal, resolveFileAttachments(fileAttachments, context, req.user.id));
     // A new Claude Code or Codex session gets the project's instructions and
     // knowledge once; later turns resume that session, which already has them.
-    const projectPreamble = chatProject && !externalSessionId
+    const chatAgent = req.body?.profileId ? getProfile(String(req.body.profileId), req.user.id) : null;
+    const projectPreamble = (chatProject || chatAgent) && !externalSessionId
       ? buildChatContext({
         project: chatProject,
+        agent: chatAgent,
         query: baseGoal,
         resolvedClient: {
           model: engineModel || engine,
@@ -1756,8 +1778,9 @@ async function runExternalEngineTurn(req, res, { engine, baseGoal, workingContex
         },
       }).prompt
       : '';
+    const contextName = [chatProject && `the Asyncat project "${chatProject.name}"`, chatAgent && `the agent "${chatAgent.name}"`].filter(Boolean).join(' with ');
     const goal = projectPreamble
-      ? `This task comes from the Asyncat project "${chatProject.name}". Read the project context first, then do the task.\n\n${projectPreamble}\n\n---\n\n## Task\n${taskGoal}`
+      ? `This task comes from ${contextName}. Read the context first, then do the task.\n\n${projectPreamble}\n\n---\n\n## Task\n${taskGoal}`
       : taskGoal;
     const runDir = hasProjectContext ? context.workingDir : externalFallbackFolder(externalCwd);
     approvals = engine === 'claude-code' && agentMode === 'action' && !autoApprove
@@ -1861,15 +1884,11 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
       });
       return;
     }
-    let profile = null;
-    if (profileId) {
-      profile = getProfile(profileId, req.user.id);
-    }
-    if (!profile && !profileId) {
-      profile = getDefaultProfile(req.user.id);
-    }
-
-    const { client: aiClient, model, isLocal, supportsNativeTools, providerInfo } = getAiClientForUser(req.user.id);
+    // The agent picked for this chat (none means Asyncat itself). A default
+    // agent is pre-selected in the composer, never applied silently here.
+    const profile = profileId ? getProfile(profileId, req.user.id) : null;
+    const resolvedClient = clientForAgent(req.user.id, profile);
+    const { client: aiClient, model, isLocal, supportsNativeTools, providerInfo } = resolvedClient;
 
     const workspaceId = req.workspaceId;
     if (!workspaceId) {
@@ -1927,9 +1946,9 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
     ].filter(Boolean).join('\n\n');
     const chatContext = buildChatContext({
       project: chatProject,
-      agent: null,
+      agent: profile,
       query: baseGoal,
-      resolvedClient: { model, isLocal, supportsNativeTools, providerInfo },
+      resolvedClient,
     });
     const goal = injectFileAttachments(baseGoal, resolvedFiles);
     const resolvedMaxRounds  = maxRounds  || profile?.max_rounds  || 25;
@@ -1939,13 +1958,14 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
     const profileTools = Array.isArray(profile?.always_allowed_tools) ? profile.always_allowed_tools : [];
     const mentionedAgentProfiles = resolveAgentMentions(agentMentions, req.user.id);
 
-    let resolvedSoul = null;
-    if (profile?.soul_override) {
-      const withoutFrontmatter = profile.soul_override.replace(/^---[\s\S]*?---\n?/, '').trim();
-      resolvedSoul = withoutFrontmatter || null;
-    } else if (profile?.soul_name && profile.soul_name !== 'default') {
-      resolvedSoul = loadSoul(profile.soul_name);
-    }
+    // Agent instructions travel with the knowledge context; a soul file
+    // (advanced) still replaces the default identity.
+    const resolvedSoul = profile?.soul_name && profile.soul_name !== 'default' ? loadSoul(profile.soul_name) : null;
+    const agentToolNames = toolsForCapabilities(profile?.capabilities, toolRegistry.all());
+    const scopeToolNames = hasProjectContext ? null : noProjectToolNames();
+    const allowedToolNames = agentToolNames && scopeToolNames
+      ? agentToolNames.filter(name => scopeToolNames.includes(name))
+      : (agentToolNames || scopeToolNames);
 
     const agent = new AgentRuntime({
       aiClient,
@@ -1966,7 +1986,7 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
       providerInfo,
       reasoningEffort,
       agentMode: resolvedAgentMode,
-      allowedTools: hasProjectContext ? null : noProjectToolNames(),
+      allowedTools: allowedToolNames,
       enabledIntegrationTools: Array.isArray(enabledIntegrationTools) ? enabledIntegrationTools : null,
       mentionedAgents: mentionedAgentProfiles,
       capabilitiesSection,
@@ -2734,16 +2754,84 @@ router.get('/profiles', withWorkspaceContext, (req, res) => {
 
 router.post('/profiles', withWorkspaceContext, (req, res) => {
   try {
-    const { name, handle, description, icon, color, soulName, soulOverride, workingDir, maxRounds, autoApprove, alwaysAllowedTools, isDefault } = req.body;
+    const {
+      name, handle, description, icon, color, soulName, soulOverride, workingDir, maxRounds, autoApprove,
+      alwaysAllowedTools, isDefault, instructions, avatarImage, starterPrompts, modelProfileId, capabilities,
+    } = req.body;
     if (!name?.trim()) return res.status(400).json({ success: false, error: 'name is required' });
     const profile = createProfile({
       userId: req.user.id, name: name.trim(), handle, description, icon, color,
       soulName, soulOverride, workingDir, maxRounds, autoApprove, alwaysAllowedTools, isDefault,
+      instructions, avatarImage, starterPrompts, modelProfileId, capabilities,
     });
     res.json({ success: true, profile });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
+});
+
+// The capability switches an agent can have (see ProfileManager).
+router.get('/profiles-capabilities', withWorkspaceContext, (_req, res) => {
+  res.json({
+    success: true,
+    capabilities: Object.entries(AGENT_CAPABILITIES).map(([id, { label }]) => ({ id, label })),
+  });
+});
+
+const agentKnowledgeUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_FILE_BYTES, files: 20 } }).array('files', 20);
+
+router.get('/profiles/:id/knowledge', withWorkspaceContext, (req, res) => {
+  const profile = getProfile(req.params.id, req.user.id);
+  if (!profile) return res.status(404).json({ success: false, error: 'Agent not found' });
+  res.json({ success: true, data: listKnowledgeFiles('agent', profile.id) });
+});
+
+router.post('/profiles/:id/knowledge', withWorkspaceContext, (req, res, next) => agentKnowledgeUpload(req, res, (err) => {
+  if (!err) return next();
+  const tooBig = err.code === 'LIMIT_FILE_SIZE';
+  return res.status(tooBig ? 413 : 400).json({ success: false, error: tooBig ? 'Files can be up to 25 MB each.' : err.message });
+}), async (req, res) => {
+  const profile = getProfile(req.params.id, req.user.id);
+  if (!profile) return res.status(404).json({ success: false, error: 'Agent not found' });
+  const added = [];
+  const errors = [];
+  for (const file of Array.isArray(req.files) ? req.files : []) {
+    try {
+      added.push(await addKnowledgeFile({
+        ownerType: 'agent',
+        ownerId: profile.id,
+        userId: req.user.id,
+        fileName: Buffer.from(file.originalname, 'latin1').toString('utf8'),
+        mimeType: file.mimetype,
+        buffer: file.buffer,
+      }));
+    } catch (uploadErr) {
+      errors.push({ name: file.originalname, error: uploadErr.message });
+    }
+  }
+  res.status(added.length || !errors.length ? 200 : 422).json({ success: added.length > 0, data: added, errors });
+});
+
+router.delete('/profiles/:id/knowledge/:fileId', withWorkspaceContext, (req, res) => {
+  const profile = getProfile(req.params.id, req.user.id);
+  if (!profile) return res.status(404).json({ success: false, error: 'Agent not found' });
+  const removed = deleteKnowledgeFile('agent', profile.id, req.params.fileId);
+  res.status(removed ? 200 : 404).json({ success: removed });
+});
+
+router.get('/profiles/:id/context', withWorkspaceContext, (req, res) => {
+  const profile = getProfile(req.params.id, req.user.id);
+  if (!profile) return res.status(404).json({ success: false, error: 'Agent not found' });
+  let modelProfile;
+  try {
+    modelProfile = describeModel(clientForAgent(req.user.id, profile));
+  } catch (err) {
+    modelProfile = { ready: false, reason: err.message };
+  }
+  res.json({
+    success: true,
+    data: knowledgeFitReport({ ownerType: 'agent', ownerId: profile.id, instructions: profile.instructions, profile: modelProfile }),
+  });
 });
 
 router.get('/profiles/:id', withWorkspaceContext, (req, res) => {
@@ -2768,6 +2856,7 @@ router.put('/profiles/:id', withWorkspaceContext, (req, res) => {
 
 router.delete('/profiles/:id', withWorkspaceContext, (req, res) => {
   try {
+    if (getProfile(req.params.id, req.user.id)) deleteOwnerKnowledge('agent', req.params.id);
     deleteProfile(req.params.id, req.user.id);
     res.json({ success: true });
   } catch (err) {
