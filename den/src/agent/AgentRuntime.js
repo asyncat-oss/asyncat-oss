@@ -21,6 +21,7 @@ import { normalizeTags, selectRelevantSkillsWithLlm, synthesizeSkillFromRun } fr
 import { listMemories, searchMemories, enforceMemoryCap, decayMemoryImportance } from './tools/memoryTools.js';
 import { memoryConsolidator } from './MemoryConsolidator.js';
 import { isGitDangerousAction, isGitReadOnlyAction } from './gitService.js';
+import { isReadOnlyShellCommand } from './shellSafety.js';
 import { getModelCapabilities, normalizeReasoningEffort } from '../ai/controllers/ai/modelCapabilities.js';
 import { cleanReasoningAnswer, combineReasoningParts, createStreamTextAccumulator, extractReasoningFromText, reasoningTextFromDelta } from './reasoningParser.js';
 import { resolveContextWindow } from '../ai/controllers/ai/modelContextResolver.js';
@@ -2246,26 +2247,7 @@ export class AgentRuntime {
   }
 
   _looksReadOnlyShellCommand(command) {
-    if (!command || typeof command !== 'string') return false;
-    const raw = command.trim();
-    if (!raw) return false;
-    if (/[`$<>]/.test(raw)) return false;
-
-    const mutatingPattern = /\b(rm|mv|cp|touch|mkdir|rmdir|chmod|chown|ln|tee|truncate|dd|curl|wget|ssh|scp|rsync)\b|\b(npm|pnpm|yarn|bun)\s+(install|i|add|remove|uninstall|update|upgrade|run|exec|dlx|create)\b|\bgit\s+(add|am|apply|checkout|clean|commit|merge|pull|push|rebase|reset|restore|revert|stash|switch)\b|\b(sed\s+-i|perl\s+-pi|python|python3|node|bash|sh)\b/i;
-    if (mutatingPattern.test(raw)) return false;
-
-    const normalized = raw
-      .replace(/^(?:cd\s+(?:"[^"]+"|'[^']+'|[^&|;]+)\s*&&\s*)+/i, '')
-      .trim();
-
-    if (/[;&]|\|\|/.test(normalized)) return false;
-
-    const readonlySegment = /^(git\s+(show|log|status|diff|rev-parse|branch|ls-files|describe|remote|tag)\b|pwd\b|ls\b|find\b|rg\b|grep\b|cat\b|sed\s+-n\b|awk\b|wc\b|head\b|tail\b|du\b|sort\b|uniq\b|cut\b|tr\b)/i;
-    return normalized
-      .split('|')
-      .map(segment => segment.trim())
-      .filter(Boolean)
-      .every(segment => readonlySegment.test(segment));
+    return isReadOnlyShellCommand(command);
   }
 
   _ensureBaselineCheckpoint({ round, toolName }) {
