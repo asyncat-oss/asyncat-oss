@@ -21,6 +21,12 @@ const RELEASES_API_URL = 'https://api.github.com/repos/asyncat-oss/asyncat-oss/r
 let initialized = false;
 let currentUpdate = null;
 let pendingCheck = null;
+// Whether a check has finished. The first one runs while the app may still be
+// on its loading screen, so the page asks for the result instead of relying
+// on having heard the event.
+let hasChecked = false;
+
+const RECHECK_MS = 6 * 60 * 60 * 1000;
 
 function toUpdateInfo(release) {
   const parsed = parseVersion(release.tag_name);
@@ -66,6 +72,7 @@ async function checkForUpdates() {
   pendingCheck = (async () => {
     try {
       const release = selectLatestRelease(await fetchPublishedReleases(), app.getVersion());
+      hasChecked = true;
       if (!release) {
         currentUpdate = null;
         const info = { version: app.getVersion() };
@@ -102,14 +109,18 @@ export function setupAutoUpdater() {
   if (IS_DEV || initialized) return;
   initialized = true;
 
-  // Give the main window and sidebar time to register their listeners.
   setTimeout(() => {
     checkForUpdates();
   }, 5000);
+  // Asyncat often stays open in the tray for days; look again now and then.
+  setInterval(() => {
+    checkForUpdates();
+  }, RECHECK_MS).unref?.();
 }
 
 export function setupUpdaterIPC() {
   ipcMain.handle('update:check', checkForUpdates);
+  ipcMain.handle('update:get-state', () => ({ checked: hasChecked, updateInfo: currentUpdate }));
   ipcMain.handle('update:download', openUpdateDownload);
   ipcMain.handle('update:install', openUpdateDownload);
   ipcMain.handle('update:open-releases', async (_event, requestedUrl) => {

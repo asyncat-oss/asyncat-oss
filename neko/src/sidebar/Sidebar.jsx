@@ -469,6 +469,10 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
       api.onUpdateNotAvailable(() => markAvailable(false)),
     ];
     window.addEventListener("asyncat:update-flag", handleFlag);
+    // The launch check may have finished before this page loaded.
+    api.getUpdateState?.()
+      .then((state) => { if (state?.checked) markAvailable(Boolean(state.updateInfo)); })
+      .catch(() => {});
     return () => {
       cleanups.forEach((cleanup) => {
         if (typeof cleanup === "function") cleanup();
