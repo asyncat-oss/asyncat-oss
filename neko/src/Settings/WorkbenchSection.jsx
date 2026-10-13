@@ -172,7 +172,7 @@ export default function WorkbenchSection() {
             { value: 'right', label: 'Right dock', description: 'Keep every tool in one column' },
           ]}
         />
-        <ToggleRow icon={RotateCcw} label="Restore open panels" description="Reopen the last browser and terminal docks when returning to Work mode." checked={prefs.restoreOpenPanels} onChange={(value) => setPreference('restoreOpenPanels', value)} />
+        <ToggleRow icon={RotateCcw} label="Restore open panels" description="Reopen the last browser and terminal docks when returning to a chat." checked={prefs.restoreOpenPanels} onChange={(value) => setPreference('restoreOpenPanels', value)} />
         <div className={row}>
           <span className="flex items-start gap-3"><PanelRight className="mt-0.5 h-4 w-4 text-gray-400" /><span><span className="block text-sm font-medium text-gray-800 dark:text-gray-200">Panel sizes</span><span className="block text-xs text-gray-500 dark:text-gray-400">Reset the right and bottom docks to their defaults.</span></span></span>
           <button type="button" onClick={resetWorkbenchLayout} className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-800">Reset</button>

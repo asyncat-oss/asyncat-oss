@@ -138,7 +138,7 @@ export default function ProjectFolders({ project, compact = false }) {
             <h2 className="text-lg font-semibold">{project.emoji || '📁'} {project.name}</h2>
           </div>
           <p className="mt-1.5 max-w-2xl text-sm leading-6 text-gray-500 dark:text-gray-400 midnight:text-slate-400">
-            A Project is reusable context for AI chats. Attach only the local folders it may use; each Work chat selects one attached folder and cannot move above it.
+            A Project is reusable context for AI chats. Attach only the local folders it may use; each chat in the project works in one attached folder and cannot move above it.
           </p>
         </header>
       )}
@@ -202,7 +202,7 @@ export default function ProjectFolders({ project, compact = false }) {
             <div className="flex flex-col items-center px-5 py-10 text-center">
               <Folder className="h-8 w-8 text-gray-300 dark:text-gray-700" />
               <p className="mt-3 text-sm font-medium text-gray-700 dark:text-gray-300">No folders attached</p>
-              <p className="mt-1 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">Add a codebase, document folder, or any other directory before starting Work.</p>
+              <p className="mt-1 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">Add a codebase, document folder, or any other directory for the agent to work in.</p>
             </div>
           ) : folders.map((folder) => (
             <div key={folder.id} className="group flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
@@ -224,7 +224,7 @@ export default function ProjectFolders({ project, compact = false }) {
                 {window.electronAPI?.shellOpen && (
                   <button type="button" onClick={() => window.electronAPI.shellOpen(folder.path)} title="Open in File Explorer" className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:hover:bg-gray-800 dark:hover:text-gray-200"><ExternalLink className="h-3.5 w-3.5" /></button>
                 )}
-                <button type="button" onClick={() => startWork(folder)} disabled={!folder.exists} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-gray-100 px-2.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"><Play className="h-3.5 w-3.5" /> New work chat</button>
+                <button type="button" onClick={() => startWork(folder)} disabled={!folder.exists} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-gray-100 px-2.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"><Play className="h-3.5 w-3.5" /> New chat</button>
                 <button type="button" onClick={() => removeFolder(folder)} disabled={busyFolderId === folder.id} className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs transition-colors ${pendingRemove === folder.id ? 'bg-red-50 font-medium text-red-600 dark:bg-red-950/30 dark:text-red-400' : 'text-gray-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/20 dark:hover:text-red-400'}`}>
                   {busyFolderId === folder.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                   {pendingRemove === folder.id ? 'Confirm' : 'Remove'}
