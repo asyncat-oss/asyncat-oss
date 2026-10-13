@@ -75,11 +75,10 @@ export const PROVIDER_CATALOG = [
     managed: false,
     runtime: true,
     setup: [
-      'Uses codex exec as a subprocess and lets Codex own its auth session.',
-      'Asyncat does not read or refresh ~/.codex/auth.json.',
-      'Run codex login or open codex once before activating this provider.'
+      'Asyncat runs the codex command on this computer, so Codex keeps using its own sign-in.',
+      'Not signed in yet? Run `codex login` in a terminal first.',
     ],
-    description: 'Use your local Codex CLI login as a runtime boundary.',
+    description: 'Use the Codex CLI on this computer, signed in with your ChatGPT account.',
   },
   {
     id: 'ollama',

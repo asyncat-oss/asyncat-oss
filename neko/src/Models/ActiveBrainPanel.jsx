@@ -1,25 +1,40 @@
-import { Square, Cpu, Gauge, MessageSquare, Mic, Volume2, Eye, Image, BarChart3 } from 'lucide-react';
+import { useRef, useState } from 'react';
+import PropTypes from 'prop-types';
+import { ArrowLeftRight, Cpu, Eye, Gauge, Image, Mic, Plus, Power, Square, Volume2 } from 'lucide-react';
+import Button from '../components/ui/Button.jsx';
+import Cat from '../components/ui/Cat.jsx';
+import { Menu, MenuItem, MenuLabel, MenuSeparator } from '../components/ui/Menu.jsx';
 import { Badge } from './modelPageShared.jsx';
+import { friendlyModelName } from '../utils/modelNames.js';
 import { ProviderLogo, LocalModelLogo } from './modelLogos.jsx';
 
-const STATUS_DOT = {
-  idle:    'bg-gray-300 dark:bg-gray-600 midnight:bg-slate-600',
+const DOT = {
+  idle: 'bg-fg-subtle/50',
   loading: 'bg-amber-400 animate-pulse',
-  ready:   'bg-green-500',
-  error:   'bg-red-500',
+  ready: 'bg-emerald-500',
+  error: 'bg-red-500',
 };
 
-const CapabilityStatus = ({ icon: Icon, label, value, status = 'idle' }) => (
-  <div className="flex min-w-0 items-center gap-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-950/50 midnight:border-slate-800 midnight:bg-slate-900/50">
-    <span className={`h-2 w-2 flex-shrink-0 rounded-full ${STATUS_DOT[status] || STATUS_DOT.idle}`} />
-    <Icon className="h-3.5 w-3.5 flex-shrink-0 text-gray-400 dark:text-gray-500 midnight:text-slate-500" />
-    <div className="min-w-0">
-      <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-gray-400 dark:text-gray-500 midnight:text-slate-500">{label}</div>
-      <div className="truncate text-xs font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300">{value}</div>
-    </div>
-  </div>
+const Capability = ({ icon: Icon, label, value, status = 'idle' }) => (
+  <span className="inline-flex min-w-0 items-center gap-1.5">
+    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${DOT[status] || DOT.idle}`} />
+    <Icon className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
+    <span className="text-fg-subtle">{label}</span>
+    <span className="truncate text-fg-muted">{value}</span>
+  </span>
 );
 
+Capability.propTypes = {
+  icon: PropTypes.elementType.isRequired,
+  label: PropTypes.string.isRequired,
+  value: PropTypes.node,
+  status: PropTypes.string,
+};
+
+/**
+ * What powers chats right now, with a switcher for the other connected
+ * providers and downloaded models.
+ */
 const ActiveBrainPanel = ({
   activeConfig,
   activeProviderName,
@@ -36,185 +51,181 @@ const ActiveBrainPanel = ({
   installingEngine,
   voiceState,
   visualModels,
-  usageRequestCount = 0,
-  usageTokensK = 0,
+  profiles = [],
+  localModels = [],
   onStop,
   onDeactivateProvider,
+  onActivateProfile,
+  onLoadLocalModel,
+  onBrowseProviders,
 }) => {
-  const providerIsExternal = Boolean(
-    activeConfig?.model &&
-    activeConfig?.provider_id &&
-    activeConfig.provider_id !== 'llamacpp-builtin'
-  );
-  const activeProviderType = activeConfig?.provider_type || '';
-  const providerTone = activeProviderType === 'cloud' || activeProviderType === 'custom'
-    ? 'Cloud provider'
-    : 'Local provider';
+  const switcherRef = useRef(null);
+  const [switcherOpen, setSwitcherOpen] = useState(false);
 
-  const primaryTitle = providerIsExternal
-    ? activeProviderName
-    : serverStatus?.model || 'No model selected';
-
+  const providerIsExternal = Boolean(activeConfig?.model && activeConfig?.provider_id && activeConfig.provider_id !== 'llamacpp-builtin');
+  // MLX runs downloaded models through its own server but is set up like a provider.
+  const isMlx = activeConfig?.provider_id === 'mlx-builtin';
+  const localReady = !providerIsExternal && isReady && serverStatus?.model;
+  const hasActive = providerIsExternal || localReady;
   const rawModel = activeConfig?.settings?.model_name || activeConfig?.model || '';
-  const displayModel = rawModel === 'openrouter/auto'
-    ? 'Auto (OpenRouter picks best)'
-    : rawModel;
+  const displayModel = rawModel === 'openrouter/auto' ? 'Auto (OpenRouter picks)' : friendlyModelName(rawModel);
+  const isLocalProvider = activeConfig?.provider_type === 'local';
 
-  const subtitle = providerIsExternal
-    ? `${providerTone} · ${displayModel}`
-    : isReady
-      ? 'Running locally · Built-in inference'
-      : statusLabel;
+  let title = 'No model selected';
+  let subtitle = 'Choose a connected provider or load a downloaded model to start chatting.';
+  let status = 'idle';
+  let statusText = 'Not set up';
+  if (providerIsExternal) {
+    title = displayModel || activeProviderName;
+    subtitle = isMlx
+      ? 'Downloaded model · MLX engine'
+      : `${activeProviderName} · ${isLocalProvider ? 'runs on your computer' : 'cloud provider'}`;
+    status = 'ready';
+    statusText = 'In use';
+  } else if (serverStatus?.status === 'loading') {
+    title = friendlyModelName(serverStatus.model) || 'Loading model…';
+    subtitle = 'Loading into memory with the built-in engine';
+    status = 'loading';
+    statusText = statusLabel;
+  } else if (localReady) {
+    title = friendlyModelName(serverStatus.model);
+    subtitle = 'Downloaded model · built-in engine';
+    status = 'ready';
+    statusText = 'In use';
+  } else if (serverStatus?.status === 'error') {
+    status = 'error';
+    statusText = 'Error';
+  }
 
-  const runtimeLabel = engineData?.current?.capabilityLabel || 'Runtime not detected';
-  const engineSource = engineData?.current?.source || 'Asyncat managed engine';
-  const hardwareLabel = showHardwareBadge ? hardwareBadgeLabel : runtimeLabel;
-  const hardwareNote = engineData?.current
-    ? `${engineData.current.runtime === 'python' ? 'Python' : 'Native'} engine`
-    : '';
-
-  const dotColor = STATUS_DOT[serverStatus?.status] || STATUS_DOT.idle;
-  const chatStatus = providerIsExternal ? 'ready' : serverStatus?.status || 'idle';
+  const runtimeLabel = engineData?.current?.capabilityLabel || '';
+  const hardwareLabel = showHardwareBadge ? hardwareBadgeLabel : '';
   const supportsImageInput = Boolean(activeConfig?.capabilities?.supportsImageInput);
   const imageCount = visualModels?.image?.length || 0;
+  const busy = Boolean(providerAction) || Boolean(switchingEngine) || Boolean(installingEngine);
+  const activeProfileId = activeConfig?.profile_id;
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
-      <div className="px-8 py-7">
-        {/* Status row */}
-        <div className="flex items-center gap-3 mb-5">
-          <span className={`w-2.5 h-2.5 rounded-full ${dotColor}`} />
-          <span className="text-xs font-medium uppercase tracking-widest text-gray-400 dark:text-gray-500 midnight:text-slate-500">
-            {providerIsExternal ? providerTone : statusLabel}
-          </span>
-          {providerIsExternal && (
-            <Badge color={activeProviderType === 'local' ? 'green' : 'blue'}>{providerTone}</Badge>
+    <section className="rounded-2xl border border-line bg-surface">
+      <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
+        <div className="flex min-w-0 flex-1 items-center gap-4">
+          {providerIsExternal && !isMlx ? (
+            <ProviderLogo providerId={activeConfig.provider_id} name={activeProviderName} size="lg" />
+          ) : isMlx ? (
+            <LocalModelLogo modelName={displayModel} modelFile={rawModel} size="lg" />
+          ) : serverStatus?.model ? (
+            <LocalModelLogo modelName={serverStatus.model} modelFile={serverStatus.model} size="lg" />
+          ) : (
+            <span className="flex h-12 w-12 shrink-0 items-end justify-center overflow-hidden rounded-xl bg-hover pt-1.5">
+              <Cat pose="head" className="w-10" outline={6} />
+            </span>
           )}
-          {activeConfig?.supports_tools && (
-            <Badge color="green">Tools</Badge>
-          )}
-        </div>
-
-        {/* Title + logo */}
-        <div className="flex items-center gap-4">
-          {providerIsExternal
-            ? <ProviderLogo providerId={activeConfig?.provider_id} name={activeProviderName} isActive size="lg" />
-            : serverStatus?.model
-              ? <LocalModelLogo modelName={serverStatus.model} modelFile={serverStatus.model} isActive size="lg" />
-              : null
-          }
           <div className="min-w-0">
-            <h2 className="text-2xl font-semibold text-gray-950 dark:text-white midnight:text-slate-100 tracking-tight">
-              {primaryTitle}
-            </h2>
-            <p className="mt-1.5 text-sm text-gray-500 dark:text-gray-400 midnight:text-slate-400">
-              {subtitle}
-            </p>
-            {activeConfig?.base_url && providerIsExternal && (
-              <p className="mt-1 text-xs text-gray-400 dark:text-gray-500 midnight:text-slate-500 font-mono break-all">
-                {activeConfig.base_url}
-              </p>
-            )}
-            {serverStatus?.error && (
-              <p className="mt-2 text-sm text-red-600 dark:text-red-400 midnight:text-red-400">{serverStatus.error}</p>
-            )}
+            <div className="flex items-center gap-1.5 text-[12px] text-fg-subtle">
+              <span className={`h-1.5 w-1.5 rounded-full ${DOT[status]}`} />
+              {statusText}
+              {providerIsExternal && activeConfig?.supports_tools ? <Badge color="gray">Tools</Badge> : null}
+            </div>
+            <h2 className="mt-0.5 truncate text-[17px] font-semibold tracking-[-0.015em] text-fg" title={title}>{title}</h2>
+            <p className="truncate text-[13px] text-fg-muted">{subtitle}</p>
+            {serverStatus?.error ? <p className="mt-1 text-[12px] text-red-600 dark:text-red-400">{serverStatus.error}</p> : null}
           </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
-          <CapabilityStatus
-            icon={MessageSquare}
-            label="Chat"
-            status={chatStatus}
-            value={providerIsExternal ? displayModel || activeProviderName : serverStatus?.model || 'Not selected'}
-          />
-          <CapabilityStatus
-            icon={Mic}
-            label="STT"
-            status={voiceState?.sttStatus || 'idle'}
-            value={voiceState?.sttModel || (voiceState?.sttStatus === 'ready' ? 'Ready' : 'Idle')}
-          />
-          <CapabilityStatus
-            icon={Volume2}
-            label="TTS"
-            status={voiceState?.ttsStatus || 'idle'}
-            value={voiceState?.ttsModel || (voiceState?.ttsStatus === 'ready' ? 'Ready' : 'Idle')}
-          />
-          <CapabilityStatus
-            icon={Eye}
-            label="Image input"
-            status={supportsImageInput ? 'ready' : 'idle'}
-            value={supportsImageInput ? 'Supported by LLM' : 'Text only'}
-          />
-          <CapabilityStatus
-            icon={Image}
-            label="Image"
-            status={imageCount ? 'ready' : 'idle'}
-            value={imageCount ? `${imageCount} asset${imageCount === 1 ? '' : 's'}` : 'No assets'}
-          />
+        <div className="flex shrink-0 items-center gap-1.5">
+          {providerIsExternal ? (
+            <Button variant="ghost" size="sm" icon={Power} onClick={onDeactivateProvider} disabled={busy}>{isMlx ? 'Unload' : 'Disconnect'}</Button>
+          ) : null}
+          {isRunning ? (
+            <Button variant="danger" size="sm" icon={Square} onClick={onStop} loading={stopping} disabled={busy}>Stop</Button>
+          ) : null}
+          <Button
+            ref={switcherRef}
+            variant={hasActive ? 'secondary' : 'primary'}
+            size="sm"
+            icon={ArrowLeftRight}
+            onClick={() => setSwitcherOpen((open) => !open)}
+            aria-haspopup="menu"
+            aria-expanded={switcherOpen}
+          >
+            {hasActive ? 'Switch model' : 'Choose a model'}
+          </Button>
+          <Menu anchorRef={switcherRef} open={switcherOpen} onClose={() => setSwitcherOpen(false)} placement="bottom-end" width={300} label="Switch model">
+            {profiles.length ? (
+              <>
+                <MenuLabel>Providers</MenuLabel>
+                {profiles.map((profile) => (
+                  <MenuItem
+                    key={profile.id}
+                    icon={() => <ProviderLogo providerId={profile.provider_id} name={profile.name} size="xs" />}
+                    label={<span className="flex flex-col"><span className="truncate text-fg">{profile.name}</span><span className="truncate font-mono text-[11px] text-fg-subtle">{profile.settings?.model_name || friendlyModelName(profile.model)}</span></span>}
+                    checked={activeProfileId === profile.id}
+                    onSelect={() => onActivateProfile(profile)}
+                  />
+                ))}
+              </>
+            ) : null}
+            {localModels.length ? (
+              <>
+                {profiles.length ? <MenuSeparator /> : null}
+                <MenuLabel>Downloaded models</MenuLabel>
+                {localModels.slice(0, 8).map((model) => (
+                  <MenuItem
+                    key={model.filename}
+                    icon={() => <LocalModelLogo modelName={model.name || ''} modelFile={model.filename || ''} size="xs" />}
+                    label={model.name || model.filename}
+                    hint={model.sizeFormatted}
+                    checked={!providerIsExternal && serverStatus?.model && (serverStatus.model === model.filename || serverStatus.model === model.name)}
+                    onSelect={() => onLoadLocalModel(model)}
+                  />
+                ))}
+              </>
+            ) : null}
+            {profiles.length || localModels.length ? <MenuSeparator /> : null}
+            <MenuItem icon={Plus} label="Connect a provider…" onSelect={onBrowseProviders} />
+          </Menu>
         </div>
+      </div>
 
-        {/* Actions */}
-        <div className="mt-6 flex flex-wrap items-center gap-3">
-          {providerIsExternal && (
-            <button
-              onClick={onDeactivateProvider}
-              disabled={Boolean(providerAction)}
-              className="inline-flex items-center gap-2 rounded-xl bg-gray-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-40 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-slate-800 midnight:text-slate-100 midnight:hover:bg-slate-700 midnight:ring-1 midnight:ring-slate-700 transition-all"
-            >
-              <Square className="w-4 h-4" />
-              Disconnect
-            </button>
-          )}
-          {isRunning && (
-            <button
-              onClick={onStop}
-              disabled={stopping || Boolean(switchingEngine) || Boolean(installingEngine)}
-              className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-5 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-40 dark:border-red-800 dark:bg-transparent dark:text-red-400 dark:hover:bg-red-950/30 midnight:border-red-900 midnight:text-red-400 midnight:hover:bg-red-950/30 transition-all"
-            >
-              <Square className="w-4 h-4" />
-              {stopping ? 'Stopping...' : 'Stop Server'}
-            </button>
-          )}
-        </div>
-
-        {/* Hardware footer */}
-        <div className="mt-6 pt-5 border-t border-gray-50 dark:border-gray-800/50 midnight:border-slate-800/50">
-          <div className="flex flex-wrap items-center gap-x-8 gap-y-3 text-xs text-gray-400 dark:text-gray-500 midnight:text-slate-500">
-            <div className="flex items-center gap-2">
-              <Gauge className="w-3.5 h-3.5 flex-shrink-0" />
-              <span>{runtimeLabel}</span>
-              {engineSource && <span className="text-gray-300 dark:text-gray-700 midnight:text-slate-700">·</span>}
-              {engineSource && <span>{engineSource}</span>}
-            </div>
-            <div className="flex items-center gap-2">
-              <Cpu className="w-3.5 h-3.5 flex-shrink-0" />
-              <span>{hardwareLabel}</span>
-              {hardwareNote && <span className="text-gray-300 dark:text-gray-700 midnight:text-slate-700">·</span>}
-              {hardwareNote && <span>{hardwareNote}</span>}
-            </div>
-            {serverStatus?.ctxSize && (
-              <div className="flex items-center gap-2">
-                <span>{Number(serverStatus.ctxSize).toLocaleString()} ctx</span>
-              </div>
-            )}
-            {usageRequestCount > 0 && (
-              <div className="flex items-center gap-2">
-                <BarChart3 className="w-3.5 h-3.5 flex-shrink-0" />
-                <span>{usageRequestCount.toLocaleString()} request{usageRequestCount === 1 ? '' : 's'}</span>
-                {usageTokensK > 0 && (
-                  <>
-                    <span className="text-gray-300 dark:text-gray-700 midnight:text-slate-700">·</span>
-                    <span>{usageTokensK}k tokens</span>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-line px-5 py-3 text-[12px]">
+        <Capability icon={Mic} label="Voice in" status={voiceState?.sttStatus} value={voiceState?.sttModel || (voiceState?.sttStatus === 'ready' ? 'Ready' : 'Off')} />
+        <Capability icon={Volume2} label="Voice out" status={voiceState?.ttsStatus} value={voiceState?.ttsModel || (voiceState?.ttsStatus === 'ready' ? 'Ready' : 'Off')} />
+        <Capability icon={Eye} label="Sees images" status={supportsImageInput ? 'ready' : 'idle'} value={supportsImageInput ? 'Yes' : 'No'} />
+        <Capability icon={Image} label="Makes images" status={imageCount ? 'ready' : 'idle'} value={imageCount ? `${imageCount} model${imageCount === 1 ? '' : 's'}` : 'Off'} />
+        {(runtimeLabel || hardwareLabel || serverStatus?.ctxSize) ? (
+          <span className="inline-flex items-center gap-1.5 text-fg-subtle sm:ml-auto">
+            {runtimeLabel ? <><Gauge className="h-3.5 w-3.5" />{runtimeLabel}</> : null}
+            {hardwareLabel ? <><Cpu className="ml-2 h-3.5 w-3.5" />{hardwareLabel}</> : null}
+            {serverStatus?.ctxSize ? <span className="ml-2 tabular-nums">{Number(serverStatus.ctxSize).toLocaleString()} ctx</span> : null}
+          </span>
+        ) : null}
       </div>
     </section>
   );
+};
+
+ActiveBrainPanel.propTypes = {
+  activeConfig: PropTypes.object,
+  activeProviderName: PropTypes.string,
+  serverStatus: PropTypes.object,
+  statusLabel: PropTypes.string,
+  isReady: PropTypes.bool,
+  isRunning: PropTypes.bool,
+  stopping: PropTypes.bool,
+  engineData: PropTypes.object,
+  hardwareBadgeLabel: PropTypes.string,
+  showHardwareBadge: PropTypes.bool,
+  providerAction: PropTypes.string,
+  switchingEngine: PropTypes.oneOfType([PropTypes.string, PropTypes.bool]),
+  installingEngine: PropTypes.oneOfType([PropTypes.string, PropTypes.bool, PropTypes.object]),
+  voiceState: PropTypes.object,
+  visualModels: PropTypes.object,
+  profiles: PropTypes.array,
+  localModels: PropTypes.array,
+  onStop: PropTypes.func,
+  onDeactivateProvider: PropTypes.func,
+  onActivateProfile: PropTypes.func.isRequired,
+  onLoadLocalModel: PropTypes.func.isRequired,
+  onBrowseProviders: PropTypes.func.isRequired,
 };
 
 export default ActiveBrainPanel;

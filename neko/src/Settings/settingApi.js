@@ -248,6 +248,14 @@ export const aiProviderApi = {
     return apiCall(`${AI_API_BASE}/models${suffix}`);
   },
 
+  // Models a provider offers for settings that are not saved yet.
+  previewProviderModels: async (draft) => {
+    return apiCall(`${AI_API_BASE}/models/preview`, {
+      method: 'POST',
+      body: JSON.stringify(draft),
+    });
+  },
+
   getUsage: async ({ range = '30d', limit = 12 } = {}) => {
     const params = new URLSearchParams({ range, limit: String(limit) });
     return apiCall(withWorkspaceParam(`${AI_API_BASE}/usage?${params.toString()}`));

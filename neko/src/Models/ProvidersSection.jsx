@@ -1,533 +1,171 @@
-import { useState, useEffect } from 'react';
-import { RefreshCw, Cloud, KeyRound, X, Plus, Save, Link2, Search, Zap, Sparkles, TriangleAlert, FileText, Image, Mic, Brain, Calendar, DollarSign, ChevronDown, Settings } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import PropTypes from 'prop-types';
+import {
+  ArrowUpRight, CheckCircle2, CircleAlert, MoreHorizontal, Pencil, Plus,
+  RefreshCw, Search, SlidersHorizontal, Trash2, WifiOff, X, Zap,
+} from 'lucide-react';
 import { aiProviderApi } from '../Settings/settingApi.js';
 import { useNetworkStatus } from '../hooks/useNetworkStatus.js';
-import { Badge, providerLabel } from './modelPageShared.jsx';
+import Button from '../components/ui/Button.jsx';
+import Cat from '../components/ui/Cat.jsx';
+import Dialog from '../components/ui/Dialog.jsx';
+import { Menu, MenuItem, MenuSeparator } from '../components/ui/Menu.jsx';
+import { Segmented } from '../components/ui/Tabs.jsx';
+import { Badge, SectionHeader, providerLabel } from './modelPageShared.jsx';
+import { friendlyModelName } from '../utils/modelNames.js';
 import { ProviderLogo } from './modelLogos.jsx';
+import { buildDirectory, matchesDirectoryFilter } from './providerDirectory.js';
+import ProviderConnectDialog from './ProviderConnectDialog.jsx';
+import ModelPickerDialog from './ModelPickerDialog.jsx';
 
-const modelDisplayName = (profile, catalog = []) => {
-  const preset = catalog.find(item => item.providerId === profile?.provider_id || item.id === profile?.provider_id);
-  const rawModel = profile?.settings?.model_name || profile?.model || '';
-  if (!rawModel) return 'No model selected';
-  if (rawModel === 'openrouter/auto') return 'Auto (OpenRouter picks best)';
-  if (preset?.model === rawModel && !profile?.settings?.model_name) {
-    return `${rawModel} (default)`;
-  }
-  return rawModel;
+const modelDisplayName = (profile) => {
+  const raw = profile?.settings?.model_name || profile?.model || '';
+  if (!raw) return 'No model chosen';
+  if (raw === 'openrouter/auto') return 'Auto (OpenRouter picks)';
+  return friendlyModelName(raw);
 };
 
-const providerTypeBadge = (item) => {
-  if (item.id === 'openai-codex' || item.providerId === 'openai-codex') {
-    return { label: 'Codex login', color: 'amber' };
-  }
-  if (item.id === 'codex-cli' || item.providerId === 'codex-cli') {
-    return { label: 'Runtime', color: 'gray' };
-  }
-  return item.local
-    ? { label: 'Local', color: 'gray' }
-    : { label: 'Cloud API', color: 'blue' };
-};
-
-const providerAuthIcon = (item) => (
-  item.requiresApiKey || item.id === 'openai-codex' || item.providerId === 'openai-codex'
-    ? <KeyRound className="w-4 h-4 text-gray-400" />
-    : <Link2 className="w-4 h-4 text-gray-400" />
-);
-
-const ProviderProfileModal = ({ catalog, profile, preset, onClose, onSave, saving }) => {
-  const seed = profile || preset || {};
-  const [form, setForm] = useState({
-    name: seed.name || '',
-    provider_id: seed.provider_id || seed.providerId || seed.id || 'custom',
-    base_url: seed.base_url || seed.baseUrl || '',
-    model: seed.model || '',
-    api_key: '',
-    supports_tools: seed.supports_tools ?? seed.supportsTools ?? true,
-    settings: seed.settings || {},
-  });
-  const [apiKeyTouched, setApiKeyTouched] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(Boolean(profile));
-
-  const selectedPreset = catalog.find(item => item.providerId === form.provider_id || item.id === form.provider_id);
-  const isAzure = form.provider_id === 'azure';
-  const isLocalManaged = form.provider_id === 'llamacpp-builtin';
-  const isRuntime = Boolean(selectedPreset?.runtime || form.provider_id === 'codex-cli');
-  const requiresKey = selectedPreset?.requiresApiKey;
-  const showApiKeyInput = !isRuntime && !isLocalManaged && (!selectedPreset?.local || selectedPreset?.requiresApiKey || form.provider_id === 'custom' || profile?.api_key_set || apiKeyTouched);
-  const isAddingFromPreset = !profile && preset;
-  const presetHasDefaults = Boolean(selectedPreset?.baseUrl && selectedPreset?.model);
-  const setupItems = Array.isArray(selectedPreset?.setup) ? selectedPreset.setup : [];
-  const docsUrl = selectedPreset?.docsUrl || '';
-  const apiKeyEnv = selectedPreset?.apiKeyEnv || '';
-  const modalAction = isRuntime || isLocalManaged ? 'Use' : 'Connect';
-
-  const update = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
-  const updateSetting = (key, value) => setForm(prev => ({ ...prev, settings: { ...(prev.settings || {}), [key]: value } }));
-
-  const submit = (e) => {
-    e.preventDefault();
-    const payload = {
-      name: form.name,
-      provider_id: form.provider_id,
-      base_url: form.base_url,
-      model: form.model,
-      supports_tools: Boolean(form.supports_tools),
-      settings: form.settings || {},
-    };
-    if (!profile || apiKeyTouched) payload.api_key = form.api_key;
-    onSave(payload);
-  };
+// ── A saved provider ─────────────────────────────────────────────────────────
+function ProfileRow({ profile, catalog, isActive, busy, highlighted, onUse, onChangeModel, onTest, onEdit, onDelete }) {
+  const menuRef = useRef(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const tested = profile.last_test_status;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <form onSubmit={submit} className="w-full max-w-2xl rounded-2xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 shadow-2xl">
-        <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-5 py-4">
-          <div>
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">{profile ? 'Edit Provider' : `${modalAction} ${selectedPreset?.name || 'Provider'}`}</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400 mt-0.5">{selectedPreset?.description || 'Configure an OpenAI-compatible endpoint.'}</p>
-          </div>
-          <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-slate-800 text-gray-500 midnight:text-slate-500">
-            <X className="w-4 h-4" />
-          </button>
+    <div
+      id={`provider-card-${profile.id}`}
+      className={`group flex items-center gap-3.5 rounded-xl border px-4 py-3 transition-[border-color,box-shadow,background-color] ${
+        isActive ? 'border-accent/35 bg-accent-soft' : 'border-line bg-surface hover:border-line-strong'
+      } ${highlighted ? 'ring-2 ring-amber-400/70' : ''}`}
+    >
+      <ProviderLogo providerId={profile.provider_id} name={profile.name} size="md" />
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-[14px] font-medium text-fg">{profile.name}</span>
+          {isActive ? <Badge color="blue">In use</Badge> : null}
         </div>
-
-        <div className="p-5 space-y-4">
-          {showApiKeyInput && (
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 midnight:text-slate-300">
-              <span className="flex items-center gap-1.5">
-                <KeyRound className="w-3.5 h-3.5" />
-                API Key
-                {profile?.api_key_set && !apiKeyTouched ? <span className="text-gray-400 font-normal">(saved)</span> : null}
-              </span>
-              <input
-                value={form.api_key}
-                onChange={(e) => { setApiKeyTouched(true); update('api_key', e.target.value); }}
-                type="password"
-                className="mt-1.5 w-full rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-950 midnight:bg-slate-900 px-3 py-2.5 text-sm text-gray-900 dark:text-gray-100 midnight:text-slate-100 outline-none"
-                placeholder={requiresKey ? `Paste API key${apiKeyEnv ? ` (${apiKeyEnv})` : ''}` : 'Optional'}
-                autoFocus
-              />
-            </label>
-          )}
-
-          {(isAddingFromPreset && presetHasDefaults) || setupItems.length > 0 || selectedPreset?.compatibility || docsUrl ? (
-            <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-gray-50 dark:bg-gray-950 midnight:bg-slate-900 px-4 py-3 text-sm text-gray-700 dark:text-gray-300 midnight:text-slate-300">
-              {isAddingFromPreset && presetHasDefaults && (
-                <>
-                  <p className="font-medium text-gray-800 dark:text-gray-200 midnight:text-slate-200">Default model: {selectedPreset.model}</p>
-                  <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">
-                    {form.provider_id === 'openrouter'
-                      ? 'OpenRouter can route automatically with openrouter/auto. Pick a concrete model later when you need predictable behavior.'
-                      : 'The preset default model is a starting point. Use Models after saving to choose a model returned by the provider.'}
-                  </p>
-                </>
-              )}
-              {selectedPreset?.compatibility && (
-                <p className="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400 midnight:text-slate-400">{selectedPreset.compatibility}</p>
-              )}
-              {setupItems.length > 0 && (
-                <ul className="mt-2 space-y-1 text-xs leading-5 text-gray-500 dark:text-gray-400 midnight:text-slate-400">
-                  {setupItems.map(item => <li key={item}>- {item}</li>)}
-                </ul>
-              )}
-              {docsUrl && (
-                <a
-                  href={docsUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 midnight:text-slate-400 hover:text-gray-800 dark:hover:text-gray-200 midnight:hover:text-slate-200 transition-colors"
-                >
-                  <Link2 className="h-3.5 w-3.5" />
-                  Provider docs
-                </a>
-              )}
-            </div>
+        <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12px] text-fg-muted">
+          <span className="truncate font-mono text-[11.5px]">{modelDisplayName(profile)}</span>
+          <span className="text-fg-subtle">·</span>
+          <span className="shrink-0">{providerLabel(profile, catalog)}</span>
+          {tested === 'ok' ? (
+            <span className="inline-flex shrink-0 items-center gap-1 text-emerald-600 dark:text-emerald-400">
+              <span className="text-fg-subtle">·</span><CheckCircle2 className="h-3 w-3" /> Working
+            </span>
           ) : null}
-
-          {/* Name — always shown but compact when adding from preset */}
-          <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 midnight:text-slate-300">
-            Name
-            <input
-              value={form.name}
-              onChange={(e) => update('name', e.target.value)}
-              className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-950 midnight:bg-slate-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 midnight:text-slate-100 outline-none"
-              placeholder={selectedPreset?.name || 'Provider name'}
-            />
-          </label>
-
-          {/* Advanced toggle */}
-          {isAddingFromPreset && (
-            <button
-              type="button"
-              onClick={() => setShowAdvanced(v => !v)}
-              className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-slate-400 hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-slate-200 transition-colors"
-            >
-              <Settings className="w-3.5 h-3.5" />
-              Endpoint and model
-              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
-            </button>
-          )}
-
-          {showAdvanced && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <label className="text-xs font-medium text-gray-600 dark:text-gray-300 midnight:text-slate-300">
-                Provider
-                <select
-                  value={form.provider_id}
-                  onChange={(e) => {
-                    const next = catalog.find(item => item.providerId === e.target.value || item.id === e.target.value);
-                    setForm(prev => ({
-                      ...prev,
-                      provider_id: e.target.value,
-                      name: prev.name || next?.name || '',
-                      base_url: next?.baseUrl || prev.base_url,
-                      model: next?.model || prev.model,
-                      supports_tools: next?.supportsTools ?? prev.supports_tools,
-                      settings: next?.settings || prev.settings || {},
-                    }));
-                  }}
-                  className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-950 midnight:bg-slate-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 midnight:text-slate-100 outline-none"
-                >
-                  {catalog.filter(item => !item.managed).map(item => (
-                    <option key={item.id} value={item.providerId}>{item.name}</option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="md:col-span-2 text-xs font-medium text-gray-600 dark:text-gray-300 midnight:text-slate-300">
-                Base URL
-                <input
-                  value={form.base_url}
-                  onChange={(e) => update('base_url', e.target.value)}
-                  disabled={isLocalManaged}
-                  className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-950 midnight:bg-slate-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 midnight:text-slate-100 outline-none disabled:opacity-60"
-                  placeholder={selectedPreset?.baseUrl || 'https://.../v1'}
-                />
-              </label>
-
-              <label className="text-xs font-medium text-gray-600 dark:text-gray-300 midnight:text-slate-300">
-                Model
-                <input
-                  value={form.model}
-                  onChange={(e) => setForm(prev => {
-                    const nextSettings = { ...(prev.settings || {}) };
-                    delete nextSettings.model_capabilities;
-                    delete nextSettings.model_name;
-                    return { ...prev, model: e.target.value, settings: nextSettings };
-                  })}
-                  className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-950 midnight:bg-slate-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 midnight:text-slate-100 outline-none"
-                  placeholder={selectedPreset?.model || 'model-id'}
-                />
-              </label>
-
-              {isAzure && (
-                <label className="text-xs font-medium text-gray-600 dark:text-gray-300 midnight:text-slate-300">
-                  API Version
-                  <input
-                    value={form.settings?.apiVersion || '2024-10-21'}
-                    onChange={(e) => updateSetting('apiVersion', e.target.value)}
-                    className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-950 midnight:bg-slate-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 midnight:text-slate-100 outline-none"
-                  />
-                </label>
-              )}
-
-              {isAzure && (
-                <label className="text-xs font-medium text-gray-600 dark:text-gray-300 midnight:text-slate-300">
-                  Deployment
-                  <input
-                    value={form.settings?.deployment || ''}
-                    onChange={(e) => updateSetting('deployment', e.target.value)}
-                    className="mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-950 midnight:bg-slate-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 midnight:text-slate-100 outline-none"
-                    placeholder="Defaults to Model if blank"
-                  />
-                </label>
-              )}
-
-              <label className="md:col-span-2 flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 midnight:text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={Boolean(form.supports_tools)}
-                  onChange={(e) => update('supports_tools', e.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300"
-                />
-                Enable native tool calling for chat and agents
-              </label>
-            </div>
-          )}
         </div>
-
-        <div className="flex items-center justify-end gap-2 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-5 py-4">
-          <button type="button" onClick={onClose} className="px-3 py-2 text-sm font-medium rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700 text-gray-700 dark:text-gray-300 midnight:text-slate-300 midnight:hover:bg-slate-800">Cancel</button>
-          <button type="submit" disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 midnight:bg-slate-800 midnight:text-slate-100 midnight:ring-1 midnight:ring-slate-700 disabled:opacity-50">
-            {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            Save
-          </button>
-        </div>
-      </form>
+        {tested && tested !== 'ok' && profile.last_test_message ? (
+          <p className="mt-1 flex items-start gap-1 text-[12px] leading-4 text-red-600 dark:text-red-400">
+            <CircleAlert className="mt-px h-3 w-3 shrink-0" />
+            <span className="line-clamp-2">{profile.last_test_message}</span>
+          </p>
+        ) : null}
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        {busy ? <RefreshCw className="mr-1 h-3.5 w-3.5 animate-spin text-fg-subtle" /> : null}
+        {!isActive ? <Button size="sm" variant="secondary" icon={Zap} onClick={onUse} disabled={busy}>Use</Button> : null}
+        <Button size="sm" variant="ghost" onClick={onChangeModel} disabled={busy} className="hidden md:inline-flex">Change model</Button>
+        <Button
+          ref={menuRef}
+          size="icon"
+          variant="ghost"
+          icon={MoreHorizontal}
+          aria-label={`More for ${profile.name}`}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          onClick={() => setMenuOpen((open) => !open)}
+        />
+        <Menu anchorRef={menuRef} open={menuOpen} onClose={() => setMenuOpen(false)} placement="bottom-end" width={196} label={`${profile.name} options`}>
+          <MenuItem icon={SlidersHorizontal} label="Change model" onSelect={onChangeModel} />
+          <MenuItem icon={RefreshCw} label="Test connection" onSelect={onTest} />
+          <MenuItem icon={Pencil} label="Edit" onSelect={onEdit} />
+          <MenuSeparator />
+          <MenuItem icon={Trash2} label="Remove" danger onSelect={onDelete} />
+        </Menu>
+      </div>
     </div>
   );
+}
+
+ProfileRow.propTypes = {
+  profile: PropTypes.object.isRequired,
+  catalog: PropTypes.array.isRequired,
+  isActive: PropTypes.bool,
+  busy: PropTypes.bool,
+  highlighted: PropTypes.bool,
+  onUse: PropTypes.func.isRequired,
+  onChangeModel: PropTypes.func.isRequired,
+  onTest: PropTypes.func.isRequired,
+  onEdit: PropTypes.func.isRequired,
+  onDelete: PropTypes.func.isRequired,
 };
 
-const LocalProviderCard = ({ name, running, baseUrl, models, onUse, onDismiss, providerAction, experimental = false }) => {
-  const hasModels = models && models.length > 0;
+// ── A runtime found on this computer ─────────────────────────────────────────
+function DetectedRow({ providerId, name, detail, busy, onConnect, onDismiss }) {
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 p-5 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <div className={`p-2 rounded-xl border ${experimental ? 'border-amber-200 bg-amber-50 text-amber-600 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400 midnight:border-amber-800 midnight:bg-amber-900/30 midnight:text-amber-300' : 'border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 midnight:border-gray-700 midnight:bg-gray-800 midnight:text-gray-400'}`}>
-            <Sparkles className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-                {name} Detected
-              </h3>
-              {running && <Badge color="green">Running</Badge>}
-              {experimental && <Badge color="amber">Experimental</Badge>}
-            </div>
-            <p className="mt-1 text-xs break-all text-gray-500 dark:text-gray-400">{baseUrl}</p>
-            {hasModels && (
-              <div className="mt-2 flex flex-wrap gap-1">
-                {models.slice(0, 5).map(m => (
-                  <span key={m} className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 midnight:bg-gray-800 midnight:text-gray-300">{m}</span>
-                ))}
-                {models.length > 5 && <span className="text-xs text-gray-400 dark:text-gray-500">+{models.length - 5} more</span>}
-              </div>
-            )}
-          </div>
-        </div>
-        <button onClick={onDismiss} className="p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-      <div className="mt-4 flex gap-2">
-        <button
-          onClick={onUse}
-          disabled={Boolean(providerAction)}
-          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-slate-800 midnight:text-slate-100 midnight:ring-1 midnight:ring-slate-700 midnight:hover:bg-slate-700"
-        >
-          <Sparkles className="w-4 h-4" />
-          Use {name}
-        </button>
-        {hasModels && (
-          <span className="flex items-center text-xs py-2 text-gray-500 dark:text-gray-400">
-            {models.length} model{models.length !== 1 ? 's' : ''} available
+    <div className="flex items-center gap-3.5 rounded-xl border border-dashed border-line-strong px-4 py-3">
+      <ProviderLogo providerId={providerId} name={name} size="md" />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="text-[14px] font-medium text-fg">{name}</span>
+          <span className="inline-flex items-center gap-1 text-[12px] text-emerald-600 dark:text-emerald-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Found
           </span>
+        </div>
+        <p className="mt-0.5 truncate text-[12px] text-fg-muted">{detail}</p>
+      </div>
+      <Button size="sm" variant="primary" onClick={onConnect} loading={busy}>Connect</Button>
+      <Button size="icon" variant="ghost" icon={X} aria-label={`Hide ${name}`} onClick={onDismiss} />
+    </div>
+  );
+}
+
+DetectedRow.propTypes = {
+  providerId: PropTypes.string.isRequired,
+  name: PropTypes.string.isRequired,
+  detail: PropTypes.string,
+  busy: PropTypes.bool,
+  onConnect: PropTypes.func.isRequired,
+  onDismiss: PropTypes.func.isRequired,
+};
+
+// ── Directory card ───────────────────────────────────────────────────────────
+function DirectoryCard({ entry, connected, onOpen }) {
+  const authLabel = entry.runtime ? 'Uses your CLI login' : entry.local ? 'Runs on your computer' : 'API key';
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group flex flex-col rounded-xl border border-line bg-surface p-4 text-left outline-none transition-[border-color,box-shadow] hover:border-line-strong hover:shadow-[0_2px_12px_-4px_rgb(0_0_0/0.12)] focus-visible:ring-2 focus-visible:ring-accent/40"
+    >
+      <div className="flex items-center gap-3">
+        <ProviderLogo providerId={entry.logoId} name={entry.name} size="sm" />
+        <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-fg">{entry.name}</span>
+        {connected ? (
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" aria-label="Connected" />
+        ) : (
+          <ArrowUpRight className="h-4 w-4 shrink-0 text-fg-subtle opacity-0 transition-opacity group-hover:opacity-100" />
         )}
       </div>
-    </div>
+      <p className="mt-2.5 line-clamp-2 min-h-[2.5rem] text-[12.5px] leading-5 text-fg-muted">{entry.description}</p>
+      <div className="mt-3 flex items-center gap-1.5 text-[11.5px] text-fg-subtle">
+        <span>{authLabel}</span>
+        {entry.presets.length > 1 ? <><span>·</span><span>{entry.presets.length} options</span></> : null}
+      </div>
+    </button>
   );
+}
+
+DirectoryCard.propTypes = {
+  entry: PropTypes.object.isRequired,
+  connected: PropTypes.bool,
+  onOpen: PropTypes.func.isRequired,
 };
 
-const LocalSwitchPrompt = ({ profile, serverStatus, onChoose, onClose, busy }) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="w-full max-w-md rounded-2xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 shadow-2xl p-5">
-      <div className="flex items-start gap-3">
-        <div className="p-2 rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-          <Zap className="w-5 h-5" />
-        </div>
-        <div>
-          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">Local model is still loaded</h3>
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400 midnight:text-slate-400">
-            Switch to {profile?.name || 'this provider'} and choose whether to keep {serverStatus?.model || 'the local model'} in memory.
-          </p>
-        </div>
-      </div>
-      <div className="mt-5 flex flex-col sm:flex-row gap-2">
-        <button disabled={busy} onClick={() => onChoose(true)} className="flex-1 px-3 py-2 text-sm font-medium rounded-xl bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 midnight:bg-slate-800 midnight:text-slate-100 midnight:ring-1 midnight:ring-slate-700 disabled:opacity-50">Stop local server</button>
-        <button disabled={busy} onClick={() => onChoose(false)} className="flex-1 px-3 py-2 text-sm font-medium rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700 text-gray-700 dark:text-gray-300 midnight:text-slate-300 disabled:opacity-50">Keep it running</button>
-        <button disabled={busy} onClick={onClose} className="px-3 py-2 text-sm font-medium rounded-xl text-gray-500 midnight:text-slate-400 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-slate-800">Cancel</button>
-      </div>
-    </div>
-  </div>
-);
-
-const RemoteModelPickerModal = ({
-  profile,
-  models,
-  loading,
-  onClose,
-  onRefresh,
-  onSelect,
-  onSelectAndActivate,
-}) => {
-  const [query, setQuery] = useState('');
-  const normalized = query.trim().toLowerCase();
-  const filtered = normalized
-    ? models.filter(model => {
-        const haystack = [
-          model.id,
-          model.name,
-          model.description,
-          model.owned_by,
-        ].filter(Boolean).join(' ').toLowerCase();
-        return haystack.includes(normalized);
-      })
-    : models;
-
-  const fmtPrice = (val) => {
-    if (!val) return null;
-    const n = parseFloat(val);
-    if (!Number.isFinite(n) || n === 0) return null;
-    return n < 0.01 ? '<$0.01' : `$${n.toFixed(2)}`;
-  };
-
-  const modalityIcon = (mod) => {
-    if (mod === 'image') return <Image className="w-3 h-3" />;
-    if (mod === 'audio') return <Mic className="w-3 h-3" />;
-    if (mod === 'text') return <FileText className="w-3 h-3" />;
-    return null;
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="w-full max-w-4xl rounded-2xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 shadow-2xl flex flex-col max-h-[90vh]">
-        <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-5 py-4">
-          <div>
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">Choose Remote Model</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{profile?.name} · {profile?.base_url}</p>
-          </div>
-          <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-slate-800 text-gray-500 midnight:text-slate-500">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="p-5 flex flex-col flex-1 min-h-0">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <label className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search by name, ID, description or provider..."
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-950 midnight:bg-slate-900 pl-9 pr-3 py-2 text-sm text-gray-900 dark:text-gray-100 midnight:text-slate-100 outline-none"
-                autoFocus
-              />
-            </label>
-            <button
-              onClick={onRefresh}
-              disabled={loading}
-              className="inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700 text-gray-700 dark:text-gray-300 midnight:text-slate-300 disabled:opacity-50 midnight:hover:bg-slate-800"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
-          </div>
-
-          <div className="mt-4 flex-1 overflow-y-auto rounded-2xl border border-gray-100 dark:border-gray-800 midnight:border-slate-800">
-            {loading ? (
-              <div className="p-8 text-center text-sm text-gray-500 dark:text-gray-400">Loading models...</div>
-            ) : filtered.length === 0 ? (
-              <div className="p-8 text-center text-sm text-gray-500 dark:text-gray-400">No models matched.</div>
-            ) : (
-              <div className="divide-y divide-gray-100 dark:divide-gray-800 midnight:divide-slate-800">
-                {filtered.map(model => {
-                  const modelId = model.id || model.name;
-                  const isCurrent = profile?.model === modelId;
-                  const arch = model.architecture || {};
-                  const inputs = Array.isArray(arch.input_modalities) ? arch.input_modalities : [];
-                  const outputs = Array.isArray(arch.output_modalities) ? arch.output_modalities : [];
-                  const params = Array.isArray(model.supported_parameters) ? model.supported_parameters : [];
-                  const supportsImageInput = Boolean(model.capabilities?.supportsImageInput || inputs.includes('image'));
-                  const promptPrice = fmtPrice(model.pricing?.prompt);
-                  const completionPrice = fmtPrice(model.pricing?.completion);
-
-                  return (
-                    <div key={modelId} className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 p-4 midnight:hover:bg-slate-900/50">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100 truncate">{model.name || modelId}</p>
-                          {isCurrent && <Badge color="green">Current</Badge>}
-                          {model.context_window && <Badge color="gray">{Number(model.context_window).toLocaleString()} ctx</Badge>}
-                        </div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400 mt-0.5 font-mono truncate">{modelId}</p>
-                        {model.description && (
-                          <p className="text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400 mt-1 line-clamp-2">{model.description}</p>
-                        )}
-                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                          {/* Modalities */}
-                          {inputs.map(mod => (
-                            <span key={mod} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800/30">
-                              {modalityIcon(mod)} {mod}
-                            </span>
-                          ))}
-                          {outputs.filter(m => !inputs.includes(m)).map(mod => (
-                            <span key={mod} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800/30">
-                              {modalityIcon(mod)} {mod}
-                            </span>
-                          ))}
-                          {supportsImageInput && !inputs.includes('image') && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800/30">
-                              <Image className="w-3 h-3" /> image input
-                            </span>
-                          )}
-                          {/* Parameter badges */}
-                          {params.includes('tools') && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800/30">
-                              <Brain className="w-3 h-3" /> Tools
-                            </span>
-                          )}
-                          {params.includes('reasoning') && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800/30 midnight:border-amber-900/40 midnight:bg-amber-950/25 midnight:text-amber-300">
-                              <Brain className="w-3 h-3" /> Reasoning
-                            </span>
-                          )}
-                          {params.includes('web_search_options') && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-900/20 dark:text-sky-400 dark:border-sky-800/30">
-                              <Search className="w-3 h-3" /> Web Search
-                            </span>
-                          )}
-                          {params.includes('structured_outputs') && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-700 border border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700 midnight:border-slate-700 midnight:bg-slate-800 midnight:text-slate-400">
-                              JSON
-                            </span>
-                          )}
-                          {/* Pricing */}
-                          {(promptPrice || completionPrice) && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800/30">
-                              <DollarSign className="w-3 h-3" />
-                              {promptPrice || 'Free'}{completionPrice ? ` / ${completionPrice}` : ''} per 1M
-                            </span>
-                          )}
-                          {/* Knowledge cutoff */}
-                          {model.knowledge_cutoff && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700 midnight:border-slate-700 midnight:bg-slate-800 midnight:text-slate-400">
-                              <Calendar className="w-3 h-3" /> {model.knowledge_cutoff}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-gray-400 dark:text-gray-500 midnight:text-slate-500 mt-1">
-                          {[model.owned_by, model.context_window_source].filter(Boolean).join(' · ')}
-                        </p>
-                      </div>
-                      <div className="flex gap-2 shrink-0">
-                        <button
-                          onClick={() => onSelect(model)}
-                          className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-slate-700 text-gray-700 dark:text-gray-300 midnight:text-slate-300 midnight:hover:bg-slate-800"
-                        >
-                          Set Model
-                        </button>
-                        <button
-                          onClick={() => onSelectAndActivate(model)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 midnight:bg-slate-800 midnight:text-slate-100 midnight:ring-1 midnight:ring-slate-700"
-                        >
-                          <Zap className="w-3.5 h-3.5" />
-                          Set + Activate
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
+// ── Section ──────────────────────────────────────────────────────────────────
 const ProvidersSection = ({
+  view = 'connected',
+  onViewChange,
   catalog,
   profiles,
   activeConfig,
@@ -544,395 +182,287 @@ const ProvidersSection = ({
   onLoadModels,
 }) => {
   const network = useNetworkStatus();
-  const [modalState, setModalState] = useState(null);
+  const [connectTarget, setConnectTarget] = useState(null); // { entry } | { profile }
+  const [connectError, setConnectError] = useState('');
+  const [pickerProfile, setPickerProfile] = useState(null);
   const [pendingActivate, setPendingActivate] = useState(null);
-  const [ollamaInfo, setOllamaInfo] = useState(null); // { found, running, models, baseUrl }
-  const [lmStudioInfo, setLmStudioInfo] = useState(null); // { found, running, models, baseUrl }
-  const [runtimeInfo, setRuntimeInfo] = useState(null);
-  const [checkingLocal, setCheckingLocal] = useState(false);
-  const [modelLists, setModelLists] = useState({});
-  const [modelLoading, setModelLoading] = useState(null);
-  const [modelPickerProfile, setModelPickerProfile] = useState(null);
+  const [detected, setDetected] = useState({ ollama: null, lmstudio: null, codex: null });
+  const [dismissed, setDismissed] = useState(() => new Set());
+  const [filter, setFilter] = useState('all');
+  const [query, setQuery] = useState('');
 
-  // Auto-detect Ollama and LM Studio on mount
+  // Look for model servers and CLIs already running on this computer.
   useEffect(() => {
-    if (checkingLocal) return;
-    setCheckingLocal(true);
-
+    let cancelled = false;
     Promise.all([
-      aiProviderApi.checkOllama(),
-      aiProviderApi.checkLMStudio(),
-      aiProviderApi.checkLocalRuntimes(),
-    ])
-      .then(([ollamaRes, lmStudioRes, runtimeRes]) => {
-        if (ollamaRes.success && ollamaRes.found && ollamaRes.running) {
-          setOllamaInfo({ found: true, running: true, models: ollamaRes.models || [], baseUrl: ollamaRes.baseUrl });
-        }
-        if (lmStudioRes.success && lmStudioRes.found && lmStudioRes.running) {
-          setLmStudioInfo({ found: true, running: true, models: lmStudioRes.models || [], baseUrl: lmStudioRes.baseUrl });
-        }
-        if (runtimeRes.success) {
-          setRuntimeInfo(runtimeRes);
-        }
-      })
-      .catch(() => {})
-      .finally(() => setCheckingLocal(false));
+      aiProviderApi.checkOllama().catch(() => null),
+      aiProviderApi.checkLMStudio().catch(() => null),
+      aiProviderApi.checkLocalRuntimes().catch(() => null),
+    ]).then(([ollama, lmstudio, runtimes]) => {
+      if (cancelled) return;
+      setDetected({
+        ollama: ollama?.found && ollama.running ? ollama : null,
+        lmstudio: lmstudio?.found && lmstudio.running ? lmstudio : null,
+        codex: runtimes?.codex?.found ? runtimes.codex : null,
+      });
+    });
+    return () => { cancelled = true; };
   }, []);
 
+  const directory = useMemo(() => buildDirectory(catalog), [catalog]);
+  const visibleEntries = directory.filter((entry) => matchesDirectoryFilter(entry, filter, query));
+  const configuredIds = useMemo(() => new Set(profiles.map((profile) => profile.provider_id)), [profiles]);
   const activeProfileId = activeConfig?.profile_id;
-  const availablePresets = catalog.filter(item => !item.managed && item.id !== 'openai-codex' && item.providerId !== 'openai-codex');
   const localServerRunning = serverStatus?.status === 'ready' || serverStatus?.status === 'loading';
-  const configuredProviderIds = new Set((profiles || []).map(profile => profile.provider_id).filter(Boolean));
-  const showOllamaDetected = Boolean(ollamaInfo?.found && !configuredProviderIds.has('ollama'));
-  const showLmStudioDetected = Boolean(lmStudioInfo?.found && !configuredProviderIds.has('lmstudio'));
-  const showOpenAiCodexDetected = Boolean(runtimeInfo?.codexCredentials && !configuredProviderIds.has('openai-codex'));
-  const showCodexCliDetected = Boolean(runtimeInfo?.codex?.found && !runtimeInfo?.codexCredentials && !configuredProviderIds.has('codex-cli'));
+  const nothingActive = !activeConfig?.model && serverStatus?.status !== 'ready';
 
-  const handleUseLocalProvider = async (providerId, info) => {
-    if (!info?.found) return;
-    const model = info.models[0] || (providerId === 'ollama' ? 'llama3.2' : 'local-model');
-    const payload = {
-      name: providerId === 'ollama' ? 'Ollama Auto' : 'LM Studio Auto',
-      provider_id: providerId,
-      provider_type: 'local',
-      base_url: info.baseUrl,
-      model,
-      supports_tools: false,
-      settings: {},
-    };
-    await onSave(null, payload);
-    if (providerId === 'ollama') setOllamaInfo(null);
-    else setLmStudioInfo(null);
-  };
+  const suggestions = [
+    detected.ollama && !configuredIds.has('ollama') && !dismissed.has('ollama') && {
+      providerId: 'ollama',
+      name: 'Ollama',
+      detail: `Running at ${detected.ollama.baseUrl} · ${detected.ollama.models?.length || 0} models`,
+      payload: { name: 'Ollama', provider_id: 'ollama', provider_type: 'local', base_url: detected.ollama.baseUrl, model: detected.ollama.models?.[0] || 'llama3.2', supports_tools: false, settings: {} },
+    },
+    detected.lmstudio && !configuredIds.has('lmstudio') && !dismissed.has('lmstudio') && {
+      providerId: 'lmstudio',
+      name: 'LM Studio',
+      detail: `Running at ${detected.lmstudio.baseUrl} · ${detected.lmstudio.models?.length || 0} models`,
+      payload: { name: 'LM Studio', provider_id: 'lmstudio', provider_type: 'local', base_url: detected.lmstudio.baseUrl, model: detected.lmstudio.models?.[0] || 'local-model', supports_tools: false, settings: {} },
+    },
+    detected.codex && !configuredIds.has('codex-cli') && !dismissed.has('codex-cli') && {
+      providerId: 'codex-cli',
+      name: 'Codex CLI',
+      detail: `${detected.codex.version || 'codex'} · uses your Codex sign-in`,
+      entry: directory.find((entry) => entry.key === 'codex-cli'),
+    },
+  ].filter(Boolean);
 
-  const handleUseRuntimeProvider = async (providerId) => {
-    const preset = catalog.find(item => item.id === providerId || item.providerId === providerId);
-    if (!preset) return;
-    await onSave(null, {
-      name: preset.name,
-      provider_id: providerId,
-      provider_type: preset.providerType || (providerId === 'codex-cli' ? 'local' : 'cloud'),
-      base_url: preset.baseUrl,
-      model: preset.model,
-      supports_tools: false,
-      settings: {},
-    });
+  const save = async (id, payload, { activateIfIdle = false } = {}) => {
+    setConnectError('');
+    try {
+      const profileId = await onSave(id, payload);
+      if (activateIfIdle && nothingActive && profileId) await onActivate(profileId, false);
+      return profileId;
+    } catch (err) {
+      setConnectError(err.message || 'Could not save this provider.');
+      throw err;
+    }
   };
 
   const activate = (profile) => {
-    if (profile.provider_id !== 'llamacpp-builtin' && profile.provider_type !== 'local' && localServerRunning) {
+    if (profile.provider_type !== 'local' && localServerRunning) {
       setPendingActivate(profile);
       return;
     }
     onActivate(profile.id, false);
   };
 
-  const fetchModels = async (profile, openPicker = false) => {
-    setModelLoading(profile.id);
-    try {
-      const models = await onLoadModels(profile.id);
-      setModelLists(prev => ({ ...prev, [profile.id]: models }));
-      if (openPicker) setModelPickerProfile(profile);
-    } finally {
-      setModelLoading(null);
-    }
-  };
-
-  const openModelPicker = (profile) => {
-    if (modelLists[profile.id]) {
-      setModelPickerProfile(profile);
-      return;
-    }
-    fetchModels(profile, true);
-  };
-
-  return (
+  const connectedView = (
     <div className="space-y-6">
-      {providerError && (
-        <div className="flex items-center gap-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-sm shadow-sm">
-          <div className="flex-shrink-0 w-6 h-6 rounded-full border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 flex items-center justify-center">
-            <TriangleAlert className="w-3 h-3 text-red-500" />
+      {providerError ? (
+        <p role="alert" className="flex items-start gap-2 rounded-xl bg-red-500/10 px-4 py-3 text-[13px] text-red-700 dark:text-red-400">
+          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" /> {providerError}
+        </p>
+      ) : null}
+
+      {loading && profiles.length === 0 ? (
+        <div className="space-y-2">
+          {[0, 1].map((row) => <div key={row} className="h-[68px] animate-pulse rounded-xl bg-hover" />)}
+        </div>
+      ) : profiles.length === 0 ? (
+        <div className="flex flex-col items-center rounded-2xl border border-dashed border-line-strong px-6 pb-10 pt-8 text-center">
+          <Cat pose="sleep" className="w-36" outline={4} />
+          <h3 className="mt-5 text-[15px] font-semibold text-fg">No providers connected yet</h3>
+          <p className="mt-1.5 max-w-sm text-[13px] leading-5 text-fg-muted">
+            Connect a cloud provider with an API key, or a model server running on this computer. Downloaded models live under Local models.
+          </p>
+          <div className="mt-5 flex gap-2">
+            <Button variant="primary" icon={Plus} onClick={() => onViewChange('add')}>Browse providers</Button>
+            <Button variant="secondary" onClick={() => onViewChange('local')}>Local models</Button>
           </div>
-          <span className="flex-1 text-gray-700 dark:text-gray-200">{providerError}</span>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {profiles.map((profile) => (
+            <ProfileRow
+              key={profile.id}
+              profile={profile}
+              catalog={catalog}
+              isActive={activeProfileId === profile.id}
+              busy={providerAction === profile.id}
+              highlighted={highlightedItem?.type === 'provider' && highlightedItem.id === profile.id}
+              onUse={() => activate(profile)}
+              onChangeModel={() => setPickerProfile(profile)}
+              onTest={() => onTest(profile.id)}
+              onEdit={() => { setConnectError(''); setConnectTarget({ profile }); }}
+              onDelete={() => onDelete(profile.id)}
+            />
+          ))}
         </div>
       )}
 
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Endpoint Profiles</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Cloud APIs and OpenAI-compatible local runtimes for chat and agents.</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge color={network.fullyOnline ? 'green' : 'red'}>{network.fullyOnline ? 'Online' : 'Offline'}</Badge>
-            <button onClick={onRefresh} disabled={loading} className="inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50">
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
-          </div>
+      {suggestions.length ? (
+        <div className="space-y-2">
+          <p className="text-[12px] font-medium text-fg-subtle">Found on this computer</p>
+          {suggestions.map((item) => (
+            <DetectedRow
+              key={item.providerId}
+              providerId={item.providerId}
+              name={item.name}
+              detail={item.detail}
+              busy={providerAction === 'new'}
+              onConnect={() => (item.entry
+                ? setConnectTarget({ entry: item.entry })
+                : save(null, item.payload, { activateIfIdle: true }).catch(() => {}))}
+              onDismiss={() => setDismissed((current) => new Set(current).add(item.providerId))}
+            />
+          ))}
         </div>
-        {network.needsNetworkMessage && (
-          <p className="mb-3 text-xs text-red-600 dark:text-red-400">{network.needsNetworkMessage}</p>
-        )}
+      ) : null}
+    </div>
+  );
 
-        {loading ? (
-          <div className="h-32 rounded-2xl bg-gray-100 dark:bg-gray-800 animate-pulse" />
-        ) : profiles.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 p-8 text-center">
-            <Cloud className="w-7 h-7 text-gray-300 dark:text-gray-600 midnight:text-gray-500 mx-auto" />
-            <p className="mt-3 text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-300">No provider profiles yet</p>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-400">Add a cloud API or local runtime below.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {profiles.map(profile => {
-              const isActive = activeProfileId === profile.id;
-              const busy = providerAction === profile.id;
-              const isHighlighted = highlightedItem?.type === 'provider' && highlightedItem.id === profile.id;
-              return (
-                <div
-                  key={profile.id}
-                  id={`provider-card-${profile.id}`}
-                  className={`group relative flex flex-col rounded-2xl border bg-white transition-all duration-200 dark:bg-gray-900 midnight:bg-slate-900
-                  ${isActive
-                    ? 'border-gray-300 dark:border-gray-600 midnight:border-slate-600'
-                    : 'border-gray-100 dark:border-gray-800 midnight:border-slate-800 hover:border-gray-200 dark:hover:border-gray-700 midnight:hover:border-slate-700 hover:shadow-sm'}
-                  ${isHighlighted ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-white dark:ring-offset-gray-900 midnight:ring-offset-slate-950' : ''}`}
-                >
-                  <div className="px-5 pt-5 pb-4 flex-1">
-                    <div className="flex items-start gap-3">
-                      <ProviderLogo
-                        providerId={profile.provider_id}
-                        name={profile.name}
-                        isActive={isActive}
-                        size="md"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100 truncate">{profile.name}</h3>
-                          {isActive && (
-                            <span className="flex h-2.5 w-2.5 relative flex-shrink-0">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" />
-                            </span>
-                          )}
-                        </div>
-                        <div className="mt-1 flex items-center gap-2 flex-wrap">
-                          <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500 midnight:text-slate-500">
-                            {providerLabel(profile, catalog)}
-                          </span>
-                          <span className="text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">·</span>
-                          <span className="text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500 truncate">
-                            {modelDisplayName(profile, catalog)}
-                          </span>
-                          {profile.api_key_set && <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500">Key saved</span>}
-                          {profile.capabilities?.supportsImageInput && <Badge color="blue">Image input</Badge>}
-                        </div>
-                        <p className="mt-1 text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500 font-mono break-all line-clamp-1">
-                          {profile.base_url}
-                        </p>
-                        {profile.last_test_message && (
-                          <p className={`mt-2 text-[11px] ${profile.last_test_status === 'ok' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>
-                            {profile.last_test_message}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="px-5 py-3 border-t border-gray-50 dark:border-gray-800 midnight:border-slate-800 flex items-center gap-1.5">
-                    <button onClick={() => activate(profile)} disabled={busy || isActive}
-                      className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium rounded-xl transition-all disabled:opacity-40
-                        ${isActive
-                          ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400 midnight:bg-green-950/30 midnight:text-green-400'
-                          : 'bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-slate-800 midnight:text-slate-100 midnight:hover:bg-slate-700 midnight:ring-1 midnight:ring-slate-700'}`}
-                    >
-                      {busy ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
-                      {isActive ? 'Active' : 'Activate'}
-                    </button>
-                    <button onClick={() => onTest(profile.id)} disabled={busy}
-                      className="px-2.5 py-2 text-xs font-medium rounded-xl text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800 midnight:text-slate-400 midnight:hover:bg-slate-800 disabled:opacity-40 transition-colors"
-                    >Test</button>
-                    <button onClick={() => openModelPicker(profile)} disabled={modelLoading === profile.id}
-                      className="px-2.5 py-2 text-xs font-medium rounded-xl text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800 midnight:text-slate-400 midnight:hover:bg-slate-800 disabled:opacity-40 transition-colors"
-                    >{modelLoading === profile.id ? '...' : 'Models'}</button>
-                    <button onClick={() => setModalState({ profile })}
-                      className="px-2.5 py-2 text-xs font-medium rounded-xl text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800 midnight:text-slate-400 midnight:hover:bg-slate-800 transition-colors"
-                    >Edit</button>
-                    <button onClick={() => onDelete(profile.id)} disabled={busy}
-                      className="p-2 text-gray-400 hover:text-red-500 dark:hover:text-red-400 rounded-xl hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors disabled:opacity-30"
-                      title="Delete"
-                    ><X className="w-4 h-4" /></button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+  const directoryView = (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <Segmented
+          value={filter}
+          onChange={setFilter}
+          label="Filter providers"
+          items={[
+            { value: 'all', label: 'All' },
+            { value: 'popular', label: 'Popular' },
+            { value: 'local', label: 'Local' },
+            { value: 'cloud', label: 'Cloud' },
+          ]}
+        />
+        <label className="flex h-9 items-center gap-2 rounded-lg border border-line-strong bg-canvas px-3 focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20 sm:w-64">
+          <Search className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={`Search ${directory.length} providers`}
+            className="min-w-0 flex-1 bg-transparent text-[13px] text-fg outline-none placeholder:text-fg-subtle"
+          />
+        </label>
       </div>
-
-      {/* Detected Local Providers - Ollama & LM Studio */}
-      {(showOllamaDetected || showLmStudioDetected || showOpenAiCodexDetected || showCodexCliDetected) && (
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Detected Chat Runtimes</h2>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {showOllamaDetected && (
-              <LocalProviderCard
-                name="Ollama"
-                found
-                running={ollamaInfo.running}
-                baseUrl={ollamaInfo.baseUrl}
-                models={ollamaInfo.models}
-                onUse={() => handleUseLocalProvider('ollama', ollamaInfo)}
-                onDismiss={() => setOllamaInfo(null)}
-                providerAction={providerAction}
-              />
-            )}
-            {showLmStudioDetected && (
-              <LocalProviderCard
-                name="LM Studio"
-                found
-                running={lmStudioInfo.running}
-                baseUrl={lmStudioInfo.baseUrl}
-                models={lmStudioInfo.models}
-                onUse={() => handleUseLocalProvider('lmstudio', lmStudioInfo)}
-                onDismiss={() => setLmStudioInfo(null)}
-                providerAction={providerAction}
-              />
-            )}
-            {showOpenAiCodexDetected && (
-              <LocalProviderCard
-                name="OpenAI Codex"
-                found
-                running
-                baseUrl="https://chatgpt.com/backend-api/codex"
-                models={['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex', 'gpt-5.2']}
-                onUse={() => handleUseRuntimeProvider('openai-codex')}
-                onDismiss={() => setRuntimeInfo(prev => ({ ...(prev || {}), codexCredentials: false }))}
-                providerAction={providerAction}
-                experimental
-              />
-            )}
-            {showCodexCliDetected && (
-              <LocalProviderCard
-                name="Codex CLI Runtime"
-                found
-                running
-                baseUrl="runtime://codex-cli"
-                models={[runtimeInfo.codex.version || 'codex']}
-                onUse={() => handleUseRuntimeProvider('codex-cli')}
-                onDismiss={() => setRuntimeInfo(prev => ({ ...(prev || {}), codex: { found: false } }))}
-                providerAction={providerAction}
-              />
-            )}
-          </div>
+      {!network.fullyOnline ? (
+        <p className="flex items-center gap-2 text-[12px] text-amber-700 dark:text-amber-400">
+          <WifiOff className="h-3.5 w-3.5" /> You&apos;re offline. Cloud providers need an internet connection; local ones still work.
+        </p>
+      ) : null}
+      {visibleEntries.length ? (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {visibleEntries.map((entry) => (
+            <DirectoryCard
+              key={entry.key}
+              entry={entry}
+              connected={entry.presets.some(({ preset }) => configuredIds.has(preset.providerId))}
+              onOpen={() => { setConnectError(''); setConnectTarget({ entry }); }}
+            />
+          ))}
         </div>
-      )}
-
-      <div>
-        <div className="flex items-center justify-between gap-4 mb-3">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Add Endpoint</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Hosted chat APIs, local runtimes, and custom OpenAI-compatible endpoints.</p>
-          </div>
-          <button onClick={() => setModalState({ preset: catalog.find(item => item.id === 'custom') })} className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-xl bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 midnight:bg-slate-800 midnight:text-slate-100 midnight:ring-1 midnight:ring-slate-700">
-            <Plus className="w-4 h-4" />
-            Custom
-          </button>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-          {availablePresets.map(item => {
-            const typeBadge = providerTypeBadge(item);
-            return (
-              <button
-                key={item.id}
-                onClick={() => setModalState({ preset: item })}
-                className="text-left rounded-2xl border border-gray-200 dark:border-gray-700 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 p-4 hover:border-gray-400 dark:hover:border-gray-500 transition-colors"
-              >
-                <div className="flex items-center gap-3 mb-2">
-                  <ProviderLogo providerId={item.providerId || item.id} name={item.name} size="sm" />
-                  <div className="min-w-0 flex-1 flex items-center justify-between gap-2">
-                    <div className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{item.name}</div>
-                    {providerAuthIcon(item)}
-                  </div>
-                </div>
-                <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">{item.description}</p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Badge color={typeBadge.color}>{typeBadge.label}</Badge>
-                  {item.supportsTools && <Badge color="green">Tools</Badge>}
-                  {item.supportsModelList && <Badge color="gray">Model list</Badge>}
-                  {item.apiKeyEnv && <Badge color="gray">{item.apiKeyEnv}</Badge>}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {modalState && (
-        <ProviderProfileModal
-          catalog={catalog}
-          profile={modalState.profile || null}
-          preset={modalState.preset || null}
-          saving={Boolean(providerAction)}
-          onClose={() => setModalState(null)}
-          onSave={async (payload) => {
-            await onSave(modalState.profile?.id || null, payload);
-            setModalState(null);
-          }}
-        />
-      )}
-
-      {modelPickerProfile && (
-        <RemoteModelPickerModal
-          profile={modelPickerProfile}
-          models={modelLists[modelPickerProfile.id] || []}
-          loading={modelLoading === modelPickerProfile.id}
-          onClose={() => setModelPickerProfile(null)}
-          onRefresh={() => fetchModels(modelPickerProfile, true)}
-          onSelect={async (model) => {
-            const modelId = model.id || model.name;
-            const nextSettings = {
-              ...(modelPickerProfile.settings || {}),
-              ...(model.context_window ? { context_window: model.context_window } : {}),
-              ...(model.name && model.name !== modelId ? { model_name: model.name } : {}),
-              ...(model.capabilities ? { model_capabilities: model.capabilities } : {}),
-            };
-            await onSave(modelPickerProfile.id, { model: modelId, settings: nextSettings });
-            setModelPickerProfile(prev => prev ? { ...prev, model: modelId, settings: nextSettings } : prev);
-          }}
-          onSelectAndActivate={async (model) => {
-            const modelId = model.id || model.name;
-            const nextSettings = {
-              ...(modelPickerProfile.settings || {}),
-              ...(model.context_window ? { context_window: model.context_window } : {}),
-              ...(model.name && model.name !== modelId ? { model_name: model.name } : {}),
-              ...(model.capabilities ? { model_capabilities: model.capabilities } : {}),
-            };
-            await onSave(modelPickerProfile.id, { model: modelId, settings: nextSettings });
-            const nextProfile = { ...modelPickerProfile, model: modelId, settings: nextSettings };
-            setModelPickerProfile(null);
-            activate(nextProfile);
-          }}
-        />
-      )}
-
-      {pendingActivate && (
-        <LocalSwitchPrompt
-          profile={pendingActivate}
-          serverStatus={serverStatus}
-          busy={providerAction === pendingActivate.id}
-          onClose={() => setPendingActivate(null)}
-          onChoose={async (stopLocal) => {
-            await onActivate(pendingActivate.id, stopLocal);
-            setPendingActivate(null);
-          }}
-        />
+      ) : (
+        <p className="rounded-xl border border-dashed border-line-strong px-4 py-10 text-center text-[13px] text-fg-muted">
+          No providers match “{query}”. Any OpenAI-compatible service works through <button type="button" className="font-medium text-accent hover:underline" onClick={() => setConnectTarget({ entry: directory.find((entry) => entry.key === 'custom') })}>Custom</button>.
+        </p>
       )}
     </div>
   );
+
+  return (
+    <div className="space-y-5">
+      {view === 'add' ? (
+        <SectionHeader
+          title="Add a provider"
+          description="Cloud services connect with an API key; local servers connect by address. Everything is stored on this computer."
+        />
+      ) : (
+        <SectionHeader
+          title="Your providers"
+          description="Pick which one Asyncat uses. Chats and agents use the provider marked In use."
+          action={(
+            <div className="flex items-center gap-1">
+              <Button size="sm" variant="ghost" icon={RefreshCw} onClick={onRefresh} loading={loading}>Refresh</Button>
+              {profiles.length ? <Button size="sm" variant="secondary" icon={Plus} onClick={() => onViewChange('add')}>Add provider</Button> : null}
+            </div>
+          )}
+        />
+      )}
+
+      {view === 'add' ? directoryView : connectedView}
+
+      {connectTarget ? (
+        <ProviderConnectDialog
+          catalog={catalog}
+          entry={connectTarget.entry || null}
+          profile={connectTarget.profile || null}
+          saving={Boolean(providerAction)}
+          error={connectError}
+          onClose={() => setConnectTarget(null)}
+          onSave={async (payload) => {
+            try {
+              await save(connectTarget.profile?.id || null, payload, { activateIfIdle: !connectTarget.profile });
+              setConnectTarget(null);
+              if (!connectTarget.profile) onViewChange('connected');
+            } catch {
+              // The dialog stays open and shows connectError.
+            }
+          }}
+        />
+      ) : null}
+
+      {pickerProfile ? (
+        <ModelPickerDialog
+          profile={pickerProfile}
+          loadModels={onLoadModels}
+          saving={providerAction === pickerProfile.id}
+          onClose={() => setPickerProfile(null)}
+          onChoose={async (changes, andActivate) => {
+            await onSave(pickerProfile.id, changes);
+            const updated = { ...pickerProfile, ...changes };
+            setPickerProfile(null);
+            if (andActivate) activate(updated);
+          }}
+        />
+      ) : null}
+
+      {pendingActivate ? (
+        <Dialog
+          size="sm"
+          title="A local model is still loaded"
+          description={`Switch to ${pendingActivate.name}. ${serverStatus?.model || 'The local model'} can stay in memory or be stopped to free it up.`}
+          onClose={() => setPendingActivate(null)}
+          footer={(
+            <>
+              <Button variant="ghost" onClick={() => setPendingActivate(null)}>Cancel</Button>
+              <Button variant="secondary" onClick={async () => { await onActivate(pendingActivate.id, false); setPendingActivate(null); }}>Keep it loaded</Button>
+              <Button variant="primary" loading={providerAction === pendingActivate.id} onClick={async () => { await onActivate(pendingActivate.id, true); setPendingActivate(null); }}>Stop and switch</Button>
+            </>
+          )}
+        />
+      ) : null}
+    </div>
+  );
+};
+
+ProvidersSection.propTypes = {
+  view: PropTypes.oneOf(['connected', 'add']),
+  onViewChange: PropTypes.func.isRequired,
+  catalog: PropTypes.array.isRequired,
+  profiles: PropTypes.array.isRequired,
+  activeConfig: PropTypes.object,
+  serverStatus: PropTypes.object,
+  loading: PropTypes.bool,
+  providerAction: PropTypes.string,
+  providerError: PropTypes.string,
+  highlightedItem: PropTypes.object,
+  onRefresh: PropTypes.func.isRequired,
+  onSave: PropTypes.func.isRequired,
+  onDelete: PropTypes.func.isRequired,
+  onTest: PropTypes.func.isRequired,
+  onActivate: PropTypes.func.isRequired,
+  onLoadModels: PropTypes.func.isRequired,
 };
 
 export default ProvidersSection;

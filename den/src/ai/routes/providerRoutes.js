@@ -350,11 +350,14 @@ function notifyProviderStatus(userId) {
   }
 }
 
-function saveBuiltinProviderConfig(userId, filename) {
+// The context size is kept so the model can be reloaded the same way when
+// Asyncat next starts (see localModelRestore.js).
+function saveBuiltinProviderConfig(userId, filename, ctxSize = getLlamaStatus()?.ctxSize) {
   const now = new Date().toISOString();
+  const settings = JSON.stringify(Number(ctxSize) > 0 ? { ctx_size: Number(ctxSize) } : {});
   db.prepare(`
     INSERT INTO ai_provider_config (user_id, profile_id, provider_type, provider_id, base_url, model, api_key, settings, supports_tools, updated_at)
-    VALUES (?, NULL, 'local', 'llamacpp-builtin', ?, ?, NULL, '{}', 0, ?)
+    VALUES (?, NULL, 'local', 'llamacpp-builtin', ?, ?, NULL, ?, 0, ?)
     ON CONFLICT(user_id) DO UPDATE SET
       profile_id     = NULL,
       provider_type = 'local',
@@ -362,10 +365,10 @@ function saveBuiltinProviderConfig(userId, filename) {
       base_url      = excluded.base_url,
       model         = excluded.model,
       api_key       = NULL,
-      settings      = '{}',
+      settings      = excluded.settings,
       supports_tools = 0,
       updated_at    = excluded.updated_at
-  `).run(userId, LLAMA_BASE_URL, filename, now);
+  `).run(userId, LLAMA_BASE_URL, filename, settings, now);
   notifyProviderStatus(userId);
 }
 
@@ -965,6 +968,27 @@ router.get('/models', async (req, res) => {
       if (!row) return res.json({ success: true, models: [] });
     }
 
+    res.json({ success: true, models: await listProviderModels(row) });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// ── POST /models/preview — list a provider's models before saving ──────────
+// The connect dialog uses this so a model can be picked from the provider's
+// own list instead of typed blind. With profileId, unsent fields (including
+// the saved API key) come from that profile.
+router.post('/models/preview', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const existing = body.profileId ? rowByProfileId(req.user.id, body.profileId) : null;
+    if (body.profileId && !existing) return res.status(404).json({ success: false, error: 'Profile not found' });
+
+    const profile = normalizeProfilePayload(body, existing);
+    if (!profile.base_url && profile.provider_id !== LLAMA_PROVIDER_ID) {
+      return res.status(400).json({ success: false, error: 'Enter the server address first.' });
+    }
+    const row = { ...profile, user_id: req.user.id, settings: JSON.stringify(profile.settings || {}) };
     res.json({ success: true, models: await listProviderModels(row) });
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });
@@ -2269,10 +2293,13 @@ router.get('/mlx/status', async (req, res) => {
 });
 
 // GET /mlx/models — list all locally detected MLX model directories
-router.get('/mlx/models', (req, res) => {
+router.get('/mlx/models', async (req, res) => {
   try {
-    const models = listMlxModels();
-    res.json({ success: true, models });
+    // Hugging Face folders only count as MLX models where mlx_lm can run them;
+    // elsewhere they would be listed but fail to load.
+    const mlxAvailable = await isMlxAvailable();
+    const models = mlxAvailable ? listMlxModels() : [];
+    res.json({ success: true, mlxAvailable, models });
   } catch (err) {
     console.error('MLX list models error:', err);
     res.status(500).json({ success: false, error: err.message });

@@ -1,4 +1,5 @@
-import { RefreshCw, Play, Trash2, Box, TriangleAlert, ChevronDown, ChevronUp, CheckCircle2, Plus, File, FolderOpen, Image } from 'lucide-react';
+import { CheckCircle2, File, FolderOpen, HardDrive, Image, Play, Plus, Trash2, TriangleAlert } from 'lucide-react';
+import Button from '../components/ui/Button.jsx';
 import { LocalModelLogo } from './modelLogos.jsx';
 import MlxModelsSection from './MlxModelsSection.jsx';
 import { localModelsApi, llamaServerApi, mlxApi } from '../Settings/settingApi.js';
@@ -8,9 +9,9 @@ const notifyModelRuntimeUpdated = () => {
   window.dispatchEvent(new CustomEvent('asyncat-model-runtime-updated'));
 };
 
-// ── Model card ─────────────────────────────────────────────────────────────────
+// ── One downloaded model ─────────────────────────────────────────────────────
 const ModelCard = ({
-  m, serverStatus, status, startingModel, deletingModel,
+  m, serverStatus, status, startingModel, deletingModel, activeMlxModel,
   switchingEngine, installingEngine,
   highlighted,
   modelLoadCtxSizes, modelLoadCtxErrors,
@@ -20,171 +21,112 @@ const ModelCard = ({
   pollCleanup, loadEngineData,
   setSwitchError
 }) => {
-  const isLoaded = (
+  const isLoaded = ((
     serverStatus?.model === m.filename ||
     serverStatus?.modelPath === (m.path || m.filename)
-  ) && (serverStatus?.status === 'ready' || status === 'ready');
+  ) && (serverStatus?.status === 'ready' || status === 'ready'))
+    || Boolean(activeMlxModel && m.engineType === 'mlx' && activeMlxModel === m.path);
 
   const isStarting = startingModel === (m.path || m.filename);
   const isDeleting = deletingModel === m.filename;
   const modelContextLimit = getModelContextLimit(m);
   const modelLoadCtxValue = modelLoadCtxSizes[m.filename] ?? String(Math.min(DEFAULT_LOAD_CTX_SIZE, modelContextLimit));
   const loadCtxError = modelLoadCtxErrors[m.filename] || getModelLoadCtxError(modelLoadCtxValue, modelContextLimit);
+  const busy = Boolean(switchingEngine) || Boolean(installingEngine);
+
+  const load = () => {
+    if (m.engineType === 'mlx') {
+      setStartingModel(m.path);
+      mlxApi.start(m.path).then(() => {
+        setServerStatus(prev => ({ ...prev, status: 'loading', model: m.name, modelPath: m.path, port: 8766 }));
+        notifyModelRuntimeUpdated();
+        pollCleanup.current?.();
+        pollCleanup.current = mlxApi.pollStatus(
+          (snap) => { setServerStatus(snap); notifyModelRuntimeUpdated(); },
+          async (snap) => { setServerStatus(snap); pollCleanup.current = null; setStartingModel(null); notifyModelRuntimeUpdated(); await loadEngineData(); },
+          async (snap) => { setServerStatus(snap); pollCleanup.current = null; setStartingModel(null); notifyModelRuntimeUpdated(); setSwitchError(snap?.error || 'Failed to load MLX model'); }
+        );
+      }).catch(err => {
+        setStartingModel(null);
+        setSwitchError(err.message || 'Failed to start MLX server');
+      });
+    } else {
+      handleStart(m.path || m.filename, modelLoadCtxValue);
+    }
+  };
+
+  const details = [
+    m.engineType === 'gguf' ? 'GGUF' : m.engineType === 'mlx' ? 'MLX' : null,
+    m.sizeFormatted,
+    m.architecture,
+    m.contextLength ? `${Number(m.contextLength).toLocaleString()} ctx max` : null,
+  ].filter(Boolean);
 
   return (
     <div
       id={`model-card-${m.id || m.filename}`}
-      className={`group relative flex flex-col rounded-2xl border bg-white transition-all duration-200 dark:bg-gray-900 midnight:bg-slate-900
-      ${isLoaded
-        ? 'border-gray-300 dark:border-gray-600 midnight:border-slate-600'
-        : 'border-gray-100 dark:border-gray-800 midnight:border-slate-800 hover:border-gray-200 dark:hover:border-gray-700 midnight:hover:border-slate-700 hover:shadow-sm'}
-      ${highlighted ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-white dark:ring-offset-gray-900 midnight:ring-offset-slate-950' : ''}`}
+      className={`flex flex-col gap-3 rounded-xl border px-4 py-3 transition-[border-color,background-color] sm:flex-row sm:items-center ${
+        isLoaded ? 'border-accent/35 bg-accent-soft' : 'border-line bg-surface hover:border-line-strong'
+      } ${highlighted ? 'ring-2 ring-amber-400/70' : ''}`}
     >
-      <div className="px-5 pt-5 pb-4 flex-1">
-        {/* Top row: icon + name */}
-        <div className="flex items-start gap-3">
-          {m.isExternal
-            ? (
-              <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl transition-colors ${
-                isLoaded
-                  ? 'bg-gray-900 text-white dark:bg-gray-600 midnight:bg-slate-700'
-                  : 'bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-400'
-              }`}>
-                <FolderOpen className="w-5 h-5" />
-              </div>
-            ) : (
-              <LocalModelLogo
-                modelName={m.name || ''}
-                modelFile={m.filename || ''}
-                isActive={isLoaded}
-                size="md"
-              />
-            )
-          }
-
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100 truncate" title={m.name || m.filename}>
-                {m.name || m.filename}
-              </h3>
-              {isLoaded && (
-                <span className="flex h-2.5 w-2.5 relative flex-shrink-0">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" />
-                </span>
-              )}
-            </div>
-
-            <div className="mt-1 flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400 midnight:text-slate-400">Model</span>
-              {m.engineType === 'gguf' && <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500 midnight:text-slate-500">GGUF</span>}
-              {m.engineType === 'mlx' && <span className="text-[10px] font-medium text-amber-500 dark:text-amber-400">MLX</span>}
-              {m.isExternal && <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500">External</span>}
-              {m.isMissing && <span className="text-[10px] font-medium text-red-500">Missing</span>}
-              {m.sizeFormatted && (
-                <span className="text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">{m.sizeFormatted}</span>
-              )}
-              {m.architecture && (
-                <span className="text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">{m.architecture}</span>
-              )}
-              {m.capabilities?.supportsImageInput && (
-                <Badge color="blue"><Image className="mr-1 inline h-2.5 w-2.5" />Image input</Badge>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Context info */}
-        <div className="mt-4 flex items-center gap-6 text-xs">
-          <div>
-            <span className="text-gray-400 dark:text-gray-500 midnight:text-slate-500">Context</span>
-            <span className="ml-1.5 font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300">
-              {m.contextLength ? `${Number(m.contextLength).toLocaleString()} ctx` : 'Unknown'}
-            </span>
-          </div>
-          <label className="flex items-center gap-1.5">
-            <span className="text-gray-400 dark:text-gray-500 midnight:text-slate-500">Load</span>
-            <div className="flex items-center">
-              <input
-                type="number"
-                min="512"
-                max={modelContextLimit}
-                step="1024"
-                value={modelLoadCtxValue}
-                onChange={(e) => updateModelLoadCtxSize(m.filename, e.target.value)}
-                onBlur={() => commitModelLoadCtxSize(m.filename, modelContextLimit)}
-                className={`w-20 bg-transparent text-xs font-medium outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
-                  loadCtxError
-                    ? 'text-red-500'
-                    : 'text-gray-700 dark:text-gray-300 midnight:text-slate-300'
-                }`}
-              />
-              <div className="flex flex-col flex-shrink-0 ml-0.5">
-                <button
-                  type="button" tabIndex={-1}
-                  onClick={() => updateModelLoadCtxSize(m.filename, String(Math.min(Number(modelLoadCtxValue) + 1024, modelContextLimit)))}
-                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 leading-none"
-                >
-                  <ChevronUp className="w-3 h-3" />
-                </button>
-                <button
-                  type="button" tabIndex={-1}
-                  onClick={() => updateModelLoadCtxSize(m.filename, String(Math.max(Number(modelLoadCtxValue) - 1024, 512)))}
-                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 leading-none"
-                >
-                  <ChevronDown className="w-3 h-3" />
-                </button>
-              </div>
-            </div>
-          </label>
-        </div>
-
-        {loadCtxError && (
-          <p className="mt-2 text-[11px] text-red-500">{loadCtxError}</p>
+      <div className="flex min-w-0 flex-1 items-center gap-3.5">
+        {m.isExternal ? (
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface ring-1 ring-inset ring-line">
+            <FolderOpen className="h-5 w-5 text-fg-muted" strokeWidth={1.75} />
+          </span>
+        ) : (
+          <LocalModelLogo modelName={m.name || ''} modelFile={m.filename || ''} size="md" />
         )}
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="truncate text-[14px] font-medium text-fg" title={m.name || m.filename}>{m.name || m.filename}</span>
+            {isLoaded ? <Badge color="blue">In use</Badge> : null}
+            {m.source === 'huggingface-cache'
+              ? <Badge color="gray" title={m.repoId}>Hugging Face cache</Badge>
+              : m.isExternal ? <Badge color="gray">Linked file</Badge> : null}
+            {m.isMissing ? <Badge color="red">Missing</Badge> : null}
+            {m.capabilities?.supportsImageInput ? <Badge color="gray"><Image className="h-3 w-3" />Sees images</Badge> : null}
+          </div>
+          <p className="mt-0.5 truncate text-[12px] text-fg-muted">{details.join(' · ')}</p>
+          {loadCtxError ? <p className="mt-1 text-[12px] text-red-600 dark:text-red-400">{loadCtxError}</p> : null}
+        </div>
       </div>
 
-      {/* Action bar */}
-      <div className="px-5 py-3 border-t border-gray-50 dark:border-gray-800 midnight:border-slate-800 flex items-center gap-2">
-        <button
-          onClick={() => {
-            if (m.engineType === 'mlx') {
-              setStartingModel(m.path);
-              mlxApi.start(m.path).then(() => {
-                setServerStatus(prev => ({ ...prev, status: 'loading', model: m.name, modelPath: m.path, port: 8766 }));
-                notifyModelRuntimeUpdated();
-                pollCleanup.current?.();
-                pollCleanup.current = mlxApi.pollStatus(
-                  (snap) => { setServerStatus(snap); notifyModelRuntimeUpdated(); },
-                  async (snap) => { setServerStatus(snap); pollCleanup.current = null; setStartingModel(null); notifyModelRuntimeUpdated(); await loadEngineData(); },
-                  async (snap) => { setServerStatus(snap); pollCleanup.current = null; setStartingModel(null); notifyModelRuntimeUpdated(); setSwitchError(snap?.error || 'Failed to load MLX model'); }
-                );
-              }).catch(err => {
-                setStartingModel(null);
-                setSwitchError(err.message || 'Failed to start MLX server');
-              });
-            } else {
-              handleStart(m.path || m.filename, modelLoadCtxValue);
-            }
-          }}
-          disabled={isStarting || isDeleting || isLoaded || Boolean(switchingEngine) || Boolean(installingEngine)}
-          className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-xl transition-all disabled:opacity-40
-            ${isLoaded
-              ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400 midnight:bg-green-950/30 midnight:text-green-400'
-              : 'bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-slate-800 midnight:text-slate-100 midnight:hover:bg-slate-700 midnight:ring-1 midnight:ring-slate-700'}`}
-        >
-          {isStarting ? <RefreshCw className="w-4 h-4 animate-spin" /> : isLoaded ? <CheckCircle2 className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-          {isStarting ? 'Loading...' : isLoaded ? 'Active' : 'Load'}
-        </button>
-
-        <button
+      <div className="flex shrink-0 items-center gap-2">
+        <label className="flex h-8 items-center gap-1.5 rounded-lg border border-line bg-canvas pl-2.5 pr-1 text-[12px] text-fg-subtle focus-within:border-accent" title="How much context to load. Larger uses more memory.">
+          Context
+          <input
+            type="number"
+            min="512"
+            max={modelContextLimit}
+            step="1024"
+            value={modelLoadCtxValue}
+            onChange={(e) => updateModelLoadCtxSize(m.filename, e.target.value)}
+            onBlur={() => commitModelLoadCtxSize(m.filename, modelContextLimit)}
+            aria-label={`Context to load for ${m.name || m.filename}`}
+            className={`w-[4.5rem] bg-transparent text-right font-medium tabular-nums outline-none ${loadCtxError ? 'text-red-600 dark:text-red-400' : 'text-fg'}`}
+          />
+        </label>
+        {isLoaded ? (
+          <span className="inline-flex h-8 items-center gap-1.5 px-2 text-[13px] font-medium text-accent">
+            <CheckCircle2 className="h-4 w-4" /> Loaded
+          </span>
+        ) : (
+          <Button size="sm" variant="secondary" icon={Play} onClick={load} loading={isStarting} disabled={isDeleting || busy || Boolean(loadCtxError)}>
+            {isStarting ? 'Loading' : 'Load'}
+          </Button>
+        )}
+        {m.readOnly ? null : <Button
+          size="icon"
+          variant="ghost"
+          icon={Trash2}
           onClick={() => handleDelete(m)}
-          disabled={isDeleting || isLoaded || Boolean(switchingEngine) || Boolean(installingEngine)}
-          className="p-2 text-gray-400 hover:text-red-500 dark:hover:text-red-400 rounded-xl hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors disabled:opacity-30"
-          title={m.isExternal ? "Remove from library" : "Delete model"}
-        >
-          {isDeleting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-        </button>
+          loading={isDeleting}
+          disabled={isLoaded || busy}
+          aria-label={m.isExternal ? `Remove ${m.name || m.filename} from library` : `Delete ${m.name || m.filename}`}
+          title={m.isExternal ? 'Remove from library' : 'Delete model'}
+          className="hover:text-red-600 dark:hover:text-red-400"
+        />}
       </div>
     </div>
   );
@@ -193,7 +135,7 @@ const ModelCard = ({
 // ── Main pane ──────────────────────────────────────────────────────────────────
 const LocalModelsPane = ({
   models, loadingModels, serverStatus, status,
-  mlxStatus,
+  mlxStatus, activeMlxModel = null,
   startingModel, setStartingModel, deletingModel,
   switchingEngine, installingEngine,
   highlightedItem,
@@ -204,204 +146,182 @@ const LocalModelsPane = ({
   modelLoadCtxSizes, modelLoadCtxErrors,
   updateModelLoadCtxSize, commitModelLoadCtxSize,
   handleStart, handleDelete
-}) => (
-  <div className="flex flex-col gap-6">
-    {/* From Disk loader */}
-    <Panel className="p-5">
-      <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3">
-        <div className="flex-1 w-full">
-          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-slate-400 mb-2">
-            Load from path
-          </label>
-          <div className="relative">
-            <FolderOpen className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+}) => {
+  const loadFromPath = async () => {
+    const p = quickLoadPath.trim();
+    if (!p) return;
+    setStartingModel(p);
+    setSwitchError('');
+    setSwitchSuccess('');
+    try {
+      const ctxSize = modelContextConfig?.ctx_size || 4096;
+      const res = await localModelsApi.autoStart(p, ctxSize);
+      setServerStatus(prev => ({
+        ...prev, status: 'loading',
+        model: p.split(/[\\/]/).pop(), modelPath: p,
+        port: res.engine === 'mlx' ? 8766 : 8765
+      }));
+      notifyModelRuntimeUpdated();
+      pollCleanup.current?.();
+      const api = res.engine === 'mlx' ? mlxApi : llamaServerApi;
+      pollCleanup.current = api.pollStatus(
+        (snap) => { setServerStatus(snap); notifyModelRuntimeUpdated(); },
+        async (snap) => { setServerStatus(snap); pollCleanup.current = null; setStartingModel(null); notifyModelRuntimeUpdated(); await loadEngineData(); await loadProviderData(); },
+        async (snap) => { setServerStatus(snap); pollCleanup.current = null; setStartingModel(null); notifyModelRuntimeUpdated(); setSwitchError(snap?.error || `Failed to load ${res.engine?.toUpperCase()} model`); }
+      );
+    } catch (err) {
+      setStartingModel(null);
+      setSwitchError(err.message || 'Failed to start model server');
+    }
+  };
+
+  const chooseFile = async () => {
+    setSwitchError('');
+    const result = await window.electronAPI.openFilesDialog({
+      title: 'Choose a local model file',
+      buttonLabel: 'Choose Model',
+      multiSelections: false,
+      defaultPath: quickLoadPath.trim() || undefined,
+      filters: [
+        { name: 'Local model files', extensions: ['gguf', 'bin'] },
+        { name: 'All files', extensions: ['*'] },
+      ],
+    });
+    if (!result?.canceled && result?.filePaths?.[0]) setQuickLoadPath(result.filePaths[0]);
+  };
+
+  const chooseFolder = async () => {
+    setSwitchError('');
+    const result = await window.electronAPI.openDirectory({
+      title: 'Choose an MLX model directory',
+      buttonLabel: 'Choose Model Folder',
+      defaultPath: quickLoadPath.trim() || undefined,
+    });
+    if (!result?.canceled && result?.filePaths?.[0]) setQuickLoadPath(result.filePaths[0]);
+  };
+
+  const hasPath = Boolean(quickLoadPath.trim());
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="space-y-3">
+        <SectionHeader
+          title="Your downloaded models"
+          description="Models on this computer, including ones in your Hugging Face cache. Loading one makes it the model chats and agents use."
+          action={models.length ? <Badge color="gray">{models.length} model{models.length === 1 ? '' : 's'}</Badge> : null}
+        />
+
+        {loadingModels ? (
+          <div className="space-y-2">
+            {[0, 1].map(i => <div key={i} className="h-[66px] animate-pulse rounded-xl bg-hover" />)}
+          </div>
+        ) : models.length === 0 ? (
+          <div className="flex flex-col items-center rounded-2xl border border-dashed border-line-strong px-6 py-10 text-center">
+            <HardDrive className="h-7 w-7 text-fg-subtle" strokeWidth={1.5} />
+            <p className="mt-3 text-[14px] font-medium text-fg">No downloaded models yet</p>
+            <p className="mt-1 max-w-xs text-[13px] leading-5 text-fg-muted">Search Hugging Face above to download one, or load a file you already have below.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {models.map(m => (
+              <ModelCard
+                key={m.filename}
+                m={m}
+                serverStatus={serverStatus}
+                status={status}
+                startingModel={startingModel}
+                deletingModel={deletingModel}
+                activeMlxModel={activeMlxModel}
+                switchingEngine={switchingEngine}
+                installingEngine={installingEngine}
+                highlighted={highlightedItem?.type === 'model' && String(highlightedItem.id) === String(m.id || m.filename)}
+                modelLoadCtxSizes={modelLoadCtxSizes}
+                modelLoadCtxErrors={modelLoadCtxErrors}
+                updateModelLoadCtxSize={updateModelLoadCtxSize}
+                commitModelLoadCtxSize={commitModelLoadCtxSize}
+                handleStart={handleStart}
+                handleDelete={handleDelete}
+                setStartingModel={setStartingModel}
+                setServerStatus={setServerStatus}
+                pollCleanup={pollCleanup}
+                loadEngineData={loadEngineData}
+                setSwitchError={setSwitchError}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <Panel className="p-4">
+        <p className="text-[13px] font-medium text-fg">Load a model from a file or folder</p>
+        <p className="mt-0.5 text-[12px] text-fg-subtle">A .gguf file, or an MLX model folder, anywhere on this computer.</p>
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <label className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg border border-line-strong bg-canvas px-3 focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20">
+            <FolderOpen className="h-4 w-4 shrink-0 text-fg-subtle" />
             <input
               type="text"
               value={quickLoadPath}
               onChange={(e) => setQuickLoadPath(e.target.value)}
-              placeholder="Path to .gguf file or MLX directory..."
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-4 text-sm text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-gray-300 focus:ring-1 focus:ring-gray-300 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-gray-600 midnight:border-gray-800/80 midnight:bg-gray-900/50 midnight:text-gray-100 midnight:placeholder:text-gray-500 midnight:focus:border-gray-700"
+              placeholder="/path/to/model.gguf"
+              aria-label="Model path"
+              className="min-w-0 flex-1 bg-transparent font-mono text-[12.5px] text-fg outline-none placeholder:text-fg-subtle"
             />
+          </label>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {window?.electronAPI?.openFilesDialog ? <Button size="md" variant="ghost" icon={File} onClick={chooseFile}>File</Button> : null}
+            {window?.electronAPI?.openDirectory ? <Button size="md" variant="ghost" icon={FolderOpen} onClick={chooseFolder}>Folder</Button> : null}
+            <Button
+              size="md"
+              variant="secondary"
+              icon={Plus}
+              onClick={handleAddPath}
+              loading={switchingEngine === 'adding_path'}
+              disabled={!hasPath || Boolean(switchingEngine)}
+              title="Keep this path in your library"
+            >
+              Add to library
+            </Button>
+            <Button
+              size="md"
+              variant="primary"
+              icon={Play}
+              onClick={loadFromPath}
+              loading={Boolean(startingModel) && startingModel === quickLoadPath.trim()}
+              disabled={!hasPath || Boolean(startingModel) || Boolean(switchingEngine) || Boolean(installingEngine)}
+            >
+              Load
+            </Button>
           </div>
-          {(window?.electronAPI?.openFilesDialog || window?.electronAPI?.openDirectory) && (
-            <div className="mt-2 flex items-center gap-2">
-              {window.electronAPI.openFilesDialog && (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    setSwitchError('');
-                    const result = await window.electronAPI.openFilesDialog({
-                      title: 'Choose a local model file',
-                      buttonLabel: 'Choose Model',
-                      multiSelections: false,
-                      defaultPath: quickLoadPath.trim() || undefined,
-                      filters: [
-                        { name: 'Local model files', extensions: ['gguf', 'bin'] },
-                        { name: 'All files', extensions: ['*'] },
-                      ],
-                    });
-                    if (!result?.canceled && result?.filePaths?.[0]) {
-                      setQuickLoadPath(result.filePaths[0]);
-                    }
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.05] dark:hover:text-gray-100 midnight:text-slate-400 midnight:hover:bg-white/[0.05] midnight:hover:text-slate-100"
-                >
-                  <File className="h-3.5 w-3.5" />
-                  Choose file
-                </button>
-              )}
-              {window.electronAPI.openDirectory && (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    setSwitchError('');
-                    const result = await window.electronAPI.openDirectory({
-                      title: 'Choose an MLX model directory',
-                      buttonLabel: 'Choose Model Folder',
-                      defaultPath: quickLoadPath.trim() || undefined,
-                    });
-                    if (!result?.canceled && result?.filePaths?.[0]) {
-                      setQuickLoadPath(result.filePaths[0]);
-                    }
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.05] dark:hover:text-gray-100 midnight:text-slate-400 midnight:hover:bg-white/[0.05] midnight:hover:text-slate-100"
-                >
-                  <FolderOpen className="h-3.5 w-3.5" />
-                  Choose folder
-                </button>
-              )}
-            </div>
-          )}
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <button
-            onClick={async () => {
-              const p = quickLoadPath.trim();
-              if (!p) return;
-              setStartingModel(p);
-              setSwitchError('');
-              setSwitchSuccess('');
-              try {
-                const ctxSize = modelContextConfig?.ctx_size || 4096;
-                const res = await localModelsApi.autoStart(p, ctxSize);
-                setServerStatus(prev => ({
-                  ...prev, status: 'loading',
-                  model: p.split(/[\\/]/).pop(), modelPath: p,
-                  port: res.engine === 'mlx' ? 8766 : 8765
-                }));
-                notifyModelRuntimeUpdated();
-                pollCleanup.current?.();
-                const api = res.engine === 'mlx' ? mlxApi : llamaServerApi;
-                pollCleanup.current = api.pollStatus(
-                  (snap) => { setServerStatus(snap); notifyModelRuntimeUpdated(); },
-                  async (snap) => { setServerStatus(snap); pollCleanup.current = null; setStartingModel(null); notifyModelRuntimeUpdated(); await loadEngineData(); await loadProviderData(); },
-                  async (snap) => { setServerStatus(snap); pollCleanup.current = null; setStartingModel(null); notifyModelRuntimeUpdated(); setSwitchError(snap?.error || `Failed to load ${res.engine?.toUpperCase()} model`); }
-                );
-              } catch (err) {
-                setStartingModel(null);
-                setSwitchError(err.message || 'Failed to start model server');
-              }
-            }}
-            disabled={!quickLoadPath.trim() || startingModel || Boolean(switchingEngine) || Boolean(installingEngine)}
-            className="flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-40 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-slate-800 midnight:text-slate-100 midnight:hover:bg-slate-700 midnight:ring-1 midnight:ring-slate-700 transition-all"
-          >
-            {startingModel ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
-            {startingModel ? 'Starting...' : 'Load'}
-          </button>
 
-          <button
-            onClick={handleAddPath}
-            disabled={!quickLoadPath.trim() || Boolean(switchingEngine)}
-            className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 midnight:border-slate-700 midnight:text-slate-400 transition-all"
-            title="Save this path to your library permanently"
-          >
-            {switchingEngine === 'adding_path' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-            Add
-          </button>
-        </div>
-      </div>
-
-      {switchError && (
-        <div className="mt-3 flex items-center gap-2.5 rounded-xl border border-red-100 bg-red-50 px-4 py-2.5 text-xs text-red-700 dark:border-red-900/30 dark:bg-red-950/20 dark:text-red-400">
-          <TriangleAlert className="w-3.5 h-3.5 flex-shrink-0" />
-          {switchError}
-        </div>
-      )}
-
-      {switchSuccess && (
-        <div className="mt-3 flex items-center gap-2.5 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-2.5 text-xs text-emerald-700 dark:border-emerald-900/30 dark:bg-emerald-950/20 dark:text-emerald-400">
-          <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
-          {switchSuccess}
-        </div>
-      )}
-    </Panel>
-
-    {/* Library header */}
-    <div className="flex items-center justify-between">
-      <SectionHeader title="Local LLM Library" />
-      {models.length > 0 && <Badge color="gray">{models.length} model{models.length !== 1 ? 's' : ''}</Badge>}
-    </div>
-
-    {/* Model grid */}
-    {loadingModels ? (
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {[1, 2].map(i => (
-          <div key={i} className="h-40 animate-pulse rounded-2xl bg-gray-100 dark:bg-gray-800/50 midnight:bg-slate-800/50" />
-        ))}
-      </div>
-    ) : models.length === 0 ? (
-      <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-800 midnight:border-slate-800 px-4 py-12 text-center">
-        <Box className="w-8 h-8 text-gray-300 dark:text-gray-600 mb-3" />
-        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">No local LLMs yet</p>
-        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 max-w-xs">
-          Search above to find and download GGUF models from HuggingFace.
-        </p>
-      </div>
-    ) : (
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {models.map(m => (
-          <ModelCard
-            key={m.filename}
-            m={m}
-            serverStatus={serverStatus}
-            status={status}
-            startingModel={startingModel}
-            deletingModel={deletingModel}
-            switchingEngine={switchingEngine}
-            installingEngine={installingEngine}
-            highlighted={highlightedItem?.type === 'model' && String(highlightedItem.id) === String(m.id || m.filename)}
-            modelLoadCtxSizes={modelLoadCtxSizes}
-            modelLoadCtxErrors={modelLoadCtxErrors}
-            updateModelLoadCtxSize={updateModelLoadCtxSize}
-            commitModelLoadCtxSize={commitModelLoadCtxSize}
-            handleStart={handleStart}
-            handleDelete={handleDelete}
-            setStartingModel={setStartingModel}
-            setServerStatus={setServerStatus}
-            pollCleanup={pollCleanup}
-            loadEngineData={loadEngineData}
-            setSwitchError={setSwitchError}
-          />
-        ))}
-      </div>
-    )}
-
-    {/* MLX active panel */}
-    {(mlxStatus?.available && (
-      mlxStatus?.mlxAvailable === false
-      || serverStatus?.port === 8766
-      || (serverStatus?.status === 'loading' && startingModel && !startingModel.toLowerCase().endsWith('.gguf') && !startingModel.toLowerCase().endsWith('.bin'))
-    )) && (
-      <Panel className="p-5">
-        <MlxModelsSection
-          globalServerStatus={serverStatus}
-          onMlxStatusChange={setServerStatus}
-          onMlxStopRequest={loadStatus}
-          onMlxRuntimeChange={loadStatus}
-        />
+        {switchError ? (
+          <p role="alert" className="mt-3 flex items-start gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-[12.5px] text-red-700 dark:text-red-400">
+            <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {switchError}
+          </p>
+        ) : null}
+        {switchSuccess ? (
+          <p className="mt-3 flex items-start gap-2 rounded-lg bg-emerald-500/10 px-3 py-2 text-[12.5px] text-emerald-700 dark:text-emerald-400">
+            <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {switchSuccess}
+          </p>
+        ) : null}
       </Panel>
-    )}
-  </div>
-);
+
+      {(mlxStatus?.available && (
+        mlxStatus?.mlxAvailable === false
+        || serverStatus?.port === 8766
+        || (serverStatus?.status === 'loading' && startingModel && !startingModel.toLowerCase().endsWith('.gguf') && !startingModel.toLowerCase().endsWith('.bin'))
+      )) && (
+        <Panel className="p-5">
+          <MlxModelsSection
+            globalServerStatus={serverStatus}
+            onMlxStatusChange={setServerStatus}
+            onMlxStopRequest={loadStatus}
+            onMlxRuntimeChange={loadStatus}
+          />
+        </Panel>
+      )}
+    </div>
+  );
+};
 
 export default LocalModelsPane;

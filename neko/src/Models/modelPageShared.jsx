@@ -1,22 +1,22 @@
 export const Badge = ({ children, color = 'gray' }) => {
   const colors = {
-    green: 'bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800/30 midnight:border-green-900/40 midnight:bg-green-950/25 midnight:text-green-400',
-    gray:  'bg-gray-50 text-gray-600 border border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700 midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-400',
-    amber: 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800/30 midnight:border-amber-900/40 midnight:bg-amber-950/25 midnight:text-amber-400',
-    red:   'bg-red-50 text-red-700 border border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800/30 midnight:border-red-900/40 midnight:bg-red-950/25 midnight:text-red-400',
-    blue:  'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800/30 midnight:border-blue-900/40 midnight:bg-blue-950/25 midnight:text-blue-400',
-    purple: 'bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-800/30 midnight:border-purple-900/40 midnight:bg-purple-950/25 midnight:text-purple-400',
-    cyan: 'bg-cyan-50 text-cyan-700 border border-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-400 dark:border-cyan-800/30 midnight:border-cyan-900/40 midnight:bg-cyan-950/25 midnight:text-cyan-400',
+    green: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+    gray: 'bg-hover text-fg-muted',
+    amber: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
+    red: 'bg-red-500/10 text-red-700 dark:text-red-400',
+    blue: 'bg-accent-soft text-accent',
+    purple: 'bg-violet-500/10 text-violet-700 dark:text-violet-300',
+    cyan: 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-300',
   };
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${colors[color]}`}>
+    <span className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium leading-4 ${colors[color] || colors.gray}`}>
       {children}
     </span>
   );
 };
 
 export const Panel = ({ children, className = '' }) => (
-  <section className={`rounded-2xl border border-gray-100 bg-white dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950 ${className}`}>
+  <section className={`rounded-2xl border border-line bg-surface ${className}`}>
     {children}
   </section>
 );
@@ -25,15 +25,15 @@ export const SectionHeader = ({ eyebrow, title, description, action }) => (
   <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
     <div className="min-w-0">
       {eyebrow && (
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+        <p className="text-[12px] font-medium text-fg-subtle">
           {eyebrow}
         </p>
       )}
-      <h2 className="mt-1 text-lg font-semibold text-gray-950 dark:text-white midnight:text-slate-100">
+      <h2 className="mt-0.5 text-[15px] font-semibold tracking-[-0.01em] text-fg">
         {title}
       </h2>
       {description && (
-        <p className="mt-1 text-sm leading-6 text-gray-500 dark:text-gray-400 midnight:text-slate-400">
+        <p className="mt-1 text-[13px] leading-5 text-fg-muted">
           {description}
         </p>
       )}

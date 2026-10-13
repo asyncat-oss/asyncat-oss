@@ -329,6 +329,7 @@ export const useModelsPageController = ({ runtimeOnly = false } = {}) => {
         }
       }
       await loadProviderData();
+      return profileId;
     } catch (err) {
       setProviderError(err.message || 'Failed to save provider.');
       throw err;
