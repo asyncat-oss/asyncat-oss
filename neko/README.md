@@ -11,14 +11,14 @@ Built with **React 19**, **Vite 6**, and **TailwindCSS 4**.
 The UI for the full Asyncat experience:
 
 - **Command Center** — one chat box for direct model chat and agent runs (Plan, Action, and Yolo), streaming, tool approvals, memory; a chat can also be answered by Claude Code or Codex
-- **Projects** — the folders the agent can work in, with their chats
+- **Projects** — instructions, files the agent knows, chats and optional folders, sized to the model's context window
 - **Notes** — documents the agent writes in chat, opened in a block editor with tables, charts, media, and DOCX/PDF export
 - **Claude Code & Codex** — sessions from this computer in the sidebar, and Agents → Coding agents
 - **Models** — LLM providers, local models and runtimes, audio and image models, and **Training** (LoRA fine-tuning, marked Labs)
-- **Customize** — Models, Agents (profiles and coding agents) and Tools & Skills, grouped in the sidebar
-- **Automations** — Workflows, Schedules, and Activity under one sidebar entry, with a tab bar
+- **Customize** — Models, Agents (your agents and coding agents) and Tools & Skills, grouped in the sidebar
+- **Scheduled** — scheduled tasks: prompts that run on their own and answer in their own chat
 - **Terminal** — integrated xterm.js terminal (desktop app) plus live agent process output
-- **Built-in browser** shared with the agent
+- **Built-in browser** shared with the agent (it runs in the desktop app)
 - **Settings** — profile, appearance, integrations, and server config
 
 ## Getting started

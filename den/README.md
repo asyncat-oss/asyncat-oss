@@ -16,13 +16,14 @@ Den is a single Express server that handles everything:
 | Training | `/api/training/*` |
 | Config | `/api/config/*` |
 | Users / Projects | `/api/users/*`, `/api/projects/*` |
-| Workspaces | `/api/teams/*` |
+| Workspace | `/api/teams` (the one local workspace) |
 | Notes | `/api/notes/*`, `/api/attachments/*` (note attachments) |
 | Files | `/api/files/*` (file explorer) |
 | Storage | `/files/*`, `/api/storage/*` (uploaded files and logs) |
-| Integrations | `/api/integrations/*` (GitHub, Obsidian, RSS, mail, notifications) |
+| Integrations | `/api/integrations/*` (RSS, mail, notifications) |
 | Search | `/api/search/*` |
 | Browser | `/api/browser/*` (built-in browser history) |
+| Desktop bridge | `/api/host/*` (notifications, scheduled-task state and the built-in browser, with the desktop app) |
 | Install / Update | `/api/install/*`, `/api/update/*` |
 | Health | `/health` |
 
