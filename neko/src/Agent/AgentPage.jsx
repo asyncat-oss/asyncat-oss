@@ -1,25 +1,41 @@
 // neko/src/Agent/AgentPage.jsx
 // ─── Agent Management Shell ───────────────────────────────────────────────────
-// Agent profile management. Scheduling lives in the top-level Schedules page.
+// Agent profiles, plus the coding agents (Claude Code, Codex) a chat can use.
+// Scheduling lives in the top-level Automations page.
 
-import { BrainCircuit } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { Layers, TerminalSquare } from 'lucide-react';
+import PageHeader from '../components/ui/PageHeader.jsx';
+import { Tabs } from '../components/ui/Tabs.jsx';
 import ProfilesPage from '../Profiles/ProfilesPage';
+import CodingAgentsSection from './CodingAgentsSection.jsx';
+
+const TABS = [
+  { value: 'profiles', label: 'Profiles', icon: Layers },
+  { value: 'coding', label: 'Coding agents', icon: TerminalSquare },
+];
 
 export default function AgentPage() {
-  return (
-    <div className="flex flex-col h-full bg-white dark:bg-gray-900 midnight:bg-slate-950">
-      <div className="flex-shrink-0 border-b border-gray-100 px-6 py-4 dark:border-gray-800 midnight:border-slate-800">
-        <div className="flex items-center gap-2.5">
-          <BrainCircuit className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-          <div>
-            <h1 className="text-base font-semibold text-gray-900 dark:text-white midnight:text-slate-100">Agents</h1>
-            <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500 midnight:text-slate-500">Reusable profiles that define behavior, tools, permissions, and working context.</p>
-          </div>
-        </div>
-      </div>
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = searchParams.get('tab') === 'coding' ? 'coding' : 'profiles';
 
-      <div className="flex-1 overflow-hidden">
-        <ProfilesPage embedded />
+  return (
+    <div className="flex h-full flex-col bg-canvas">
+      <PageHeader
+        title="Agents"
+        description="Profiles set an agent's personality, tools, permissions and working folder. Coding agents let Claude Code or Codex answer a chat."
+      >
+        <Tabs
+          className="mt-4"
+          label="Agents"
+          value={tab}
+          onChange={(value) => setSearchParams(value === 'profiles' ? {} : { tab: value }, { replace: true })}
+          items={TABS}
+        />
+      </PageHeader>
+
+      <div className={`flex-1 ${tab === 'coding' ? 'overflow-y-auto' : 'overflow-hidden'}`}>
+        {tab === 'coding' ? <CodingAgentsSection /> : <ProfilesPage embedded />}
       </div>
     </div>
   );
