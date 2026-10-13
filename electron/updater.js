@@ -143,10 +143,10 @@ function setDownload(next) {
   send('update:download-state', download);
 }
 
-async function fetchChecksums(url) {
+async function fetchChecksums(url, signal = null) {
   if (!url || !isTrustedReleaseUrl(url)) return null;
   try {
-    const response = await net.fetch(url);
+    const response = await net.fetch(url, { signal });
     return response.ok ? parseChecksums(await response.text()) : null;
   } catch {
     return null;
@@ -180,19 +180,23 @@ async function startUpdate() {
     destination = path.join(app.getPath('downloads'), update.assetName);
   }
 
-  downloadAbort = new AbortController();
+  const abort = new AbortController();
+  downloadAbort = abort;
   setDownload({ status: 'downloading', version: update.version, strategy, received: 0, total: update.assetSize || 0, file: null, error: null });
   (async () => {
     try {
       const [result, sums] = await Promise.all([
         downloadFile(update.assetUrl, destination, {
           fetchImpl: (url, options) => net.fetch(url, options),
-          signal: downloadAbort.signal,
-          onProgress: ({ received, total }) => setDownload({ received, total: total || download.total }),
+          signal: abort.signal,
+          onProgress: ({ received, total }) => {
+            if (!abort.signal.aborted) setDownload({ received, total: total || download.total });
+          },
         }),
-        fetchChecksums(update.checksumUrl),
+        fetchChecksums(update.checksumUrl, abort.signal),
       ]);
       try {
+        if (abort.signal.aborted) throw Object.assign(new Error('The download was cancelled.'), { cancelled: true });
         if (update.checksumUrl && !sums && !update.assetDigest) {
           throw new Error("Couldn't fetch the release's checksums to check the download. Try again.");
         }
@@ -205,18 +209,20 @@ async function startUpdate() {
       if (strategy === 'open-installer') shell.showItemInFolder(destination);
       setDownload({ status: 'ready', file: strategy === 'replace-appimage' ? RUNNING_APPIMAGE : destination });
     } catch (error) {
-      console.warn('[updater] download failed:', error.message);
-      setDownload({ status: error.cancelled ? 'idle' : 'error', error: error.cancelled ? null : error.message });
+      if (!error.cancelled) console.warn('[updater] download failed:', error.message);
+      setDownload({ status: error.cancelled ? 'idle' : 'error', error: error.cancelled ? null : error.message, received: 0 });
     } finally {
-      downloadAbort = null;
+      if (downloadAbort === abort) downloadAbort = null;
     }
   })();
   return { success: true };
 }
 
+/** Stop a running download; its partial file is removed and Update starts over. */
 function cancelUpdate() {
-  downloadAbort?.abort();
-  return { success: true };
+  if (!downloadAbort) return { success: true, cancelled: false };
+  downloadAbort.abort();
+  return { success: true, cancelled: true };
 }
 
 /** Finish an update that is ready: restart into it, or run the installer. */

@@ -5,6 +5,7 @@ import fs from 'fs';
 import http from 'http';
 import os from 'os';
 import path from 'path';
+import { Writable } from 'stream';
 
 import {
   appImageStagingPath,
@@ -106,6 +107,63 @@ test('an update is installed only when a checksum proves the download', () => {
   assert.throws(() => verifyChecksum({ sums, digest: `sha256:${bad}`, assetName: 'Asyncat.AppImage', sha256: good }), { code: 'CHECKSUM_MISMATCH' });
   assert.equal(digestSha256('sha256:' + good), good);
   assert.equal(digestSha256('nope'), null);
+});
+
+test('Cancel stops the transfer and removes the partial file; a retry starts clean', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'asyncat-update-'));
+  // Sends one chunk, then stalls as a slow mirror would.
+  const server = http.createServer((_req, res) => {
+    res.writeHead(200, { 'Content-Length': String(1024 * 1024) });
+    res.write(Buffer.alloc(64 * 1024, 1));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const target = path.join(dir, 'Asyncat.exe');
+    const controller = new AbortController();
+    const pending = downloadFile(`http://127.0.0.1:${server.address().port}/`, target, {
+      signal: controller.signal,
+      onProgress: () => controller.abort(),
+    });
+    await assert.rejects(pending, (error) => error.cancelled === true);
+    assert.deepEqual(fs.readdirSync(dir), []);
+
+    // A leftover .part from an earlier crash does not get in the way.
+    fs.writeFileSync(`${target}.part`, 'stale');
+    const body = Buffer.alloc(2048, 3);
+    const fresh = await serve(body);
+    try {
+      const result = await downloadFile(`http://127.0.0.1:${fresh.address().port}/`, target);
+      assert.equal(result.bytes, body.length);
+      assert.deepEqual(fs.readdirSync(dir), ['Asyncat.exe']);
+    } finally {
+      fresh.close();
+    }
+  } finally {
+    server.closeAllConnections?.();
+    server.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a full disk fails the download with a clear message instead of hanging', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'asyncat-update-'));
+  const server = await serve(Buffer.alloc(512 * 1024, 5));
+  try {
+    const target = path.join(dir, 'Asyncat.dmg');
+    const fullDisk = () => new Writable({
+      write(_chunk, _encoding, callback) {
+        callback(Object.assign(new Error('ENOSPC: no space left on device, write'), { code: 'ENOSPC' }));
+      },
+    });
+    await assert.rejects(
+      downloadFile(`http://127.0.0.1:${server.address().port}/`, target, { openWrite: fullDisk }),
+      /disk is full/,
+    );
+    assert.deepEqual(fs.readdirSync(dir), []);
+  } finally {
+    server.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('a short download or HTTP error leaves no file behind', async () => {

@@ -11,6 +11,8 @@
 import { createHash } from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { Readable, Transform } from 'stream';
+import { pipeline } from 'stream/promises';
 
 function isInside(child, parent) {
   const relative = path.relative(path.resolve(parent), path.resolve(child));
@@ -53,43 +55,68 @@ export function parseChecksums(text) {
   return sums;
 }
 
+function cancelledError() {
+  return Object.assign(new Error('The download was cancelled.'), { cancelled: true });
+}
+
+/** A plain-words error for a failed write (full disk, no permission, ...). */
+export function friendlyWriteError(error) {
+  if (error?.code === 'ENOSPC') {
+    return new Error('The disk is full, so the update could not be saved. Free up some space and try again.');
+  }
+  if (error?.code === 'EACCES' || error?.code === 'EPERM' || error?.code === 'EROFS') {
+    return new Error("Asyncat isn't allowed to save the update in that folder. Try again, or download it from the release page.");
+  }
+  return error;
+}
+
 /**
  * Stream `url` to `destination`, reporting { received, total } as it goes.
  * Writes to a `.part` file first so a failed or cancelled download never
- * leaves a half-written file under the real name. Resolves { bytes, sha256 }.
+ * leaves a half-written file under the real name; the `.part` file is
+ * removed on any failure, so a retry starts clean. A write error (a full
+ * disk) fails the download instead of hanging it. Resolves { bytes, sha256 }.
  */
-export async function downloadFile(url, destination, { fetchImpl = fetch, onProgress = null, signal = null } = {}) {
-  const response = await fetchImpl(url, { signal });
+export async function downloadFile(url, destination, { fetchImpl = fetch, onProgress = null, signal = null, openWrite = (file) => fs.createWriteStream(file) } = {}) {
+  const partial = `${destination}.part`;
+  fs.mkdirSync(path.dirname(destination), { recursive: true });
+  fs.rmSync(partial, { force: true });
+
+  let response;
+  try {
+    response = await fetchImpl(url, { signal });
+  } catch (error) {
+    throw signal?.aborted ? cancelledError() : error;
+  }
   if (!response.ok || !response.body) throw new Error(`The download failed (HTTP ${response.status}).`);
   const total = Number(response.headers.get('content-length')) || 0;
   const hash = createHash('sha256');
-  const partial = `${destination}.part`;
-  fs.mkdirSync(path.dirname(destination), { recursive: true });
-  const out = fs.createWriteStream(partial);
   let received = 0;
   let lastReport = 0;
-  try {
-    const reader = response.body.getReader();
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      hash.update(value);
-      received += value.length;
-      if (!out.write(value)) await new Promise((resolve) => out.once('drain', resolve));
+  const meter = new Transform({
+    transform(chunk, _encoding, callback) {
+      hash.update(chunk);
+      received += chunk.length;
       const now = Date.now();
       if (onProgress && now - lastReport > 150) {
         lastReport = now;
         onProgress({ received, total });
       }
-    }
-    await new Promise((resolve, reject) => {
-      out.once('error', reject);
-      out.end(resolve);
-    });
+      callback(null, chunk);
+    },
+  });
+
+  try {
+    await pipeline(
+      Readable.fromWeb(response.body),
+      meter,
+      openWrite(partial),
+      ...(signal ? [{ signal }] : []),
+    );
+    if (signal?.aborted) throw cancelledError();
   } catch (error) {
-    out.destroy();
     fs.rmSync(partial, { force: true });
-    throw signal?.aborted ? Object.assign(new Error('The download was cancelled.'), { cancelled: true }) : error;
+    throw signal?.aborted ? cancelledError() : friendlyWriteError(error);
   }
   if (total && received !== total) {
     fs.rmSync(partial, { force: true });
