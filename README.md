@@ -27,19 +27,21 @@ It is not a chatbot wrapper. It controls your screen, writes and runs code, mana
 | **Basal Ganglia** | Watches which tools succeed for which kinds of goals. After 3 successful runs of the same goal pattern with the same set of tools it writes a new skill automatically. No annotation, no config |
 | **One chat box** | Chat and agent work happen in the same place. The **Tools** setting decides per message: **Auto** runs the agent when the model supports tools or a project, file or mention is involved; **Just chat** talks to the model directly; **Always use tools** always runs the agent. The agent works in `plan` (read-only tools), `action` (full ReAct loop, asks before risky tools) or **Yolo** (`action` with auto-approve). A `design` mode (canvases, artifacts and images; no source edits or shell/git writes) is available through the API |
 | **Claude Code and Codex** | Hand a chat to Claude Code or Codex installed on your computer, signed in with your own account. Pick one, and its model, under the message box; follow-ups continue the same session and its steps show in the chat. Your existing Claude Code and Codex sessions (from the terminal or their apps) are listed in the sidebar: open one and carry on where you left off. In Action mode Claude Code asks through the usual approval card before running commands. **Customize → Agents → Coding agents** shows install and sign-in status, plan usage limits, and every session |
-| **Approvals** | Before a risky tool runs, the agent asks: approve once, trust it for the rest of the run, or always allow. File edits show the diff before you decide |
+| **Projects** | A home for related work, like Claude and ChatGPT Projects: custom instructions every chat in it follows, files it knows (text, PDF, Word and images), its chats, and optionally folders the agent can work in. Files that fit in the model's context window go in whole; bigger sets are searched and the relevant passages sent. The project page shows how much of the model's window they take and whether the model can see images. Things the agent remembers in a project stay with that project |
+| **Approvals** | Before a risky tool runs, the agent asks: approve once, trust it for the rest of the run, or always allow. File edits show the diff before you decide. With nobody to ask (a scheduled run, an API call), risky tools are refused |
+| **Security** | The agent's shell commands run in a sandbox (bubblewrap on Linux, sandbox-exec on macOS) that can read your files but only write in the project folder, temporary folders and package caches. Commands only skip approval when a parser proves them read-only. Text from web pages, email and other outside sources is marked as information, not instructions. API keys and sign-in tokens are stored encrypted, with the key in your system keychain |
 | **Small prompts for local models** | Each agent step sends a core set of tools (about 40, or 24 for models that read tools from the prompt) instead of the full list. The agent finds the rest with `tool_search` when it needs them |
 | **35+ providers** | OpenAI, Anthropic, Gemini, Ollama, llama.cpp, MLX, LM Studio, OpenRouter, DeepSeek, Groq, Together AI, Mistral, Perplexity, Cohere, and more |
-| **Agent profiles** | Bundle a soul, working directory, tool permissions, and max rounds into named configurations. Switch profiles per task |
-| **Desktop automation** | Click, type, read screen content via OCR, focus windows — controls your actual machine |
+| **Agents** | Make your own agents, like GPTs and Gems: a name and picture, instructions, files it knows, starter prompts, what it may do (web, files, documents, memory, integrations, computer) and its own model. Start from a template, then pick an agent in the message box; scheduled tasks can use one too. Coding agents (Claude Code, Codex) have their own tab |
+| **Desktop automation** | Click, type, read screen content via OCR, focus windows — controls your actual machine (X11 and Wayland) |
 | **Sandboxes** | Isolated workspace copies. Review changes as a unified diff. Apply or discard. Commit to a branch |
 | **Scheduled tasks** | Prompts that run on their own: once, daily, on weekdays, on chosen days of the week, every few hours, or on a cron expression, in any time zone. Each task has its own chat where every run's prompt and answer land, and a desktop notification says when it's done. Runs missed while the computer slept are made up once if they are less than 12 hours late. Ask in any chat ("every weekday at 8am, summarise my email") or use the **Scheduled** page. Unattended runs only use safe tools and the ones the task pre-approves, and can't create other tasks |
 | **Command palette** | `Cmd/Ctrl+K` from anywhere — jump to any page, or search projects, notes, chats, and memory |
 | **Semantic memory** | Recall by meaning, not just keywords. Uses your provider's embeddings when available, falls back to an offline keyword (hashed lexical) index |
-| **Built-in browser** | A real tabbed browser the agent shares. Hand it the page you're on with one click, or let it browse on its own |
+| **Built-in browser** | A real tabbed browser the agent shares, running in the desktop app so it works even with the chat or window closed. The agent reads pages as an outline with element references and clicks and types with real input; typing into password or card fields, and buy, send or delete buttons, ask you first. Sign-in pop-ups work, the agent can hand a page to you to sign in, and its web tools share the browser's sign-ins |
 | **MCP support** | Add stdio MCP servers to `data/mcp.json` in the backend data folder (`den/data/mcp.json` from source, `<user data>/data/mcp.json` when installed). It is created on first start and hot-reloaded. Also manageable through `/api/agent/mcp` (no UI yet) |
-| **Persistent memory** | SQLite-backed key-value memory with types: `user`, `feedback`, `project`, `reference`, `fact`, `preference`, `context`, `task_state` |
-| **Notes** | The agent writes notes as documents in the chat; open one to edit it (rich text, tables, export to DOCX/PDF). `Cmd/Ctrl+K` finds them |
+| **Persistent memory** | SQLite-backed memory with types: `user`, `feedback`, `project`, `reference`, `fact`, `preference`, `context`, `task_state`. Memories made in a project stay in it; ones about you apply everywhere |
+| **Notes** | The agent writes notes as documents in the chat; open one to edit it (rich text, tables, line, bar, area, pie, donut and scatter charts, export to DOCX/PDF). `Cmd/Ctrl+K` finds them |
 | **System tray** | Left-click for quick chat; the menu shows Asyncat, opens scheduled tasks, restarts the backend, or quits. Closing the window leaves Asyncat in the tray while a scheduled task is on (**Settings → Background**), and it can start at login, hidden in the tray |
 | **Global shortcuts** | `Cmd/Ctrl+Shift+A` summons Asyncat from any app; `Cmd/Ctrl+Shift+Space` opens quick chat. Change or turn off either one in **Settings → Appearance** |
 | **Fine-tuning (Labs)** | **Customize → Models → Training** trains a LoRA adapter for a local model and saves it to disk. Loading the adapter is still up to you |
@@ -56,6 +58,8 @@ It is not a chatbot wrapper. It controls your screen, writes and runs code, mana
 | **One chat box**: pick who answers (Asyncat, Claude Code or Codex) and the model; your Claude Code and Codex sessions sit in the sidebar. | **Coding agents**: install and sign-in status, plan usage, and every Claude Code and Codex session on this computer. |
 | ![Models page, Add provider view](docs/images/models.png) | ![Update screen with release notes](docs/images/update.png) |
 | **Models**: the model in use, a searchable provider directory, local models, voice, images, usage and training. | **Updates** download, get checked against the release checksums, and install from inside the app. |
+| ![A project page with its chats, instructions, files and how much of the model's context they take](docs/images/projects.png) | ![Agents page with two agents and templates to start from](docs/images/agents.png) |
+| **Projects**: instructions every chat follows, files the agent knows (with how much of the model's context they take), chats, and optional folders. | **Agents**: your own agents with instructions, files, starter prompts, abilities and a model; pick one in the message box. |
 
 ---
 
@@ -113,6 +117,17 @@ npm run electron:dev:tools
 In dev mode Electron loads the frontend from the Vite dev server (`localhost:8717`), so you get hot module replacement, and uses the backend that `npm run dev:backend` runs on port 8716 in Node's watch mode, which restarts when you edit `den/`. Developer Tools are also available at any time from **View → Toggle Developer Tools**.
 
 To work in a regular browser instead, `npm run dev` starts only the backend and the Vite dev server.
+
+Tests:
+
+```bash
+npm test -w den          # backend
+npm test -w neko         # frontend
+npm run test:release     # desktop app and release scripts
+npm run test:e2e         # end-to-end smoke test in a headless browser
+```
+
+The end-to-end test starts a throwaway copy of Asyncat (its own data folder and ports) with a fake model and clicks through chat, projects, agents, scheduled tasks and the main pages. It needs a Chromium-based browser (Chrome, Chromium, Edge or Brave) and never touches your data.
 
 #### 3. Build & Package Distributables
 
@@ -235,17 +250,24 @@ Go to **Customize → Models → Language**:
 Start a **New chat** and type. Under the message box you can choose:
 
 - **Who answers**: Asyncat's own agent with your model, or Claude Code or Codex if they are installed and signed in on this computer
+- **Agent**: one of your agents, with its instructions, files and model
 - **Tools**: Auto, Always use tools, or Just chat
-- **Project**: a folder the agent can work in
+- **Project**: a project's instructions and files, and optionally one of its folders for the agent to work in
 - **Mode**: **Plan** (read-only; proposes changes without making them), **Action** (full ReAct execution loop, asks before risky tools, up to 25 rounds by default) or **Yolo** (Action with every tool auto-approved)
 
-### 3. Run scheduled tasks
+### 3. Set up projects and agents
+
+Open **Projects** in the sidebar and create one. On its page, add **instructions** (for example "answer in British English, use metric units") and **files** the agent should know, and start a chat from there. Add a folder when the agent should work with files on your computer. The bar under the files shows how much of the current model's context window they take: when they don't all fit, the agent searches them for each question instead.
+
+Open **Customize → Agents** to make an agent: start from a template or a blank one, give it instructions, files, starter prompts, what it may do and, if you like, its own model. Pick it in the message box; its starter prompts show on a new chat.
+
+### 4. Run scheduled tasks
 
 Open **Scheduled** in the sidebar and create a task: what it should do, when (once, daily, weekdays, chosen days, every few hours, or a cron expression under **Advanced**), and optionally a project and an agent. Or just ask in a chat: "every Monday at 9, list what changed in my project last week". Each run's answer lands in the task's chat with a notification; **Run now** tries it straight away.
 
-Nobody approves tools during a scheduled run, so tools that normally ask first are refused unless the task lists them under **Advanced → Pre-approved tools**. Old schedules and workflows were turned into scheduled tasks on the first start of this version: one-step workflows keep their schedule, longer ones become one prompt with numbered steps and start paused.
+A run gets its project's and agent's instructions and files, like a chat would. Nobody approves tools during a scheduled run, so tools that normally ask first are refused unless the task lists them under **Advanced → Pre-approved tools**. Old schedules and workflows were turned into scheduled tasks on the first start of this version: one-step workflows keep their schedule, longer ones become one prompt with numbered steps and start paused.
 
-### 4. Manage skills and memory
+### 5. Manage skills and memory
 
 Go to **Customize → Tools & Skills** to browse the tool inventory, load skill modules, edit agent soul, and review memory entries.
 
@@ -279,8 +301,9 @@ asyncat-oss/
 │   │   ├── db/                # SQLite client + schema
 │   │   ├── files/             # File explorer service (/api/files)
 │   │   ├── install/           # Runtime readiness checks (/api/install)
-│   │   ├── integrations/      # GitHub, Obsidian, RSS, mail, outbound notifications
-│   │   ├── lib/               # Shared helpers: .env I/O, system deps, engine installs
+│   │   ├── integrations/      # RSS, mail, outbound notifications
+│   │   ├── knowledge/         # Project and agent files: text extraction, search, context sizing
+│   │   ├── lib/               # Shared helpers: .env I/O, system deps, engine installs, secret encryption
 │   │   ├── middleware/        # Local profile context, cross-site request guard
 │   │   ├── notes/             # Delta-based notes, export (/api/notes)
 │   │   ├── search/            # Universal search (/api/search)
@@ -292,14 +315,13 @@ asyncat-oss/
 ├── neko/            # React + Vite frontend
 │   └── src/
 │       ├── CommandCenter/     # Chat and agent runs
-│       ├── Agent/             # Agents page (profiles, coding agents)
+│       ├── Agent/             # Agents page (your agents and the agent editor, coding agents)
 │       ├── Models/            # LLM providers, local models and runtimes, audio, images
-│       ├── Profiles/          # Agent profiles
 │       ├── Scheduled/         # Scheduled tasks
 │       ├── Tools/             # Tools & skills browser
 │       ├── Training/          # Fine-tuning jobs (shown as Models → Training)
 │       ├── Settings/          # Settings tabs
-│       ├── projects/          # Projects (folders the agent works in, and their chats)
+│       ├── projects/          # Projects: instructions, files, chats and folders
 │       ├── sidebar/           # Sidebar, Claude Code & Codex sessions, Cmd/Ctrl+K search
 │       ├── components/        # Shared UI pieces and the update screen
 │       └── notes/             # Notes editor (opened from note documents in chat)
@@ -316,12 +338,14 @@ Electron starts
     (registered from the user's settings by electron/shortcuts.js)
   → creates the window and shows the loading screen
   → electron/backend.js — spawns den/src/index.js (bundled Node.js when packaged,
-    system Node in dev; dev scripts reuse the watch-mode backend instead)
+    system Node in dev; dev scripts reuse the watch-mode backend instead), passing
+    a per-launch bridge token and the keychain-held key for saved secrets
   → polls /health until the backend is ready (30s timeout; on failure a dialog
     offers the diagnostic logs and the app continues)
   → starts the static frontend server (neko/dist/) on port 8717 unless Vite is running
   → BrowserWindow loads http://127.0.0.1:8717 (packaged) or http://localhost:8717 (Vite)
-  → sends 'backend:ready' (or 'backend:error') IPC event to the renderer
+  → connects the backend ↔ desktop bridge (/api/host): notifications, scheduled-task
+    state and the built-in browser, which runs in the desktop app
 ```
 
 ### Agent runtime flow
