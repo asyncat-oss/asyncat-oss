@@ -635,9 +635,8 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
                 aria-expanded="false"
                 className="group relative flex h-10 w-10 items-center justify-center rounded-lg text-fg outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-accent/40"
               >
-                <AsyncatMark className="h-7 w-7 transition-opacity group-hover:opacity-0 group-focus-visible:opacity-0" />
-                <PanelLeftOpen className="absolute h-[18px] w-[18px] text-fg-muted opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" strokeWidth={1.75} />
-                {hasActiveRuns ? <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-sidebar" /> : null}
+                <PanelLeftOpen className="h-[18px] w-[18px] text-fg-muted transition-colors group-hover:text-fg" strokeWidth={1.75} />
+                {hasActiveRuns ? <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-sidebar" /> : null}
               </button>
             </Tooltip>
           ) : (
@@ -646,16 +645,15 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
                 type="button"
                 onClick={openCommandCenter}
                 title="Command Center"
-                className="flex min-w-0 items-center gap-2 rounded-lg p-1 outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                className="flex min-w-0 items-center gap-1.5 rounded-lg px-1.5 py-1 outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
               >
-                <span className="relative flex h-8 w-8 shrink-0 items-center justify-center">
-                  <AsyncatMark className="h-7 w-7" />
-                  {hasActiveRuns ? <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-sidebar" /> : null}
-                </span>
+                {/* Below the sm breakpoint the sidebar is a 64px rail with no room for the name. */}
+                <AsyncatMark variant="glyph" className="h-5 w-5 text-fg sm:hidden" />
                 <span className="hidden min-w-0 items-center gap-1.5 sm:flex">
                   <span className="truncate text-[18px] font-[680] leading-none tracking-[-0.05em] text-fg">asyncat</span>
-                  <span className="rounded-md bg-accent-soft px-1.5 py-px text-[10px] font-semibold text-accent">Beta</span>
+                  <span className="rounded-md bg-hover px-1.5 py-px text-[10px] font-medium text-fg-muted">Beta</span>
                 </span>
+                {hasActiveRuns ? <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" title="An agent is working" /> : null}
               </button>
               <Tooltip label="Collapse sidebar" side="bottom" className="hidden sm:block">
                 <button
