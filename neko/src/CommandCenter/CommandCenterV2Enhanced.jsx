@@ -300,10 +300,27 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
   const [engines, setEngines] = useState([]);
   useEffect(() => {
     let cancelled = false;
-    agentApi.getEngines()
+    const refresh = () => agentApi.getEngines()
       .then(res => { if (!cancelled) setEngines(res?.engines || []); })
       .catch(() => {});
-    return () => { cancelled = true; };
+    refresh();
+    // Runs report the agents' usage limits, so re-read them after each one.
+    window.addEventListener('agent-run-complete', refresh);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('agent-run-complete', refresh);
+    };
+  }, []);
+  // The model picked for each coding agent (null = the agent's own default).
+  const [engineModels, setEngineModels] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('asyncat_engine_models') || '{}') || {}; } catch { return {}; }
+  });
+  const setEngineModel = useCallback((engine, model) => {
+    setEngineModels(prev => {
+      const next = { ...prev, [engine]: model || null };
+      try { localStorage.setItem('asyncat_engine_models', JSON.stringify(next)); } catch { /* localStorage may be unavailable */ }
+      return next;
+    });
   }, []);
   const setSelectedEngine = useCallback((value) => {
     setSelectedEngineState(value);
@@ -1317,6 +1334,9 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
         clientTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone || null,
         engine: runEngine,
         externalSessionId: isExternalEngine ? (runMetadata?.externalSessions?.[runEngine] || null) : null,
+        // A chat opened from a Claude Code or Codex session keeps working in that session's folder.
+        externalCwd: isExternalEngine ? (runMetadata?.externalCwd || null) : null,
+        engineModel: isExternalEngine ? (engineModels[runEngine] || null) : null,
       });
       for await (const event of eventStream) {
         if (controller.signal.aborted) break;
@@ -1683,6 +1703,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
   }, [
     toast,
     selectedEngine,
+    engineModels,
     setConversationMetadata,
     agentRunning,
     currentRunKey,
@@ -2628,6 +2649,9 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
               engine={conversationEngine}
               engines={engines}
               onEngineChange={hasConversationContent ? undefined : setSelectedEngine}
+              engineModel={engineModels[conversationEngine] || null}
+              onEngineModelChange={(model) => setEngineModel(conversationEngine, model)}
+              externalFolder={conversationMetadata?.externalCwd || null}
               sttReady={sttReady}
               ttsReady={ttsReady}
               voiceMode={voiceMode}
@@ -3141,6 +3165,9 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                 engine={conversationEngine}
                 engines={engines}
                 onEngineChange={hasConversationContent ? undefined : setSelectedEngine}
+                engineModel={engineModels[conversationEngine] || null}
+                onEngineModelChange={(model) => setEngineModel(conversationEngine, model)}
+                externalFolder={conversationMetadata?.externalCwd || null}
                 sttReady={sttReady}
                 ttsReady={ttsReady}
                 voiceMode={voiceMode}

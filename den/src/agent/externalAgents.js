@@ -10,11 +10,14 @@
 //   codex exec --json [resume <thread>]
 
 import { execFile, spawn } from 'child_process';
+import { randomBytes, randomUUID, timingSafeEqual } from 'crypto';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { promisify } from 'util';
 import { runtimeDataPath } from '../config/runtimeConfig.js';
+import { claudeUsageFromEvent, recordUsage } from './externalUsage.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -56,7 +59,11 @@ function agentPath() {
 }
 
 function agentEnv() {
-  return { ...process.env, PATH: agentPath(), NO_COLOR: '1' };
+  const env = { ...process.env, PATH: agentPath(), NO_COLOR: '1' };
+  // A FORCE_COLOR inherited from a dev runner would override NO_COLOR and put
+  // colour codes into command output.
+  delete env.FORCE_COLOR;
+  return env;
 }
 
 function findBinary(command) {
@@ -83,7 +90,14 @@ export async function detectExternalEngines() {
   const results = [];
   for (const engine of Object.values(EXTERNAL_ENGINES)) {
     const binary = findBinary(engine.command);
-    const info = { id: engine.id, name: engine.name, installed: Boolean(binary), signInCommand: engine.signInCommand, installUrl: engine.installUrl };
+    const info = {
+      id: engine.id,
+      name: engine.name,
+      installed: Boolean(binary),
+      signInCommand: engine.signInCommand,
+      installUrl: engine.installUrl,
+      models: engineModels(engine.id),
+    };
     if (!binary) {
       results.push(info);
       continue;
@@ -107,6 +121,35 @@ export async function detectExternalEngines() {
     results.push(info);
   }
   return results;
+}
+
+// Codex's default when no model is picked: one every ChatGPT plan can use, so a
+// model in config.toml that the account can't use doesn't break it.
+export const CODEX_DEFAULT_MODEL = 'gpt-5.5';
+
+/**
+ * Models offered in the composer. `id: null` keeps the CLI's own default.
+ * Codex lists what its model cache says this account can pick.
+ */
+export function engineModels(engine, env = process.env) {
+  if (engine === 'claude-code') {
+    return [
+      { id: null, label: 'Default', hint: 'Whatever Claude Code is set to use' },
+      { id: 'opus', label: 'Opus', hint: 'Most capable' },
+      { id: 'sonnet', label: 'Sonnet', hint: 'Fast and capable' },
+      { id: 'haiku', label: 'Haiku', hint: 'Fastest' },
+    ];
+  }
+  const models = [{ id: null, label: 'GPT-5.5', hint: 'Default' }];
+  try {
+    const home = env.CODEX_HOME || path.join(os.homedir(), '.codex');
+    const cache = JSON.parse(fs.readFileSync(path.join(home, 'models_cache.json'), 'utf8'));
+    const listed = (cache.models || [])
+      .filter((model) => model.visibility === 'list' && model.slug && model.slug !== CODEX_DEFAULT_MODEL)
+      .sort((a, b) => (a.priority ?? 99) - (b.priority ?? 99));
+    for (const model of listed) models.push({ id: model.slug, label: model.display_name || model.slug, hint: model.description || '' });
+  } catch { /* no cache yet: only the default */ }
+  return models;
 }
 
 /** Where an external agent works when the conversation has no Project. */
@@ -133,7 +176,7 @@ const CLAUDE_TOOL_NAMES = {
   TodoWrite: 'todo_write',
 };
 
-function claudeToolCall(block) {
+export function claudeToolCall(block) {
   const input = block.input || {};
   const tool = CLAUDE_TOOL_NAMES[block.name] || block.name;
   const args = { ...input };
@@ -180,7 +223,7 @@ function codexToolCall(item) {
 
 // ── Running ─────────────────────────────────────────────────────────────────
 
-function buildCommand(engine, { goal, workingDir, externalSessionId, agentMode, autoApprove, model }) {
+function buildCommand(engine, { goal, workingDir, externalSessionId, agentMode, autoApprove, model, approvalConfigPath }) {
   if (engine === 'claude-code') {
     const permissionMode = agentMode === 'plan' ? 'plan' : autoApprove ? 'bypassPermissions' : 'acceptEdits';
     const args = [
@@ -192,6 +235,10 @@ function buildCommand(engine, { goal, workingDir, externalSessionId, agentMode, 
     ];
     if (externalSessionId) args.push('--resume', externalSessionId);
     if (model) args.push('--model', model);
+    // Without this, anything acceptEdits doesn't cover (shell commands, web
+    // fetches) is refused outright in -p mode. With it, Claude Code asks the
+    // user through Asyncat's approval card.
+    if (approvalConfigPath) args.push('--mcp-config', approvalConfigPath, '--permission-prompt-tool', 'mcp__asyncat__approve');
     return { command: 'claude', args };
   }
   // Codex: plan reads only, action may write inside the workspace (sandboxed),
@@ -202,7 +249,7 @@ function buildCommand(engine, { goal, workingDir, externalSessionId, agentMode, 
     'exec', '--json', '--skip-git-repo-check',
     '-C', workingDir,
     '-s', sandbox,
-    '-m', model || 'gpt-5.5',
+    '-m', model || CODEX_DEFAULT_MODEL,
     '-c', 'model_reasoning_effort="medium"',
   ];
   if (externalSessionId) args.push('resume', externalSessionId, goal);
@@ -214,7 +261,7 @@ function buildCommand(engine, { goal, workingDir, externalSessionId, agentMode, 
  * Run one turn with an external agent. `emit(type, data)` receives Asyncat
  * agent events. Resolves with { answer, externalSessionId, stopReason, usage }.
  */
-export function runExternalAgent({ engine, goal, workingDir, externalSessionId = null, agentMode = 'action', autoApprove = false, model = null, emit, abortSignal }) {
+export function runExternalAgent({ engine, goal, workingDir, externalSessionId = null, agentMode = 'action', autoApprove = false, model = null, approvalConfigPath = null, emit, abortSignal }) {
   const spec = EXTERNAL_ENGINES[engine];
   return new Promise((resolve, reject) => {
     const binary = findBinary(spec.command);
@@ -222,8 +269,11 @@ export function runExternalAgent({ engine, goal, workingDir, externalSessionId =
       reject(new Error(`${spec.name} isn't installed. Install it, sign in with \`${spec.signInCommand}\`, then try again.`));
       return;
     }
-    const { args } = buildCommand(engine, { goal, workingDir, externalSessionId, agentMode, autoApprove, model });
-    const child = spawn(binary, args, { cwd: workingDir, env: agentEnv(), stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+    const { args } = buildCommand(engine, { goal, workingDir, externalSessionId, agentMode, autoApprove, model, approvalConfigPath });
+    // Approvals wait on a person, so give the approval tool longer than
+    // Claude Code's default MCP tool timeout.
+    const env = approvalConfigPath ? { ...agentEnv(), MCP_TOOL_TIMEOUT: String(10 * 60 * 1000) } : agentEnv();
+    const child = spawn(binary, args, { cwd: workingDir, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
 
     let sessionId = externalSessionId;
     let answer = '';
@@ -239,6 +289,10 @@ export function runExternalAgent({ engine, goal, workingDir, externalSessionId =
     const handleClaude = (event) => {
       if (event.type === 'system' && event.subtype === 'init') {
         sessionId = event.session_id || sessionId;
+        return;
+      }
+      if (event.type === 'rate_limit_event' && event.rate_limit_info) {
+        recordUsage('claude-code', claudeUsageFromEvent(event.rate_limit_info));
         return;
       }
       if (event.type === 'stream_event') {
@@ -395,4 +449,82 @@ function friendlyFailure(engine, detail) {
     return 'Claude Code was refreshing its sign-in in another window. Try again in a moment.';
   }
   return `${spec.name}: ${detail}`;
+}
+
+// ── Approvals for Claude Code ───────────────────────────────────────────────
+
+const APPROVAL_SCRIPT = fileURLToPath(new URL('./claudeApprovalMcp.js', import.meta.url));
+const approvalRuns = new Map();
+
+function describeClaudeAction(toolName, input = {}) {
+  if (toolName === 'Bash') return input.description || `Run \`${String(input.command || '').slice(0, 200)}\``;
+  if (toolName === 'WebFetch') return `Open ${input.url || 'a web page'}`;
+  if (toolName === 'WebSearch') return `Search the web for "${input.query || ''}"`;
+  if (input.file_path) return `${toolName} ${input.file_path}`;
+  return `Use ${toolName}`;
+}
+
+/**
+ * Let one Claude Code run ask the user before acting. Writes an MCP config
+ * (private to this user) naming the approval server, with a URL and secret for
+ * this run. `requestPermission` is the route's usual approval prompt.
+ */
+export function openExternalApprovals({ requestPermission, port, alwaysAllowedTools = [], workingDir = null }) {
+  const runId = randomUUID();
+  const token = randomBytes(24).toString('hex');
+  const dir = runtimeDataPath('tmp');
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const configPath = path.join(dir, `claude-approval-${runId}.json`);
+  const config = {
+    mcpServers: {
+      asyncat: {
+        type: 'stdio',
+        command: process.execPath,
+        args: [APPROVAL_SCRIPT],
+        env: {
+          ASYNCAT_APPROVAL_URL: `http://127.0.0.1:${port}/api/agent/external-approvals/${runId}`,
+          ASYNCAT_APPROVAL_TOKEN: token,
+        },
+      },
+    },
+  };
+  fs.writeFileSync(configPath, JSON.stringify(config), { mode: 0o600 });
+  approvalRuns.set(runId, { token, requestPermission, allowed: new Set(alwaysAllowedTools), workingDir });
+  return {
+    configPath,
+    close() {
+      approvalRuns.delete(runId);
+      fs.rmSync(configPath, { force: true });
+    },
+  };
+}
+
+function tokensMatch(expected, given) {
+  const a = Buffer.from(String(expected));
+  const b = Buffer.from(String(given || ''));
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/**
+ * Answer one approval request from the MCP server. Returns null when the run
+ * or its secret is unknown, otherwise Claude Code's permission result.
+ */
+export async function decideExternalApproval(runId, token, { toolName, input = {}, toolUseId = null } = {}) {
+  const run = approvalRuns.get(runId);
+  if (!run || !tokensMatch(run.token, token)) return null;
+  const call = claudeToolCall({ name: toolName, input, id: toolUseId });
+  if (run.allowed.has(call.tool)) return { behavior: 'allow' };
+  const decision = await run.requestPermission({
+    tool: call.tool,
+    toolCallId: toolUseId,
+    args: call.args,
+    permission: 'dangerous',
+    description: describeClaudeAction(toolName, input),
+    workingDir: run.workingDir,
+    engine: 'claude-code',
+  });
+  const name = decision?.decision || 'deny';
+  const allowed = name === 'allow' || name === 'allow_session' || name.startsWith('allow_always');
+  if (allowed && name !== 'allow') run.allowed.add(call.tool);
+  return allowed ? { behavior: 'allow' } : { behavior: 'deny', message: decision?.reason || 'The user declined this action.' };
 }

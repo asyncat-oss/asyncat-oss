@@ -45,7 +45,9 @@ import { execSync } from 'child_process';
 import { getArtifactsDir, getLegacyArtifactsDir } from '../../agent/workspacePaths.js';
 import { shellSessionManager } from '../../agent/ShellSessionManager.js';
 import { resolveBrowserCommand } from '../../agent/browserCommandQueue.js';
-import { detectExternalEngines, isExternalEngine, runExternalAgent, scratchWorkspace } from '../../agent/externalAgents.js';
+import { decideExternalApproval, detectExternalEngines, isExternalEngine, openExternalApprovals, runExternalAgent, scratchWorkspace } from '../../agent/externalAgents.js';
+import { listExternalSessions, readExternalSession } from '../../agent/externalSessions.js';
+import { getExternalUsage } from '../../agent/externalUsage.js';
 
 const router = express.Router();
 const pendingPermissions = new Map();
@@ -1891,13 +1893,116 @@ router.post('/git/discard', withWorkspaceContext, (req, res) => {
 // format as Asyncat's agent.
 router.get('/engines', async (_req, res) => {
   try {
-    res.json({ success: true, engines: await detectExternalEngines() });
+    const usage = getExternalUsage();
+    const engines = (await detectExternalEngines()).map((engine) => ({ ...engine, usage: usage[engine.id] || null }));
+    res.json({ success: true, engines });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-async function runExternalEngineTurn(req, res, { engine, baseGoal, workingContext, workingDir, fileAttachments, externalSessionId, engineModel, agentMode, autoApprove, abortSignal }) {
+// Claude Code's approval server (agent/claudeApprovalMcp.js) posts here and
+// waits for the user's answer. Each run has its own secret.
+router.post('/external-approvals/:runId', async (req, res) => {
+  try {
+    const result = await decideExternalApproval(req.params.runId, req.get('x-asyncat-approval-token'), req.body || {});
+    if (!result) return res.status(403).json({ behavior: 'deny', message: 'Unknown approval request.' });
+    res.json(result);
+  } catch (err) {
+    res.json({ behavior: 'deny', message: err.message });
+  }
+});
+
+// Conversations already linked to a Claude Code or Codex session, by "engine:id".
+function linkedExternalConversations(userId) {
+  const rows = db.prepare(`
+    SELECT id, metadata FROM conversations
+    WHERE user_id = ? AND deleted_at IS NULL AND metadata LIKE '%externalSessions%'
+  `).all(userId);
+  const linked = new Map();
+  for (const row of rows) {
+    const metadata = parseProviderJson(row.metadata, {}) || {};
+    for (const [engine, sessionId] of Object.entries(metadata.externalSessions || {})) {
+      if (sessionId) linked.set(`${engine}:${sessionId}`, { id: row.id, metadata });
+    }
+  }
+  return linked;
+}
+
+// Sessions from Claude Code and Codex on this computer, newest first.
+router.get('/external-sessions', (req, res) => {
+  try {
+    const engine = ['claude-code', 'codex'].includes(req.query.engine) ? req.query.engine : 'all';
+    const limit = Math.min(Math.max(Number(req.query.limit) || 30, 1), 200);
+    const linked = linkedExternalConversations(req.user.id);
+    const sessions = listExternalSessions({ engine, limit, hideCwd: scratchWorkspace() })
+      .map((session) => ({ ...session, conversationId: linked.get(`${session.engine}:${session.id}`)?.id || null }));
+    res.json({ success: true, sessions });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Open a Claude Code or Codex session as an Asyncat chat. The first time it is
+// copied in; later, a chat that was opened this way is refreshed when the
+// session has moved on (the session file is the full record, including turns
+// sent from Asyncat). Follow-ups resume the same session in its own folder.
+router.post('/external-sessions/open', withWorkspaceContext, async (req, res) => {
+  try {
+    const { engine, sessionId } = req.body || {};
+    if (!isExternalEngine(engine) || !sessionId) {
+      return res.status(400).json({ success: false, error: 'Choose a Claude Code or Codex session.' });
+    }
+    const existing = linkedExternalConversations(req.user.id).get(`${engine}:${sessionId}`);
+    const importedAt = existing?.metadata?.importedFrom?.syncedAt || 0;
+    if (existing && !existing.metadata?.importedFrom) {
+      return res.json({ success: true, conversationId: existing.id, refreshed: false });
+    }
+
+    const session = await readExternalSession(engine, sessionId);
+    if (existing && session.modifiedAt <= importedAt + 1000) {
+      return res.json({ success: true, conversationId: existing.id, refreshed: false });
+    }
+    if (session.messages.length === 0) {
+      return res.status(422).json({ success: false, error: 'That session has no messages to show yet.' });
+    }
+
+    const metadata = {
+      ...(existing?.metadata || {}),
+      engine,
+      experienceMode: 'work',
+      externalSessions: { ...(existing?.metadata?.externalSessions || {}), [engine]: sessionId },
+      externalCwd: session.cwd || null,
+      importedFrom: { engine, sessionId, syncedAt: session.modifiedAt, skippedTurns: session.skippedTurns },
+    };
+    const result = await chatService.saveConversation(req.user.id, session.messages, {
+      title: existing ? null : session.title,
+      mode: 'work',
+      projectIds: [],
+      metadata,
+      conversationId: existing?.id || null,
+      workspaceId: req.workspaceId,
+      databaseClient: req.db,
+    });
+    res.json({ success: true, conversationId: result.conversationId, refreshed: Boolean(existing) });
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, error: err.message });
+  }
+});
+
+// The folder a chat without a Project runs in: the folder of the Claude Code or
+// Codex session it continues (Claude Code only finds a session from its own
+// folder), otherwise a private scratch folder.
+function externalFallbackFolder(externalCwd) {
+  if (externalCwd && path.isAbsolute(externalCwd)) {
+    try {
+      if (fs.statSync(externalCwd).isDirectory()) return externalCwd;
+    } catch { /* the folder is gone */ }
+  }
+  return scratchWorkspace();
+}
+
+async function runExternalEngineTurn(req, res, { engine, baseGoal, workingContext, workingDir, fileAttachments, externalSessionId, externalCwd, engineModel, agentMode, autoApprove, preApprovedTools, abortSignal }) {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
@@ -1906,6 +2011,7 @@ async function runExternalEngineTurn(req, res, { engine, baseGoal, workingContex
   res.flushHeaders?.();
   req.socket?.setTimeout?.(0);
   const heartbeat = setInterval(() => writeAgentSseComment(res, 'ping'), 15000);
+  let approvals = null;
 
   try {
     const hasProjectContext = Boolean(workingContext && typeof workingContext === 'object' && workingContext.rootId);
@@ -1916,14 +2022,24 @@ async function runExternalEngineTurn(req, res, { engine, baseGoal, workingContex
       userId: req.user.id,
     });
     const goal = injectFileAttachments(baseGoal, resolveFileAttachments(fileAttachments, context, req.user.id));
+    const runDir = hasProjectContext ? context.workingDir : externalFallbackFolder(externalCwd);
+    approvals = engine === 'claude-code' && agentMode === 'action' && !autoApprove
+      ? openExternalApprovals({
+        requestPermission: createPermissionRequest(req, res),
+        port: req.socket.localPort,
+        alwaysAllowedTools: Array.isArray(preApprovedTools) ? preApprovedTools : [],
+        workingDir: runDir,
+      })
+      : null;
     const result = await runExternalAgent({
       engine,
       goal,
-      workingDir: context.workingDir || scratchWorkspace(),
+      workingDir: runDir,
       externalSessionId,
       agentMode,
       autoApprove,
       model: engineModel,
+      approvalConfigPath: approvals?.configPath || null,
       emit: (type, data) => writeAgentSse(res, { type, data }),
       abortSignal,
     });
@@ -1939,6 +2055,7 @@ async function runExternalEngineTurn(req, res, { engine, baseGoal, workingContex
     });
   } finally {
     clearInterval(heartbeat);
+    approvals?.close();
     if (!res.writableEnded) res.end();
   }
 }
@@ -1977,6 +2094,7 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
       experienceMode = null,
       engine = 'asyncat',
       externalSessionId = null,
+      externalCwd = null,
       engineModel = null,
     } = req.body;
     const resolvedAgentMode = agentMode === 'design'
@@ -1997,9 +2115,11 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
         workingDir,
         fileAttachments,
         externalSessionId,
+        externalCwd,
         engineModel,
         agentMode: resolvedAgentMode,
         autoApprove: resolvedAgentMode === 'action' && (autoApprove === true || autoApprove === 'all'),
+        preApprovedTools,
         abortSignal: abortController.signal,
       });
       return;

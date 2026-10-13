@@ -5,6 +5,7 @@ import PropTypes from "prop-types";
 import { ArrowUp, Bell, Bookmark, ChevronDown, Hammer, ClipboardPen, Cloud, Cpu, Headphones, ImagePlus, Loader2, Mail, MessageCircle, Mic, Paperclip, Rss, Send, ShieldAlert, ShieldOff, Square, Wrench, X, Zap, Plus, Check, Folder } from "lucide-react";
 import { Menu, MenuItem, MenuLabel } from "../../../components/ui/Menu.jsx";
 import { ProviderGlyph } from "../../../Models/modelLogos.jsx";
+import { folderName, usageHint } from "../../../Agent/externalAgentFormat.js";
 import eventBus from "../../../utils/eventBus.js";
 import ConfirmModal from "../modals/ConfirmModal.jsx";
 import { WorkingContextModal } from "../modals/WorkingContextModal.jsx";
@@ -565,6 +566,7 @@ function EnginePicker({ engine, engines, onChange, disabled }) {
               : option.signedIn === false
                 ? `Not signed in. Run \`${option.signInCommand}\` in a terminal.`
                 : ENGINE_DESCRIPTIONS[option.id];
+            const usage = !unavailable && option.signedIn !== false ? usageHint(option.usage) : "";
             return (
               <MenuItem
                 key={option.id}
@@ -573,6 +575,7 @@ function EnginePicker({ engine, engines, onChange, disabled }) {
                   <span className="flex flex-col py-0.5">
                     <span className="text-fg">{option.name}</span>
                     <span className="whitespace-normal text-[11px] leading-4 text-fg-subtle">{hint}</span>
+                    {usage ? <span className="whitespace-normal text-[11px] leading-4 text-fg-subtle">{usage}</span> : null}
                   </span>
                 )}
                 checked={engine === option.id}
@@ -590,6 +593,56 @@ function EnginePicker({ engine, engines, onChange, disabled }) {
 EnginePicker.propTypes = {
   engine: PropTypes.string.isRequired,
   engines: PropTypes.arrayOf(PropTypes.object).isRequired,
+  onChange: PropTypes.func,
+  disabled: PropTypes.bool,
+};
+
+// Which model Claude Code or Codex uses. Can change between turns.
+function EngineModelPicker({ engine, engines, value, onChange, disabled }) {
+  const buttonRef = useRef(null);
+  const [open, setOpen] = useState(false);
+  const models = engines.find(item => item.id === engine)?.models || [];
+  if (models.length < 2 || !onChange) return null;
+  const current = models.find(model => (model.id || null) === (value || null)) || models[0];
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={() => setOpen(isOpen => !isOpen)}
+        disabled={disabled}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title="Model"
+        className="inline-flex items-center gap-1 rounded-full px-2.5 py-1.5 text-xs font-medium text-fg-muted transition-colors hover:bg-hover hover:text-fg disabled:cursor-not-allowed"
+      >
+        <span>{current.label}</span>
+        <ChevronDown className="h-3 w-3 opacity-50" />
+      </button>
+      <Menu anchorRef={buttonRef} open={open} onClose={() => setOpen(false)} placement="top-start" width={260} label="Model">
+        <MenuLabel>Model</MenuLabel>
+        {models.map(model => (
+          <MenuItem
+            key={model.id || "default"}
+            label={(
+              <span className="flex flex-col py-0.5">
+                <span className="text-fg">{model.label}</span>
+                {model.hint ? <span className="whitespace-normal text-[11px] leading-4 text-fg-subtle">{model.hint}</span> : null}
+              </span>
+            )}
+            checked={(model.id || null) === (current.id || null)}
+            onSelect={() => onChange(model.id || null)}
+          />
+        ))}
+      </Menu>
+    </>
+  );
+}
+
+EngineModelPicker.propTypes = {
+  engine: PropTypes.string.isRequired,
+  engines: PropTypes.arrayOf(PropTypes.object).isRequired,
+  value: PropTypes.string,
   onChange: PropTypes.func,
   disabled: PropTypes.bool,
 };
@@ -676,6 +729,9 @@ export const MessageInputV2 = ({
   engine = "asyncat",
   engines = [],
   onEngineChange,
+  engineModel = null,
+  onEngineModelChange,
+  externalFolder = null,
   reasoningEffort = "auto",
   onReasoningEffortChange,
   tokenUsage = null,
@@ -1975,6 +2031,9 @@ export const MessageInputV2 = ({
                 {(engines.some(item => item.installed) || usesExternalEngine) && (
                   <EnginePicker engine={engine} engines={engines} onChange={onEngineChange} disabled={disabled} />
                 )}
+                {usesExternalEngine && (
+                  <EngineModelPicker engine={engine} engines={engines} value={engineModel} onChange={onEngineModelChange} disabled={disabled} />
+                )}
 
                 <div className={usesExternalEngine ? "hidden" : "relative"}>
                   <button
@@ -2167,7 +2226,16 @@ export const MessageInputV2 = ({
                 <ChevronDown className="h-3 w-3 opacity-60" />
               </button>
             )}
-            {!activeWorkingContext && (
+            {!activeWorkingContext && externalFolder && (
+              <span
+                title={`Continues the session in ${externalFolder}`}
+                className="inline-flex min-w-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-fg-muted"
+              >
+                <Folder className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                <span className="truncate">{folderName(externalFolder)}</span>
+              </span>
+            )}
+            {!activeWorkingContext && !externalFolder && (
               <button
                 type="button"
                 onClick={openWorkingContextMenu}

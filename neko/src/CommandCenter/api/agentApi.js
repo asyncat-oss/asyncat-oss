@@ -6,6 +6,15 @@ export const agentApi = {
   // they are signed in.
   getEngines: async () => apiRequest(`${API_BASE_URL}/agent/engines`),
 
+  // Claude Code and Codex sessions on this computer, and opening one as a chat.
+  listExternalSessions: async ({ engine = 'all', limit = 30 } = {}) =>
+    apiRequest(`${API_BASE_URL}/agent/external-sessions?engine=${encodeURIComponent(engine)}&limit=${limit}`),
+  openExternalSession: async (engine, sessionId) =>
+    apiRequest(`${API_BASE_URL}/agent/external-sessions/open`, {
+      method: 'POST',
+      body: JSON.stringify({ engine, sessionId }),
+    }),
+
   runStream: async function* (goal, conversationHistory = [], workingDir = null, maxRounds = 25, signal = null, continueSessionId = null, opts = {}) {
     const workspaceId = (() => {
       try {
@@ -42,6 +51,8 @@ export const agentApi = {
         clientTimezone: opts.clientTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone || null,
         engine: opts.engine || 'asyncat',
         externalSessionId: opts.externalSessionId || null,
+        externalCwd: opts.externalCwd || null,
+        engineModel: opts.engineModel || null,
       })
     });
 
