@@ -61,7 +61,7 @@ const ConnectionNotice = () => {
 // The cat walking along a line, shown while Asyncat starts up.
 const StartupScene = ({ label }) => (
   <div className="flex min-h-screen flex-col items-center justify-center bg-canvas text-fg" role="status" aria-label={label}>
-    <div className="w-[132px] animate-[fadeIn_300ms_ease-out]">
+    <div className="w-[132px] bg-canvas">
       <Cat pose="walk" className="mx-auto -mb-px w-[92px]" outline={6} />
       <div className="h-0.5 rounded-full bg-[repeating-linear-gradient(90deg,var(--as-line-strong)_0_14px,transparent_14px_22px)] motion-safe:animate-[startup-ground_0.64s_linear_infinite]" />
     </div>

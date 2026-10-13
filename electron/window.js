@@ -145,8 +145,8 @@ export function showLoadingScreen() {
           --cat-detail: #3d3c3a;
           --cat-whisker: #bdb9b1;
         }
+        html, body { background: var(--background); }
         body {
-          background: var(--background);
           color: var(--foreground);
           display: flex;
           flex-direction: column;
@@ -157,7 +157,10 @@ export function showLoadingScreen() {
           -webkit-app-region: drag;
           user-select: none;
         }
-        .stage { width: 132px; opacity: 0; animation: appear 360ms ease-out forwards; }
+        /* No fade on the cat: an animated layer with transparent areas can be
+           drawn white on some Linux GPU setups. The opaque background keeps it
+           matching the page even if it is given its own layer. */
+        .stage { width: 132px; background: var(--background); }
         .cat { display: block; width: 92px; margin: 0 auto -1px; overflow: visible; }
         .cat .cat-o { display: none; }
         .cat-f .s { fill: var(--cat); }
