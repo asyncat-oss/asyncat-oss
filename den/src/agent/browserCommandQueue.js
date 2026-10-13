@@ -42,7 +42,7 @@ export async function sendBrowserCommand(action, params = {}, context = {}, { ti
     action,
     owner: browserOwner(context),
     conversationId: context?.conversationId || null,
-    ...(cat ? { partition: cat.browserPartition, allowedSites: cat.allowedSites || [] } : {}),
+    ...(cat ? { partition: cat.browserPartition, allowedSites: cat.allowedSites || [], catName: cat.catName || null } : {}),
   }, { timeoutMs, capability: 'browser' });
 }
 

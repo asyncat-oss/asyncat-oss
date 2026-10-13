@@ -506,6 +506,19 @@ export function describeToolStep(tool, args = {}) {
   return { kind: 'tool', title: `Used ${tool}` };
 }
 
+const FAILED_VERBS = {
+  Opened: "Couldn't open", Searched: "Couldn't search", Wrote: "Couldn't write", Changed: "Couldn't change",
+  Deleted: "Couldn't delete", Moved: "Couldn't move", Ran: "Couldn't run", Read: "Couldn't read",
+  Sent: "Couldn't send", Used: "Couldn't use", Remembered: "Couldn't remember",
+};
+
+/** "Opened x" → "Couldn't open x", for a step that failed. */
+export function failedStepTitle(title) {
+  const [verb, ...rest] = String(title).split(' ');
+  if (!FAILED_VERBS[verb]) return `Failed: ${title}`;
+  return `${FAILED_VERBS[verb]} ${rest.join(' ')}`.trim();
+}
+
 function costOf(cat, usage, isLocal) {
   if (isLocal) return 0;
   const price = cat.limits?.pricePerMillion;
@@ -601,7 +614,7 @@ async function executeRun(cat, entry) {
       toolCalls.delete(data.toolCallId);
       const step = describeToolStep(call.tool, call.args);
       const ok = data.result?.success !== false && !data.result?.error;
-      addTimelineEvent(cat.id, entry.runId, step.kind, step.title, {
+      addTimelineEvent(cat.id, entry.runId, step.kind, ok ? step.title : failedStepTitle(step.title), {
         tool: call.tool,
         args: argsSummary(call.args),
         ok,

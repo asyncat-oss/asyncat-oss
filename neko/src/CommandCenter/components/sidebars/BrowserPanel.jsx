@@ -1,8 +1,38 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertTriangle, AppWindow, ArrowLeft, ArrowRight, Bug, Camera, ChevronDown, ChevronUp, Copy, Download, ExternalLink,
-  FileText, Ghost, Globe, Hand, History, Lock, Maximize2, Minimize2, MoreHorizontal, Pause, Play, Plus, RotateCcw,
-  Search, ShieldAlert, Sparkles, Trash2, Volume2, VolumeX, WifiOff, X,
+  AlertTriangle,
+  AppWindow,
+  ArrowLeft,
+  ArrowRight,
+  Bug,
+  Camera,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  Download,
+  ExternalLink,
+  FileText,
+  Ghost,
+  Globe,
+  Hand,
+  History,
+  Lock,
+  Maximize2,
+  Minimize2,
+  MoreHorizontal,
+  Pause,
+  Play,
+  Plus,
+  RotateCcw,
+  Search,
+  ShieldAlert,
+  Sparkles,
+  Trash2,
+  Volume2,
+  VolumeX,
+  WifiOff,
+  X,
+  Cat as CatIcon,
 } from 'lucide-react';
 import eventBus from '../../../utils/eventBus.js';
 import { useUiPreferences } from '../../../contexts/UiPreferencesContext.jsx';
@@ -414,12 +444,14 @@ function HostBrowser({ api, request, workingContext }) {
       <div className={`flex min-w-0 shrink-0 items-center gap-0.5 overflow-x-auto border-b px-1 py-1 ${incognito ? 'border-violet-200 bg-violet-50/60 dark:border-violet-900/50 dark:bg-violet-950/20 midnight:border-violet-900/50 midnight:bg-violet-950/20' : 'border-line bg-canvas'}`}>
         {tabs.map((tab) => {
           const active = tab.id === state.activeTabId;
-          const TabIcon = tab.popup ? AppWindow : tab.agent ? Sparkles : Globe;
+          const TabIcon = tab.popup ? AppWindow : tab.catProfile ? CatIcon : tab.agent ? Sparkles : Globe;
           const tip = tab.popup
             ? 'Pop-up window (click to bring it forward)'
-            : tab.agent
-              ? 'Opened by Asyncat. Uses your Standard browser profile, so sign-ins here are kept.'
-              : tab.title;
+            : tab.catProfile
+              ? `${tab.label || 'A Cat'}'s own browser profile: sign-ins here are kept for ${tab.label || 'that Cat'} only.`
+              : tab.agent
+                ? 'Opened by Asyncat. Uses your Standard browser profile, so sign-ins here are kept.'
+                : tab.title;
           return (
             <div
               key={tab.id}
