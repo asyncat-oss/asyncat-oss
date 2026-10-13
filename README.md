@@ -6,7 +6,7 @@
 
 ![Asyncat finding and fixing a failing test](docs/images/demo.gif)
 
-<sub>A Work-mode run in a project folder: the agent makes a plan, asks before running `npm test` and before editing a file (with the diff), then runs the tests again. The commands and the edit really ran. The model's replies came from a scripted local endpoint, so the recording can be reproduced.</sub>
+<sub>An agent run in a project folder, recorded before the beta.6 redesign: the agent makes a plan, asks before running `npm test` and before editing a file (with the diff), then runs the tests again. The commands and the edit really ran. The model's replies came from a scripted local endpoint, so the recording can be reproduced.</sub>
 
 ---
 
@@ -25,8 +25,9 @@ It is not a chatbot wrapper. It controls your screen, writes and runs code, mana
 | **220+ tools** | Files, shell, git, browser, Docker, screen, keyboard, semantic memory, RAG, notes, kanban, system, network, audio, image, design canvases, code analysis, sandboxes, scheduler, workflows, model management, integrations |
 | **51 bundled skills** | Reusable instruction modules: code review, debugging, TDD, deployment, security audit, incident response, data engineering, and more |
 | **Basal Ganglia** | Watches which tools succeed for which kinds of goals. After 3 successful runs of the same goal pattern with the same set of tools it writes a new skill automatically. No annotation, no config |
-| **Chat + agent modes** | **Chat** talks to the model directly (no tools). **Work** runs the agent in `plan` (read-only tools), `action` (full ReAct loop, asks before risky tools) or **Yolo** (`action` with auto-approve). A `design` mode (canvases, artifacts and images; no source edits or shell/git writes) is available through the API |
-| **Approvals** | Before a risky tool runs, Work asks: approve once, trust it for the rest of the run, or always allow. File edits show the diff before you decide |
+| **One chat box** | Chat and agent work happen in the same place. The **Tools** setting decides per message: **Auto** runs the agent when the model supports tools or a project, file or mention is involved; **Just chat** talks to the model directly; **Always use tools** always runs the agent. The agent works in `plan` (read-only tools), `action` (full ReAct loop, asks before risky tools) or **Yolo** (`action` with auto-approve). A `design` mode (canvases, artifacts and images; no source edits or shell/git writes) is available through the API |
+| **Claude Code and Codex** | Hand a chat to Claude Code or Codex installed on your computer, signed in with your own account. Pick one under the message box before the first message; follow-ups continue the same session and its steps show in the chat. **Agents → Coding agents** shows whether each is installed and signed in |
+| **Approvals** | Before a risky tool runs, the agent asks: approve once, trust it for the rest of the run, or always allow. File edits show the diff before you decide |
 | **Small prompts for local models** | Each agent step sends a core set of tools (about 40, or 24 for models that read tools from the prompt) instead of the full list. The agent finds the rest with `tool_search` when it needs them |
 | **35+ providers** | OpenAI, Anthropic, Gemini, Ollama, llama.cpp, MLX, LM Studio, OpenRouter, DeepSeek, Groq, Together AI, Mistral, Perplexity, Cohere, and more |
 | **Agent profiles** | Bundle a soul, working directory, tool permissions, and max rounds into named configurations. Switch profiles per task |
@@ -48,6 +49,8 @@ It is not a chatbot wrapper. It controls your screen, writes and runs code, mana
 ---
 
 ## Screenshots
+
+These were taken before the beta.6 redesign (new sidebar, Models page, chat and logo).
 
 | | |
 |---|---|
@@ -228,18 +231,19 @@ Page navigation shortcuts (`Cmd/Ctrl+1`…) and the two global shortcuts can be 
 
 ### 1. Add a provider
 
-Go to **Models → LLM** and add an endpoint:
+Go to **Models → Language**:
 
-- **Local**: start a local engine (llama.cpp, Ollama, MLX) and select it
-- **Cloud**: add OpenAI, Anthropic, Gemini, or any OpenRouter-compatible key
+- **Local**: under **Local models**, load a GGUF model with the built-in llama.cpp engine (models already in your Hugging Face cache are listed too), or connect Ollama, LM Studio, MLX or another local server under **Add provider**. The last model you loaded is loaded again when Asyncat starts
+- **Cloud**: under **Add provider**, search for OpenAI, Anthropic, Gemini, OpenRouter and others and add your key. Asyncat lists the provider's models so you can pick one before saving
 
 ### 2. Open a chat
 
-Start a **New chat** and pick **Chat** (talks to the model directly, no tools) or **Work** (runs the agent). In Work, choose a mode:
+Start a **New chat** and type. Under the message box you can choose:
 
-- **Plan** — read-only; proposes changes without making them
-- **Action** — full ReAct execution loop, asks before risky tools, up to 25 rounds by default
-- **Yolo** — Action with every tool auto-approved
+- **Who answers**: Asyncat's own agent with your model, or Claude Code or Codex if they are installed and signed in on this computer
+- **Tools**: Auto, Always use tools, or Just chat
+- **Project**: a folder the agent can work in
+- **Mode**: **Plan** (read-only; proposes changes without making them), **Action** (full ReAct execution loop, asks before risky tools, up to 25 rounds by default) or **Yolo** (Action with every tool auto-approved)
 
 ### 3. Run scheduled tasks
 

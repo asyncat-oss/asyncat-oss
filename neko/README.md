@@ -10,7 +10,7 @@ Built with **React 19**, **Vite 6**, and **TailwindCSS 4**.
 
 The UI for the full Asyncat experience:
 
-- **Command Center** — Chat (direct model chat) and Work (agent runs with Plan, Action, and Yolo modes), streaming, tool approvals, memory
+- **Command Center** — one chat box for direct model chat and agent runs (Plan, Action, and Yolo), streaming, tool approvals, memory; a chat can also be answered by Claude Code or Codex
 - **Projects & Tasks** — kanban and list views
 - **Notes** — block-based editor with tables, charts, media, and DOCX/PDF export
 - **Models** — LLM providers, local models and runtimes, audio and image models, and **Training** (LoRA fine-tuning, marked Labs)
@@ -73,11 +73,22 @@ once in `src/router/AppRouter.jsx`.
 
 Light, Dark, Midnight, and System (the default).
 
-When adding Tailwind classes:
+Colours are semantic tokens defined once per theme in `src/index.css`, so one
+class covers all three themes:
 
 ```css
-bg-white dark:bg-gray-900 midnight:bg-gray-950
+bg-canvas bg-surface bg-hover text-fg text-fg-muted border-line text-accent
 ```
+
+Older screens still use explicit `dark:` and `midnight:` variants
+(`bg-white dark:bg-gray-900 midnight:bg-gray-950`); prefer the tokens in new code.
+
+## Shared UI pieces
+
+`src/components/ui/` holds the building blocks new screens should use:
+`Button`, `Dialog`, `Menu` (with `MenuItem`), `Tooltip`, `Tabs` and
+`Segmented`, `Field`/`Input`/`Select`, `PageHeader`, `AsyncatMark` (the logo)
+and `Cat` (the mascot, in several poses).
 
 ## License
 

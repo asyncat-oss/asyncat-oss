@@ -90,9 +90,22 @@ read tool definitions from the prompt. The rest stay reachable through the
 callable for the rest of the run. This keeps a step's prompt small enough for
 local models.
 
-In Work's Action mode, any tool not marked safe asks for approval first
+In Action mode, any tool not marked safe asks for approval first
 (`_checkPermission` in `src/agent/AgentRuntime.js`). File edit and write
 requests carry a diff, so the change is visible before it is allowed.
+
+## Coding agents
+
+A chat can be answered by Claude Code or Codex instead of Asyncat's own agent.
+`src/agent/externalAgents.js` runs the installed CLI headless
+(`claude -p --output-format stream-json`, `codex exec --json`) in the chat's
+project folder, or in a scratch folder without one, and turns its events into
+the same stream the agent uses. `GET /api/agent/engines` reports whether each
+is installed and signed in; `POST /api/agent/run` takes `engine` and the
+`externalSessionId` from the previous turn so follow-ups resume the session.
+Plan maps to Claude's `plan` permission mode and Codex's `read-only` sandbox,
+Action to `acceptEdits` and `workspace-write`, and auto-approve to
+`bypassPermissions` and `danger-full-access`.
 
 ## Local profile
 
