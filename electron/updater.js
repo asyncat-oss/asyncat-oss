@@ -169,6 +169,9 @@ async function openUpdateDownload() {
 
 let download = { status: 'idle' };
 let downloadAbort = null;
+// True while Update is checking for an earlier finished download, so a
+// second click can't start a second download.
+let preparing = false;
 
 function setDownload(next) {
   download = { ...download, ...next };
@@ -186,6 +189,16 @@ async function fetchChecksums(url, signal = null) {
 }
 
 async function startUpdate() {
+  if (preparing) return { success: true };
+  preparing = true;
+  try {
+    return await beginUpdate();
+  } finally {
+    preparing = false;
+  }
+}
+
+async function beginUpdate() {
   const update = currentUpdate;
   if (!update) return { success: false, error: 'No update is available.' };
   if (download.status === 'downloading') return { success: true };
