@@ -815,13 +815,27 @@ export async function installEngine({ profile, releaseTag, assetName, retryModel
   const previousSelection = currentSelectionSnapshot(previousAdvisor.current);
   const effectiveProfile = sanitizeInstallProfile(profile, previousAdvisor.hardware);
 
+  const before = getStatus();
   await stopServer();
-  const installed = await installManagedLlamaServer({
-    profile: effectiveProfile,
-    releaseTag,
-    assetName,
-    onProgress,
-  });
+  let installed;
+  try {
+    installed = await installManagedLlamaServer({
+      profile: effectiveProfile,
+      releaseTag,
+      assetName,
+      onProgress,
+    });
+  } catch (err) {
+    // The download or unpacking failed, so the previous engine is still in
+    // place: bring back the model that was running instead of leaving chat
+    // without one.
+    if (before.status === 'ready' && before.model) {
+      startServer(before.model, modelsDir, before.ctxSize).catch((restartErr) => {
+        console.warn('[llamaServer] Could not restart the previous model after a failed install:', restartErr.message);
+      });
+    }
+    throw err;
+  }
 
   const capabilityHint = profileCapabilityHint(installed.profile || effectiveProfile);
   const gpu = await detectGpuInfo();
