@@ -585,8 +585,8 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
         case "navTools": navigate("/tools"); break;
         case "navScheduled":
         case "navScheduler": navigate("/scheduled"); break;
-        case "navProfiles": navigate("/agent/profiles"); break;
-        case "navAgent": navigate("/agent"); break;
+        case "navProfiles": navigate("/agents"); break;
+        case "navAgent": navigate("/agents"); break;
         default: break;
       }
     };
@@ -602,9 +602,7 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
 
   const isOnProjects = basePage === "projects";
   const isOnModels = basePage === "models";
-  const isOnAgent = location.pathname === "/agent"
-    || location.pathname.startsWith("/agent/profiles")
-    || location.pathname.startsWith("/profiles");
+  const isOnAgent = location.pathname === "/agents";
   const isOnScheduled = location.pathname.startsWith("/scheduled");
   const isOnTools = location.pathname.startsWith("/tools");
   const routeConversationId = location.pathname.match(/^\/conversations\/([^/]+)/)?.[1] || null;
@@ -684,7 +682,7 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
 
   const configureItems = [
     { key: "models", label: "Models", path: "/models", active: isOnModels, icon: Cpu, hint: shortcutHint("navModels") },
-    { key: "agent", label: "Agents", path: "/agent/profiles", active: isOnAgent, icon: BrainCircuit, hint: shortcutHint("navAgent") },
+    { key: "agent", label: "Agents", path: "/agents", active: isOnAgent, icon: BrainCircuit, hint: shortcutHint("navAgent") },
     { key: "tools", label: "Tools & Skills", path: "/tools", active: isOnTools, icon: Wrench, hint: shortcutHint("navTools") },
   ].filter((item) => navItemsVisibility[item.key] !== false);
 

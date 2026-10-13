@@ -55,7 +55,7 @@ const COMMANDS = [
   { id: 'cmd-home',      label: 'Go to Chat',           to: '/home',         icon: MessageSquare },
   { id: 'cmd-scheduled', label: 'Go to Scheduled',      to: '/scheduled',    icon: CalendarClock },
   { id: 'cmd-scheduled-new', label: 'New scheduled task', to: '/scheduled?new=1', icon: CalendarPlus },
-  { id: 'cmd-agents',    label: 'Go to Agents',         to: '/agent/profiles', icon: BrainCircuit },
+  { id: 'cmd-agents',    label: 'Go to Agents',         to: '/agents', icon: BrainCircuit },
   { id: 'cmd-models',    label: 'Go to Models',         to: '/models',       icon: Cpu },
   { id: 'cmd-training',  label: 'Go to Training',       to: '/models?tab=training', icon: GraduationCap },
   { id: 'cmd-tools',     label: 'Go to Tools & Skills', to: '/tools',        icon: Wrench },

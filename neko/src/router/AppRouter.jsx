@@ -161,7 +161,7 @@ const createRouter = () => createBrowserRouter([
       },
       {
         path: "agents",
-        element: <CommandCenterV2Enhanced />,
+        element: <AgentPage />,
         errorElement: <RouteErrorElement />
       },
       {
@@ -190,21 +190,12 @@ const createRouter = () => createBrowserRouter([
         element: <Navigate to="/models?tab=training" replace />,
         errorElement: <RouteErrorElement />
       },
-      {
-        path: "profiles",
-        element: <Navigate to="/agent/profiles" replace />,
+      // Older links to the Agents page.
+      ...["profiles", "agent", "agent/profiles"].map((path) => ({
+        path,
+        element: <Navigate to="/agents" replace />,
         errorElement: <RouteErrorElement />
-      },
-      {
-        path: "agent",
-        element: <Navigate to="/agent/profiles" replace />,
-        errorElement: <RouteErrorElement />
-      },
-      {
-        path: "agent/profiles",
-        element: <AgentPage />,
-        errorElement: <RouteErrorElement />
-      },
+      })),
       {
         path: "agents/:sessionId",
         element: <CommandCenterV2Enhanced />,

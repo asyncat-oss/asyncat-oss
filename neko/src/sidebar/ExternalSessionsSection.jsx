@@ -81,7 +81,7 @@ export default function ExternalSessionsSection({ onOpened }) {
         </button>
         <button
           type="button"
-          onClick={() => navigate("/agent/profiles?tab=coding")}
+          onClick={() => navigate("/agents?tab=coding")}
           className="rounded-md px-1.5 py-0.5 text-[11px] text-fg-subtle opacity-0 outline-none transition-opacity hover:bg-hover hover:text-fg-muted focus-visible:opacity-100 group-hover/section:opacity-100"
         >
           View all

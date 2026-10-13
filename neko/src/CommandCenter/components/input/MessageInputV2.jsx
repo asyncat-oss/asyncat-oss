@@ -2132,7 +2132,7 @@ export const MessageInputV2 = ({
                     agents={agentProfiles}
                     selectedAgentId={selectedAgentId || null}
                     onChange={onAgentChange}
-                    onManage={() => navigate('/agent/profiles')}
+                    onManage={() => navigate('/agents')}
                     disabled={disabled}
                   />
                 )}
