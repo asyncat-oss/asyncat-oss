@@ -101,6 +101,7 @@ import {
   synthesize as ttsSynthesize,
 } from '../controllers/ai/ttsServerManager.js';
 import db from '../../db/client.js';
+import { sealSecret } from '../../lib/secretBox.js';
 import { asyncatHome, listManagedRuntimes, removeManagedRuntime } from '../../lib/localEngine.js';
 import { startRuntimeInstallJob, getRuntimeInstallJob, isRuntimeInstallActive } from '../../lib/runtimeInstallJobs.js';
 import { execFile } from 'child_process';
@@ -420,12 +421,12 @@ function readCodexCliTokens() {
 function persistCodexTokensForRow(userId, row, tokenBundle) {
   if (row?.id) {
     db.prepare('UPDATE ai_provider_profiles SET api_key = ?, updated_at = ? WHERE id = ? AND user_id = ?')
-      .run(tokenBundle, new Date().toISOString(), row.id, userId);
+      .run(sealSecret(tokenBundle), new Date().toISOString(), row.id, userId);
   }
   const active = db.prepare('SELECT profile_id FROM ai_provider_config WHERE user_id = ?').get(userId);
   if (active?.profile_id && row?.id && active.profile_id === row.id) {
     db.prepare('UPDATE ai_provider_config SET api_key = ?, updated_at = ? WHERE user_id = ?')
-      .run(tokenBundle, new Date().toISOString(), userId);
+      .run(sealSecret(tokenBundle), new Date().toISOString(), userId);
   }
 }
 
@@ -644,7 +645,7 @@ function saveActiveProviderFromRow(userId, row) {
     row.provider_id,
     row.base_url,
     row.model,
-    row.api_key || null,
+    sealSecret(row.api_key) || null,
     row.settings || '{}',
     providerSupportsTools(row) ? 1 : 0,
     now,
@@ -842,7 +843,7 @@ router.post('/profiles', (req, res) => {
       profile.provider_id,
       profile.base_url,
       profile.model,
-      profile.api_key || null,
+      sealSecret(profile.api_key) || null,
       JSON.stringify(profile.settings || {}),
       profile.supports_tools,
       now,
@@ -873,7 +874,7 @@ router.patch('/profiles/:id', (req, res) => {
       profile.provider_id,
       profile.base_url,
       profile.model,
-      profile.api_key || null,
+      sealSecret(profile.api_key) || null,
       JSON.stringify(profile.settings || {}),
       profile.supports_tools,
       now,

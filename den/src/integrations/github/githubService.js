@@ -1,5 +1,6 @@
 // integrations/github/githubService.js
 import db from '../../db/client.js';
+import { sealSecret } from '../../lib/secretBox.js';
 
 const SCOPES = 'read:user repo';
 
@@ -62,7 +63,7 @@ export function saveIntegration(userId, accessToken, login, email) {
       email        = excluded.email,
       metadata     = excluded.metadata,
       updated_at   = datetime('now')
-  `).run(userId, accessToken, email || '', JSON.stringify({ login }));
+  `).run(userId, sealSecret(accessToken), email || '', JSON.stringify({ login }));
 }
 
 export function deleteIntegration(userId) {

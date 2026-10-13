@@ -4,6 +4,7 @@
 import OpenAI from 'openai';
 import { config } from 'dotenv';
 import db from '../../../db/client.js';
+import { sealSecret } from '../../../lib/secretBox.js';
 import { getStatus as getLlamaStatus } from './llamaServerManager.js';
 import { getStatus as getMlxStatus } from './mlxServerManager.js';
 import {
@@ -83,10 +84,10 @@ function persistCodexTokens(userId, profileId, tokenBundle) {
   if (!userId) return;
   const now = new Date().toISOString();
   db.prepare('UPDATE ai_provider_config SET api_key = ?, updated_at = ? WHERE user_id = ?')
-    .run(tokenBundle, now, userId);
+    .run(sealSecret(tokenBundle), now, userId);
   if (profileId) {
     db.prepare('UPDATE ai_provider_profiles SET api_key = ?, updated_at = ? WHERE user_id = ? AND id = ?')
-      .run(tokenBundle, now, userId, profileId);
+      .run(sealSecret(tokenBundle), now, userId, profileId);
   }
 }
 

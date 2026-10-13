@@ -19,6 +19,7 @@ const HOST_SEEN_MS = 45_000;
 const MAX_QUEUE = 500;
 
 let token = null;
+let launchToken = null; // from ASYNCAT_HOST_TOKEN, kept after it leaves the environment
 let lastPollAt = 0;
 let hostCapabilities = new Set();
 const queue = [];
@@ -35,8 +36,11 @@ const events = new EventEmitter();
 export function hostToken() {
   if (token) return token;
   const fromEnv = String(process.env.ASYNCAT_HOST_TOKEN || '').trim();
-  if (fromEnv) {
-    token = fromEnv;
+  // The agent's commands inherit this process's environment; keep it out.
+  delete process.env.ASYNCAT_HOST_TOKEN;
+  if (fromEnv) launchToken = fromEnv;
+  if (launchToken) {
+    token = launchToken;
     return token;
   }
   token = crypto.randomBytes(32).toString('hex');

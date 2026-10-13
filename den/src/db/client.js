@@ -13,6 +13,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import logger from '../logger.js';
+import { openingStatements, sealStoredSecrets } from './sealSecrets.js';
+import { secretStatus } from '../lib/secretBox.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -26,6 +28,10 @@ const DB_PATH = process.env.DB_PATH
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
 const db = new Database(DB_PATH);
+
+// Saved secrets are encrypted (lib/secretBox.js). Queries open them, so the
+// rest of the code reads plain values; writes seal them with sealSecret().
+const rawPrepare = openingStatements(db);
 
 // ─── Pragmas ──────────────────────────────────────────────────────────────────
 db.pragma('journal_mode = WAL');   // concurrent reads while writing
@@ -349,6 +355,16 @@ ensureModelPathsSchema();
 ensureCheckpointSchema();
 ensureConversationFts();
 ensureSemanticSchema();
+
+try {
+  // Load the key now, which also takes it out of the environment the agent's
+  // commands inherit.
+  const { keySource } = secretStatus();
+  const sealed = sealStoredSecrets(rawPrepare);
+  if (sealed > 0) logger.info(`Secrets: encrypted ${sealed} saved key(s) (key from ${keySource})`);
+} catch (err) {
+  logger.warn('Secrets: could not encrypt saved keys:', err.message);
+}
 
 // Delete expired transient memories on every server boot
 try {

@@ -3,29 +3,9 @@ import { getWorkspaceRoot } from '../files/fileExplorerService.js';
 import { getAllConfig, setConfigValue, isBootstrapKey } from './appConfig.js';
 import { ENV_FILE, readEnv as readEnvFile, writeEnv } from '../lib/env.js';
 import { buildEffectiveRuntimeConfig, runtimeDataRoot } from './runtimeConfig.js';
+import { SECRET_CONFIG_KEYS } from '../db/sealSecrets.js';
 
-const SECRETS = [
-  'HF_TOKEN',
-  'OPENAI_API_KEY',
-  'ELEVENLABS_API_KEY',
-  'STABILITY_API_KEY',
-  'FAL_KEY',
-  'REPLICATE_API_TOKEN',
-  'GEMINI_API_KEY',
-  'MINIMAX_API_KEY',
-  // Integration OAuth credentials
-  'GOOGLE_CLIENT_ID',
-  'GOOGLE_CLIENT_SECRET',
-  'GITHUB_CLIENT_ID',
-  'GITHUB_CLIENT_SECRET',
-  'MICROSOFT_CLIENT_ID',
-  'MICROSOFT_CLIENT_SECRET',
-  'MAIL_IMAP_PASSWORD',
-  'MAIL_SMTP_PASSWORD',
-  'NOTIFY_DISCORD_WEBHOOK',
-  'NOTIFY_SLACK_WEBHOOK',
-  'NOTIFY_TELEGRAM_BOT_TOKEN',
-];
+const SECRETS = SECRET_CONFIG_KEYS;
 
 // Enough to tell which key is stored without revealing a useful part of it.
 export function maskSecret(value) {

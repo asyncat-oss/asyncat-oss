@@ -9,6 +9,8 @@
 // BOOTSTRAP_KEYS are the chicken-and-egg values needed before the DB is open.
 // Those stay in the active runtime .env and are never written here.
 import db from '../db/client.js';
+import { isSecretConfigKey } from '../db/sealSecrets.js';
+import { sealSecret } from '../lib/secretBox.js';
 
 // Values that must remain in the runtime .env (read before the DB exists).
 export const BOOTSTRAP_KEYS = new Set([
@@ -58,7 +60,7 @@ export function setConfigValue(key, value) {
     INSERT INTO app_config (key, value, updated_at)
     VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
-  `).run(key, String(value));
+  `).run(key, isSecretConfigKey(key) ? sealSecret(String(value)) : String(value));
   process.env[key] = String(value);
   return true;
 }

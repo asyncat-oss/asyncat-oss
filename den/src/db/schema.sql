@@ -476,8 +476,8 @@ CREATE TABLE IF NOT EXISTS custom_model_paths (
 );
 
 -- ─── Integrations ─────────────────────────────────────────────────────────────
--- One row per user per provider. Tokens are encrypted at rest by the OS keychain
--- for production; for local OSS they live in the local database.
+-- One row per user per provider. Tokens are encrypted (lib/secretBox.js) with a
+-- key kept in the system keychain by the desktop app.
 
 CREATE TABLE IF NOT EXISTS user_integrations (
   id            TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),

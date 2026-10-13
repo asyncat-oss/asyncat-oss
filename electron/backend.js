@@ -16,6 +16,7 @@ import fs from 'fs';
 import path from 'path';
 import { app } from 'electron';
 import { createLaunchToken } from './hostBridge.js';
+import { loadSecretKey } from './secretKey.js';
 import { DEN_ENTRY, DEN_CWD, BACKEND_PORT, HEALTH_URL, IS_DEV, USE_EXTERNAL_BACKEND } from './constants.js';
 
 let backendProcess = null;
@@ -222,6 +223,8 @@ export function startBackend() {
       // shutdown over stdin (Windows has no SIGTERM to catch).
       ASYNCAT_HOST_TOKEN: createLaunchToken(),
       ASYNCAT_STDIN_CONTROL: '1',
+      // The keychain-held key that encrypts saved API keys and tokens.
+      ...(loadSecretKey() && { ASYNCAT_SECRET_KEY: loadSecretKey() }),
       ...(app.isPackaged && {
         ASYNCAT_LOG_DIR: path.join(DEN_CWD, 'logs'),
         ASYNCAT_ENV_PATH: path.join(DEN_CWD, '.env'),
