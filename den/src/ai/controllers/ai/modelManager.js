@@ -401,6 +401,17 @@ export function deleteModel(filename) {
  * Returns a downloadId that can be used to track progress.
  * Progress is streamed via SSE from the route handler.
  */
+/** A folder inside the models folder; anything that climbs out is refused. */
+export function modelsSubdir(subDir = '') {
+  if (!subDir) return MODELS_DIR;
+  const resolved = path.resolve(MODELS_DIR, String(subDir));
+  const relative = path.relative(MODELS_DIR, resolved);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('Downloads go into a folder inside the models folder.');
+  }
+  return resolved;
+}
+
 export async function startDownload(url, filename, subDir = '', options = {}) {
   // Sanitize filename
   const safeFilename = path.basename(filename).replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -409,7 +420,7 @@ export async function startDownload(url, filename, subDir = '', options = {}) {
     throw new Error(`Only ${allowedExtensions.join(', ')} model files are supported`);
   }
 
-  const baseDir = subDir ? path.join(MODELS_DIR, subDir) : MODELS_DIR;
+  const baseDir = modelsSubdir(subDir);
   if (!fs.existsSync(baseDir)) {
     fs.mkdirSync(baseDir, { recursive: true });
   }
