@@ -120,7 +120,7 @@ export async function startWhisper(modelPath) {
     throw new Error(state.error);
   }
 
-  setState({ status: 'loading', model: path.basename(modelPath), error: null });
+  setState({ status: 'loading', model: path.basename(modelPath), modelPath, error: null });
 
   const args = [
     '--model', modelPath,

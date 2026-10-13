@@ -19,7 +19,13 @@ function publicJob(job) {
   };
 }
 
-export function startRuntimeInstallJob(runtimeId) {
+/**
+ * Start installing a runtime in the background.
+ *   beforeSwap()   runs right before the new copy replaces the old one (stop
+ *                  what runs from it); until then everything keeps working
+ *   afterFinish()  runs when the job ends, however it ends (start it again)
+ */
+export function startRuntimeInstallJob(runtimeId, { beforeSwap = null, afterFinish = null } = {}) {
   if (!MANAGED_RUNTIME_SPECS[runtimeId]) {
     throw new Error(`Unknown runtime: ${runtimeId}`);
   }
@@ -46,6 +52,7 @@ export function startRuntimeInstallJob(runtimeId) {
 
   installManagedRuntime(runtimeId, {
     signal: job.abort.signal,
+    beforeSwap,
     onProgress: (p) => {
       const phase = p.phase || job.progress.phase;
       job.progress = {
@@ -72,6 +79,11 @@ export function startRuntimeInstallJob(runtimeId) {
       }
       job.status = 'error';
       job.error = err.message || 'Install failed';
+    })
+    .finally(() => {
+      Promise.resolve(afterFinish?.()).catch((error) => {
+        console.warn(`[runtime] Could not start ${runtimeId} again after its install:`, error.message);
+      });
     });
 
   return publicJob(job);

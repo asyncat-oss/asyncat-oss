@@ -2151,12 +2151,39 @@ router.get('/runtimes', (_req, res) => {
   res.json({ success: true, root: asyncatHome(), runtimes: listManagedRuntimes() });
 });
 
+/**
+ * Stop a runtime for the moment its files are replaced, and start it again
+ * afterwards with the same model if it was running.
+ */
+function pauseManagedRuntime(runtimeId) {
+  let resume = null;
+  return {
+    beforeSwap: async () => {
+      const status = runtimeId === 'whisper' ? getWhisperStatus()
+        : runtimeId === 'piper' ? getTtsStatus()
+          : runtimeId === 'mlx' ? getMlxStatus() : null;
+      const running = status && (status.status === 'ready' || status.status === 'loading') && status.modelPath;
+      if (running) {
+        const modelPath = status.modelPath;
+        resume = runtimeId === 'whisper' ? () => startWhisper(modelPath)
+          : runtimeId === 'piper' ? () => startTts(modelPath)
+            : () => startMlxServer(modelPath);
+      }
+      await stopManagedRuntime(runtimeId);
+    },
+    afterFinish: async () => {
+      if (resume) await resume();
+    },
+  };
+}
+
 // POST /runtimes/:id/install-jobs — download + install a prebuilt runtime binary.
 router.post('/runtimes/:id/install-jobs', async (req, res) => {
   try {
     const runtimeId = String(req.params.id || '').trim();
-    await stopManagedRuntime(runtimeId);
-    const job = startRuntimeInstallJob(runtimeId);
+    // Voice and MLX keep working through the download; they stop only while
+    // the new copy is swapped in.
+    const job = startRuntimeInstallJob(runtimeId, pauseManagedRuntime(runtimeId));
     res.status(202).json({ success: true, job });
   } catch (err) {
     const status = /already running/i.test(err.message) ? 409

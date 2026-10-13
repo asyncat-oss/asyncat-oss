@@ -818,8 +818,9 @@ export async function installEngine({ profile, releaseTag, assetName, retryModel
   const previousSelection = currentSelectionSnapshot(previousAdvisor.current);
   const effectiveProfile = sanitizeInstallProfile(profile, previousAdvisor.hardware);
 
-  const before = getStatus();
-  await stopServer();
+  // The model keeps running through the download and checks; it is stopped
+  // only right before the new engine is swapped in, and brought back after.
+  const pause = pauseForEngineSwap();
   let installed;
   try {
     installed = await installManagedLlamaServer({
@@ -828,16 +829,10 @@ export async function installEngine({ profile, releaseTag, assetName, retryModel
       assetName,
       onProgress,
       signal,
+      beforeSwap: pause.stop,
     });
   } catch (err) {
-    // The download or unpacking failed, so the previous engine is still in
-    // place: bring back the model that was running instead of leaving chat
-    // without one.
-    if (before.status === 'ready' && before.model) {
-      startServer(before.model, modelsDir, before.ctxSize).catch((restartErr) => {
-        console.warn('[llamaServer] Could not restart the previous model after a failed install:', restartErr.message);
-      });
-    }
+    pause.restoreAfterFailure(modelsDir);
     throw err;
   }
 
@@ -851,22 +846,7 @@ export async function installEngine({ profile, releaseTag, assetName, retryModel
   };
   persistEngineConfig(updates);
 
-  let retry = {
-    attempted: false,
-    success: false,
-    model: retryModel || null,
-    error: null,
-  };
-
-  if (retryModel) {
-    retry.attempted = true;
-    try {
-      await startServer(retryModel, modelsDir, ctxSize);
-      retry.success = true;
-    } catch (err) {
-      retry.error = err.message;
-    }
-  }
+  const retry = await pause.restart({ retryModel, ctxSize, modelsDir });
 
   return {
     previousSelection,
@@ -880,6 +860,48 @@ export async function installEngine({ profile, releaseTag, assetName, retryModel
       version: installed.version,
       gpuLayers: parseInt(gpuLayers, 10),
       capabilityHint,
+    },
+  };
+}
+
+/**
+ * Stop the running model only when an engine is about to be swapped, and
+ * bring it back afterwards whatever happened:
+ *   stop()                  the beforeSwap hook: remembers and stops the model
+ *   restart({ retryModel }) after a successful install: start retryModel or
+ *                           the model that was running, on the new engine
+ *   restoreAfterFailure()   after a failed install: start the stopped model
+ *                           again (on the engine still in place)
+ */
+export function pauseForEngineSwap({ status = getStatus, stop = stopServer, start = startServer } = {}) {
+  let stopped = null;
+  return {
+    stop: async () => {
+      const before = status();
+      if (before.status === 'ready' || before.status === 'loading') {
+        // The full path, so a model loaded from outside the models folder comes back too.
+        stopped = { model: before.modelPath || before.model, ctxSize: before.ctxSize };
+      }
+      await stop();
+    },
+    restoreAfterFailure: (modelsDir) => {
+      if (!stopped?.model) return;
+      start(stopped.model, modelsDir, stopped.ctxSize).catch((restartErr) => {
+        console.warn('[llamaServer] Could not restart the previous model after a failed install:', restartErr.message);
+      });
+    },
+    restart: async ({ retryModel = null, ctxSize, modelsDir } = {}) => {
+      const model = retryModel || stopped?.model || null;
+      const retry = { attempted: false, success: false, model, error: null, restoredPrevious: !retryModel && Boolean(stopped?.model) };
+      if (!model) return retry;
+      retry.attempted = true;
+      try {
+        await start(model, modelsDir, retryModel ? ctxSize : (stopped?.ctxSize ?? ctxSize));
+        retry.success = true;
+      } catch (err) {
+        retry.error = err.message;
+      }
+      return retry;
     },
   };
 }
@@ -966,7 +988,9 @@ export async function startEngineInstallJob({ profile, releaseTag, assetName, re
         status: 'complete',
         phase: result.retry?.attempted ? 'retrying_model' : 'complete',
         message: result.retry?.attempted
-          ? (result.retry.success ? 'Managed engine installed and model retry started.' : 'Managed engine installed, but model retry failed.')
+          ? (result.retry.success
+            ? (result.retry.restoredPrevious ? 'Managed engine installed; your model is loading again.' : 'Managed engine installed and model retry started.')
+            : 'Managed engine installed, but the model could not be started again.')
           : 'Managed engine installed successfully.',
         percent: 100,
         retry: result.retry,
@@ -1277,11 +1301,13 @@ export async function startPythonEngineInstallJob({ profile, retryModel, ctxSize
 
   (async () => {
     update({ status: 'running', phase: 'preparing', message: 'Inspecting hardware…', startedAt: nowIso(), percent: 1 });
+    // Chats keep using the current engine during the 10–30 minute build.
+    const pause = pauseForEngineSwap();
     try {
-      await stopServer();
       const result = await installPythonEngine({
         profile,
         signal: job.abort.signal,
+        beforeSwap: pause.stop,
         onProgress: (p) => !job.abort.signal.aborted && update({
           status: 'running', phase: p.phase || 'running',
           message: p.message || 'Building…',
@@ -1289,12 +1315,7 @@ export async function startPythonEngineInstallJob({ profile, retryModel, ctxSize
         }),
       });
 
-      let retry = { attempted: false, success: false, model: retryModel || null, error: null };
-      if (retryModel) {
-        retry.attempted = true;
-        try { await startServer(retryModel, modelsDir, ctxSize); retry.success = true; }
-        catch (e) { retry.error = e.message; }
-      }
+      const retry = await pause.restart({ retryModel, ctxSize, modelsDir });
 
       update({
         status: 'complete', phase: 'complete', percent: 100,
@@ -1303,6 +1324,7 @@ export async function startPythonEngineInstallJob({ profile, retryModel, ctxSize
         statusSnapshot: getStatus(), finishedAt: nowIso(),
       });
     } catch (e) {
+      pause.restoreAfterFailure(modelsDir);
       if (e?.cancelled) {
         update({ status: 'cancelled', phase: 'cancelled', message: 'Build cancelled. The runtime you had is unchanged.', error: null, finishedAt: nowIso() });
         return;
@@ -1368,6 +1390,7 @@ export async function removeManagedEngine(key) {
 const state = {
   status:    'idle',   // 'idle' | 'loading' | 'ready' | 'error'
   model:     null,     // filename of loaded model
+  modelPath: null,     // full path of the loaded model
   pid:       null,
   error:     null,     // human-readable classified error
   errorRaw:  null,     // full raw log output for debug
@@ -1430,6 +1453,7 @@ function snapshot() {
   return {
     status:     state.status,
     model:      state.model,
+    modelPath:  state.modelPath ?? null,
     pid:        state.pid,
     error,
     errorCode,  // 'CORRUPTED' | 'OOM' | 'PORT' | 'MISSING' | 'UNSUPPORTED' | null
@@ -1616,6 +1640,7 @@ export async function startServer(modelFilename, modelsDir, ctxSizeOverride) {
   emit({
     status:    'loading',
     model:     safeFilename,
+    modelPath,
     error:     null,
     pid:       null,
     startedAt: new Date().toISOString(),
@@ -1822,7 +1847,7 @@ export async function stopServer(options = {}) {
   if (preserveState) {
     emit({ pid: null });
   } else {
-    emit({ status: 'idle', model: null, pid: null, error: null, ctxTrain: null, ctxSize: null, vision: false, mmproj: null });
+    emit({ status: 'idle', model: null, modelPath: null, pid: null, error: null, ctxTrain: null, ctxSize: null, vision: false, mmproj: null });
   }
 
   if (!proc) return;

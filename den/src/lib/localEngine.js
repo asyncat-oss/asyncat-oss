@@ -1108,7 +1108,7 @@ async function installCudartCompanion(release, mainAssetName, targetDir, onProgr
   }
 }
 
-export async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgress = null, { signal = null } = {}) {
+export async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgress = null, { signal = null, beforeSwap = null } = {}) {
   let archivePath = null;
   const targetDir = managedEngineDir(profile);
   const stagingDir = assertManagedTarget(path.join(
@@ -1247,6 +1247,9 @@ export async function installManagedAsset(asset, release, profile = 'cpu_safe', 
       installedAt: new Date().toISOString(),
     }, stagingDir);
     throwIfAborted(signal);
+    // Only now stop what runs from the engine being replaced (the model keeps
+    // answering through the whole download and check).
+    await beforeSwap?.();
     swapManagedDirectory(stagingDir, targetDir);
     const installed = managedLlamaBinaryPath(profile);
     await pointCurrentManagedEngine(targetDir);
@@ -1586,7 +1589,10 @@ export async function installManagedLlamaServer(input = 'cpu_safe') {
   for (const asset of candidates) {
     const assetProfile = inferProfileFromAssetName(asset.name, effectiveProfile);
     try {
-      return await installManagedAsset(asset, release, assetProfile, options.onProgress, { signal: options.signal || null });
+      return await installManagedAsset(asset, release, assetProfile, options.onProgress, {
+        signal: options.signal || null,
+        beforeSwap: options.beforeSwap || null,
+      });
     } catch (e) {
       // Only "this build doesn't run here" is worth trying the next build
       // for. A failed download, a full disk, a checksum mismatch or a cancel
@@ -1871,7 +1877,7 @@ function managedPythonPackages(spec) {
   return [mlxPackage, spec.packageName];
 }
 
-async function installManagedPythonRuntime(spec, report, signal = null) {
+async function installManagedPythonRuntime(spec, report, signal = null, beforeSwap = null) {
   const support = runtimePlatformSupport(spec);
   if (!support.supported) throw new Error(support.reason);
 
@@ -1892,6 +1898,7 @@ async function installManagedPythonRuntime(spec, report, signal = null) {
     finalDir: venvDir,
     signal,
     swap: swapManagedDirectory,
+    beforeSwap,
     marker: { runtime: spec.id, packages },
     build: async (stagingDir) => {
       report('preparing', `Creating an isolated Python environment for ${spec.label}`, 10);
@@ -1941,7 +1948,7 @@ async function installManagedPythonRuntime(spec, report, signal = null) {
   };
 }
 
-export async function installManagedRuntime(runtimeId, { onProgress = null, capability = null, signal = null } = {}) {
+export async function installManagedRuntime(runtimeId, { onProgress = null, capability = null, signal = null, beforeSwap = null } = {}) {
   const spec = MANAGED_RUNTIME_SPECS[runtimeId];
   if (!spec) throw new Error(`Unknown runtime: ${runtimeId}`);
 
@@ -1949,7 +1956,7 @@ export async function installManagedRuntime(runtimeId, { onProgress = null, capa
     onProgress?.({ phase, message, percent, runtime: spec.id, ...extra });
 
   if (spec.installer === 'python') {
-    return installManagedPythonRuntime(spec, report, signal);
+    return installManagedPythonRuntime(spec, report, signal, beforeSwap);
   }
 
   report('resolving', `Finding a ${spec.label} build for your system`, 2);
@@ -2059,6 +2066,7 @@ export async function installManagedRuntime(runtimeId, { onProgress = null, capa
     }, stagingDir);
     const relativeBinary = path.relative(stagingDir, stagedInstalled);
     throwIfAborted(signal);
+    await beforeSwap?.();
     swapManagedDirectory(stagingDir, targetDir);
     const installed = path.join(targetDir, relativeBinary);
     persistRuntimeConfigValue(spec.envKey, installed);
