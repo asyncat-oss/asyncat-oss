@@ -13,7 +13,7 @@ const ax = (nodeId, role, name, backend, children = [], parentId) => ({
 });
 
 /** A fake webContents.debugger with one page: a heading and a Buy button. */
-function fakeDebugger({ hitBackend = 11, probeFires = true } = {}) {
+function fakeDebugger({ hitBackend = 11, probeFires = true, editable = true } = {}) {
   const dbg = new EventEmitter();
   const calls = [];
   let attached = false;
@@ -43,6 +43,7 @@ function fakeDebugger({ hitBackend = 11, probeFires = true } = {}) {
         if (fn.includes('return Boolean(window.__asyncatProbes')) return { result: { value: probeArmed && probeFires } };
         if (fn.includes('var form = this.form')) return { result: { value: false } };
         if (fn.includes('t.contains(h)')) return { result: { value: false } };
+        if (fn.includes('function ok(el)')) return { result: { value: editable } };
         return { result: { value: true } };
       }
       default: return {};
@@ -107,6 +108,14 @@ test('something covering the element stops the click and says what it is', async
   await driver.snapshot();
   await assert.rejects(driver.click(await driver.resolveTarget({ ref: 'e2' })), /div#cookie-banner/);
   assert.equal(calls.filter((c) => c.method === 'Input.dispatchMouseEvent').length, 0);
+});
+
+test('typing into something that is not a text field is refused, not faked', async () => {
+  const { dbg, calls } = fakeDebugger({ editable: false });
+  const driver = new PageDriver(dbg, { platform: 'linux' });
+  await driver.snapshot();
+  await assert.rejects(driver.typeText(await driver.resolveTarget({ ref: 'e1' }), 'hello', { rendered: false }), /can't take typed text/);
+  assert.equal(calls.filter((c) => c.method === 'Input.insertText').length, 0);
 });
 
 test('the safety check reads the element itself', async () => {

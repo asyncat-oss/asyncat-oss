@@ -697,6 +697,23 @@ export class PageDriver {
 
   async typeText(target, text, { clear = true, rendered = true } = {}) {
     const element = await this.focus(target, { rendered });
+    // Typing into a heading or button would "succeed" with nothing typed.
+    const editable = await this.callOn(element, `function () {
+      function ok(el) {
+        if (!el) return false;
+        if (el.isContentEditable) return true;
+        if (el.tagName === 'TEXTAREA') return !el.disabled && !el.readOnly;
+        if (el.tagName !== 'INPUT') return false;
+        var kind = String(el.type || 'text').toLowerCase();
+        var textual = ['text', 'search', 'email', 'url', 'tel', 'password', 'number', 'date', 'datetime-local', 'month', 'time', 'week'].indexOf(kind) >= 0;
+        return textual && !el.disabled && !el.readOnly;
+      }
+      var active = document.activeElement;
+      return ok(this) || (active !== document.body && ok(active));
+    }`).catch(() => true);
+    if (editable === false) {
+      throw new Error("That element can't take typed text. Pick a text box or other editable field from preview_snapshot.");
+    }
     const value = String(text ?? '');
     if (clear) {
       // Select what's there; the typed text then replaces it.
