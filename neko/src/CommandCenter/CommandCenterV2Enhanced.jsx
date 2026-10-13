@@ -389,8 +389,9 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
   });
   const [selectedAgentMode, setSelectedAgentMode] = useState(() => {
     try {
+      // Design mode was retired from the composer; an old saved value falls back.
       const saved = localStorage.getItem('asyncat_agent_mode');
-      return ['plan', 'action', 'design'].includes(saved) ? saved : null;
+      return ['plan', 'action'].includes(saved) ? saved : null;
     } catch {
       return null;
     }
@@ -464,15 +465,11 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     return null;
   }, [agentEvents]);
   useEffect(() => {
-    if (selectedAgentMode === 'design') {
-      if (!toolsEnabled) setToolsEnabled(true);
-      return;
-    }
     const derivedMode = toolsEnabled ? 'action' : 'plan';
     if (selectedAgentMode !== derivedMode) setSelectedAgentMode(derivedMode);
   }, [selectedAgentMode, setToolsEnabled, toolsEnabled]);
   const handleAgentModeChange = useCallback((nextMode) => {
-    const mode = ['plan', 'action', 'design'].includes(nextMode) ? nextMode : 'action';
+    const mode = nextMode === 'plan' ? 'plan' : 'action';
     setSelectedAgentMode(mode);
     setToolsEnabled(mode !== 'plan');
     try { localStorage.setItem('asyncat_agent_mode', mode); } catch { /* localStorage may be unavailable */ }
@@ -739,7 +736,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
 
   const toggleSidePanelTab = useCallback((tab) => {
     if (tab === 'terminal') {
-      if (experienceMode !== 'work' || !workingContext?.workingDir) return;
+      if (!workingContext?.workingDir) return;
       setTerminalEverOpened(true);
       setShowTerminalDock((open) => {
         const next = !open;
@@ -759,7 +756,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
       try { localStorage.setItem('asyncat_show_command_side_panel', String(next)); } catch { /* localStorage may be unavailable */ }
       return next;
     });
-  }, [experienceMode, sidePanelTab, workingContext?.workingDir]);
+  }, [sidePanelTab, workingContext?.workingDir]);
 
   useEffect(() => {
     if (workingContext?.workingDir) return;
@@ -906,8 +903,6 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
         });
       };
       reader.readAsDataURL(file);
-    } else if (experienceMode === 'chat') {
-      setError('Direct Chat accepts images only. Select Work and a Project to attach other file types.');
     } else if (file.size < 500_000 && (file.type.startsWith('text/') || file.name.match(/\.(md|txt|js|ts|jsx|tsx|py|json|yaml|yml|sh|css|html|xml|csv|log|conf|env|toml|rs|go|java|cpp|c|h)$/i))) {
       const reader = new FileReader();
       reader.onload = (ev) => {
@@ -935,7 +930,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
         promptOnly: true,
       });
     }
-  }, [experienceMode, multimodalCapabilities?.vision?.ready, multimodalCapabilities?.vision?.supportsImageInput, setError]);
+  }, [multimodalCapabilities?.vision?.ready, multimodalCapabilities?.vision?.supportsImageInput, setError]);
 
   const conversationBranches = useMemo(() => {
     const storedBranches = Array.isArray(conversationMetadata?.branches)
@@ -1157,7 +1152,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     const effectiveAgentMode = isDirectChat
       ? 'chat'
       : runOptions.agentMode || (runOptions.enableTools === true ? 'action' : runOptions.enableTools === false ? 'plan' : agentMode);
-    const effectiveToolsEnabled = !isDirectChat && (effectiveAgentMode === 'action' || effectiveAgentMode === 'design');
+    const effectiveToolsEnabled = !isDirectChat && effectiveAgentMode === 'action';
     const activeWorkingContext = isDirectChat ? null : (workingContext || null);
     const activeConversationHistory = Array.isArray(runOptions.baseConversationHistory)
       ? runOptions.baseConversationHistory
@@ -2551,7 +2546,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
   };
   const shouldRenderSidePanel = showActivitySidebar && (
     sidePanelTab === 'preview'
-    || (experienceMode === 'work' && (
+    || ((
       sidePanelTab === 'saved'
       || sidePanelTab === 'artifacts'
       || sidePanelTab === 'artifact'
@@ -2570,7 +2565,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     !hasConversationContent ? (
       <div className="relative flex min-h-0 flex-1 flex-col overflow-y-auto">
         <div className="absolute right-4 top-4 z-10 flex items-center gap-1">
-          {!isGhostMode && experienceMode === 'work' && workingContext?.workingDir && (
+          {!isGhostMode && workingContext?.workingDir && (
             <button
               type="button"
               onClick={() => toggleSidePanelTab('code')}
@@ -2601,12 +2596,12 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                   ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 midnight:bg-blue-950/30'
                   : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
               }`}
-              title={experienceMode === 'chat' ? 'Browser · not shared with Chat' : 'Browser'}
+              title="Browser"
             >
               <Globe className="w-4 h-4" />
             </button>
           )}
-          {!isGhostMode && experienceMode === 'work' && workingContext?.workingDir && (
+          {!isGhostMode && workingContext?.workingDir && (
             <button
               type="button"
               onClick={() => toggleSidePanelTab('terminal')}
@@ -2705,26 +2700,26 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                     )
               }
               hasMessages={hasConversationContent}
-              toolsEnabled={experienceMode === 'work' && toolsEnabled}
+              toolsEnabled={toolsEnabled}
               agentMode={agentMode}
-              onToggleAgentMode={experienceMode === 'work' ? () => setToolsEnabled(!toolsEnabled) : undefined}
-              onAgentModeChange={experienceMode === 'work' ? handleAgentModeChange : undefined}
+              onToggleAgentMode={() => setToolsEnabled(!toolsEnabled)}
+              onAgentModeChange={handleAgentModeChange}
               autoApprove={agentAutoApprove}
-              onToggleAutoApprove={experienceMode === 'work' ? handleToggleAgentAutoApprove : undefined}
-              enabledIntegrationTools={experienceMode === 'work' ? enabledIntegrationTools : []}
-              onEnabledIntegrationToolsChange={experienceMode === 'work' ? handleEnabledIntegrationToolsChange : undefined}
+              onToggleAutoApprove={handleToggleAgentAutoApprove}
+              enabledIntegrationTools={enabledIntegrationTools}
+              onEnabledIntegrationToolsChange={handleEnabledIntegrationToolsChange}
               reasoningEffort={reasoningEffort}
               onReasoningEffortChange={handleReasoningEffortChange}
                 externalFileAttachment={externalFileAttachment}
-                workingContext={experienceMode === 'work' ? workingContext : null}
-                onWorkingContextChange={experienceMode === 'work' ? setWorkingContext : undefined}
+                workingContext={workingContext}
+                onWorkingContextChange={setWorkingContext}
                 multimodalCapabilities={multimodalCapabilities}
-                pendingInteraction={experienceMode === 'work' ? pendingInputInteraction : null}
-                onPermissionDecision={experienceMode === 'work' ? handleAgentPermission : undefined}
-                onAskUserAnswer={experienceMode === 'work' ? handleAgentAskUser : undefined}
-                onOpenRuntimePanel={experienceMode === 'work' ? openRuntimePanel : undefined}
-                runtimeStatus={experienceMode === 'work' ? runtimeStatus : null}
-                runtimePanelOpen={experienceMode === 'work' && showActivitySidebar && sidePanelTab === 'runtime'}
+                pendingInteraction={pendingInputInteraction}
+                onPermissionDecision={handleAgentPermission}
+                onAskUserAnswer={handleAgentAskUser}
+                onOpenRuntimePanel={openRuntimePanel}
+                runtimeStatus={runtimeStatus}
+                runtimePanelOpen={showActivitySidebar && sidePanelTab === 'runtime'}
               />
 
             {!isGhostMode && (
@@ -2820,7 +2815,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                             ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 midnight:bg-blue-950/30 midnight:text-blue-300'
                             : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
                         }`}
-                        title={experienceMode === 'chat' ? 'Browser · not shared with Chat' : 'Browser'}
+                        title="Browser"
                       >
                         <Globe className="h-4 w-4" />
                         <span className="hidden sm:inline">Browser</span>
@@ -3128,7 +3123,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
             </div>
 
             <div className="shrink-0">
-              {experienceMode === 'work' && currentPlanEvent && (
+              {currentPlanEvent && (
                 <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 pt-3">
                   <CurrentPlanPanel
                     data={currentPlanEvent.data}
@@ -3169,14 +3164,14 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                     : getVoicePlaceholder(sttReady, ttsReady, "Ask anything...")
                 }
                 hasMessages={hasConversationContent}
-                toolsEnabled={experienceMode === 'work' && toolsEnabled}
+                toolsEnabled={toolsEnabled}
                 agentMode={agentMode}
-                onToggleAgentMode={experienceMode === 'work' ? () => setToolsEnabled(!toolsEnabled) : undefined}
-                onAgentModeChange={experienceMode === 'work' ? handleAgentModeChange : undefined}
+                onToggleAgentMode={() => setToolsEnabled(!toolsEnabled)}
+                onAgentModeChange={handleAgentModeChange}
                   autoApprove={agentAutoApprove}
-                onToggleAutoApprove={experienceMode === 'work' ? handleToggleAgentAutoApprove : undefined}
-                enabledIntegrationTools={experienceMode === 'work' ? enabledIntegrationTools : []}
-                onEnabledIntegrationToolsChange={experienceMode === 'work' ? handleEnabledIntegrationToolsChange : undefined}
+                onToggleAutoApprove={handleToggleAgentAutoApprove}
+                enabledIntegrationTools={enabledIntegrationTools}
+                onEnabledIntegrationToolsChange={handleEnabledIntegrationToolsChange}
                 reasoningEffort={reasoningEffort}
                 onReasoningEffortChange={handleReasoningEffortChange}
                 isRunning={agentRunning}
@@ -3184,13 +3179,13 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                 runStartedAt={runStartedAtRef.current}
                 externalFileAttachment={externalFileAttachment}
                 onNativeFileAttach={setExternalFileAttachment}
-                workingContext={experienceMode === 'work' ? workingContext : null}
-                onWorkingContextChange={experienceMode === 'work' ? setWorkingContext : undefined}
+                workingContext={workingContext}
+                onWorkingContextChange={setWorkingContext}
                 tokenUsage={latestTokenUsage}
                 multimodalCapabilities={multimodalCapabilities}
-                pendingInteraction={experienceMode === 'work' ? pendingInputInteraction : null}
-                onPermissionDecision={experienceMode === 'work' ? handleAgentPermission : undefined}
-                onAskUserAnswer={experienceMode === 'work' ? handleAgentAskUser : undefined}
+                pendingInteraction={pendingInputInteraction}
+                onPermissionDecision={handleAgentPermission}
+                onAskUserAnswer={handleAgentAskUser}
               />
             </div>
           </div>
@@ -3198,11 +3193,11 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
 
         {terminalEverOpened && workingContext?.workingDir && (!isXLScreen || workbenchPreferences.terminalPosition === 'bottom') && (
           <section
-            style={{ height: showTerminalDock && experienceMode === 'work' ? bottomDockHeight : 0 }}
+            style={{ height: showTerminalDock ? bottomDockHeight : 0 }}
             className="relative shrink-0 overflow-hidden border-t border-gray-200 bg-white transition-[height] duration-150 dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-950"
-            aria-hidden={!showTerminalDock || experienceMode !== 'work'}
+            aria-hidden={!showTerminalDock}
           >
-            {showTerminalDock && experienceMode === 'work' && (
+            {showTerminalDock && (
               <div onMouseDown={handleBottomDockDragStart} className="absolute inset-x-0 top-0 z-20 h-1.5 cursor-row-resize hover:bg-indigo-400/20" title="Drag to resize terminal" />
             )}
             <div className="flex h-full min-h-0 flex-col pt-1">
@@ -3218,7 +3213,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                 <button type="button" onClick={() => { setShowTerminalDock(false); try { localStorage.setItem('asyncat_show_terminal_dock', 'false'); } catch { /* noop */ } }} className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200" title="Close terminal dock"><X className="h-3.5 w-3.5" /></button>
               </div>
               <div className="min-h-0 flex-1">
-                <TerminalPanel workingDir={workingContext?.workingDir || null} agentOutput={agentTerminalOutput} visible={showTerminalDock && experienceMode === 'work'} />
+                <TerminalPanel workingDir={workingContext?.workingDir || null} agentOutput={agentTerminalOutput} visible={showTerminalDock} />
               </div>
             </div>
           </section>
@@ -3271,7 +3266,6 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
               runtimeStatusLoading={runtimeStatusLoading}
               onRuntimeStatusRefresh={loadRuntimeStatus}
               agentTerminalOutput={agentTerminalOutput}
-              experienceMode={experienceMode}
             />
           </div>
         </aside>
@@ -3279,11 +3273,11 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
 
       {terminalEverOpened && workingContext?.workingDir && isXLScreen && workbenchPreferences.terminalPosition === 'right' && (
         <aside
-          style={{ width: showTerminalDock && experienceMode === 'work' ? sidePanelWidth : 0 }}
+          style={{ width: showTerminalDock ? sidePanelWidth : 0 }}
           className="relative hidden shrink-0 overflow-hidden border-l border-gray-200 bg-white transition-[width] duration-150 xl:flex dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-950"
-          aria-hidden={!showTerminalDock || experienceMode !== 'work'}
+          aria-hidden={!showTerminalDock}
         >
-          {showTerminalDock && experienceMode === 'work' && (
+          {showTerminalDock && (
             <div onMouseDown={handlePanelDragStart} className="absolute inset-y-0 left-0 z-20 w-1.5 cursor-col-resize hover:bg-indigo-400/20" title="Drag to resize terminal" />
           )}
           <div className="flex min-w-0 flex-1 flex-col">
@@ -3293,7 +3287,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
               <div className="flex-1" />
               <button type="button" onClick={() => { setShowTerminalDock(false); try { localStorage.setItem('asyncat_show_terminal_dock', 'false'); } catch { /* noop */ } }} className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200" title="Close terminal dock"><X className="h-3.5 w-3.5" /></button>
             </div>
-            <div className="min-h-0 flex-1"><TerminalPanel workingDir={workingContext?.workingDir || null} agentOutput={agentTerminalOutput} visible={showTerminalDock && experienceMode === 'work'} /></div>
+            <div className="min-h-0 flex-1"><TerminalPanel workingDir={workingContext?.workingDir || null} agentOutput={agentTerminalOutput} visible={showTerminalDock} /></div>
           </div>
         </aside>
       )}
@@ -3339,7 +3333,6 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
               runtimeStatusLoading={runtimeStatusLoading}
               onRuntimeStatusRefresh={loadRuntimeStatus}
               agentTerminalOutput={agentTerminalOutput}
-              experienceMode={experienceMode}
             />
           </div>
         </div>

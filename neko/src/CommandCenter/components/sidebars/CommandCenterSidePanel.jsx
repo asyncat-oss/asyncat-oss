@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Activity, Code2, Link2, X, BookMarked, Globe, FilePlus, ArrowLeft, List, Lock } from 'lucide-react';
+import { Activity, Code2, Link2, X, BookMarked, Globe, FilePlus, ArrowLeft, List } from 'lucide-react';
 import AgentActivitySidebar from '../agent/AgentActivitySidebar';
 import ChatSourcesMediaSidebar from './ChatSourcesMediaSidebar';
 import ArtifactCard from '../renderers/ArtifactRenderer';
@@ -184,7 +184,6 @@ export default function CommandCenterSidePanel({
   onSelectArtifact,
   selectedArtifact = null,
   chatNavItems = [],
-  experienceMode = 'work',
 }) {
   const currentTab = activeTab === 'git' || activeTab === 'sandboxes' ? 'code' : (activeTab || 'steps');
   const browserRequest = useMemo(
@@ -225,12 +224,6 @@ export default function CommandCenterSidePanel({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col">
-        {currentTab === 'preview' && experienceMode === 'chat' && (
-          <div className="flex h-8 shrink-0 items-center gap-1.5 border-b border-gray-100 bg-gray-50/80 px-3 text-[10px] font-medium text-gray-500 dark:border-gray-800 dark:bg-gray-900/70 dark:text-gray-400 midnight:border-slate-800 midnight:bg-slate-900/70 midnight:text-slate-400">
-            <Lock className="h-3 w-3" />
-            Manual browser · page content is not shared with Chat
-          </div>
-        )}
         {currentTab === 'steps' && (
           <AgentActivitySidebar items={stepsItems} isLoading={stepsLoading} isRunning={isRunning} />
         )}
