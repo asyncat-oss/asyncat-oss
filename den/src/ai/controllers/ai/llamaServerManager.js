@@ -29,9 +29,11 @@ import {
   persistRuntimeConfigValue,
   removeManagedLlamaEngine,
   removeManagedLlamaPython,
+  swapManagedDirectory,
   writeManagedPythonEngineMetadata,
 } from '../../../lib/localEngine.js';
 import { ensureFreeSpace } from '../../../lib/engineDownload.js';
+import { buildManagedVenv, pythonInVenv, runPythonCommand } from '../../../lib/pythonEnv.js';
 import { runtimeHome } from '../../../config/runtimeConfig.js';
 
 const execAsync = promisify(exec);
@@ -1046,27 +1048,6 @@ const PYTHON_GPU_CAPABILITY = {
   intel_sycl:  'intel',
 };
 
-function runCommandStreaming(cmd, args, options = {}, timeoutMs = 120000, onLine = null) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { ...options, stdio: ['ignore', 'pipe', 'pipe'] });
-    const timer = setTimeout(() => { child.kill(); reject(new Error(`Timed out: ${cmd}`)); }, timeoutMs);
-    const onChunk = (chunk) => {
-      if (!onLine) return;
-      chunk.toString().split('\n').filter(l => l.trim()).forEach(l => onLine(l.trim()));
-    };
-    child.stdout.on('data', onChunk);
-    child.stderr.on('data', onChunk);
-    let errTail = '';
-    child.stderr.on('data', (c) => { errTail = (errTail + c).slice(-800); });
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      if (code === 0) resolve();
-      else reject(new Error(`${cmd} exited ${code}: ${errTail.trim()}`));
-    });
-    child.on('error', (e) => { clearTimeout(timer); reject(e); });
-  });
-}
-
 async function findPythonCmd() {
   const cmds = IS_WIN ? ['python', 'python3', 'py'] : ['python3', 'python'];
   for (const cmd of cmds) {
@@ -1156,7 +1137,7 @@ function cudaInstallHint() {
   return 'Install CUDA Toolkit from developer.nvidia.com/cuda-downloads (select Windows).';
 }
 
-async function installPythonEngine({ profile, retryModel, ctxSize, modelsDir, onProgress = null }) {
+async function installPythonEngine({ profile, onProgress = null, signal = null, beforeSwap = null }) {
   // Pre-flight: C++ compiler is required to build llama-cpp-python from source
   const cxx = await checkCxxCompiler();
   if (!cxx) {
@@ -1207,95 +1188,71 @@ async function installPythonEngine({ profile, retryModel, ctxSize, modelsDir, on
   await ensureFreeSpace(os.tmpdir(), 2 * 1024 * 1024 * 1024, 'the GPU runtime build (temporary files)');
   const capabilityHint = PYTHON_GPU_CAPABILITY[profile] || 'cpu_safe';
   const pythonVenvDir = path.join(asyncatHome(), 'llama.cpp', 'python');
-  const backupVenvDir = `${pythonVenvDir}.backup-${randomUUID()}`;
-  let movedExisting = false;
-  let preserveBackup = false;
+  const cmakeArgs = { nvidia_gpu: '-DGGML_CUDA=on', apple_metal: '-DGGML_METAL=on', amd_rocm: '-DGGML_HIP=on', vulkan: '-DGGML_VULKAN=on', intel_sycl: '-DGGML_SYCL=on' }[profile] || '';
+  const env = { ...(cmakeArgs ? { ...process.env, CMAKE_ARGS: cmakeArgs } : process.env), ...cudaEnvOverrides };
+  const tag = profile === 'nvidia_gpu' ? 'CUDA' : profile === 'apple_metal' ? 'Metal' : profile === 'amd_rocm' ? 'ROCm' : profile === 'vulkan' ? 'Vulkan' : profile === 'intel_sycl' ? 'SYCL' : 'CPU';
 
-  try {
-    if (fs.existsSync(pythonVenvDir)) {
-      fs.renameSync(pythonVenvDir, backupVenvDir);
-      movedExisting = true;
-    }
-    onProgress?.({ phase: 'venv', message: 'Creating isolated Python environment…', percent: 5 });
-    await runCommandStreaming(pythonCmd, ['-m', 'venv', pythonVenvDir], {}, 120000);
+  // The new environment is built beside the working one (10–30 minutes) and
+  // swapped in only at the end, so the working one keeps running chats in the
+  // meantime and survives a quit or a failed build.
+  await buildManagedVenv({
+    finalDir: pythonVenvDir,
+    signal,
+    swap: swapManagedDirectory,
+    beforeSwap,
+    marker: { profile },
+    build: async (stagingDir) => {
+      onProgress?.({ phase: 'venv', message: 'Creating isolated Python environment…', percent: 5 });
+      await runPythonCommand(pythonCmd, ['-m', 'venv', stagingDir], { timeoutMs: 120000, signal });
+      const stagedPython = pythonInVenv(stagingDir);
 
-    const pythonBin = managedPythonBinaryPath();
+      onProgress?.({ phase: 'pip', message: 'Upgrading pip…', percent: 10 });
+      await runPythonCommand(stagedPython, ['-m', 'pip', 'install', '--upgrade', 'pip'], { timeoutMs: 120000, signal });
 
-    onProgress?.({ phase: 'pip', message: 'Upgrading pip…', percent: 10 });
-    await runCommandStreaming(pythonBin, ['-m', 'pip', 'install', '--upgrade', 'pip'], {}, 120000);
+      // ninja + cmake must be pre-installed in the venv so llama-cpp-python's build
+      // backend can find them. Without this, pip's isolated build environment tries
+      // to download ninja and fails on restricted networks or older pip.
+      onProgress?.({ phase: 'build_tools', message: 'Installing build tools (ninja, cmake, scikit-build-core)…', percent: 20 });
+      await runPythonCommand(
+        stagedPython,
+        ['-m', 'pip', 'install', '--upgrade', 'ninja', 'cmake', 'scikit-build-core', 'wheel', 'setuptools'],
+        { timeoutMs: 300000, signal },
+      );
 
-    // ninja + cmake must be pre-installed in the venv so llama-cpp-python's build
-    // backend can find them. Without this, pip's isolated build environment tries
-    // to download ninja and fails on restricted networks or older pip.
-    onProgress?.({ phase: 'build_tools', message: 'Installing build tools (ninja, cmake, scikit-build-core)…', percent: 20 });
-    await runCommandStreaming(
-      pythonBin,
-      ['-m', 'pip', 'install', '--upgrade', 'ninja', 'cmake', 'scikit-build-core', 'wheel', 'setuptools'],
-      {}, 300000
-    );
+      onProgress?.({ phase: 'compile', message: `Compiling llama-cpp-python with ${tag} support — takes 10–30 min…`, percent: 30 });
+      await runPythonCommand(
+        stagedPython,
+        // --no-build-isolation reuses the ninja/cmake we just installed instead of
+        // trying to download them again inside an isolated build env
+        ['-m', 'pip', 'install', '--upgrade', 'llama-cpp-python[server]', '--no-build-isolation'],
+        {
+          env,
+          timeoutMs: 3600000,
+          signal,
+          onLine: (line) => {
+            if (!NOISY_OUTPUT_RE.test(line)) {
+              onProgress?.({ phase: 'compile', message: line.slice(0, 140), percent: null });
+            }
+          },
+        },
+      );
 
-    const cmakeArgs = { nvidia_gpu: '-DGGML_CUDA=on', apple_metal: '-DGGML_METAL=on', amd_rocm: '-DGGML_HIP=on', vulkan: '-DGGML_VULKAN=on', intel_sycl: '-DGGML_SYCL=on' }[profile] || '';
-    const env = { ...(cmakeArgs ? { ...process.env, CMAKE_ARGS: cmakeArgs } : process.env), ...cudaEnvOverrides };
-    const tag = profile === 'nvidia_gpu' ? 'CUDA' : profile === 'apple_metal' ? 'Metal' : profile === 'amd_rocm' ? 'ROCm' : profile === 'vulkan' ? 'Vulkan' : profile === 'intel_sycl' ? 'SYCL' : 'CPU';
+      onProgress?.({ phase: 'finalizing', message: 'Verifying installation…', percent: 95 });
+      await runPythonCommand(stagedPython, ['-c', LLAMA_PYTHON_IMPORT_PROBE], { timeoutMs: 30000, signal });
+      writeManagedPythonEngineMetadata({
+        profile,
+        capabilityHint,
+        version: 'latest',
+        installedAt: new Date().toISOString(),
+      }, stagingDir);
+    },
+  });
 
-    onProgress?.({ phase: 'compile', message: `Compiling llama-cpp-python with ${tag} support — takes 10–30 min…`, percent: 30 });
-    await runCommandStreaming(
-      pythonBin,
-      // --no-build-isolation reuses the ninja/cmake we just installed instead of
-      // trying to download them again inside an isolated build env
-      ['-m', 'pip', 'install', '--upgrade', 'llama-cpp-python[server]', '--no-build-isolation'],
-      { env }, 3600000,
-      (line) => {
-        if (!NOISY_OUTPUT_RE.test(line)) {
-          onProgress?.({ phase: 'compile', message: line.slice(0, 140), percent: null });
-        }
-      }
-    );
-
-    onProgress?.({ phase: 'finalizing', message: 'Verifying installation…', percent: 95 });
-    await runCommandStreaming(pythonBin, ['-c', LLAMA_PYTHON_IMPORT_PROBE], {}, 30000);
-    const gpu = await detectGpuInfo();
-    const gpuLayers = String(suggestedGpuLayers(capabilityHint, gpu));
-    const updates = { LLAMA_BINARY_PATH: '', LLAMA_PYTHON_PATH: pythonBin, LLAMA_GPU_LAYERS: gpuLayers };
-    writeManagedPythonEngineMetadata({
-      profile,
-      capabilityHint,
-      version: 'latest',
-      installedAt: new Date().toISOString(),
-    });
-    persistEngineConfig(updates);
-
-    return { pythonPath: pythonBin, profile, capabilityHint, gpuLayers: parseInt(gpuLayers, 10) };
-  } catch (error) {
-    if (fs.existsSync(pythonVenvDir)) {
-      try {
-        fs.rmSync(pythonVenvDir, { recursive: true });
-      } catch (cleanupError) {
-        preserveBackup = movedExisting;
-        const recovery = movedExisting
-          ? ` The previous environment remains at ${backupVenvDir}.`
-          : '';
-        throw new Error(`${error.message} The incomplete environment could not be removed: ${cleanupError.message}.${recovery}`);
-      }
-    }
-    if (movedExisting && fs.existsSync(backupVenvDir)) {
-      try {
-        fs.renameSync(backupVenvDir, pythonVenvDir);
-      } catch (restoreError) {
-        preserveBackup = true;
-        throw new Error(`${error.message} The previous environment remains at ${backupVenvDir} because rollback failed: ${restoreError.message}`);
-      }
-    }
-    throw error;
-  } finally {
-    if (!preserveBackup && fs.existsSync(backupVenvDir)) {
-      try {
-        fs.rmSync(backupVenvDir, { recursive: true });
-      } catch (cleanupError) {
-        console.warn(`[llamaServer] Could not remove the previous Python runtime backup at ${backupVenvDir}: ${cleanupError.message}`);
-      }
-    }
-  }
+  const pythonBin = managedPythonBinaryPath();
+  const gpu = await detectGpuInfo();
+  const gpuLayers = String(suggestedGpuLayers(capabilityHint, gpu));
+  persistEngineConfig({ LLAMA_BINARY_PATH: '', LLAMA_PYTHON_PATH: pythonBin, LLAMA_GPU_LAYERS: gpuLayers });
+  return { pythonPath: pythonBin, profile, capabilityHint, gpuLayers: parseInt(gpuLayers, 10) };
 }
 
 const pythonInstallJobs = new Map();
@@ -1306,7 +1263,7 @@ export async function startPythonEngineInstallJob({ profile, retryModel, ctxSize
   if (running) throw new Error('A Python GPU runtime build is already running.');
 
   const job = {
-    id: randomUUID(), status: 'queued', phase: 'queued',
+    id: randomUUID(), abort: new AbortController(), status: 'queued', phase: 'queued',
     message: 'Preparing Python GPU runtime build…', percent: 0,
     profile: profile || null, retryModel: retryModel || null,
     retry: null, error: null, install: null, advisor: null, statusSnapshot: null,
@@ -1323,8 +1280,9 @@ export async function startPythonEngineInstallJob({ profile, retryModel, ctxSize
     try {
       await stopServer();
       const result = await installPythonEngine({
-        profile, retryModel, ctxSize, modelsDir,
-        onProgress: (p) => update({
+        profile,
+        signal: job.abort.signal,
+        onProgress: (p) => !job.abort.signal.aborted && update({
           status: 'running', phase: p.phase || 'running',
           message: p.message || 'Building…',
           percent: typeof p.percent === 'number' ? p.percent : job.percent,
@@ -1345,6 +1303,10 @@ export async function startPythonEngineInstallJob({ profile, retryModel, ctxSize
         statusSnapshot: getStatus(), finishedAt: nowIso(),
       });
     } catch (e) {
+      if (e?.cancelled) {
+        update({ status: 'cancelled', phase: 'cancelled', message: 'Build cancelled. The runtime you had is unchanged.', error: null, finishedAt: nowIso() });
+        return;
+      }
       console.error('[llamaServer] Python GPU build failed:', e.message);
       update({ status: 'error', phase: 'error', message: e.message || 'Build failed.', error: e.message, finishedAt: nowIso() });
     }
@@ -1355,7 +1317,28 @@ export async function startPythonEngineInstallJob({ profile, retryModel, ctxSize
 
 export function getPythonEngineInstallJob(jobId) {
   const job = pythonInstallJobs.get(jobId);
-  return job ? { ...job } : null;
+  if (!job) return null;
+  const { abort: _abort, ...rest } = job;
+  return rest;
+}
+
+/** Stop a running GPU runtime build; the environment in use is untouched. */
+export function cancelPythonEngineInstallJob(jobId) {
+  const job = pythonInstallJobs.get(jobId);
+  if (!job) return null;
+  if (job.status !== 'queued' && job.status !== 'running') {
+    throw Object.assign(new Error('This build has already finished.'), { code: 'NOT_RUNNING' });
+  }
+  Object.assign(job, { message: 'Cancelling…', updatedAt: nowIso() });
+  job.abort.abort();
+  return getPythonEngineInstallJob(jobId);
+}
+
+/** Stop every running engine install and build (used when the backend shuts down). */
+export function cancelAllEngineInstalls() {
+  for (const job of [...installJobs.values(), ...pythonInstallJobs.values()]) {
+    if (job.status === 'queued' || job.status === 'running') job.abort?.abort();
+  }
 }
 
 export async function removeManagedEngine(key) {

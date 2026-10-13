@@ -524,6 +524,13 @@ export const llamaServerApi = {
     });
   },
 
+  // Stop a running GPU runtime build (the runtime in use is unchanged).
+  cancelPythonInstallJob: async (jobId) => {
+    return apiCall(`${AI_API_BASE}/server/engines/python-install-jobs/${encodeURIComponent(jobId)}`, {
+      method: 'DELETE',
+    });
+  },
+
   // Poll a Python GPU build job until it completes or errors.
   pollPythonInstallJob: (jobId, onUpdate, onDone, onError) => {
     let stopped = false;
@@ -536,7 +543,8 @@ export const llamaServerApi = {
         const job = data.job;
         onUpdate?.(job);
         if (job?.status === 'complete') { stopped = true; onDone?.(job); return; }
-        if (job?.status === 'error')    { stopped = true; onError?.(job); return; }
+        // A cancelled build ends here too; callers check job.status.
+        if (job?.status === 'error' || job?.status === 'cancelled') { stopped = true; onError?.(job); return; }
       } catch (err) {
         if (!stopped) { stopped = true; onError?.({ status: 'error', error: err.message }); return; }
       }

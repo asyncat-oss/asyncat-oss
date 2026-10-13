@@ -16,6 +16,14 @@ import {
   verifyDownloadedAsset,
 } from './engineDownload.js';
 import { extractArchive } from './engineArchive.js';
+import {
+  buildManagedVenv,
+  findPythonWithVenv,
+  pythonInVenv,
+  pythonPackageVersion,
+  runPythonCommand,
+  VENV_MARKER_FILE,
+} from './pythonEnv.js';
 
 // Persist a runtime path. These used to be written to a source-tree .env; they now
 // live in the DB-backed app_config (hydrated into process.env at boot). We set
@@ -244,8 +252,8 @@ function writeManagedEngineMetadata(metadata, root = managedEngineDir()) {
   fs.writeFileSync(managedEngineMetadataPath(root), `${JSON.stringify(metadata, null, 2)}\n`, 'utf8');
 }
 
-export function writeManagedPythonEngineMetadata(metadata) {
-  writeManagedEngineMetadata(metadata, managedPythonDir());
+export function writeManagedPythonEngineMetadata(metadata, root = managedPythonDir()) {
+  writeManagedEngineMetadata(metadata, root);
 }
 
 // Folders an install or swap uses for a moment: `.<name>.install-<id>` (the
@@ -367,7 +375,6 @@ const BACKUP_DIR_RE = /^(.+)\.backup-[0-9a-f-]{8,}$/i;
 const STAGING_DIR_RE = /\.install-[0-9a-f-]{8,}$/i;
 // Temp folders older Asyncat versions unpacked downloads into.
 const LEGACY_TMP_RE = /^asyncat-(llama|cudart|whisper|sd)-/;
-export const MANAGED_VENV_MARKER = 'asyncat-venv.json';
 
 /**
  * Whether a managed Python environment finished installing. Current installs
@@ -375,7 +382,7 @@ export const MANAGED_VENV_MARKER = 'asyncat-venv.json';
  * finished (inside the venv for llama-cpp-python, beside it for the others).
  */
 function pythonEnvLooksComplete(venvDir, parentDir) {
-  if (fs.existsSync(path.join(venvDir, MANAGED_VENV_MARKER))) return true;
+  if (fs.existsSync(path.join(venvDir, VENV_MARKER_FILE))) return true;
   if (fs.existsSync(path.join(venvDir, MANAGED_ENGINE_METADATA_FILE))) return true;
   try {
     const finishedAt = fs.statSync(path.join(parentDir, MANAGED_RUNTIME_METADATA_FILE)).mtimeMs;
@@ -1848,37 +1855,8 @@ function findBinaryByNames(root, baseNames) {
   return null;
 }
 
-function findPythonWithVenv() {
-  const candidates = isWin
-    ? ['python', 'python3', 'py']
-    : [
-        'python3',
-        'python',
-        '/opt/homebrew/bin/python3',
-        '/usr/local/bin/python3',
-        '/usr/bin/python3',
-      ];
-  for (const candidate of candidates) {
-    try {
-      execFileSync(candidate, ['-c', 'import venv, sys; print(sys.executable)'], {
-        stdio: 'ignore',
-        timeout: 8000,
-        windowsHide: true,
-      });
-      return candidate;
-    } catch {}
-  }
-  return null;
-}
-
 function managedRuntimePythonDir(spec) {
   return path.join(asyncatHome(), spec.dir, 'python');
-}
-
-function pythonInVenv(venvDir) {
-  return isWin
-    ? path.join(venvDir, 'Scripts', 'python.exe')
-    : path.join(venvDir, 'bin', 'python');
 }
 
 function pythonConsoleScript(venvDir, name) {
@@ -1887,110 +1865,42 @@ function pythonConsoleScript(venvDir, name) {
     : path.join(venvDir, 'bin', name);
 }
 
-function runManagedCommand(command, args, { timeoutMs = 20 * 60 * 1000, onLine = null, signal = null } = {}) {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(cancelledError());
-      return;
-    }
-    const child = spawn(command, args, {
-      env: process.env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-    });
-    let settled = false;
-    signal?.addEventListener('abort', () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      try { child.kill(); } catch {}
-      reject(cancelledError());
-    }, { once: true });
-    let errorTail = '';
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      child.kill();
-      reject(new Error(`Timed out while running ${path.basename(command)}.`));
-    }, timeoutMs);
-    const handleChunk = chunk => {
-      const text = chunk.toString();
-      errorTail = (errorTail + text).slice(-1200);
-      if (onLine) {
-        text.split(/[\r\n]+/).map(line => line.trim()).filter(Boolean).forEach(onLine);
-      }
-    };
-    child.stdout.on('data', handleChunk);
-    child.stderr.on('data', handleChunk);
-    child.once('error', error => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      reject(error);
-    });
-    child.once('close', code => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      if (code === 0) resolve();
-      else reject(new Error(`${path.basename(command)} exited with code ${code}: ${errorTail.trim()}`));
-    });
-  });
-}
-
 function managedPythonPackages(spec) {
   if (spec.id !== 'mlx' || process.platform !== 'linux') return [spec.packageName];
   const mlxPackage = detectGpu()?.vendor === 'NVIDIA' ? 'mlx[cuda12]' : 'mlx[cpu]';
   return [mlxPackage, spec.packageName];
 }
 
-function installedPythonPackageVersion(python, packageName) {
-  try {
-    return execFileSync(
-      python,
-      ['-c', `import importlib.metadata; print(importlib.metadata.version(${JSON.stringify(packageName)}))`],
-      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 15000, windowsHide: true },
-    ).trim() || null;
-  } catch {
-    return null;
-  }
-}
-
 async function installManagedPythonRuntime(spec, report, signal = null) {
   const support = runtimePlatformSupport(spec);
   if (!support.supported) throw new Error(support.reason);
 
-  const systemPython = findPythonWithVenv();
+  const systemPython = await findPythonWithVenv({ signal });
   if (!systemPython) {
     throw new Error(`Python 3 with venv support is required to install ${spec.label}.`);
   }
 
   const root = managedRuntimeRoot(spec);
-  const venvDir = managedRuntimePythonDir(spec);
-  const backupVenv = assertManagedTarget(`${venvDir}.backup-${randomUUID()}`);
-  fs.mkdirSync(root, { recursive: true });
-  let movedExisting = false;
-  let preserveBackup = false;
-  try {
-    if (fs.existsSync(venvDir)) {
-      fs.renameSync(venvDir, backupVenv);
-      movedExisting = true;
-    }
-    // pip downloads and unpacks the packages; MLX with CUDA is the largest.
-    await ensureFreeSpace(root, (spec.id === 'mlx' ? 3 : 1) * 1024 * 1024 * 1024, spec.label);
-    report('preparing', `Creating an isolated Python environment for ${spec.label}`, 10);
-    await runManagedCommand(systemPython, ['-m', 'venv', venvDir], { timeoutMs: 180000, signal });
-    const python = pythonInVenv(venvDir);
+  const venvDir = assertManagedTarget(managedRuntimePythonDir(spec));
+  const packages = managedPythonPackages(spec);
+  // pip downloads and unpacks the packages; MLX with CUDA is the largest.
+  await ensureFreeSpace(root, (spec.id === 'mlx' ? 3 : 1) * 1024 * 1024 * 1024, spec.label);
 
-    report('installing', `Installing the latest ${spec.label} environment`, 30);
-    await runManagedCommand(python, ['-m', 'pip', 'install', '--upgrade', 'pip'], {
-      timeoutMs: 300000,
-      signal,
-    });
-    await runManagedCommand(
-      python,
-      ['-m', 'pip', 'install', '--upgrade', ...managedPythonPackages(spec)],
-      {
+  // Built beside the working environment and swapped in at the end, so
+  // quitting halfway leaves the old one working.
+  const version = await buildManagedVenv({
+    finalDir: venvDir,
+    signal,
+    swap: swapManagedDirectory,
+    marker: { runtime: spec.id, packages },
+    build: async (stagingDir) => {
+      report('preparing', `Creating an isolated Python environment for ${spec.label}`, 10);
+      await runPythonCommand(systemPython, ['-m', 'venv', stagingDir], { timeoutMs: 180000, signal });
+      const python = pythonInVenv(stagingDir);
+
+      report('installing', `Installing the latest ${spec.label} environment`, 30);
+      await runPythonCommand(python, ['-m', 'pip', 'install', '--upgrade', 'pip'], { timeoutMs: 300000, signal });
+      await runPythonCommand(python, ['-m', 'pip', 'install', '--upgrade', ...packages], {
         timeoutMs: 30 * 60 * 1000,
         signal,
         onLine: line => {
@@ -1998,65 +1908,37 @@ async function installManagedPythonRuntime(spec, report, signal = null) {
             report('installing', line.slice(0, 160), 65);
           }
         },
-      },
-    );
+      });
 
-    report('verifying', `Verifying ${spec.label}`, 92);
-    await runManagedCommand(python, ['-c', `import ${spec.importName}`], { timeoutMs: 30000, signal });
-    const installed = spec.id === 'piper' ? pythonConsoleScript(venvDir, 'piper') : python;
-    if (!fs.existsSync(installed)) {
-      throw new Error(`${spec.label} installed, but its executable was not found at ${installed}.`);
-    }
+      report('verifying', `Verifying ${spec.label}`, 92);
+      await runPythonCommand(python, ['-c', `import ${spec.importName}`], { timeoutMs: 30000, signal });
+      const staged = spec.id === 'piper' ? pythonConsoleScript(stagingDir, 'piper') : python;
+      if (!fs.existsSync(staged)) {
+        throw new Error(`${spec.label} installed, but its executable was not found at ${staged}.`);
+      }
+      return (await pythonPackageVersion(python, spec.packageName)) || 'managed-python';
+    },
+  });
 
-    const version = installedPythonPackageVersion(python, spec.packageName) || 'managed-python';
-    writeManagedRuntimeMetadata(spec, {
-      runtime: spec.id,
-      version,
-      installer: 'python-venv',
-      packages: managedPythonPackages(spec),
-      installedAt: new Date().toISOString(),
-    });
-    persistRuntimeConfigValue(spec.envKey, installed);
-    report('complete', `${spec.label} installed`, 100, { binary: installed, version });
-    return {
-      runtime: spec.id,
-      binary: installed,
-      envKey: spec.envKey,
-      version,
-      verified: true,
-      license: spec.license || null,
-      projectUrl: spec.projectUrl || null,
-    };
-  } catch (error) {
-    if (fs.existsSync(venvDir)) {
-      try {
-        removeManagedEntry(venvDir);
-      } catch (cleanupError) {
-        preserveBackup = movedExisting;
-        const recovery = movedExisting
-          ? ` The previous environment remains at ${backupVenv}.`
-          : '';
-        throw new Error(`${error.message} The incomplete environment could not be removed: ${cleanupError.message}.${recovery}`);
-      }
-    }
-    if (movedExisting && fs.existsSync(backupVenv)) {
-      try {
-        fs.renameSync(backupVenv, venvDir);
-      } catch (restoreError) {
-        preserveBackup = true;
-        throw new Error(`${error.message} The previous environment remains at ${backupVenv} because rollback failed: ${restoreError.message}`);
-      }
-    }
-    throw error;
-  } finally {
-    if (!preserveBackup && fs.existsSync(backupVenv)) {
-      try {
-        removeManagedEntry(backupVenv);
-      } catch (cleanupError) {
-        console.warn(`[runtime] Could not remove the previous ${spec.label} backup at ${backupVenv}: ${cleanupError.message}`);
-      }
-    }
-  }
+  const installed = spec.id === 'piper' ? pythonConsoleScript(venvDir, 'piper') : pythonInVenv(venvDir);
+  writeManagedRuntimeMetadata(spec, {
+    runtime: spec.id,
+    version,
+    installer: 'python-venv',
+    packages,
+    installedAt: new Date().toISOString(),
+  });
+  persistRuntimeConfigValue(spec.envKey, installed);
+  report('complete', `${spec.label} installed`, 100, { binary: installed, version });
+  return {
+    runtime: spec.id,
+    binary: installed,
+    envKey: spec.envKey,
+    version,
+    verified: true,
+    license: spec.license || null,
+    projectUrl: spec.projectUrl || null,
+  };
 }
 
 export async function installManagedRuntime(runtimeId, { onProgress = null, capability = null, signal = null } = {}) {

@@ -36,6 +36,7 @@ const RuntimeSection = () => {
     handleEngineSwitch,
     handleManagedInstall,
     handleCancelInstall,
+    handleCancelBuild,
     handleBuildGpuRuntime,
     handleRemoveManagedEngine,
     mlxStatus,
@@ -132,6 +133,7 @@ const RuntimeSection = () => {
         onSwitch={handleEngineSwitch}
         onInstall={handleManagedInstall}
         onCancelInstall={handleCancelInstall}
+        onCancelBuild={handleCancelBuild}
         onBuildGpuRuntime={handleBuildGpuRuntime}
         onRemoveManagedEngine={handleRemoveManagedEngine}
         onRefreshCatalog={refreshRuntimeCatalog}

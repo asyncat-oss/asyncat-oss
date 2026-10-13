@@ -33,6 +33,7 @@ import {
   cancelEngineInstallJob,
   startPythonEngineInstallJob,
   getPythonEngineInstallJob,
+  cancelPythonEngineInstallJob,
   removeManagedEngine,
   subscribe as llamaSubscribe,
 } from '../controllers/ai/llamaServerManager.js';
@@ -2122,6 +2123,17 @@ router.get('/server/engines/python-install-jobs/:id', (req, res) => {
   const job = getPythonEngineInstallJob(req.params.id);
   if (!job) return res.status(404).json({ success: false, error: 'Python install job not found' });
   res.json({ success: true, job });
+});
+
+// ── DELETE /server/engines/python-install-jobs/:id — cancel a GPU runtime build ─
+router.delete('/server/engines/python-install-jobs/:id', (req, res) => {
+  try {
+    const job = cancelPythonEngineInstallJob(req.params.id);
+    if (!job) return res.status(404).json({ success: false, error: 'Python install job not found' });
+    res.json({ success: true, job });
+  } catch (err) {
+    res.status(err.code === 'NOT_RUNNING' ? 409 : 500).json({ success: false, error: err.message });
+  }
 });
 
 // ── Managed runtimes (Piper / Whisper / stable-diffusion.cpp) ─────────────────

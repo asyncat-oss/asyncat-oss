@@ -251,11 +251,27 @@ export const useModelsPageController = ({ runtimeOnly = false } = {}) => {
         setPythonBuildError('');
       },
       async (job) => {
-        setPythonInstallJob(job);
         pythonBuildPollCleanup.current = null;
+        if (job?.status === 'cancelled') {
+          setPythonInstallJob(null);
+          setInstallNotice(job.message || 'Build cancelled. The runtime you had is unchanged.');
+          return;
+        }
+        setPythonInstallJob(job);
         setPythonBuildError(job?.error || 'GPU runtime build failed.');
       },
     );
+  };
+
+  const handleCancelBuild = async () => {
+    const jobId = pythonInstallJob?.id;
+    if (!jobId) return;
+    try {
+      const res = await llamaServerApi.cancelPythonInstallJob(jobId);
+      if (res?.job) setPythonInstallJob(res.job);
+    } catch (err) {
+      setPythonBuildError(err.message || 'Could not cancel the build.');
+    }
   };
 
   const handleBuildGpuRuntime = async (profile, retryModelAfterBuild) => {
@@ -738,6 +754,7 @@ export const useModelsPageController = ({ runtimeOnly = false } = {}) => {
     handleEngineSwitch,
     handleManagedInstall,
     handleCancelInstall,
+    handleCancelBuild,
     handleBuildGpuRuntime,
     handleRemoveManagedEngine
   };

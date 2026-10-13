@@ -132,6 +132,7 @@ const EngineRuntimeSection = ({
   onSwitch,
   onInstall,
   onCancelInstall,
+  onCancelBuild,
   onBuildGpuRuntime,
   onRemoveManagedEngine,
   onRefreshCatalog,
@@ -386,10 +387,10 @@ const EngineRuntimeSection = ({
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <Badge color={installStatusTone(jobStatus)}>{jobStatus}</Badge>
-                {!activeBuildJob && (jobStatus === 'running' || jobStatus === 'queued') && onCancelInstall && (
+                {(jobStatus === 'running' || jobStatus === 'queued') && (activeBuildJob ? onCancelBuild : onCancelInstall) && (
                   <button
                     type="button"
-                    onClick={() => onCancelInstall()}
+                    onClick={() => (activeBuildJob ? onCancelBuild() : onCancelInstall())}
                     className="rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-fg hover:bg-hover"
                   >
                     Cancel
