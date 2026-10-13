@@ -107,6 +107,20 @@ Plan maps to Claude's `plan` permission mode and Codex's `read-only` sandbox,
 Action to `acceptEdits` and `workspace-write`, and auto-approve to
 `bypassPermissions` and `danger-full-access`.
 
+In Action mode Claude Code runs with `--permission-prompt-tool`, pointing at
+`src/agent/claudeApprovalMcp.js`, a dependency-free MCP server that forwards
+each request to `POST /api/agent/external-approvals/:runId` (secret per run).
+The backend shows the normal `permission_request` card and returns the answer.
+
+`src/agent/externalSessions.js` lists and reads the CLIs' own session files
+(`~/.claude/projects/*/*.jsonl`, `~/.codex/sessions/**/rollout-*.jsonl`),
+reading only the start and end of each while listing.
+`GET /api/agent/external-sessions` returns them and
+`POST /api/agent/external-sessions/open` copies one into a chat that resumes it
+in the session's own folder. `src/agent/externalUsage.js` keeps plan usage from
+Claude Code's `rate_limit_event` and Codex's `rate_limits` records; it is
+returned with `GET /api/agent/engines`.
+
 ## Local profile
 
 Asyncat creates one local profile automatically. It is used only to associate
