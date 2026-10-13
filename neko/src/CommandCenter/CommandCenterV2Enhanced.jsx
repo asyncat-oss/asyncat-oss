@@ -62,6 +62,7 @@ import AgentAvatar from "../Agent/AgentAvatar.jsx";
 import { useAgents } from "../Agent/useAgents.js";
 import Cat from "../components/ui/Cat.jsx";
 import { engineDisplayName, registerEngineNames, resumeCommand } from "../Agent/externalAgentFormat.js";
+import { ALWAYS_ALLOW_EVENT, ALWAYS_ALLOW_KEY, alwaysAllowedChatTools } from "../services/chatDefaults.js";
 
 import { buildConversationSourceCatalog } from "./utils/conversationUtils.js";
 import {
@@ -411,12 +412,13 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
   const voiceAudioRef = useRef(null);
   const [voiceModeTtsState, setVoiceModeTtsState] = useState('idle'); // idle | loading | playing
   const [autoRecordAfterTts, setAutoRecordAfterTts] = useState(false);
-  const [alwaysAllowedTools, setAlwaysAllowedTools] = useState(() => {
-    try {
-      const stored = localStorage.getItem('asyncat_always_allow_tools');
-      return stored ? new Set(JSON.parse(stored)) : new Set();
-    } catch { return new Set(); }
-  });
+  const [alwaysAllowedTools, setAlwaysAllowedTools] = useState(() => new Set(alwaysAllowedChatTools()));
+  // Revoked in Settings → Privacy & safety.
+  useEffect(() => {
+    const reload = () => setAlwaysAllowedTools(new Set(alwaysAllowedChatTools()));
+    window.addEventListener(ALWAYS_ALLOW_EVENT, reload);
+    return () => window.removeEventListener(ALWAYS_ALLOW_EVENT, reload);
+  }, []);
   const [enabledIntegrationTools, setEnabledIntegrationTools] = useState(() => {
     try {
       const stored = localStorage.getItem('asyncat_enabled_integration_tools');
@@ -2129,7 +2131,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
         setAlwaysAllowedTools(prev => {
           const next = new Set(prev);
           next.add(toolName);
-          try { localStorage.setItem('asyncat_always_allow_tools', JSON.stringify([...next])); } catch { /* localStorage may be unavailable */ }
+          try { localStorage.setItem(ALWAYS_ALLOW_KEY, JSON.stringify([...next])); } catch { /* localStorage may be unavailable */ }
           return next;
         });
       }

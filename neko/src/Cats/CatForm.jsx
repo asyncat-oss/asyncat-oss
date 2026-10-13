@@ -37,7 +37,7 @@ function shrinkImage(file, size = 160) {
   });
 }
 
-function Chips({ value, onChange, placeholder, list = null, mono = false, label }) {
+export function Chips({ value, onChange, placeholder, list = null, mono = false, label }) {
   const [draft, setDraft] = useState('');
   const commit = () => {
     const parts = draft.split(/[\s,]+/).map((part) => part.trim()).filter(Boolean);

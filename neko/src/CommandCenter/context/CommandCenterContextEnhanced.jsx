@@ -9,6 +9,7 @@ import commandCenterApi from '../api';
 import { CLIENT_ID, subscribeAppEvent } from '../../services/appEvents.js';
 import { mergeStaleMessages } from '../utils/messageMerge.js';
 import { buildEventsFromMessages } from '../utils/agentEventUtils.js';
+import { newChatToolsEnabled } from '../../services/chatDefaults.js';
 
 const ActionTypes = {
   SET_MESSAGES: 'SET_MESSAGES',
@@ -170,6 +171,8 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
   const location = useLocation();
 
   const [toolsEnabled, setToolsEnabled] = useState(() => {
+    const preset = newChatToolsEnabled();
+    if (preset !== null) return preset;
     try {
       const savedMode = localStorage.getItem('asyncat_agent_mode');
       if (savedMode === 'plan') return false;
@@ -418,9 +421,16 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     }
   }, [state.justLoadedConversation]);
 
+  // Settings → Privacy & safety can make every new chat start in Plan or Action.
+  const applyNewChatMode = useCallback(() => {
+    const preset = newChatToolsEnabled();
+    if (preset !== null) setToolsEnabled(preset);
+  }, []);
+
   const handleNewConversation = useCallback(async (options = {}) => {
     loadConversationRequestRef.current += 1;
     dispatch({ type: ActionTypes.RESET_STATE, payload: { keepMode: true } });
+    applyNewChatMode();
     const nextWorkingContext = normalizeWorkingContext(options.workingContext || null);
     if (nextWorkingContext) {
       dispatch({ type: ActionTypes.SET_WORKING_CONTEXT, payload: nextWorkingContext });
@@ -441,7 +451,7 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     if (initialMessage) {
       dispatch({ type: ActionTypes.SET_PENDING_SEND, payload: { text: initialMessage, at: Date.now() } });
     }
-  }, []);
+  }, [applyNewChatMode]);
 
   const clearPendingSend = useCallback(() => {
     dispatch({ type: ActionTypes.SET_PENDING_SEND, payload: null });
@@ -622,7 +632,8 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
   const handleClearConversation = useCallback(() => {
     loadConversationRequestRef.current += 1;
     dispatch({ type: ActionTypes.RESET_STATE, payload: { keepMode: true } });
-  }, []);
+    applyNewChatMode();
+  }, [applyNewChatMode]);
 
   const setSelectedProjects = useCallback((projectIds) => {
     dispatch({ type: ActionTypes.SET_SELECTED_PROJECTS, payload: projectIds || [] });
