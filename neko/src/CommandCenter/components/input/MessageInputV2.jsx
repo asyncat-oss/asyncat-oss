@@ -3,6 +3,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import PropTypes from "prop-types";
 import { connectorToolLabel, connectorToolParts } from "../../../Connectors/connectorFormat.js";
+import { startWavRecording } from "../../../utils/wavRecorder.js";
 import { ArrowUp, Bell, Bookmark, ChevronDown, Hammer, ClipboardPen, Cloud, Cpu, Headphones, ImagePlus, Loader2, Mail, MessageCircle, Mic, Paperclip, Rss, Send, ShieldAlert, ShieldOff, Square, Wrench, X, Zap, Plus, Check, Folder, Sparkles } from "lucide-react";
 import { Menu, MenuItem, MenuLabel, MenuSeparator } from "../../../components/ui/Menu.jsx";
 import AgentAvatar from "../../../Agent/AgentAvatar.jsx";
@@ -1667,43 +1668,44 @@ export const MessageInputV2 = ({
 
 
 
-  const startRecording = async () => {
+  // Recorded as 16 kHz WAV, which speech recognition takes without ffmpeg.
+  // Hands-free (voice mode) stops by itself when you stop talking.
+  const finishRecording = async (result) => {
+    mediaRecorderRef.current = null;
+    setIsRecording(false);
+    clearInterval(recordingTimerRef.current);
+    setRecordingDuration(0);
+    if (!result?.blob || result.heard === false) return;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      const chunks = [];
-      recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-      recorder.onstop = async () => {
-        const audioBlob = new Blob(chunks, { type: 'audio/webm' });
-        setIsRecording(false);
-        clearInterval(recordingTimerRef.current);
-        setRecordingDuration(0);
-        try {
-          const res = await audioApi.whisper.transcribe(audioBlob);
-          if (res.text) {
-            const transcribed = res.text.trim();
-            setValue(prev => {
-              const base = prev.trim();
-              return base ? `${base} ${transcribed}` : transcribed;
-            });
-            // Voice Mode: auto-submit after a brief delay so the user sees what was transcribed
-            if (voiceConversationActive && transcribed) {
-              setTimeout(() => {
-                handleSubmit(null, transcribed);
-              }, 400);
-            }
-          }
-        } catch (err) {
-          setError('Failed to transcribe audio: ' + err.message);
-        }
-        stream.getTracks().forEach(track => track.stop());
-      };
-      
+      const res = await audioApi.whisper.transcribe(result.blob);
+      const transcribed = String(res.text || '').trim();
+      if (!transcribed) return;
+      setValue(prev => {
+        const base = prev.trim();
+        return base ? `${base} ${transcribed}` : transcribed;
+      });
+      // Voice Mode: send it after a moment, so the words show first.
+      if (voiceConversationActive) {
+        setTimeout(() => {
+          handleSubmit(null, transcribed);
+        }, 400);
+      }
+    } catch (err) {
+      setError('Failed to transcribe audio: ' + err.message);
+    }
+  };
+
+  const startRecording = async ({ handsFree = false } = {}) => {
+    if (mediaRecorderRef.current) return;
+    try {
+      const recorder = await startWavRecording({
+        autoStop: handsFree,
+        onAutoStop: finishRecording,
+      });
       mediaRecorderRef.current = recorder;
-      recorder.start();
       setIsRecording(true);
-      
-      let startMs = Date.now();
+
+      const startMs = Date.now();
       recordingTimerRef.current = setInterval(() => {
         setRecordingDuration(Date.now() - startMs);
       }, 1000);
@@ -1712,18 +1714,26 @@ export const MessageInputV2 = ({
     }
   };
 
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-      mediaRecorderRef.current.stop();
-    }
+  const stopRecording = async () => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder) return;
+    finishRecording(await recorder.stop());
   };
+
+  // Hands-free: when an answer has been read aloud, listen again.
+  useEffect(() => {
+    if (autoRecordPrompt && voiceConversationActive && !isRecording && !disabled) {
+      startRecording({ handsFree: true });
+    }
+    // startRecording changes identity every render; this follows the prompt only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRecordPrompt, voiceConversationActive]);
 
   useEffect(() => {
     return () => {
       if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-        mediaRecorderRef.current.stop();
-      }
+      mediaRecorderRef.current?.cancel();
+      mediaRecorderRef.current = null;
     };
   }, []);
 
@@ -2266,7 +2276,7 @@ export const MessageInputV2 = ({
                 {sttReady && (
                   <button
                     type="button"
-                    onClick={isRecording ? stopRecording : startRecording}
+                    onClick={isRecording ? stopRecording : () => startRecording({ handsFree: voiceConversationActive })}
                     disabled={disabled && !isRecording}
                     title={isRecording ? "Stop recording" : voiceConversationActive ? "Voice mode active" : "Record voice input"}
                     className={`flex h-8 items-center justify-center gap-2 rounded-full transition-all duration-200 ${

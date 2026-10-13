@@ -17,6 +17,10 @@ import ConfirmDeleteDialog from './ConfirmDeleteDialog.jsx';
 import ModelDownloadHub from './ModelDownloadHub.jsx';
 import ManagedEngineCard from './ManagedEngineCard.jsx';
 import LocalEnginePanel from './LocalEnginePanel.jsx';
+import VoiceSetupCard from './media/VoiceSetupCard.jsx';
+import ImageSetupCard from './media/ImageSetupCard.jsx';
+import GallerySection from './media/GallerySection.jsx';
+import { Advanced } from './media/MediaParts.jsx';
 import {
   STATUS_META, conciseHardwareSummary, getModelContextLimit,
   providerLabel
@@ -94,6 +98,7 @@ const ModelsPage = () => {
   const [audioModels, setAudioModels] = useState({ whisper: [], tts: [] });
   const [visualModels, setVisualModels] = useState({ image: [] });
   const [highlightedItem, setHighlightedItem] = useState(null);
+  const [galleryKey, setGalleryKey] = useState(0);
   const [usageRange, setUsageRange] = useState('30d');
   const [modelUsage, setModelUsage] = useState(null);
   const [loadingUsage, setLoadingUsage] = useState(false);
@@ -470,6 +475,8 @@ const ModelsPage = () => {
 
             {activeTab === 'audio' && (
               <>
+                <VoiceSetupCard />
+                <Advanced title="Advanced" hint="Engines, any model from Hugging Face or a file, cloud keys">
                 {downloadHub}
                 <div className="grid gap-6 xl:grid-cols-2">
                   <div className="space-y-4">
@@ -501,21 +508,26 @@ const ModelsPage = () => {
                     <AudioModelsSection mode="tts" highlightedItem={highlightedItem} onModelsChange={setAudioModels} />
                   </div>
                 </div>
+                </Advanced>
               </>
             )}
 
             {activeTab === 'image' && (
               <>
-                <ManagedEngineCard
-                  runtimeId="sd"
-                  name="stable-diffusion.cpp"
-                  purpose="Makes images on this computer from downloaded models; uses your GPU when it can."
-                  icon={Image}
-                  onChanged={refreshVisualData}
-                />
-                {downloadHub}
-                <CapabilityProvidersSection capability="image" />
-                <VisualModelsSection highlightedItem={highlightedItem} onModelsChange={setVisualModels} />
+                <ImageSetupCard onPictureMade={() => setGalleryKey((key) => key + 1)} />
+                <GallerySection refreshKey={galleryKey} />
+                <Advanced title="Advanced" hint="ComfyUI, the engine, any model from Hugging Face or a file, cloud keys">
+                  <ManagedEngineCard
+                    runtimeId="sd"
+                    name="stable-diffusion.cpp"
+                    purpose="Makes images on this computer from downloaded models; uses your GPU when it can."
+                    icon={Image}
+                    onChanged={refreshVisualData}
+                  />
+                  {downloadHub}
+                  <CapabilityProvidersSection capability="image" />
+                  <VisualModelsSection highlightedItem={highlightedItem} onModelsChange={setVisualModels} />
+                </Advanced>
               </>
             )}
 

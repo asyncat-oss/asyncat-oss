@@ -807,12 +807,19 @@ function AudioResultCard({ result }) {
   );
 }
 
+// A picture's own address: its gallery link from den, or inline data.
+function directImageSrc(result) {
+  const url = result?.media?.url;
+  if (url) return url.startsWith('/') ? `${import.meta.env.VITE_MAIN_URL || ''}${url}` : url;
+  return result?.image && String(result.image).startsWith('data:image/') ? result.image : null;
+}
+
 function ImageResultCard({ result }) {
   const media = result?.media || {};
-  const [blobUrl, setBlobUrl] = useState(result?.image && String(result.image).startsWith('data:image/') ? result.image : null);
+  const [blobUrl, setBlobUrl] = useState(directImageSrc(result));
   const [fetchError, setFetchError] = useState(null);
   const imagePath = media.path || result?.imagePath;
-  const canFetch = media.rootId && media.path;
+  const canFetch = !media.url && media.rootId && media.path;
 
   useEffect(() => {
     if (!canFetch) return undefined;
@@ -2165,9 +2172,10 @@ function collectGeneratedMedia(events = []) {
 
 function MediaThumb({ item }) {
   const media = item.result?.media || {};
-  const [src, setSrc] = useState(item.result?.image && String(item.result.image).startsWith('data:') ? item.result.image : null);
+  const [src, setSrc] = useState(item.type === 'image' ? directImageSrc(item.result) : null);
 
   useEffect(() => {
+    if (item.type === 'image' && media.url) return undefined;
     const path = item.type === 'audio' ? item.result?.path : media.path;
     const rootId = item.type === 'audio' ? 'workspace' : media.rootId;
     if (!path || !rootId) return undefined;
@@ -2176,7 +2184,7 @@ function MediaThumb({ item }) {
       .then(url => { if (!cancelled) setSrc(url); })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [item.result?.path, item.type, media.path, media.rootId]);
+  }, [item.result?.path, item.type, media.path, media.rootId, media.url]);
 
   if (item.type === 'image') {
     return src ? <img src={src} alt="" className="h-14 w-14 rounded-lg object-cover" /> : <Image className="h-5 w-5 text-gray-400" />;
