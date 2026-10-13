@@ -9,6 +9,14 @@ import { MessageSquare, CheckSquare, Clock, Search, Folder, FolderOpen, Plus, Pe
 import { getRelativeTime, parseConversationDate } from '../utils/conversationUtils.js';
 import { useConfirm } from '../../components/confirmContext.js';
 import { useToast, errorDetail } from '../../components/toastContext.js';
+import ConversationBadge from '../../components/ConversationBadge.jsx';
+import { ProviderGlyph } from '../../Models/modelLogos.jsx';
+import AsyncatMark from '../../components/ui/AsyncatMark.jsx';
+import { useAgents } from '../../Agent/useAgents.js';
+import { conversationEngine, engineDisplayName } from '../../Agent/externalAgentFormat.js';
+
+const ENGINE_FILTER_KEY = 'asyncat_chats_engine_filter';
+const ENGINE_ORDER = ['asyncat', 'claude-code', 'codex'];
 
 function basenamePath(value = '') {
   const parts = String(value || '').split(/[\\/]/).filter(Boolean);
@@ -69,6 +77,16 @@ const ChatsPage = () => {
   const serverSearchTimer = useRef(null);
   const [selectedItems, setSelectedItems] = useState({});
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  // Which engine's chats to show: 'all', 'asyncat', 'claude-code', 'codex'…
+  const [engineFilter, setEngineFilterState] = useState(() => {
+    try { return localStorage.getItem(ENGINE_FILTER_KEY) || 'all'; } catch { return 'all'; }
+  });
+  const setEngineFilter = (value) => {
+    setEngineFilterState(value);
+    try { localStorage.setItem(ENGINE_FILTER_KEY, value); } catch { /* localStorage may be unavailable */ }
+  };
+  const { agents } = useAgents();
+  const agentsById = new Map(agents.map(agent => [String(agent.id), agent]));
 
   const [actionModal, setActionModal] = useState(null);
   const [actionModalTitle, setActionModalTitle] = useState('');
@@ -223,11 +241,22 @@ const ChatsPage = () => {
       workingContext: run.workingContext || run.metadata?.workingContext || null,
     }));
 
-  const filteredConversations = conversationPool !== null
+  // Engines that answered at least one chat, for the filter chips.
+  const enginesPresent = [...new Set(conversations.map(conversationEngine))]
+    .sort((a, b) => {
+      const ia = ENGINE_ORDER.indexOf(a);
+      const ib = ENGINE_ORDER.indexOf(b);
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib) || a.localeCompare(b);
+    });
+  const activeEngineFilter = engineFilter !== 'all' && !enginesPresent.includes(engineFilter) ? 'all' : engineFilter;
+  const matchesEngine = (chat) => activeEngineFilter === 'all' || conversationEngine(chat) === activeEngineFilter;
+
+  const filteredConversations = (conversationPool !== null
     ? conversationPool
     : conversations.filter(c =>
         !q || (c.title || '').toLowerCase().includes(q) || (c.preview || '').toLowerCase().includes(q)
-      ).map(c => ({ ...c, type: 'chat', title: c.title || 'Untitled conversation' }));
+      ).map(c => ({ ...c, type: 'chat', title: c.title || 'Untitled conversation' }))
+  ).filter(matchesEngine);
 
   const filteredActiveChatRuns = activeChatRuns
     .filter(run => !run.conversationId || !filteredConversations.some(c => c.id === run.conversationId))
@@ -397,6 +426,7 @@ const ChatsPage = () => {
           {isSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
         </button>
         )}
+        {!isActiveRun && <ConversationBadge conversation={chat} agentsById={agentsById} className="self-start pt-[3px]" />}
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 midnight:text-gray-100 truncate">
             {itemTitle}
@@ -522,6 +552,33 @@ const ChatsPage = () => {
             </span>
           )}
         </div>
+
+        {enginesPresent.length > 1 && (
+          <div className="mb-4 -mt-2 flex flex-wrap items-center gap-1.5 flex-shrink-0" role="radiogroup" aria-label="Who answered">
+            {['all', ...enginesPresent].map(engine => {
+              const selected = activeEngineFilter === engine;
+              return (
+                <button
+                  key={engine}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => setEngineFilter(engine)}
+                  className={`inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors ${
+                    selected
+                      ? 'border-line-strong bg-selected text-fg'
+                      : 'border-line text-fg-muted hover:bg-hover hover:text-fg'
+                  }`}
+                >
+                  {engine === 'all' ? null : engine === 'asyncat'
+                    ? <AsyncatMark variant="glyph" className="h-3.5 w-3.5" />
+                    : <ProviderGlyph providerId={engine} className="h-3.5 w-3.5" />}
+                  {engine === 'all' ? 'All' : engineDisplayName(engine)}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {selectedCount > 0 && (
           <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 flex-shrink-0 dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">

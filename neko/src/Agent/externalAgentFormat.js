@@ -2,6 +2,38 @@
 
 export const ENGINE_NAMES = { 'claude-code': 'Claude Code', codex: 'Codex' };
 
+// Names of agents that joined through the Agent Client Protocol, learnt from
+// the engines list (see registerEngineNames).
+const extraEngineNames = new Map();
+
+/** Remember the display names of the engines the backend reports. */
+export function registerEngineNames(engines = []) {
+  for (const engine of Array.isArray(engines) ? engines : []) {
+    if (engine?.id && engine?.name) extraEngineNames.set(engine.id, engine.name);
+  }
+}
+
+/** "Asyncat", "Claude Code", "Codex", or an ACP agent's name. */
+export function engineDisplayName(engine) {
+  if (!engine || engine === 'asyncat') return 'Asyncat';
+  if (ENGINE_NAMES[engine]) return ENGINE_NAMES[engine];
+  if (extraEngineNames.has(engine)) return extraEngineNames.get(engine);
+  const bare = String(engine).replace(/^acp:/, '');
+  return bare.split(/[-_ ]+/).filter(Boolean).map((word) => word[0].toUpperCase() + word.slice(1)).join(' ') || 'Agent';
+}
+
+/** Which engine answered a conversation (from its metadata). */
+export function conversationEngine(conversation) {
+  const metadata = conversation?.metadata && typeof conversation.metadata === 'object' ? conversation.metadata : {};
+  return metadata.engine || metadata.importedFrom?.engine || conversation?.engine || 'asyncat';
+}
+
+/** The custom agent a conversation used, if any. */
+export function conversationAgentId(conversation) {
+  const metadata = conversation?.metadata && typeof conversation.metadata === 'object' ? conversation.metadata : {};
+  return metadata.agentProfileId || conversation?.agentProfileId || conversation?.agent_profile_id || null;
+}
+
 /** "4:30 PM" today, "Tue 4:30 PM" this week, otherwise "12 Nov". */
 export function formatResetTime(ms, now = Date.now()) {
   if (!ms) return '';

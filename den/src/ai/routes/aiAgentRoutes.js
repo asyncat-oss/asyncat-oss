@@ -542,7 +542,9 @@ router.get('/chats/search', withWorkspaceContext, (req, res) => {
       if (ftsTerms) {
         titleRows = db.prepare(`
           SELECT c.id, c.title, c.mode, c.message_count, c.last_message_at, c.created_at,
-                 c.is_pinned, c.is_archived, bm25(conversations_fts) AS rank
+                 c.is_pinned, c.is_archived, bm25(conversations_fts) AS rank,
+                 json_extract(c.metadata, '$.engine') AS engine,
+                 json_extract(c.metadata, '$.agentProfileId') AS agent_profile_id
           FROM conversations_fts fts
           JOIN conversations c ON c.id = fts.conversation_id
           WHERE fts.conversations_fts MATCH ? AND c.user_id = ? AND c.deleted_at IS NULL
@@ -558,7 +560,9 @@ router.get('/chats/search', withWorkspaceContext, (req, res) => {
     let contentRows = [];
     if (remaining > 0) {
       contentRows = db.prepare(`
-        SELECT id, title, mode, message_count, last_message_at, created_at, is_pinned, is_archived
+        SELECT id, title, mode, message_count, last_message_at, created_at, is_pinned, is_archived,
+               json_extract(metadata, '$.engine') AS engine,
+               json_extract(metadata, '$.agentProfileId') AS agent_profile_id
         FROM conversations
         WHERE user_id = ? AND deleted_at IS NULL AND messages LIKE ?
         ORDER BY last_message_at DESC

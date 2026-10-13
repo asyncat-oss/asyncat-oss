@@ -39,6 +39,8 @@ import { useConfirm } from "../components/confirmContext.js";
 import { useToast, errorDetail } from "../components/toastContext.js";
 import AsyncatMark from "../components/ui/AsyncatMark.jsx";
 import ExternalSessionsSection from "./ExternalSessionsSection.jsx";
+import ConversationBadge from "../components/ConversationBadge.jsx";
+import { useAgents } from "../Agent/useAgents.js";
 import { isSkippedUpdate, openUpdateScreen } from "../components/updateEvents.js";
 import Tooltip from "../components/ui/Tooltip.jsx";
 import { Menu, MenuItem, MenuSeparator } from "../components/ui/Menu.jsx";
@@ -205,7 +207,7 @@ function conversationUpdatedAt(conversation) {
   ).getTime() || 0;
 }
 
-const RecentConversationItem = memo(({ conversation, active, running, onOpen, onRename, onDelete, nested = false }) => {
+const RecentConversationItem = memo(({ conversation, active, running, onOpen, onRename, onDelete, nested = false, agentsById = null }) => {
   const title = conversation.title || "Untitled conversation";
   const menuButtonRef = useRef(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -261,6 +263,7 @@ const RecentConversationItem = memo(({ conversation, active, running, onOpen, on
         aria-current={active ? "page" : undefined}
         className={`flex h-full min-w-0 flex-1 items-center gap-2 rounded-lg pr-8 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40 ${nested ? "pl-7" : "pl-2.5"}`}
       >
+        <ConversationBadge conversation={conversation} agentsById={agentsById} />
         <span className={`min-w-0 flex-1 truncate text-[13px] ${active ? "font-medium" : ""}`}>{title}</span>
       </button>
 
@@ -303,6 +306,7 @@ RecentConversationItem.propTypes = {
   onRename: PropTypes.func.isRequired,
   onDelete: PropTypes.func.isRequired,
   nested: PropTypes.bool,
+  agentsById: PropTypes.instanceOf(Map),
 };
 
 const ProjectConversationGroup = memo(({
@@ -317,6 +321,7 @@ const ProjectConversationGroup = memo(({
   onOpenConversation,
   onRenameConversation,
   onDeleteConversation,
+  agentsById = null,
 }) => {
   const ProjectIcon = expanded ? FolderOpen : Folder;
   const name = project.name || "Untitled project";
@@ -362,6 +367,7 @@ const ProjectConversationGroup = memo(({
               onOpen={onOpenConversation}
               onRename={onRenameConversation}
               onDelete={onDeleteConversation}
+              agentsById={agentsById}
               nested
             />
           )) : (
@@ -392,6 +398,7 @@ ProjectConversationGroup.propTypes = {
   onOpenConversation: PropTypes.func.isRequired,
   onRenameConversation: PropTypes.func.isRequired,
   onDeleteConversation: PropTypes.func.isRequired,
+  agentsById: PropTypes.instanceOf(Map),
 };
 
 const SectionHeader = ({ label, onLabelClick, labelTitle, children }) => (
@@ -447,6 +454,9 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
     activeConversationIds = new Set(),
     setConversationListRefresh,
   } = useCommandCenter();
+
+  const { agents } = useAgents();
+  const agentsById = useMemo(() => new Map(agents.map((agent) => [String(agent.id), agent])), [agents]);
 
   const collapsed = sidebarState === "collapsed";
   const displayName = profileData?.name || user?.name || "You";
@@ -813,6 +823,7 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
                       onOpenConversation={openConversation}
                       onRenameConversation={renameConversation}
                       onDeleteConversation={deleteConversation}
+                      agentsById={agentsById}
                     />
                   );
                 })}
@@ -849,6 +860,7 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
                   onOpen={openConversation}
                   onRename={renameConversation}
                   onDelete={deleteConversation}
+                  agentsById={agentsById}
                 />
               ))}
             </div>
