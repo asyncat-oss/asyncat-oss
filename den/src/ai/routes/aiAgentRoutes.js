@@ -45,6 +45,7 @@ import { execSync } from 'child_process';
 import { getArtifactsDir, getLegacyArtifactsDir } from '../../agent/workspacePaths.js';
 import { shellSessionManager } from '../../agent/ShellSessionManager.js';
 import { resolveBrowserCommand } from '../../agent/browserCommandQueue.js';
+import { detectExternalEngines, isExternalEngine, runExternalAgent, scratchWorkspace } from '../../agent/externalAgents.js';
 
 const router = express.Router();
 const pendingPermissions = new Map();
@@ -1883,6 +1884,65 @@ router.post('/git/discard', withWorkspaceContext, (req, res) => {
 
 // ── Agent run (streaming) ─────────────────────────────────────────────────────
 
+// ── External agents (Claude Code, Codex) ───────────────────────────────────
+// A conversation can hand its turns to an installed agent CLI instead of
+// Asyncat's own loop. It works in the conversation's Project folder, or a
+// private scratch folder without one, and its events are streamed in the same
+// format as Asyncat's agent.
+router.get('/engines', async (_req, res) => {
+  try {
+    res.json({ success: true, engines: await detectExternalEngines() });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+async function runExternalEngineTurn(req, res, { engine, baseGoal, workingContext, workingDir, fileAttachments, externalSessionId, engineModel, agentMode, autoApprove, abortSignal }) {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Content-Encoding', 'identity');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders?.();
+  req.socket?.setTimeout?.(0);
+  const heartbeat = setInterval(() => writeAgentSseComment(res, 'ping'), 15000);
+
+  try {
+    const hasProjectContext = Boolean(workingContext && typeof workingContext === 'object' && workingContext.rootId);
+    const context = resolveAgentWorkingContext({
+      workingContext: hasProjectContext ? workingContext : null,
+      workingDir: hasProjectContext ? workingDir : null,
+      profile: null,
+      userId: req.user.id,
+    });
+    const goal = injectFileAttachments(baseGoal, resolveFileAttachments(fileAttachments, context, req.user.id));
+    const result = await runExternalAgent({
+      engine,
+      goal,
+      workingDir: context.workingDir || scratchWorkspace(),
+      externalSessionId,
+      agentMode,
+      autoApprove,
+      model: engineModel,
+      emit: (type, data) => writeAgentSse(res, { type, data }),
+      abortSignal,
+    });
+    writeAgentSse(res, {
+      type: 'done',
+      data: { answer: result.answer, stopReason: result.stopReason, engine, externalSessionId: result.externalSessionId, rounds: 1 },
+    });
+  } catch (err) {
+    writeAgentSse(res, { type: 'error', data: { message: err.message } });
+    writeAgentSse(res, {
+      type: 'done',
+      data: { answer: '', stopReason: 'error', engine, externalSessionId: err.externalSessionId || externalSessionId },
+    });
+  } finally {
+    clearInterval(heartbeat);
+    if (!res.writableEnded) res.end();
+  }
+}
+
 router.post('/run', withWorkspaceContext, async (req, res) => {
   let heartbeatInterval = null;
   const abortController = new AbortController();
@@ -1915,6 +1975,9 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
       clientTimestamp = null,
       clientTimezone = null,
       experienceMode = null,
+      engine = 'asyncat',
+      externalSessionId = null,
+      engineModel = null,
     } = req.body;
     const resolvedAgentMode = agentMode === 'design'
       ? 'design'
@@ -1925,6 +1988,21 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
 
     if (!baseGoal) {
       return res.status(400).json({ success: false, error: 'Goal is required' });
+    }
+    if (isExternalEngine(engine)) {
+      await runExternalEngineTurn(req, res, {
+        engine,
+        baseGoal,
+        workingContext,
+        workingDir,
+        fileAttachments,
+        externalSessionId,
+        engineModel,
+        agentMode: resolvedAgentMode,
+        autoApprove: resolvedAgentMode === 'action' && (autoApprove === true || autoApprove === 'all'),
+        abortSignal: abortController.signal,
+      });
+      return;
     }
     let profile = null;
     if (profileId) {

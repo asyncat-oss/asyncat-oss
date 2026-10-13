@@ -2,6 +2,10 @@ import { API_BASE_URL, apiRequest, addWorkspaceToUrl, getCurrentWorkspaceId, han
 import apiClient from '../../services/apiClient.js';
 
 export const agentApi = {
+  // Agent CLIs installed on this computer (Claude Code, Codex) and whether
+  // they are signed in.
+  getEngines: async () => apiRequest(`${API_BASE_URL}/agent/engines`),
+
   runStream: async function* (goal, conversationHistory = [], workingDir = null, maxRounds = 25, signal = null, continueSessionId = null, opts = {}) {
     const workspaceId = (() => {
       try {
@@ -36,6 +40,8 @@ export const agentApi = {
         assistantMessageId: opts.assistantMessageId || null,
         clientTimestamp: opts.clientTimestamp || new Date().toISOString(),
         clientTimezone: opts.clientTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+        engine: opts.engine || 'asyncat',
+        externalSessionId: opts.externalSessionId || null,
       })
     });
 
