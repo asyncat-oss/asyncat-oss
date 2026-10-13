@@ -1,9 +1,17 @@
 // pdfConverter.js - Convert note blocks to PDF using Puppeteer
-import { renderChartToImage } from './chartRenderer.js';
 import { sanitizeTableCell } from './sanitizer.js';
 import localStorageService from '../../storage/localStorageService.js';
 import fsp from 'fs/promises';
 import { launchBrowser } from '../../lib/browserLauncher.js';
+
+// chart.js and the native canvas module load only when a PDF has charts, so a
+// missing or broken canvas build can't stop the backend from starting.
+let chartRenderer = null;
+async function renderChartToImage(type, properties) {
+  chartRenderer ||= import('./chartRenderer.js');
+  const { renderChartToImage: render } = await chartRenderer;
+  return render(type, properties);
+}
 
 const PUBLIC_ATTACHMENT_BASE_URL = process.env.PUBLIC_ATTACHMENT_BASE_URL
   ? process.env.PUBLIC_ATTACHMENT_BASE_URL.replace(/\/$/, '')
