@@ -20,6 +20,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setGlobalShortcut:    (id, patch) => ipcRenderer.invoke('shortcuts:set', id, patch),
   resetGlobalShortcuts: () => ipcRenderer.invoke('shortcuts:reset'),
 
+  // ─── Background running (Settings → Background) ───────────────────────
+  getBackgroundSettings: () => ipcRenderer.invoke('background:get'),
+  setBackgroundSettings: (patch) => ipcRenderer.invoke('background:set', patch),
+
   // ─── Window Controls ──────────────────────────────────────────────────
   minimizeWindow: () => ipcRenderer.send('window:minimize'),
   maximizeWindow: () => ipcRenderer.send('window:maximize'),

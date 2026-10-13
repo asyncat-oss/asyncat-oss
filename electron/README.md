@@ -9,7 +9,10 @@ This directory contains the Electron main-process code that wraps the asyncat de
 | `shortcut-config.js`, `shortcut-config.test.js` | Defaults and validation for those shortcuts, and their tests |
 | `backend.js` | Spawns `den/src/index.js` with the bundled Node.js (packaged) or the system Node.js (dev), using `den/` or the user-data folder as its working directory. Polls `/health`, auto-restarts after crashes, writes `logs/backend-process.log`. With `--external-backend` (used by `npm run electron:dev`) it waits for the watch-mode dev backend instead |
 | `window.js` | Creates the `BrowserWindow` and the loading screen shown while the backend starts |
-| `tray.js` | System tray icon. Left-click opens quick chat; right-click shows Show / Restart Backend / Quit |
+| `tray.js` | System tray icon. Left-click opens quick chat; the menu has Show, Scheduled tasks, Restart Backend and Quit (on Linux the menu is always attached, since most desktops don't pass clicks on) |
+| `background.js` | Whether closing the window quits or leaves Asyncat in the tray for scheduled tasks (`userData/background.json`, Settings → Background), the one-time "still running" notice, and starting at login hidden in the tray (`--hidden`; on Linux `~/.config/autostart/asyncat.desktop`) |
+| `background-config.js`, `background-config.test.js` | The rules and file formats behind `background.js`, and their tests |
+| `hostBridge.js` | Long-polls the backend for notifications and requests only the desktop app can serve (see `den/src/lib/hostBridge.js`); the backend also reports how many scheduled tasks are on |
 | `popup.js`, `popup.html`, `popup-preload.js` | Quick-chat popup (tray left-click or the quick-ask shortcut, `Cmd/Ctrl+Shift+Space` by default) |
 | `pet.js`, `pet.html`, `pet-preload.js` | Optional always-on-top desktop companion that shows agent status |
 | `menu.js` | Native OS menu bar with keyboard shortcuts |

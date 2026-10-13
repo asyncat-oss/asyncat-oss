@@ -1,6 +1,6 @@
 // electron/tray.js — System tray icon and menu
 import { Tray, Menu, nativeImage } from 'electron';
-import { ICONS, IS_MAC } from './constants.js';
+import { ICONS, IS_LINUX, IS_MAC } from './constants.js';
 import { getMainWindow } from './window.js';
 import { isBackendRunning } from './backend.js';
 
@@ -11,7 +11,7 @@ let _callbacks = {};
  * Create the system tray icon.
  * @param {object} opts
  * @param {Function} opts.onQuit
- * @param {Function} opts.onShow
+ * @param {Function} opts.onShow — Called with an optional in-app route
  * @param {Function} opts.onRestartBackend
  * @param {Function} opts.onTrayClick — Called with (tray) on left-click
  */
@@ -42,6 +42,11 @@ export function createTray({ onQuit, onShow, onRestartBackend, onTrayClick }) {
     tray.popUpContextMenu(buildContextMenu());
   });
 
+  // Most Linux desktops (AppIndicator) never send clicks to the app and only
+  // show a menu set in advance. Asyncat may live only in the tray, so the
+  // menu must always be there to reopen the window or quit.
+  if (IS_LINUX) tray.setContextMenu(buildContextMenu());
+
   return tray;
 }
 
@@ -50,7 +55,7 @@ export function createTray({ onQuit, onShow, onRestartBackend, onTrayClick }) {
  */
 export function updateTrayMenu(callbacks = {}) {
   Object.assign(_callbacks, callbacks);
-  // No-op for menu content — it's built fresh on each right-click via buildContextMenu()
+  if (tray && IS_LINUX) tray.setContextMenu(buildContextMenu());
 }
 
 /**
@@ -68,7 +73,7 @@ export function setAgentRunCount(count) {
 
 function buildContextMenu() {
   const backendRunning = isBackendRunning();
-  const { onQuit, onShow, onRestartBackend } = _callbacks;
+  const { onQuit, onShow, onRestartBackend, onTrayClick } = _callbacks;
 
   return Menu.buildFromTemplate([
     {
@@ -78,6 +83,11 @@ function buildContextMenu() {
         if (win) { win.show(); win.focus(); }
         else if (onShow) { onShow(); }
       },
+    },
+    ...(IS_LINUX && onTrayClick ? [{ label: 'Quick chat', click: () => onTrayClick(null) }] : []),
+    {
+      label: 'Scheduled tasks',
+      click: () => onShow?.('/scheduled'),
     },
     { type: 'separator' },
     {

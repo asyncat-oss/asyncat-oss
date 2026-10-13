@@ -8,6 +8,7 @@ import {
   Palette,
   AppWindow,
   Plug,
+  Power,
   Server,
   UserRound,
   Wrench,
@@ -22,6 +23,7 @@ import StorageSection from './StorageSection';
 import IntegrationsSection from './IntegrationsSection';
 import RuntimeSection from './RuntimeSection';
 import WorkbenchSection from './WorkbenchSection';
+import BackgroundSection from './BackgroundSection';
 
 const TAB_ALIASES = {
   general: 'profile',
@@ -69,6 +71,13 @@ const SettingsPage = () => {
       label: 'Workbench',
       description: 'Browser, terminal, panel layout, and local browsing data.',
       icon: AppWindow,
+    },
+    {
+      id: 'background',
+      group: 'System',
+      label: 'Background',
+      description: 'Keep Asyncat running for scheduled tasks after you close the window, and start it when you log in.',
+      icon: Power,
     },
     {
       id: 'runtime',
@@ -150,6 +159,8 @@ const SettingsPage = () => {
         return <IntegrationsSection />;
       case 'workbench':
         return <WorkbenchSection />;
+      case 'background':
+        return <BackgroundSection />;
       case 'runtime':
         return <RuntimeSection />;
       case 'advanced':

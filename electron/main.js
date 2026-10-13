@@ -15,6 +15,7 @@ import { reportBootResult, setupAutoUpdater, setupUpdaterIPC } from './updater.j
 import { initShortcuts, registerShortcutIPC } from './shortcuts.js';
 import { startBackend, stopBackend, isBackendRunning } from './backend.js';
 import { postHostEvent, registerHostHandler, startHostBridge, stopHostBridge } from './hostBridge.js';
+import { keepRunningAfterClose, noteKeptRunning, registerBackgroundIPC, setEnabledTaskCount, startsHidden } from './background.js';
 import http from 'http';
 import net from 'net';
 import fs from 'fs';
@@ -48,7 +49,11 @@ if (!gotLock) {
     const win = getMainWindow();
     if (win) {
       if (win.isMinimized()) win.restore();
+      win.show();
       win.focus();
+    } else {
+      // Running in the tray without a window: opening Asyncat again shows it.
+      bootApp();
     }
   });
 }
@@ -60,12 +65,10 @@ if (IS_WIN) {
   app.setAppUserModelId(WINDOWS_APP_ID);
 }
 
-// macOS: keep app running when all windows closed (tray icon stays)
-app.on('window-all-closed', () => {
-  if (!IS_MAC) {
-    quitApp();
-  }
-});
+// Closing the main window either quits or leaves Asyncat in the tray
+// (Settings → Background); see onMainWindowClosed. Handling this event stops
+// Electron from quitting on its own when the last window closes.
+app.on('window-all-closed', () => {});
 
 // macOS: re-create window when dock icon clicked
 app.on('activate', () => {
@@ -106,6 +109,7 @@ function setupPopupIPC() {
 
 function setupIPC() {
   registerShortcutIPC(ipcMain);
+  registerBackgroundIPC(ipcMain);
   ipcMain.handle('app:version', () => app.getVersion());
   ipcMain.handle('app:platform', () => process.platform);
   ipcMain.on('app:is-packaged', (event) => { event.returnValue = app.isPackaged; });
@@ -617,7 +621,7 @@ let prevRunCount = 0;
 function refreshTray() {
   updateTrayMenu({
     onQuit: quitApp,
-    onShow: () => bootApp(),
+    onShow: (route) => bootApp(route),
     onRestartBackend: async () => {
       await stopBackend();
       await startBackend();
@@ -709,9 +713,48 @@ function stopFrontendServer() {
 
 // ─── Boot Sequence ────────────────────────────────────────────────────────────
 
-async function bootApp() {
+// The window was closed: quit, or keep running in the tray so scheduled tasks
+// still run. The window itself is gone either way, which frees its memory.
+async function onMainWindowClosed() {
+  if (isQuitting) return;
+  if (await keepRunningAfterClose()) {
+    if (!getMainWindow()) noteKeptRunning();
+  } else {
+    quitApp();
+  }
+}
+
+// Start without a window (login item, --hidden): backend, tray and
+// notifications only. The window opens from the tray or a notification.
+async function startInBackground() {
+  let ok = true;
+  try {
+    await startBackend();
+    console.log('[Asyncat] Backend is healthy ✓ (started in the tray)');
+  } catch (err) {
+    ok = false;
+    console.error('[Asyncat] Failed to start backend:', err.message);
+  }
+  refreshTray();
+  setupHostBridge();
+  return ok;
+}
+
+/** Open the window (or bring it forward). `initialRoute` is an in-app path. */
+async function bootApp(initialRoute = '') {
+  const route = typeof initialRoute === 'string' && /^\/[\w\-/?=&.%]*$/.test(initialRoute) ? initialRoute : '';
+  const existing = getMainWindow();
+  if (existing) {
+    if (existing.isMinimized()) existing.restore();
+    existing.show();
+    existing.focus();
+    if (route) existing.webContents.send('app:navigate', route);
+    return;
+  }
+
   // 1. Create the window immediately (shows loading screen)
   const win = createWindow();
+  win.once('closed', onMainWindowClosed);
   showLoadingScreen();
   let backendError = null;
 
@@ -750,7 +793,7 @@ async function bootApp() {
 
   // 4. Load the frontend (always via HTTP to avoid file:// CORS issues)
   const frontendHost = viteRunning ? 'localhost' : '127.0.0.1';
-  win.loadURL(`http://${frontendHost}:${FRONTEND_PORT}`);
+  win.loadURL(`http://${frontendHost}:${FRONTEND_PORT}${route}`);
 
   // 5. Notify the renderer of the actual backend result
   win.webContents.once('did-finish-load', () => {
@@ -784,23 +827,14 @@ function setupHostBridge() {
       body: String(body || '').slice(0, 400),
       ...(icon.isEmpty() ? {} : { icon }),
     });
-    notification.on('click', () => {
-      let win = getMainWindow();
-      if (!win) {
-        bootApp();
-        win = getMainWindow();
-      }
-      if (!win) return;
-      if (win.isMinimized()) win.restore();
-      win.show();
-      win.focus();
-      // Only in-app paths, e.g. /conversations/<id>.
-      if (typeof route === 'string' && /^\/[\w\-/?=&.%]*$/.test(route)) {
-        win.webContents.send('app:navigate', route);
-      }
-    });
+    // Opens the window if it was closed, at the page the message is about
+    // (only in-app paths, e.g. /conversations/<id>).
+    notification.on('click', () => bootApp(typeof route === 'string' ? route : ''));
     notification.show();
   });
+
+  // How many scheduled tasks are on, to decide what closing the window does.
+  registerHostHandler('scheduled.state', ({ enabled } = {}) => setEnabledTaskCount(enabled));
 
   powerMonitor.on('resume', () => postHostEvent('power.resume'));
   powerMonitor.on('unlock-screen', () => postHostEvent('power.resume'));
@@ -888,7 +922,7 @@ app.whenReady().then(async () => {
   // Create tray
   createTray({
     onQuit: quitApp,
-    onShow: () => bootApp(),
+    onShow: (route) => bootApp(route),
     onRestartBackend: async () => {
       await stopBackend();
       await startBackend();
@@ -916,9 +950,9 @@ app.whenReady().then(async () => {
     },
   });
 
-  // Boot the app
+  // Boot the app; a login item starts it in the tray without a window.
   // A new version that came up properly keeps itself; see update-rollback.js.
-  reportBootResult(await bootApp());
+  reportBootResult(startsHidden() ? await startInBackground() : await bootApp());
 
   // Re-apply the saved icon now that the window and tray exist.
   applyAppIcon();
