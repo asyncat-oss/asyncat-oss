@@ -65,13 +65,9 @@ import {
 } from '../controllers/ai/mlxServerManager.js';
 import {
   listAllAudioModels,
-  listWhisperModels,
-  listTtsModels,
   deleteAudioModel,
   deleteCustomAudioPath,
   clearCache as clearAudioCache,
-  WHISPER_DIR,
-  TTS_DIR,
 } from '../controllers/ai/audioModelManager.js';
 import {
   listVisualModels,
@@ -116,7 +112,6 @@ const providerStatusClients = new Map();
 const execFileAsync = promisify(execFile);
 
 import {
-  getHuggingFaceToken,
   huggingFaceHeaders,
   isHuggingFaceUrl,
 } from '../controllers/ai/huggingFaceAuth.js';
@@ -1312,221 +1307,6 @@ router.get('/hf-files', async (req, res) => {
   }
 });
 
-// ── GET /recommended-models — curated list of good GGUF models (public, static data)
-router.get('/recommended-models', async (req, res) => {
-  try {
-    const catalog = [
-      {
-        repoId: 'unsloth/gemma-4-E4B-it-GGUF',
-        name: 'Gemma 4 E4B',
-        description: 'Google\'s latest Gemma 4 with 4.5B effective params. Multimodal (text + image + audio), 128K context, excellent reasoning. Best for laptops with 8-12GB VRAM.',
-        architecture: 'gemma4',
-        modalities: ['text', 'image', 'audio'],
-        params: '4.5B eff',
-        quantizations: ['Q4_K_M', 'Q5_K_M', 'Q6_K', 'Q8_0'],
-        defaultQuant: 'Q4_K_M',
-        sizeBytes: 9 * 1024 * 1024 * 1024,
-        vram: '~9GB',
-        hardwareTier: 'mid',
-        tags: ['google', 'gemma4', 'multimodal', 'vision', 'audio', 'reasoning'],
-        trending: true,
-        features: ['thinking', 'function calling', 'multimodal'],
-      },
-      {
-        repoId: 'unsloth/gemma-4-26B-A4B-it-GGUF',
-        name: 'Gemma 4 26B-A4B (MoE)',
-        description: 'Google\'s MoE Gemma 4 — 25B total params, 3.8B active. Exceptional reasoning (88% on AIME 2026), 256K context, multimodal (text + image). Best balance of power and speed.',
-        architecture: 'gemma4',
-        modalities: ['text', 'image'],
-        params: '25B / 3.8B active',
-        quantizations: ['Q3_K_M', 'Q4_K_M', 'Q5_K_M', 'Q6_K', 'Q8_0'],
-        defaultQuant: 'Q4_K_M',
-        sizeBytes: 17 * 1024 * 1024 * 1024,
-        vram: '~17GB',
-        hardwareTier: 'high',
-        tags: ['google', 'gemma4', 'moe', 'vision', 'reasoning', 'coding'],
-        trending: true,
-        features: ['thinking', 'function calling', 'long-context', 'multimodal'],
-      },
-      {
-        repoId: 'HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive',
-        name: 'Qwen 3.5-9B Uncensored',
-        description: 'Qwen 3.5 9B with all safety filters removed. 0 refusals, 100% capability. Hybrid Gated DeltaNet architecture, 262K context, multimodal (text+image+video). New architecture (2026).',
-        architecture: 'qwen35',
-        modalities: ['text', 'image', 'video'],
-        params: '9B',
-        quantizations: ['Q4_K_M', 'Q6_K', 'Q8_0', 'BF16'],
-        defaultQuant: 'Q4_K_M',
-        sizeBytes: 5.3 * 1024 * 1024 * 1024,
-        vram: '~5.3GB',
-        hardwareTier: 'entry',
-        tags: ['qwen', 'qwen35', 'uncensored', 'multimodal', 'coding'],
-        trending: true,
-        features: ['uncensored', 'multimodal', 'fast'],
-      },
-      {
-        repoId: 'unsloth/Qwen3.6-35B-A3B-GGUF',
-        name: 'Qwen 3.6-35B-A3B (MoE)',
-        description: 'Alibaba\'s newest (Apr 2026). 35B total / 3B active MoE. Best-in-class agentic coding (73.4% on SWE-bench), thinking preservation across conversations, tool calling mastery. 262K context.',
-        architecture: 'qwen36moe',
-        modalities: ['text', 'image', 'video'],
-        params: '35B / 3B active',
-        quantizations: ['Q3_K_M', 'Q4_K_M', 'Q5_K_M', 'Q6_K', 'Q8_0'],
-        defaultQuant: 'Q4_K_M',
-        sizeBytes: 22 * 1024 * 1024 * 1024,
-        vram: '~22GB',
-        hardwareTier: 'high',
-        tags: ['qwen', 'qwen36', 'moe', 'coding', 'agentic', 'thinking'],
-        trending: true,
-        features: ['thinking', 'function calling', 'agentic', 'long-context', 'multimodal'],
-      },
-      {
-        repoId: 'unsloth/Qwen3.5-7B-Instruct-GGUF',
-        name: 'Qwen 3.5-7B',
-        description: 'Qwen 3.5 7B — proven, stable, fast. 32K context, strong multilingual support (29+ languages), excellent coding. The reliable workhorse.',
-        architecture: 'qwen25',
-        modalities: ['text'],
-        params: '7B',
-        quantizations: ['Q2_K', 'Q3_K_M', 'Q4_0', 'Q4_K_M', 'Q5_K_M', 'Q6_K', 'Q8_0'],
-        defaultQuant: 'Q4_K_M',
-        sizeBytes: 4.7 * 1024 * 1024 * 1024,
-        vram: '~4.7GB',
-        hardwareTier: 'entry',
-        tags: ['qwen', 'qwen25', 'coding', 'multilingual'],
-        trending: false,
-        features: ['fast', 'multilingual', 'stable'],
-      },
-      {
-        repoId: 'unsloth/gemma-4-31B-it-GGUF',
-        name: 'Gemma 4 31B Dense',
-        description: 'Google\'s dense 31B Gemma 4. Most powerful Gemma variant at 85.2% MMLU Pro. 256K context, vision + text. Needs a beefy GPU (24-30GB VRAM).',
-        architecture: 'gemma4',
-        modalities: ['text', 'image'],
-        params: '30.7B',
-        quantizations: ['Q4_K_M', 'Q5_K_M', 'Q6_K', 'Q8_0'],
-        defaultQuant: 'Q5_K_M',
-        sizeBytes: 30 * 1024 * 1024 * 1024,
-        vram: '~30GB',
-        hardwareTier: 'beefy',
-        tags: ['google', 'gemma4', 'dense', 'vision', 'reasoning'],
-        trending: false,
-        features: ['thinking', 'function calling', 'long-context', 'multimodal'],
-      },
-      {
-        repoId: 'prism-ml/Bonsai-8B-gguf',
-        name: 'Bonsai 8B',
-        description: 'Efficient 8B model optimized for consumer hardware. Fast inference, good quality, low VRAM requirement. Great for everyday tasks.',
-        architecture: 'bonsai',
-        modalities: ['text'],
-        params: '8B',
-        quantizations: ['Q4_K_M', 'Q5_K_M', 'Q6_K'],
-        defaultQuant: 'Q4_K_M',
-        sizeBytes: 5 * 1024 * 1024 * 1024,
-        vram: '~5GB',
-        hardwareTier: 'entry',
-        tags: ['bonsai', 'efficient', 'fast'],
-        trending: true,
-        features: ['fast', 'low-vram'],
-      },
-      {
-        repoId: 'unsloth/Qwen3.5-14B-Instruct-GGUF',
-        name: 'Qwen 3.5-14B',
-        description: 'Qwen 3.5 14B dense model. Good balance between capability and hardware requirements. 32K context, strong coding and math.',
-        architecture: 'qwen25',
-        modalities: ['text'],
-        params: '14B',
-        quantizations: ['Q4_K_M', 'Q5_K_M', 'Q6_K', 'Q8_0'],
-        defaultQuant: 'Q4_K_M',
-        sizeBytes: 9 * 1024 * 1024 * 1024,
-        vram: '~9GB',
-        hardwareTier: 'mid',
-        tags: ['qwen', 'qwen25', 'coding', 'balanced'],
-        trending: false,
-        features: ['coding', 'math', 'balanced'],
-      },
-    ];
-
-    res.json({ success: true, models: catalog, count: catalog.length });
-  } catch (err) {
-    console.error('Recommended models error:', err);
-    res.status(500).json({ success: false, error: 'Failed to get recommended models' });
-  }
-});
-
-// ── GET /hf-repo/:repoId/files — list GGUF files in a HF repo ─────────────────
-router.get('/hf-repo/:repoId/files', async (req, res) => {
-  try {
-    const { repoId } = req.params;
-    const url = `https://huggingface.co/api/models/${repoId}/tree/main?recursive=true`;
-
-    const hfRes = await fetch(url, {
-      headers: huggingFaceHeaders(req.user.id),
-      signal: AbortSignal.timeout(8000),
-    });
-
-    if (!hfRes.ok) {
-      throw new Error(`HF API ${hfRes.status}`);
-    }
-
-    const data = await hfRes.json();
-
-    const ggufFiles = (Array.isArray(data) ? data : [])
-      .filter(f => f.path.endsWith('.gguf') || f.path.endsWith('.bin'))
-      .map(f => ({
-        path: f.path,
-        filename: f.path.split('/').pop(),
-        size: f.size || 0,
-        sizeFormatted: f.size ? formatBytes(f.size) : 'unknown',
-        type: f.type === 'directory' ? 'dir' : 'file',
-      }));
-
-    res.json({ success: true, files: ggufFiles, repoId });
-  } catch (err) {
-    res.status(500).json({ success: false, error: 'Failed to fetch repo files', details: err.message });
-  }
-});
-
-// ── GET /hf-download-url — get direct CDN URL for a HF file ───────────────────
-router.get('/hf-download-url', async (req, res) => {
-  try {
-    const { repoId, filename } = req.query;
-    if (!repoId || !filename) {
-      return res.status(400).json({ success: false, error: 'repoId and filename required' });
-    }
-
-    const url = `https://huggingface.co/${repoId}/resolve/main/${encodeURIComponent(filename)}`;
-    const headRes = await fetch(url, {
-      method: 'HEAD',
-      headers: huggingFaceHeaders(req.user.id, { Accept: '*/*' }),
-      signal: AbortSignal.timeout(5000),
-    });
-
-    if (!headRes.ok) {
-      throw new Error(`File not found or inaccessible: ${repoId}/${filename}`);
-    }
-
-    const contentLength = headRes.headers.get('content-length');
-    res.json({
-      success: true,
-      url,
-      filename,
-      size: contentLength ? parseInt(contentLength, 10) : 0,
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, error: 'Failed to get download URL', details: err.message });
-  }
-});
-
-function formatBytes(bytes) {
-  if (!bytes || bytes === 0) return '0 B';
-  const gb = bytes / 1024 ** 3;
-  if (gb >= 1) return `${gb.toFixed(2)} GB`;
-  const mb = bytes / 1024 ** 2;
-  if (mb >= 1) return `${mb.toFixed(1)} MB`;
-  const kb = bytes / 1024;
-  return `${kb.toFixed(0)} KB`;
-}
-
 // ══════════════════════════════════════════════════════════════════════════════
 // VISUAL MODEL ROUTES — /api/ai/providers/visual/*
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1581,140 +1361,6 @@ router.delete('/visual/models/:id', (req, res) => {
     if (err.message.includes('not found')) {
       return res.status(404).json({ success: false, error: err.message });
     }
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// ── Cloud image generation ────────────────────────────────────────────────────
-async function generateWithCloudProvider(providerId, params) {
-  const { prompt, negativePrompt, width = 1024, height = 1024, steps, seed } = params;
-
-  if (providerId === 'openai') {
-    const size = (width <= 512 && height <= 512) ? '512x512'
-      : (width > 1024 || height > 1024) ? '1792x1024'
-      : '1024x1024';
-    const response = await fetch('https://api.openai.com/v1/images/generations', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${requiredEnv('OPENAI_API_KEY', 'OpenAI image generation')}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: process.env.OPENAI_IMAGE_MODEL || 'dall-e-3',
-        prompt: negativePrompt ? `${prompt}. Avoid: ${negativePrompt}` : prompt,
-        n: 1,
-        size,
-        response_format: 'url',
-      }),
-      signal: AbortSignal.timeout(120_000),
-    });
-    if (!response.ok) {
-      const error = await response.text().catch(() => response.statusText);
-      throw new Error(`OpenAI image generation failed: ${error}`);
-    }
-    const result = await response.json();
-    const imageUrl = result.data?.[0]?.url;
-    if (!imageUrl) throw new Error('OpenAI image generation returned no URL.');
-    const imgRes = await fetch(imageUrl, { signal: AbortSignal.timeout(60_000) });
-    return {
-      buffer: Buffer.from(await imgRes.arrayBuffer()),
-      mimeType: 'image/png',
-      provider: 'openai',
-      width: parseInt(size.split('x')[0], 10),
-      height: parseInt(size.split('x')[1], 10),
-      revisedPrompt: result.data?.[0]?.revised_prompt,
-    };
-  }
-
-  if (providerId === 'fal') {
-    const imageSize = (width >= height)
-      ? (width / height > 1.5 ? 'landscape_16_9' : 'square_hd')
-      : 'portrait_16_9';
-    const response = await fetch('https://fal.run/fal-ai/flux/schnell', {
-      method: 'POST',
-      headers: {
-        Authorization: `Key ${requiredEnv('FAL_KEY', 'fal.ai image generation')}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        prompt,
-        image_size: imageSize,
-        num_inference_steps: steps || 4,
-        num_images: 1,
-        enable_safety_checker: true,
-        ...(seed != null ? { seed } : {}),
-      }),
-      signal: AbortSignal.timeout(120_000),
-    });
-    if (!response.ok) {
-      const error = await response.text().catch(() => response.statusText);
-      throw new Error(`fal.ai image generation failed: ${error}`);
-    }
-    const result = await response.json();
-    const img = result.images?.[0];
-    if (!img?.url) throw new Error('fal.ai image generation returned no image.');
-    const imgRes = await fetch(img.url, { signal: AbortSignal.timeout(60_000) });
-    return {
-      buffer: Buffer.from(await imgRes.arrayBuffer()),
-      mimeType: img.content_type || 'image/jpeg',
-      provider: 'fal',
-      width: img.width || width,
-      height: img.height || height,
-      seed: result.seed,
-    };
-  }
-
-  if (providerId === 'stability') {
-    const form = new FormData();
-    form.append('prompt', prompt);
-    if (negativePrompt) form.append('negative_prompt', negativePrompt);
-    form.append('output_format', 'png');
-    form.append('aspect_ratio', width >= height ? (width / height > 1.4 ? '16:9' : '1:1') : '9:16');
-    if (seed != null) form.append('seed', String(seed));
-    const response = await fetch('https://api.stability.ai/v2beta/stable-image/generate/ultra', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${requiredEnv('STABILITY_API_KEY', 'Stability AI image generation')}`,
-        Accept: 'image/*',
-      },
-      body: form,
-      signal: AbortSignal.timeout(120_000),
-    });
-    if (!response.ok) {
-      const error = await response.text().catch(() => response.statusText);
-      throw new Error(`Stability AI image generation failed: ${error}`);
-    }
-    const seed_header = response.headers.get('seed');
-    return {
-      buffer: Buffer.from(await response.arrayBuffer()),
-      mimeType: 'image/png',
-      provider: 'stability',
-      width,
-      height,
-      seed: seed_header ? parseInt(seed_header, 10) : seed,
-    };
-  }
-
-  throw new Error(`${providerId} image generation is not supported.`);
-}
-
-// POST /visual/image/cloud/generate — cloud image gen via ASYNCAT_IMAGE_PROVIDER
-router.post('/visual/image/cloud/generate', async (req, res) => {
-  try {
-    const providerId = String(process.env.ASYNCAT_IMAGE_PROVIDER || '').trim();
-    if (!providerId || providerId === 'local') {
-      return res.status(400).json({ success: false, error: 'No cloud image provider configured. Set ASYNCAT_IMAGE_PROVIDER in Settings.' });
-    }
-    const result = await generateWithCloudProvider(providerId, req.body || {});
-    const ext = result.mimeType?.includes('png') ? 'png' : 'jpg';
-    res.setHeader('Content-Type', result.mimeType || 'image/png');
-    res.setHeader('Content-Length', result.buffer.length);
-    res.setHeader('X-Asyncat-Image-Provider', result.provider);
-    if (result.seed != null) res.setHeader('X-Asyncat-Seed', String(result.seed));
-    if (result.revisedPrompt) res.setHeader('X-Asyncat-Revised-Prompt', result.revisedPrompt.slice(0, 500));
-    res.setHeader('Content-Disposition', `inline; filename="generated_${Date.now()}.${ext}"`);
-    res.send(result.buffer);
-  } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -2231,27 +1877,6 @@ router.get('/server/status', (req, res) => {
   res.json({ success: true, ...getLlamaStatus() });
 });
 
-// ── GET /server/status/stream — SSE stream while model is loading ─────────────
-router.get('/server/status/stream', async (req, res) => {
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no');
-
-  const send = data => res.write(`data: ${JSON.stringify(data)}\n\n`);
-
-  send(getLlamaStatus());
-
-  const unsub = llamaSubscribe(snap => {
-    send(snap);
-    if (snap.status === 'ready' || snap.status === 'error' || snap.status === 'idle') {
-      setTimeout(() => { try { res.end(); } catch {} }, 300);
-    }
-  });
-
-  req.on('close', () => unsub());
-});
-
 // ── POST /server/start — load a model into the built-in server ────────────────
 router.post('/server/start', async (req, res) => {
   let { filename, ctxSize } = req.body;
@@ -2289,30 +1914,6 @@ router.post('/server/start', async (req, res) => {
 
   } catch (err) {
     console.error('[llamaServer] Start failed:', err.message);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// ── POST /server/activate — mark the ready built-in server as the provider ───
-router.post('/server/activate', async (req, res) => {
-  try {
-    const snap = getLlamaStatus();
-    if (snap.status !== 'ready' || !snap.model) {
-      return res.status(409).json({
-        success: false,
-        error: `Local model is not ready yet (status: ${snap.status}).`,
-      });
-    }
-
-    try {
-      saveBuiltinProviderConfig(req.user.id, snap.model);
-      res.json({ success: true, model: snap.model, baseUrl: LLAMA_BASE_URL });
-    } catch (dbErr) {
-      console.error('[llamaServer] Failed to save provider config:', dbErr);
-      res.status(500).json({ success: false, error: dbErr.message });
-    }
-  } catch (err) {
-    console.error('Server activate error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });

@@ -5,7 +5,7 @@ import express from 'express';
 import db from '../../db/client.js';
 import { chatService } from '../controllers/ai/chatService.js';
 import { initializeAgent, AgentRuntime, AgentSession } from '../../agent/index.js';
-import { deleteCheckpoint, listCheckpoints, restoreCheckpoint } from '../../agent/AgentRuntime.js';
+import { deleteCheckpoint, restoreCheckpoint } from '../../agent/AgentRuntime.js';
 import {
   applySandboxPatch,
   commitSandboxBranch,
@@ -29,9 +29,8 @@ import { noProjectToolNames } from '../../agent/toolScopes.js';
 import { createScheduledTaskRouter } from './scheduledTaskRoutes.js';
 import { getWorkspaceRoot, loadEntry, resolveWorkingDirectoryContext } from '../../files/fileExplorerService.js';
 import { codeSearchTool, listDefinitionsTool, findDefinitionTool, findReferencesTool } from '../../agent/tools/codeSearchTools.js';
-import { publicProvider } from '../controllers/ai/providerCatalog.js';
 import { listMemories, normalizeMemoryRow, searchMemories, hybridRecall, ALL_PROJECTS } from '../../agent/tools/memoryTools.js';
-import { embeddingStatus, resetEmbeddingStrategy, embedText } from '../embeddings/embeddingService.js';
+import { embeddingStatus, embedText } from '../embeddings/embeddingService.js';
 import { getMcpStatus, listMcpServers, mergeMcpEnv, readMcpConfig, reloadMcpTools, writeMcpConfig } from '../../agent/tools/mcpTools.js';
 import { toolRegistry } from '../../agent/tools/toolRegistry.js';
 import { formatMultimodalCapabilityPrompt, getMultimodalCapabilities } from '../../agent/multimodalCapabilities.js';
@@ -39,7 +38,7 @@ import { normalizeApprovalDecision } from '../../agent/approvalDecisions.js';
 import { buildChatContext, projectForChat } from '../../knowledge/chatContext.js';
 import { getModelCapabilities } from '../controllers/ai/modelCapabilities.js';
 import { getModelRuntimeStatus } from '../controllers/ai/modelRuntimeStatus.js';
-import { listProfiles, getProfile, getProfileByHandle, createProfile, updateProfile, deleteProfile, getDefaultProfile, toolsForCapabilities, AGENT_CAPABILITIES } from '../../agent/ProfileManager.js';
+import { listProfiles, getProfile, getProfileByHandle, createProfile, updateProfile, deleteProfile, toolsForCapabilities, AGENT_CAPABILITIES } from '../../agent/ProfileManager.js';
 import { addKnowledgeFile, deleteKnowledgeFile, deleteOwnerKnowledge, listKnowledgeFiles, MAX_FILE_BYTES } from '../../knowledge/knowledgeStore.js';
 import { knowledgeFitReport } from '../../knowledge/contextBuilder.js';
 import { describeModel } from '../controllers/ai/modelProfile.js';
@@ -506,31 +505,6 @@ router.post('/chats/save', withWorkspaceContext, async (req, res) => {
   }
 });
 
-router.post('/chats/autosave', withWorkspaceContext, async (req, res) => {
-  try {
-    const { messages, mode = 'chat', projectIds = [], metadata = {}, conversationId = null, fileAttachments = null } = req.body;
-
-    if (!messages || !Array.isArray(messages) || messages.length < 2) {
-      return res.status(400).json({ success: false, error: 'Auto-save requires at least 2 messages' });
-    }
-
-    const result = await chatService.saveConversation(req.user.id, messages, {
-      title: null, mode, projectIds, metadata, conversationId,
-      workspaceId: req.workspaceId,
-      fileAttachments,
-      databaseClient: req.db
-    });
-
-    res.json({ success: true, ...result });
-  } catch (error) {
-    if (error.message.includes('not found') || error.message.includes('access denied')) {
-      return res.status(404).json({ success: false, error: 'Conversation not found' });
-    }
-    console.error('Auto-save error:', error);
-    res.status(500).json({ success: false, error: 'Auto-save failed' });
-  }
-});
-
 router.get('/chats', withWorkspaceContext, async (req, res) => {
   try {
     const { mode, limit = 50, offset = 0, includeArchived = false, search } = req.query;
@@ -547,16 +521,6 @@ router.get('/chats', withWorkspaceContext, async (req, res) => {
   } catch (error) {
     console.error('Get conversations error:', error);
     res.status(500).json({ success: false, error: 'Failed to retrieve conversations' });
-  }
-});
-
-router.get('/chats/workspaces', withWorkspaceContext, async (req, res) => {
-  try {
-    const workspaces = await chatService.getUserConversationWorkspaces(req.user.id);
-    res.json({ success: true, workspaces });
-  } catch (error) {
-    console.error('Get conversation workspaces error:', error);
-    res.status(500).json({ success: false, error: 'Failed to retrieve conversation workspaces' });
   }
 });
 
@@ -616,16 +580,6 @@ router.get('/chats/trash', withWorkspaceContext, async (req, res) => {
   }
 });
 
-router.get('/chats/stats/summary', withWorkspaceContext, async (req, res) => {
-  try {
-    const stats = await chatService.getConversationStats(req.user.id, req.workspaceId);
-    res.json({ success: true, stats });
-  } catch (error) {
-    console.error('Get stats error:', error);
-    res.status(500).json({ success: false, error: 'Failed to retrieve statistics' });
-  }
-});
-
 router.get('/chats/:conversationId', withWorkspaceContext, async (req, res) => {
   try {
     const conversation = await chatService.getConversation(req.user.id, req.params.conversationId, req.workspaceId, req.db);
@@ -636,33 +590,6 @@ router.get('/chats/:conversationId', withWorkspaceContext, async (req, res) => {
     }
     console.error('Get conversation error:', error);
     res.status(500).json({ success: false, error: 'Failed to retrieve conversation' });
-  }
-});
-
-router.post('/chats/:conversationId/continue', withWorkspaceContext, async (req, res) => {
-  try {
-    const mode = String(req.body?.mode || '').trim().toLowerCase();
-    if (!['chat', 'work'].includes(mode)) {
-      return res.status(400).json({ success: false, error: 'Mode must be chat or work' });
-    }
-
-    const result = await chatService.continueConversation(
-      req.user.id,
-      req.params.conversationId,
-      mode,
-      req.workspaceId,
-      req.db,
-    );
-    res.status(201).json({ success: true, ...result });
-  } catch (error) {
-    if (error.message.includes('not found')) {
-      return res.status(404).json({ success: false, error: 'Conversation not found' });
-    }
-    if (error.message.includes('already in') || error.message.includes('no readable messages')) {
-      return res.status(400).json({ success: false, error: error.message });
-    }
-    console.error('Continue conversation error:', error);
-    res.status(500).json({ success: false, error: 'Failed to continue conversation' });
   }
 });
 
@@ -1012,17 +939,6 @@ router.get('/embeddings/status', withWorkspaceContext, (req, res) => {
     res.json({ success: true, ...embeddingStatus(req.user.id) });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message || 'Failed to load embedding status' });
-  }
-});
-
-// Force a re-probe of the provider's embeddings endpoint (e.g. after switching
-// the active provider in the Models page).
-router.post('/embeddings/refresh', withWorkspaceContext, (req, res) => {
-  try {
-    resetEmbeddingStrategy(req.user.id);
-    res.json({ success: true, ...embeddingStatus(req.user.id) });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message || 'Failed to refresh embedding status' });
   }
 });
 
@@ -1996,29 +1912,6 @@ router.get('/sessions', withWorkspaceContext, (req, res) => {
   res.json({ success: true, sessions });
 });
 
-router.get('/sessions/search', withWorkspaceContext, async (req, res) => {
-  try {
-    const q = req.query.q?.trim();
-    if (!q) {
-      return res.status(400).json({ success: false, error: 'q parameter required' });
-    }
-
-    const rows = db.prepare(`
-      SELECT s.id, s.goal, s.status, s.total_rounds, s.created_at, s.updated_at,
-             bm25(agent_sessions_fts) as rank
-      FROM agent_sessions_fts fts
-      JOIN agent_sessions s ON s.id = fts.session_id
-      WHERE fts.agent_sessions_fts MATCH ? AND s.user_id = ?
-      ORDER BY rank
-      LIMIT 20
-    `).all(`${q}*`, req.user.id);
-
-    res.json({ success: true, count: rows.length, sessions: rows });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
 router.get('/sessions/:id', withWorkspaceContext, (req, res) => {
   const session = AgentSession.load(req.params.id);
   if (!session || session.userId !== req.user.id) {
@@ -2202,66 +2095,6 @@ router.delete('/sessions/:id', withWorkspaceContext, async (req, res) => {
   }
 });
 
-router.post('/sessions/:id/feedback', withWorkspaceContext, async (req, res) => {
-  try {
-    const { rating, comment, was_helpful } = req.body;
-    if (!rating || rating < 1 || rating > 5) {
-      return res.status(400).json({ success: false, error: 'rating 1-5 required' });
-    }
-
-    const session = db.prepare(
-      'SELECT id FROM agent_sessions WHERE id = ? AND user_id = ?'
-    ).get(req.params.id, req.user.id);
-
-    if (!session) {
-      return res.status(404).json({ success: false, error: 'Session not found' });
-    }
-
-    db.prepare(`
-      UPDATE agent_sessions
-      SET feedback_rating = ?, feedback_comment = ?, was_helpful = ?
-      WHERE id = ?
-    `).run(rating, comment || null, was_helpful !== undefined ? (was_helpful ? 1 : 0) : null, req.params.id);
-
-    res.json({ success: true, message: 'Feedback recorded' });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-router.post('/sessions/:id/correct', withWorkspaceContext, async (req, res) => {
-  try {
-    const { tool, correction, explanation } = req.body;
-    if (!correction) {
-      return res.status(400).json({ success: false, error: 'correction text required' });
-    }
-
-    const session = db.prepare(
-      'SELECT id, corrections FROM agent_sessions WHERE id = ? AND user_id = ?'
-    ).get(req.params.id, req.user.id);
-
-    if (!session) {
-      return res.status(404).json({ success: false, error: 'Session not found' });
-    }
-
-    const corrections = session.corrections ? JSON.parse(session.corrections) : [];
-    corrections.push({
-      tool: tool || 'general',
-      correction,
-      explanation: explanation || '',
-      timestamp: new Date().toISOString()
-    });
-
-    db.prepare(`
-      UPDATE agent_sessions SET corrections = ? WHERE id = ?
-    `).run(JSON.stringify(corrections.slice(-10)), req.params.id);
-
-    res.json({ success: true, message: 'Correction recorded' });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
 // ── Permissions / ask_user responses ─────────────────────────────────────────
 
 router.post('/permissions/:requestId', withWorkspaceContext, (req, res) => {
@@ -2296,34 +2129,6 @@ router.post('/ask/:requestId', withWorkspaceContext, (req, res) => {
 });
 
 // ── Brain stats (memory + skill counts for UI indicators) ─────────────────────
-
-router.get('/brain-stats', withWorkspaceContext, async (req, res) => {
-  try {
-    const workspaceId = req.workspaceId ||
-      db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
-
-    const memoryCount = workspaceId
-      ? (db.prepare('SELECT COUNT(*) AS c FROM agent_memory WHERE user_id = ? AND workspace_id = ?').get(req.user.id, workspaceId)?.c ?? 0)
-      : 0;
-
-    const skills = listSkills();
-    const skillCount = skills.length;
-    const autoSkillCount = skills.filter(s => {
-      const tags = Array.isArray(s.tags) ? s.tags : [];
-      return (
-        s.created_by === 'basal-ganglia' ||
-        s.created_by === 'skill-synthesizer' ||
-        tags.includes('auto-generated') ||
-        tags.includes('auto-synthesized') ||
-        tags.includes('learned')
-      );
-    }).length;
-
-    res.json({ success: true, memoryCount: Number(memoryCount), skillCount, autoSkillCount });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
 
 // ── Agent memory ──────────────────────────────────────────────────────────────
 
@@ -2687,15 +2492,6 @@ router.delete('/profiles/:id', withWorkspaceContext, (req, res) => {
 });
 
 // ── Checkpoints ──────────────────────────────────────────────────────────────
-
-router.get('/checkpoints', withWorkspaceContext, (_req, res) => {
-  res.json({ success: true, checkpoints: listCheckpoints() });
-});
-
-router.post('/checkpoints/restore', withWorkspaceContext, (req, res) => {
-  const result = restoreCheckpoint(req.body?.id || null);
-  res.status(result.success ? 200 : 404).json(result);
-});
 
 // ─── Artifact Routes ────────────────────────────────────────────────────────
 

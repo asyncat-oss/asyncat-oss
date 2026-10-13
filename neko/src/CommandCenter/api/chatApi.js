@@ -103,13 +103,6 @@ export const chatApi = {
     return await apiRequest(`${ENDPOINTS.CHATS}/${conversationId}`);
   },
 
-  continueConversation: async (conversationId, mode) => {
-    return await apiRequest(`${ENDPOINTS.CHATS}/${conversationId}/continue`, {
-      method: 'POST',
-      body: JSON.stringify({ mode })
-    });
-  },
-
   getConversationHistory: async (filters = {}) => {
     const {
       limit = 50,

@@ -4,7 +4,6 @@ import rawDb from '../../../db/client.js';
 import { deleteCheckpoint } from '../../../agent/AgentRuntime.js';
 import { v4 as uuidv4 } from 'uuid';
 import { normalizeConversationMode } from './conversationModes.js';
-import { buildConversationContinuation } from './conversationContinuation.js';
 
 /**
  * Parse a conversation's messages JSON and extract all note IDs created by
@@ -803,20 +802,6 @@ class ChatService {
     }
   }
 
-  async continueConversation(userId, conversationId, targetMode, workspaceId = null, databaseClient = null) {
-    const sourceConversation = await this.getConversation(userId, conversationId, workspaceId, databaseClient);
-    const continuation = buildConversationContinuation(sourceConversation, targetMode, { createId: uuidv4 });
-
-    return this.saveConversation(userId, continuation.messages, {
-      title: continuation.title,
-      mode: continuation.mode,
-      projectIds: continuation.projectIds,
-      metadata: continuation.metadata,
-      workspaceId,
-      databaseClient,
-    });
-  }
-
   // Get user's conversations using SQLite
   async getUserConversations(userId, options = {}) {
     const {
@@ -1172,145 +1157,11 @@ class ChatService {
     }
   }
 
-  // Auto-save helper with workspace context
-  async autoSaveSession(userId, messages, currentConversationId, options = {}) {
-    if (messages.length < 2) return null;
-
-    try {
-      return await this.saveConversation(userId, messages, {
-        ...options,
-        conversationId: currentConversationId
-      });
-    } catch (error) {
-      console.warn('Auto-save failed:', error);
-      return null;
-    }
-  }
-
   // Simple title generation
   generateTitle(firstMessage) {
     if (!firstMessage) return 'New Chat';
     const clean = firstMessage.trim();
     return clean.length <= 50 ? clean : clean.substring(0, 47) + '...';
-  }
-
-  // Get conversation statistics for a workspace
-  async getConversationStats(userId, workspaceId = null) {
-    try {
-      // Get effective workspace ID
-      const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId);
-
-      // Note: This is a complex aggregation query that might need to be split up for Supabase
-      // For now, let's use a simpler approach and calculate stats on the client side
-      const { data: conversations, error } = await db
-        .schema('aichats')
-        .from('conversations')
-        .select('mode, is_pinned, message_count, last_message_at')
-        .eq('user_id', userId)
-        .eq('workspace_id', effectiveWorkspaceId)
-        .eq('is_archived', false);
-
-      if (error) {
-        // Error getting stats - return default values
-        throw error;
-      }
-
-      const stats = {
-        total_conversations: conversations.length,
-        chat_conversations: conversations.filter(c => c.mode === 'chat').length,
-        build_conversations: conversations.filter(c => c.mode === 'build').length,
-        pinned_conversations: conversations.filter(c => c.is_pinned).length,
-        total_messages: conversations.reduce((sum, c) => sum + (c.message_count || 0), 0),
-        last_activity: conversations.reduce((latest, c) => {
-          const messageTime = new Date(c.last_message_at || 0);
-          const latestTime = new Date(latest || 0);
-          return messageTime > latestTime ? c.last_message_at : latest;
-        }, null)
-      };
-
-      return {
-        totalConversations: parseInt(stats.total_conversations || 0),
-        chatConversations: parseInt(stats.chat_conversations || 0),
-        buildConversations: parseInt(stats.build_conversations || 0),
-        pinnedConversations: parseInt(stats.pinned_conversations || 0),
-        totalMessages: parseInt(stats.total_messages || 0),
-        lastActivity: stats.last_activity,
-        workspaceId: effectiveWorkspaceId
-      };
-
-    } catch (error) {
-      return {
-        totalConversations: 0,
-        chatConversations: 0,
-        buildConversations: 0,
-        pinnedConversations: 0,
-        totalMessages: 0,
-        lastActivity: null,
-        workspaceId: null
-      };
-    }
-  }
-
-  // Get all workspaces where user has conversations
-  async getUserConversationWorkspaces(userId) {
-    try {
-      // This is a complex join query - we'll need to fetch data separately and combine
-      const { data: conversations, error: convError } = await db
-        .schema('aichats')
-        .from('conversations')
-        .select('workspace_id, last_message_at')
-        .eq('user_id', userId)
-        .eq('is_archived', false);
-
-      if (convError) {
-        return [];
-      }
-
-      // Group conversations by workspace
-      const workspaceStats = {};
-      conversations.forEach(conv => {
-        const wsId = conv.workspace_id;
-        if (!workspaceStats[wsId]) {
-          workspaceStats[wsId] = {
-            conversation_count: 0,
-            last_activity: null
-          };
-        }
-        workspaceStats[wsId].conversation_count++;
-        if (!workspaceStats[wsId].last_activity || conv.last_message_at > workspaceStats[wsId].last_activity) {
-          workspaceStats[wsId].last_activity = conv.last_message_at;
-        }
-      });
-
-      // Get team details for each workspace that has conversations
-      const workspaceIds = Object.keys(workspaceStats);
-      if (workspaceIds.length === 0) return [];
-
-      const { data: workspaceList, error: wsError } = await db
-        .from('workspaces')
-        .select('id, name, emoji')
-        .in('id', workspaceIds);
-
-      if (wsError) {
-        return [];
-      }
-
-      // Combine workspace details with conversation stats
-      const result = (workspaceList || []).map(team => ({
-        workspace_id: team.id,
-        workspace_name: team.name,
-        workspace_emoji: team.emoji,
-        conversation_count: workspaceStats[team.id].conversation_count,
-        last_activity: workspaceStats[team.id].last_activity
-      }));
-
-      // Sort by last activity
-      result.sort((a, b) => new Date(b.last_activity || 0) - new Date(a.last_activity || 0));
-
-      return result;
-    } catch (error) {
-      return [];
-    }
   }
 
   // Cache management
