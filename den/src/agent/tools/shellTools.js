@@ -1,7 +1,8 @@
 // den/src/agent/tools/shellTools.js
 // ─── Shell Execution Tools ───────────────────────────────────────────────────
-// Execute commands, Python scripts, and Node.js code in a sandboxed process.
-// All dangerous — always require user permission.
+// Execute commands, Python scripts, and Node.js code. On Linux and macOS they
+// run in a sandbox that only lets them write inside the project folder (see
+// commandSandbox.js). All dangerous — the user approves each one.
 // Supports streaming output via tool_progress events.
 
 import { spawn } from 'child_process';
@@ -11,6 +12,7 @@ import { IS_WIN, isPathInside } from './shared.js';
 import { PermissionLevel } from './toolRegistry.js';
 import { getTmpDir } from '../workspacePaths.js';
 import { shellSessionManager } from '../ShellSessionManager.js';
+import { sandboxedCommand, sandboxHint } from '../commandSandbox.js';
 const DEFAULT_TIMEOUT = parseInt(process.env.AGENT_CMD_TIMEOUT ?? '120000', 10); // 120s (was 30s — too short for npm install/build)
 const MAX_OUTPUT = 32000; // chars (was 16000 — too small for test/build output)
 const STREAM_INTERVAL_MS = 250; // how often to flush streaming progress
@@ -25,6 +27,14 @@ function getSmartTimeout(command, userTimeout) {
   // Test commands get moderate time
   if (/\b(npm\s+test|jest|pytest|cargo\s+test|go\s+test|mocha|vitest)/.test(cmd)) return 120000;
   return DEFAULT_TIMEOUT;
+}
+
+/** Run file+args in the project sandbox (when available) and explain sandbox failures. */
+async function runInProject(file, args, context, options) {
+  const plan = sandboxedCommand({ file, args, workspaceRoot: context.workspaceRoot || context.workingDir });
+  const result = await runProcess(plan.file, plan.args, options);
+  const hint = plan.sandboxed ? sandboxHint(result) : null;
+  return { ...result, ...(plan.sandboxed ? { sandboxed: true } : {}), ...(hint ? { note: hint } : {}) };
 }
 
 /** Run a command and capture output — cross-platform, with optional streaming. */
@@ -144,7 +154,7 @@ export const runCommandTool = {
     }
     const timeout = getSmartTimeout(args.command, args.timeout);
     const [sh, flag] = IS_WIN ? ['cmd.exe', '/c'] : ['/bin/sh', '-c'];
-    return await runProcess(sh, [flag, args.command], {
+    return await runInProject(sh, [flag, args.command], context, {
       cwd,
       timeout,
       toolName: 'run_command',
@@ -175,7 +185,7 @@ export const runPythonTool = {
       fs.writeFileSync(tmpFile, args.code, 'utf8');
       const timeout = (args.timeout || 30) * 1000;
       const python = IS_WIN ? 'python' : 'python3';
-      const result = await runProcess(python, [tmpFile], {
+      const result = await runInProject(python, [tmpFile], context, {
         cwd: context.workingDir,
         timeout,
         toolName: 'run_python',
@@ -209,7 +219,7 @@ export const runNodeTool = {
     try {
       fs.writeFileSync(tmpFile, args.code, 'utf8');
       const timeout = (args.timeout || 30) * 1000;
-      const result = await runProcess('node', [tmpFile], {
+      const result = await runInProject('node', [tmpFile], context, {
         cwd: context.workingDir,
         timeout,
         toolName: 'run_node',

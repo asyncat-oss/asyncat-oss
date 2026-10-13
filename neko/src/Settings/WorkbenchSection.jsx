@@ -20,6 +20,7 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { useUiPreferences } from '../contexts/UiPreferencesContext.jsx';
 import { useConfirm } from '../components/confirmContext.js';
+import { configApi } from './settingApi.js';
 
 const card = 'overflow-hidden rounded-xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950';
 const row = 'flex items-center justify-between gap-4 rounded-lg px-3 py-3 transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03] midnight:hover:bg-white/[0.03]';
@@ -105,6 +106,26 @@ export default function WorkbenchSection() {
   const confirm = useConfirm();
   const [clearing, setClearing] = useState(false);
   const [clearMessage, setClearMessage] = useState('');
+  // Backend setting: run the agent's shell commands in a sandbox.
+  const [commandSandbox, setCommandSandbox] = useState(true);
+  useEffect(() => {
+    configApi.getConfig()
+      .then((res) => setCommandSandbox(String(res?.config?.ASYNCAT_COMMAND_SANDBOX || 'auto').toLowerCase() !== 'off'))
+      .catch(() => {});
+  }, []);
+  const changeCommandSandbox = async (value) => {
+    if (!value) {
+      const ok = await confirm({
+        title: 'Turn off the command sandbox?',
+        message: "Commands the agent runs will be able to change or delete any file your account can, not just files in the project. Only do this if a tool you need can't work in the sandbox.",
+        confirmLabel: 'Turn off',
+        destructive: true,
+      });
+      if (!ok) return;
+    }
+    setCommandSandbox(value);
+    configApi.updateConfig('ASYNCAT_COMMAND_SANDBOX', value ? 'auto' : 'off').catch(() => setCommandSandbox(!value));
+  };
 
   // The terminal runs on the backend host (the same machine in the desktop
   // app), so offer only the shells that exist there instead of every shell on
@@ -187,6 +208,9 @@ export default function WorkbenchSection() {
         ]} />
         <ChoiceRow icon={Wrench} label="Font size" value={String(prefs.terminalFontSize)} onChange={(value) => setPreference('terminalFontSize', Number(value))} compact options={[11, 12, 13, 14, 15, 16].map((size) => ({ value: String(size), label: `${size}` }))} />
         <ToggleRow icon={ShieldCheck} label="Confirm before stopping" description="Ask before closing an interactive terminal that may still be running." checked={prefs.terminalConfirmClose} onChange={(value) => setPreference('terminalConfirmClose', value)} />
+        {platform !== 'win32' && (
+          <ToggleRow icon={ShieldCheck} label="Sandbox the agent's commands" description="Commands the agent runs can read your files but only change files in the project folder, temporary folders and package caches. Not available on Windows." checked={commandSandbox} onChange={changeCommandSandbox} />
+        )}
       </SectionCard>
 
       <SectionCard icon={Globe2} title="Browser" description="The embedded browser is isolated from the Asyncat app and your system browser.">

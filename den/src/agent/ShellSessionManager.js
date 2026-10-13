@@ -10,6 +10,7 @@
 // via stdin and output is captured via a unique sentinel pattern.
 
 import { spawn } from 'child_process';
+import { sandboxedCommand } from './commandSandbox.js';
 import { IS_WIN } from './tools/shared.js';
 
 const SENTINEL_PREFIX = '__ASYNCAT_DONE__';
@@ -46,8 +47,10 @@ class ShellSession {
     const [sh, initFlag] = IS_WIN
       ? ['cmd.exe', null]
       : [this._shell || '/bin/bash', '--norc'];
-    const args = initFlag ? [initFlag] : [];
-    this._proc = spawn(sh, args, {
+    // The session's folder is the most it may write to (see commandSandbox.js).
+    const plan = sandboxedCommand({ file: sh, args: initFlag ? [initFlag] : [], workspaceRoot: this.cwd });
+    this.sandboxed = plan.sandboxed;
+    this._proc = spawn(plan.file, plan.args, {
       cwd: this.cwd,
       env: { ...process.env, PS1: '', PS2: '' },
       stdio: ['pipe', 'pipe', 'pipe'],
