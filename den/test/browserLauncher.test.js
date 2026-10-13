@@ -24,6 +24,12 @@ test('finds a Chromium-family browser on PATH on Linux', () => {
   assert.equal(findSystemBrowser({ platform: 'linux', env: { PATH: path.join(scratch, 'empty') } }), null);
 });
 
+test('finds Brave when it is the only Chromium-family browser', () => {
+  const bin = path.join(scratch, 'brave-bin');
+  const brave = fakeExecutable('brave-bin', 'brave');
+  assert.equal(findSystemBrowser({ platform: 'linux', env: { PATH: bin } }), brave);
+});
+
 test('finds Chrome in the user Applications folder on macOS', () => {
   const home = path.join(scratch, 'mac-home');
   const chrome = fakeExecutable('mac-home', 'Applications', 'Google Chrome.app', 'Contents', 'MacOS', 'Google Chrome');

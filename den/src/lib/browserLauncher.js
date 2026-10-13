@@ -14,12 +14,15 @@ const LINUX_COMMANDS = [
   'chromium-browser',
   'microsoft-edge',
   'microsoft-edge-stable',
+  'brave',
+  'brave-browser',
 ];
 
 const MAC_APPS = [
   'Google Chrome.app/Contents/MacOS/Google Chrome',
   'Chromium.app/Contents/MacOS/Chromium',
   'Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+  'Brave Browser.app/Contents/MacOS/Brave Browser',
 ];
 
 const WINDOWS_PATHS = [
@@ -28,6 +31,8 @@ const WINDOWS_PATHS = [
   ['PROGRAMFILES(X86)', 'Google/Chrome/Application/chrome.exe'],
   ['PROGRAMFILES(X86)', 'Microsoft/Edge/Application/msedge.exe'],
   ['PROGRAMFILES', 'Microsoft/Edge/Application/msedge.exe'],
+  ['LOCALAPPDATA', 'BraveSoftware/Brave-Browser/Application/brave.exe'],
+  ['PROGRAMFILES', 'BraveSoftware/Brave-Browser/Application/brave.exe'],
 ];
 
 function isExecutableFile(filePath) {
