@@ -430,6 +430,39 @@ export const profilesApi = {
     });
   },
 
+  getCapabilities: async () => {
+    return await apiRequest(`${API_BASE_URL}/agent/profiles-capabilities`);
+  },
+
+  listKnowledge: async (id) => {
+    return await apiRequest(`${API_BASE_URL}/agent/profiles/${encodeURIComponent(id)}/knowledge`);
+  },
+
+  /** Upload files; resolves to { data: added[], errors: [{ name, error }] }. */
+  uploadKnowledge: async (id, files) => {
+    const form = new FormData();
+    for (const file of files) form.append('files', file, file.name);
+    const response = await apiClient.request(`${API_BASE_URL}/agent/profiles/${encodeURIComponent(id)}/knowledge`, {
+      method: 'POST',
+      body: form,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok && !(Array.isArray(data.errors) && data.errors.length)) {
+      throw new Error(data.error || `Upload failed (HTTP ${response.status})`);
+    }
+    return { data: data.data || [], errors: data.errors || [] };
+  },
+
+  deleteKnowledge: async (id, fileId) => {
+    return await apiRequest(`${API_BASE_URL}/agent/profiles/${encodeURIComponent(id)}/knowledge/${encodeURIComponent(fileId)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  getContextFit: async (id) => {
+    return await apiRequest(`${API_BASE_URL}/agent/profiles/${encodeURIComponent(id)}/context`);
+  },
+
   getProcesses: async () => {
     return await apiRequest(`${API_BASE_URL}/agent/processes`);
   },

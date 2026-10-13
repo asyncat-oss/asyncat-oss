@@ -53,7 +53,10 @@ import {
   Lightbulb,
   PenLine,
   Search,
+  MessageSquareQuote,
 } from "lucide-react";
+import AgentAvatar from "../Agent/AgentAvatar.jsx";
+import { useAgents } from "../Agent/useAgents.js";
 import Cat from "../components/ui/Cat.jsx";
 import { resumeCommand } from "../Agent/externalAgentFormat.js";
 
@@ -413,7 +416,13 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
       return [];
     }
   });
-  const [selectedProfileId] = useState(null);
+  // The agent picked for this chat in the composer (saved with the chat).
+  const selectedProfileId = conversationMetadata?.agentProfileId || null;
+  const { agents } = useAgents();
+  const selectedAgent = useMemo(() => agents.find((agent) => agent.id === selectedProfileId) || null, [agents, selectedProfileId]);
+  const setSelectedAgent = useCallback((agentId) => {
+    setConversationMetadata({ ...(conversationMetadata || {}), agentProfileId: agentId || null });
+  }, [conversationMetadata, setConversationMetadata]);
   const [agentLoadingSession, setAgentLoadingSession] = useState(false);
   const [showDeleteAgentConfirm, setShowDeleteAgentConfirm] = useState(false);
   // Skill-learned toast
@@ -1142,7 +1151,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     const runEnabledIntegrationTools = isDirectChat ? [] : requestedIntegrationTools;
     const selectedReasoningEffort = runOptions.reasoningEffort || messageObj?.reasoningEffort || reasoningEffort || 'auto';
     const leadingProfileMention = getLeadingProfileMention(submittedGoal, agentMentions);
-    const effectiveProfileId = isDirectChat ? null : (leadingProfileMention?.id || selectedProfileId);
+    const effectiveProfileId = leadingProfileMention?.id || selectedProfileId;
     let runKey = currentRunKey;
     let runConversationId = currentConversationId;
     const isFirstExchangeOfNewConversation = !currentConversationId && messages.length === 0;
@@ -1315,8 +1324,11 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
             reasoningEffort: selectedReasoningEffort,
             fileAttachments,
             projectId: workingContext?.projectId || null,
+            profileId: effectiveProfileId || null,
           })
-        : agentApi.runStream(submittedGoal, activeConversationHistory, activeWorkingContext?.workingDir || null, 25, controller.signal, runOptions.continueSessionId !== undefined ? runOptions.continueSessionId : agentCurrentSessionId, {
+        // maxRounds is left to the agent (or the default); it used to be
+        // fixed at 25 here, which overrode every agent's own setting.
+        : agentApi.runStream(submittedGoal, activeConversationHistory, activeWorkingContext?.workingDir || null, null, controller.signal, runOptions.continueSessionId !== undefined ? runOptions.continueSessionId : agentCurrentSessionId, {
         autoApprove: effectiveAgentMode === 'action' ? agentAutoApprove : false,
         preApprovedTools: effectiveAgentMode === 'action' ? [...alwaysAllowedTools] : [],
         profileId: effectiveProfileId,
@@ -2532,6 +2544,10 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     if (isGhostMode) return 'Ghost Mode — this conversation stays off the record';
     return "What's on your mind today?";
   };
+  // A picked agent's own conversation starters replace the general ones.
+  const agentStarters = selectedAgent?.starter_prompts?.length
+    ? selectedAgent.starter_prompts.map((text) => ({ icon: MessageSquareQuote, label: text.length > 42 ? `${text.slice(0, 40)}…` : text, text }))
+    : null;
   // Starter prompts under the welcome composer; clicking one fills the box.
   const starterPrompts = [
     { icon: Lightbulb, label: 'Explain something', text: 'Explain how large language models work, in simple terms.' },
@@ -2645,15 +2661,25 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
         </div>
         <div className="flex flex-col items-center justify-center flex-1 px-6 py-8">
           <div className="max-w-3xl w-full">
-            <div className="mb-7 flex flex-col items-center text-center">
-              <Cat pose={isGhostMode ? 'sleep' : 'sit'} className={isGhostMode ? 'w-24' : 'w-12'} outline={7} />
-              <h1 className="mt-4 text-[28px] font-semibold tracking-[-0.025em] text-fg">
-                {getGreeting()}
-              </h1>
-              <p className="mt-2 max-w-lg text-[13px] leading-5 text-fg-subtle">
-                Ask anything. Open a project when you want Asyncat to work with your files.
-              </p>
-            </div>
+            {selectedAgent && !isGhostMode ? (
+              <div className="mb-7 flex flex-col items-center text-center">
+                <AgentAvatar agent={selectedAgent} size="lg" />
+                <h1 className="mt-4 text-[28px] font-semibold tracking-[-0.025em] text-fg">{selectedAgent.name}</h1>
+                <p className="mt-2 max-w-lg text-[13px] leading-5 text-fg-subtle">
+                  {selectedAgent.description || 'Your custom agent. Ask it anything.'}
+                </p>
+              </div>
+            ) : (
+              <div className="mb-7 flex flex-col items-center text-center">
+                <Cat pose={isGhostMode ? 'sleep' : 'sit'} className={isGhostMode ? 'w-24' : 'w-12'} outline={7} />
+                <h1 className="mt-4 text-[28px] font-semibold tracking-[-0.025em] text-fg">
+                  {getGreeting()}
+                </h1>
+                <p className="mt-2 max-w-lg text-[13px] leading-5 text-fg-subtle">
+                  Ask anything. Open a project when you want Asyncat to work with your files.
+                </p>
+              </div>
+            )}
 
             {isGhostMode && (
               <div className="flex justify-center mb-4">
@@ -2675,6 +2701,8 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
               engine={conversationEngine}
               engines={engines}
               onEngineChange={hasConversationContent ? undefined : setSelectedEngine}
+              selectedAgentId={conversationMetadata?.agentProfileId}
+              onAgentChange={setSelectedAgent}
               engineModel={engineModels[conversationEngine] || null}
               onEngineModelChange={(model) => setEngineModel(conversationEngine, model)}
               externalFolder={conversationMetadata?.externalCwd || null}
@@ -2722,7 +2750,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
 
             {!isGhostMode && (
               <div className="mx-auto mt-2 flex max-w-3xl flex-wrap justify-center gap-2 px-4 sm:px-6">
-                {starterPrompts.map(({ icon: PromptIcon, label, text }) => (
+                {(agentStarters || starterPrompts).map(({ icon: PromptIcon, label, text }) => (
                   <button
                     key={label}
                     type="button"
@@ -3140,6 +3168,8 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                 engine={conversationEngine}
                 engines={engines}
                 onEngineChange={hasConversationContent ? undefined : setSelectedEngine}
+                selectedAgentId={conversationMetadata?.agentProfileId}
+                onAgentChange={setSelectedAgent}
                 engineModel={engineModels[conversationEngine] || null}
                 onEngineModelChange={(model) => setEngineModel(conversationEngine, model)}
                 externalFolder={conversationMetadata?.externalCwd || null}

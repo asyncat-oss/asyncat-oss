@@ -2,8 +2,10 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import PropTypes from "prop-types";
-import { ArrowUp, Bell, Bookmark, ChevronDown, Hammer, ClipboardPen, Cloud, Cpu, Headphones, ImagePlus, Loader2, Mail, MessageCircle, Mic, Paperclip, Rss, Send, ShieldAlert, ShieldOff, Square, Wrench, X, Zap, Plus, Check, Folder } from "lucide-react";
-import { Menu, MenuItem, MenuLabel } from "../../../components/ui/Menu.jsx";
+import { ArrowUp, Bell, Bookmark, ChevronDown, Hammer, ClipboardPen, Cloud, Cpu, Headphones, ImagePlus, Loader2, Mail, MessageCircle, Mic, Paperclip, Rss, Send, ShieldAlert, ShieldOff, Square, Wrench, X, Zap, Plus, Check, Folder, Sparkles } from "lucide-react";
+import { Menu, MenuItem, MenuLabel, MenuSeparator } from "../../../components/ui/Menu.jsx";
+import AgentAvatar from "../../../Agent/AgentAvatar.jsx";
+import { useAgents } from "../../../Agent/useAgents.js";
 import { ProviderGlyph } from "../../../Models/modelLogos.jsx";
 import { folderName, usageHint } from "../../../Agent/externalAgentFormat.js";
 import eventBus from "../../../utils/eventBus.js";
@@ -14,7 +16,7 @@ import { useLocalModelStatus } from "../../hooks/useLocalModelStatus.js";
 import { useModelConfig } from "../../hooks/useModelConfig.js";
 import { useActiveBrainStatus } from "../../hooks/useActiveBrainStatus.js";
 import { localModelsApi, llamaServerApi, audioApi, aiProviderApi } from "../../../Settings/settingApi.js";
-import { profilesApi, filesApi } from "../../api";
+import { filesApi } from "../../api";
 import { dirname, basename, fileIconMeta, rootIcon } from "../../../files/fileUtils.js";
 import { attachmentKind, AttachmentChip, ImageLightbox } from "../shared/AttachmentComponents.jsx";
 
@@ -598,6 +600,74 @@ EnginePicker.propTypes = {
   disabled: PropTypes.bool,
 };
 
+// Which agent (custom instructions, knowledge, model, capabilities) answers.
+function AgentPicker({ agents, selectedAgentId, onChange, onManage, disabled }) {
+  const buttonRef = useRef(null);
+  const [open, setOpen] = useState(false);
+  if (!onChange) return null;
+  const current = agents.find(agent => agent.id === selectedAgentId) || null;
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={() => setOpen(isOpen => !isOpen)}
+        disabled={disabled}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={current ? `${current.name}${current.description ? ` — ${current.description}` : ""}` : "Pick an agent for this chat"}
+        className="inline-flex max-w-[11rem] items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium text-fg-muted transition-colors hover:bg-hover hover:text-fg disabled:cursor-not-allowed"
+      >
+        {current ? <AgentAvatar agent={current} size="xs" /> : <Sparkles className="h-3.5 w-3.5" />}
+        <span className="truncate">{current ? current.name : "Agent"}</span>
+        <ChevronDown className="h-3 w-3 shrink-0 opacity-50" />
+      </button>
+      <Menu anchorRef={buttonRef} open={open} onClose={() => setOpen(false)} placement="top-start" width={290} label="Agent">
+        <MenuLabel>Agent for this chat</MenuLabel>
+        <MenuItem
+          icon={Sparkles}
+          label={(
+            <span className="flex flex-col py-0.5">
+              <span className="text-fg">No agent</span>
+              <span className="whitespace-normal text-[11px] leading-4 text-fg-subtle">Asyncat with its usual instructions</span>
+            </span>
+          )}
+          checked={!current}
+          onSelect={() => onChange(null)}
+        />
+        {agents.map(agent => (
+          <MenuItem
+            key={agent.id}
+            icon={() => <AgentAvatar agent={agent} size="xs" />}
+            label={(
+              <span className="flex flex-col py-0.5">
+                <span className="text-fg">{agent.name}</span>
+                {agent.description ? <span className="line-clamp-2 whitespace-normal text-[11px] leading-4 text-fg-subtle">{agent.description}</span> : null}
+              </span>
+            )}
+            checked={current?.id === agent.id}
+            onSelect={() => onChange(agent.id)}
+          />
+        ))}
+        {onManage && (
+          <>
+            <MenuSeparator />
+            <MenuItem icon={Plus} label={agents.length ? "Manage agents" : "Create an agent"} onSelect={onManage} />
+          </>
+        )}
+      </Menu>
+    </>
+  );
+}
+
+AgentPicker.propTypes = {
+  agents: PropTypes.arrayOf(PropTypes.object).isRequired,
+  selectedAgentId: PropTypes.string,
+  onChange: PropTypes.func,
+  onManage: PropTypes.func,
+  disabled: PropTypes.bool,
+};
+
 // Which model Claude Code or Codex uses. Can change between turns.
 function EngineModelPicker({ engine, engines, value, onChange, disabled }) {
   const buttonRef = useRef(null);
@@ -730,6 +800,8 @@ export const MessageInputV2 = ({
   engine = "asyncat",
   engines = [],
   onEngineChange,
+  selectedAgentId,
+  onAgentChange,
   engineModel = null,
   onEngineModelChange,
   externalFolder = null,
@@ -762,8 +834,7 @@ export const MessageInputV2 = ({
   const [providerProfiles, setProviderProfiles] = useState([]);
   const [activeProfileId, setActiveProfileId] = useState(null);
   const [openMenu, setOpenMenu] = useState(null);
-  const [agentProfiles, setAgentProfiles] = useState([]);
-  const [profilesLoaded, setProfilesLoaded] = useState(false);
+  const { agents: agentProfiles, loaded: profilesLoaded } = useAgents();
   const [cursorPosition, setCursorPosition] = useState(0);
   const [dismissedTrigger, setDismissedTrigger] = useState(null);
   const voiceCapabilityMode = sttReady && ttsReady ? 'full' : sttReady ? 'stt' : ttsReady ? 'tts' : 'none';
@@ -990,29 +1061,13 @@ export const MessageInputV2 = ({
     requestAnimationFrame(() => textareaRef.current?.focus());
   }, [activeWorkingContext?.rootId, externalFileAttachment, isWorkExperience, supportsImageInput]);
 
-  useEffect(() => {
-    if (!isWorkExperience) {
-      setAgentProfiles([]);
-      setProfilesLoaded(true);
-      return undefined;
-    }
-    let cancelled = false;
-    profilesApi
-      .listProfiles()
-      .then((res) => {
-        if (!cancelled) setAgentProfiles(res.profiles || []);
-      })
-      .catch(() => {
-        if (!cancelled) setAgentProfiles([]);
-      })
-      .finally(() => {
-        if (!cancelled) setProfilesLoaded(true);
-      });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [isWorkExperience]);
+  // A default agent is picked for new chats, visibly, in the agent picker.
+  useEffect(() => {
+    if (!onAgentChange || !profilesLoaded || hasMessages || selectedAgentId !== undefined) return;
+    const defaultAgent = agentProfiles.find(profile => profile.is_default);
+    if (defaultAgent) onAgentChange(defaultAgent.id);
+  }, [agentProfiles, hasMessages, onAgentChange, profilesLoaded, selectedAgentId]);
 
   useEffect(() => {
     if (!isWorkExperience) {
@@ -2071,6 +2126,15 @@ export const MessageInputV2 = ({
                 )}
                 {usesExternalEngine && (
                   <EngineModelPicker engine={engine} engines={engines} value={engineModel} onChange={onEngineModelChange} disabled={disabled} />
+                )}
+                {onAgentChange && (agentProfiles.length > 0 || selectedAgentId) && (
+                  <AgentPicker
+                    agents={agentProfiles}
+                    selectedAgentId={selectedAgentId || null}
+                    onChange={onAgentChange}
+                    onManage={() => navigate('/agent/profiles')}
+                    disabled={disabled}
+                  />
                 )}
 
                 <div className={usesExternalEngine ? "hidden" : "relative"}>
