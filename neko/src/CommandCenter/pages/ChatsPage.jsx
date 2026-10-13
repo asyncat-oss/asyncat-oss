@@ -522,10 +522,10 @@ const ChatsPage = () => {
         {/* Header */}
         <div className="flex items-center justify-between mb-5 flex-shrink-0">
           <div>
-            <h1 className="text-lg font-semibold leading-none text-gray-950 dark:text-gray-100 midnight:text-slate-100">
+            <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-fg">
               Chats
             </h1>
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">
+            <p className="mt-1 text-[13px] text-fg-muted">
               Conversations and agent runs
             </p>
           </div>

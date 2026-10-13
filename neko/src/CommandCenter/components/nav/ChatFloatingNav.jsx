@@ -58,7 +58,7 @@ export default function ChatFloatingNav({ items = [], scrollContainerRef }) {
               key={i}
               className={`block rounded-full transition-all duration-200 ${
                 i === activeIdx
-                  ? 'h-4 w-[3px] bg-indigo-400 dark:bg-indigo-500'
+                  ? 'h-4 w-[3px] bg-accent'
                   : 'h-[5px] w-[3px] bg-gray-300/70 dark:bg-gray-600/60'
               }`}
             />
@@ -85,7 +85,7 @@ export default function ChatFloatingNav({ items = [], scrollContainerRef }) {
                   }`}
                 >
                   <span className={`mt-0.5 shrink-0 text-[10px] tabular-nums font-semibold w-4 ${
-                    i === activeIdx ? 'text-indigo-500 dark:text-indigo-400' : 'text-gray-300 dark:text-gray-600'
+                    i === activeIdx ? 'text-accent' : 'text-fg-subtle'
                   }`}>
                     {i + 1}
                   </span>

@@ -148,10 +148,10 @@ const TrashPage = () => {
       <div className="flex-shrink-0 border-b border-gray-100 px-6 py-4 dark:border-gray-800 midnight:border-slate-800">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-semibold leading-none text-gray-950 dark:text-gray-100 midnight:text-slate-100">
+            <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-fg">
               Trash
             </h1>
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">
+            <p className="mt-1 text-[13px] text-fg-muted">
               Deleted conversations are kept for 30 days
             </p>
           </div>

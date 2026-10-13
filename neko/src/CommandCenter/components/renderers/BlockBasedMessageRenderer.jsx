@@ -559,7 +559,7 @@ const parseInlineMarkdown = (text, onTermClick, options = {}) => {
           parts.push(<InlineFilePath key={`fp-${key++}`} rawPath={m[10]} />);
         } else {
           parts.push(
-            <code key={`c-${key++}`} className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-700 rounded text-sm font-mono">
+            <code key={`c-${key++}`} className="rounded-md bg-hover px-1.5 py-0.5 font-mono text-[0.86em] text-fg">
               {m[10]}
             </code>
           );
@@ -595,7 +595,7 @@ export function headingId(text) {
 }
 
 export const BlockRenderer = ({ block, onTermClick }) => {
-  const baseStyles = "leading-7 text-gray-900 dark:text-gray-100 midnight:text-slate-100";
+  const baseStyles = "leading-7 text-fg";
 
   const renderContent = (content, options) => {
     const parsed = parseInlineMarkdown(content, onTermClick, options);
@@ -605,21 +605,21 @@ export const BlockRenderer = ({ block, onTermClick }) => {
   switch (block.type) {
     case 'heading1':
       return (
-        <h1 id={headingId(block.content)} className={`mb-3 mt-7 text-2xl font-semibold tracking-tight first:mt-0 ${baseStyles}`}>
+        <h1 id={headingId(block.content)} className={`mb-3 mt-8 text-[22px] font-semibold tracking-[-0.02em] first:mt-0 ${baseStyles}`}>
           {renderContent(block.content)}
         </h1>
       );
 
     case 'heading2':
       return (
-        <h2 id={headingId(block.content)} className={`mb-3 mt-6 text-xl font-semibold tracking-tight first:mt-0 ${baseStyles}`}>
+        <h2 id={headingId(block.content)} className={`mb-2.5 mt-7 text-[19px] font-semibold tracking-[-0.015em] first:mt-0 ${baseStyles}`}>
           {renderContent(block.content)}
         </h2>
       );
 
     case 'heading3':
       return (
-        <h3 id={headingId(block.content)} className={`mb-2 mt-5 text-base font-semibold first:mt-0 ${baseStyles}`}>
+        <h3 id={headingId(block.content)} className={`mb-2 mt-6 text-[16px] font-semibold first:mt-0 ${baseStyles}`}>
           {renderContent(block.content)}
         </h3>
       );
@@ -648,7 +648,7 @@ export const BlockRenderer = ({ block, onTermClick }) => {
         }
 
         return (
-          <ul className="mb-4 space-y-1.5">
+          <ul className="mb-4 space-y-1 pl-1">
             {items.map((item, i) => {
             // Block parser already stripped the bullet prefix before storing content.
             // Only strip real bullet chars (•, -) here — never *, which could be italic markdown.
@@ -657,7 +657,7 @@ export const BlockRenderer = ({ block, onTermClick }) => {
 
             return (
               <li key={i} className={`${baseStyles} relative flex gap-2.5`}>
-                <span className="mt-[0.15rem] min-w-[0.5rem] font-normal text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+                <span className="min-w-[0.5rem] select-none font-normal text-fg-subtle" aria-hidden="true">
                   •
                 </span>
                 <span className={`flex-1 ${hasSubContent ? 'space-y-1.5' : ''}`}>
@@ -719,10 +719,10 @@ export const BlockRenderer = ({ block, onTermClick }) => {
         }
 
         return (
-          <ol className="mb-4 space-y-2.5">
+          <ol className="mb-4 space-y-1.5">
             {structuredItems.map((item, i) => (
               <li key={i} className="relative flex gap-3" style={{ listStyle: 'none' }}>
-                <span className="mt-0.5 min-w-[1.5rem] text-sm font-semibold text-gray-500 dark:text-gray-400 midnight:text-slate-400">
+                <span className="min-w-[1.5rem] text-right font-medium tabular-nums leading-7 text-fg-subtle">
                   {item.number}.
                 </span>
                 <div className="flex-1 space-y-1.5">
@@ -733,8 +733,8 @@ export const BlockRenderer = ({ block, onTermClick }) => {
                     <div className="pl-6 space-y-1 text-sm">
                       {item.subItems.map((sub, j) => (
                         <div key={j} className="flex gap-2 items-start">
-                          <span className="text-gray-500 dark:text-gray-500 midnight:text-slate-500 font-normal mt-0.5 text-xs">→</span>
-                          <span className="flex-1 text-gray-600 dark:text-gray-400 midnight:text-slate-400 leading-relaxed">
+                          <span className="mt-0.5 text-xs font-normal text-fg-subtle">→</span>
+                          <span className="flex-1 leading-relaxed text-fg-muted">
                             {renderContent(sub)}
                           </span>
                         </div>
@@ -767,8 +767,8 @@ export const BlockRenderer = ({ block, onTermClick }) => {
 
     case 'quote':
       return (
-        <blockquote className="mb-4 border-l-2 border-gray-300 py-1 pl-4 italic dark:border-gray-600 midnight:border-slate-600">
-          <div className={`${baseStyles} opacity-80`}>
+        <blockquote className="mb-4 border-l-[3px] border-line-strong py-0.5 pl-4">
+          <div className="leading-7 text-fg-muted">
             {renderContent(block.content)}
           </div>
         </blockquote>
@@ -812,23 +812,23 @@ export const BlockRenderer = ({ block, onTermClick }) => {
       );
 
       return (
-        <div className="mb-4 max-w-full overflow-hidden rounded-xl border border-gray-200/80 dark:border-gray-700/60 midnight:border-slate-700/60">
+        <div className="mb-4 max-w-full overflow-hidden rounded-xl border border-line">
           <div className="overflow-x-auto">
-            <table className="min-w-full border-collapse text-[13px]">
+            <table className="min-w-full border-collapse text-[14px]">
               <thead>
-                <tr className="border-b border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-gray-50/80 dark:bg-gray-800/60 midnight:bg-slate-800/60">
+                <tr className="border-b border-line bg-hover">
                   {normalizedRows[0]?.map((header, i) => (
-                    <th key={i} className={`px-4 py-2.5 text-left align-top text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 midnight:text-slate-400 [overflow-wrap:anywhere] whitespace-nowrap ${baseStyles}`}>
+                    <th key={i} className="whitespace-nowrap px-4 py-2 text-left align-top text-[13px] font-semibold leading-6 text-fg [overflow-wrap:anywhere]">
                       {renderContent(header, { linkVariant: 'chip' })}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-800 midnight:divide-slate-800">
+              <tbody className="divide-y divide-line">
                 {normalizedRows.slice(1).map((row, i) => (
-                  <tr key={i} className="transition-colors hover:bg-gray-50/70 dark:hover:bg-gray-800/30 midnight:hover:bg-slate-800/40">
+                  <tr key={i} className="transition-colors hover:bg-hover">
                     {row.map((cell, j) => (
-                      <td key={j} className={`px-4 py-2.5 align-top [overflow-wrap:anywhere] ${baseStyles}`}>
+                      <td key={j} className="px-4 py-2 align-top leading-6 text-fg [overflow-wrap:anywhere]">
                         {renderContent(cell, { linkVariant: 'chip' })}
                       </td>
                     ))}
@@ -842,12 +842,12 @@ export const BlockRenderer = ({ block, onTermClick }) => {
     }
 
     case 'divider':
-      return <hr className="my-6 border-t border-gray-200 dark:border-gray-700 midnight:border-slate-700" />;
+      return <hr className="my-7 border-t border-line" />;
 
     case 'callout':
       return (
-        <div className="mb-4 rounded-lg bg-gray-50 px-4 py-3 dark:bg-gray-900/60 midnight:bg-slate-900/60">
-          <div className={`${baseStyles} text-sm`}>
+        <div className="mb-4 rounded-xl border border-line bg-hover px-4 py-3">
+          <div className={`${baseStyles} text-[14px]`}>
               {renderContent(block.content)}
           </div>
         </div>
@@ -1006,17 +1006,18 @@ const CodeBlock = ({ content, language = 'text' }) => {
   const { Icon, color } = fileIconMeta(language, 'file');
 
   return (
-    <div className="mb-4 rounded-xl bg-[#f6f8fa] dark:bg-[#0d1117] midnight:bg-[#0d1117]">
-      <div className="flex items-center justify-between px-4 pt-3 pb-1">
+    <div className="mb-4 overflow-hidden rounded-xl border border-line bg-[#f6f8fa] dark:bg-[#0d1117]">
+      <div className="flex items-center justify-between border-b border-line px-3.5 py-1.5">
         <div className="flex items-center gap-1.5">
           <Icon className={`w-3.5 h-3.5 ${color} opacity-70`} />
-          <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 midnight:text-slate-500 select-none">
-            {language}
+          <span className="select-none text-[12px] font-medium text-fg-subtle">
+            {language || 'text'}
           </span>
         </div>
         <button
+          type="button"
           onClick={handleCopy}
-          className="flex items-center gap-1.5 text-[11px] font-medium text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 midnight:text-slate-500 midnight:hover:text-slate-300 transition-colors select-none"
+          className="flex h-7 select-none items-center gap-1.5 rounded-md px-2 text-[12px] font-medium text-fg-subtle transition-colors hover:bg-hover hover:text-fg"
         >
           {copyStatus === 'copied' ? (
             <>
@@ -1032,9 +1033,11 @@ const CodeBlock = ({ content, language = 'text' }) => {
         </button>
       </div>
 
-      <pre className="px-4 pb-4 overflow-x-auto">
+      <pre className="overflow-x-auto px-4 py-3.5">
         <code
           className="text-[13px] font-mono leading-relaxed hljs"
+          // highlight.js's stylesheet pads `pre code.hljs`; the pre already does.
+          style={{ padding: 0, overflow: 'visible' }}
           dangerouslySetInnerHTML={{ __html: highlighted }}
         />
       </pre>

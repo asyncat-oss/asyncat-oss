@@ -5,7 +5,7 @@ import {
   Search, Pencil, Trash2, List, Zap, FilePlus, FileDown,
   FileText, LayoutList, ShieldAlert, MessageCircle, Send, GitBranch,
   ShieldOff, Brain, RotateCcw, Link2, Image, ExternalLink, Copy, Volume2, Square, Loader2 as Spinner, Download, Mic, SkipBack, SkipForward,
-  AlertTriangle, RefreshCw, TimerOff, AlertCircle, Palette, Bell, Eye, Lock, Wrench
+  AlertTriangle, RefreshCw, TimerOff, AlertCircle, Palette, Bell, Eye, Lock, Wrench, Check, ChevronLeft
 } from 'lucide-react';
 import { audioApi } from '../../../Settings/settingApi.js';
 import { filesApi, agentApi } from '../../api';
@@ -17,6 +17,7 @@ import { AttachmentChip, ImageLightbox } from '../shared/AttachmentComponents.js
 import { useUiPreferences } from '../../../contexts/UiPreferencesContext.jsx';
 import { openWebLink } from '../../../utils/openWebLink.js';
 import { extractLocalhostUrl } from '../../utils/localhostUrl.js';
+import Tooltip from '../../../components/ui/Tooltip.jsx';
 
 // ── Inline @mention rendering ─────────────────────────────────────────────────
 function renderGoalWithMentions(goal = "", fileAttachments = []) {
@@ -197,11 +198,32 @@ function getToolStatus(result, data) {
   return { label: 'Done', tone: 'text-green-600 dark:text-green-400', icon: CheckCircle2 };
 }
 
+// Messages share one reading column and one text style, streaming or not.
+const MESSAGE_TEXT = 'text-[15px] leading-7 text-fg';
+
 function FeedFrame({ children, className = '' }) {
   return (
-    <div className={`max-w-4xl mx-auto ${className}`}>
+    <div className={`max-w-3xl mx-auto ${className}`}>
       {children}
     </div>
+  );
+}
+
+function MessageAction({ label, onClick, disabled = false, active = false, children }) {
+  return (
+    <Tooltip label={label} side="top">
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        aria-label={label}
+        className={`flex h-7 w-7 items-center justify-center rounded-lg outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-35 ${
+          active ? 'text-amber-500' : 'text-fg-subtle hover:text-fg'
+        }`}
+      >
+        {children}
+      </button>
+    </Tooltip>
   );
 }
 
@@ -273,8 +295,8 @@ function UserGoalEvent({ data, onEditMessage, onToggleMessageFlag, isRunning, hi
         highlighted ? 'bg-amber-50/80 dark:bg-amber-950/20 midnight:bg-amber-950/20' : ''
       }`}
     >
-      <div className="max-w-4xl mx-auto flex flex-col items-end">
-        <div className="max-w-[75%] rounded-2xl px-4 py-3 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800">
+      <div className="max-w-3xl mx-auto flex flex-col items-end">
+        <div className="max-w-[80%] rounded-[22px] bg-bubble px-4 py-2.5">
           {(data?.parentBranchId || data?.bookmarked) && (
             <div className="mb-1 flex justify-end gap-1.5 items-center">
               {data?.parentBranchId && (
@@ -324,7 +346,7 @@ function UserGoalEvent({ data, onEditMessage, onToggleMessageFlag, isRunning, hi
               </div>
             </div>
           ) : (
-            <div className="text-gray-900 dark:text-white midnight:text-white leading-relaxed whitespace-pre-wrap font-medium">
+            <div className={`${MESSAGE_TEXT} whitespace-pre-wrap [overflow-wrap:anywhere]`}>
               {renderGoalWithMentions(goal, data?.fileAttachments)}
             </div>
           )}
@@ -357,33 +379,22 @@ function UserGoalEvent({ data, onEditMessage, onToggleMessageFlag, isRunning, hi
             />
           )}
         </div>
-        <div className="mt-1 flex justify-end gap-1 pr-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+        <div className="mt-1 flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
           {canEdit && (
-            <button
-              onClick={() => setIsEditing(true)}
-              className="inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
-              title="Edit and branch from here"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-              Edit
-            </button>
+            <MessageAction label="Edit and branch from here" onClick={() => setIsEditing(true)}>
+              <Pencil className="h-3.5 w-3.5" />
+            </MessageAction>
           )}
-          <button
+          <MessageAction
+            label={data?.bookmarked ? 'Remove bookmark' : 'Bookmark'}
+            active={Boolean(data?.bookmarked)}
             onClick={() => onToggleMessageFlag?.(data?.messageId, 'bookmarked')}
-            className={`inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-slate-800 ${data?.bookmarked ? 'text-amber-500' : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-slate-200'}`}
-            title={data?.bookmarked ? 'Remove bookmark' : 'Bookmark message'}
           >
-            <BookMarked className="w-3.5 h-3.5" />
-            Bookmark
-          </button>
-          <button
-            onClick={handleCopy}
-            className="inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
-            title="Copy message"
-          >
-            {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
-            Copy
-          </button>
+            <BookMarked className="h-3.5 w-3.5" />
+          </MessageAction>
+          <MessageAction label={copied ? 'Copied' : 'Copy'} onClick={handleCopy}>
+            {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+          </MessageAction>
         </div>
       </div>
     </div>
@@ -403,15 +414,15 @@ function ThinkingEvent({ data }) {
         className="flex items-center gap-1.5 rounded-md py-1 text-left transition-colors hover:text-gray-500 focus:outline-none focus-visible:ring-1 focus-visible:ring-gray-300 dark:hover:text-gray-400 dark:focus-visible:ring-gray-700 midnight:hover:text-slate-400"
       >
         {expanded
-          ? <ChevronDown className="w-3 h-3 text-gray-400 dark:text-gray-500 midnight:text-slate-500 flex-shrink-0" />
-          : <ChevronRight className="w-3 h-3 text-gray-400 dark:text-gray-500 midnight:text-slate-500 flex-shrink-0" />}
+          ? <ChevronDown className="w-3 h-3 text-fg-subtle flex-shrink-0" />
+          : <ChevronRight className="w-3 h-3 text-fg-subtle flex-shrink-0" />}
         <span className="text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400 select-none">
           Reasoning{expanded && words > 0 ? ` · ${words} words` : ''}
         </span>
       </button>
       {expanded && (
-        <div className="mt-1 pl-3 border-l-2 border-gray-100 dark:border-gray-800 midnight:border-slate-800">
-          <pre className="text-[11px] text-gray-400 dark:text-gray-500 midnight:text-slate-500 whitespace-pre-wrap font-mono leading-relaxed max-h-64 overflow-y-auto py-1 pr-1">
+        <div className="mt-1 pl-3 border-l-2 border-line">
+          <pre className="text-[11px] text-fg-subtle whitespace-pre-wrap font-mono leading-relaxed max-h-64 overflow-y-auto py-1 pr-1">
             {thought}
           </pre>
         </div>
@@ -437,7 +448,7 @@ function ToolEvent({ data, result, onRetryTool, framed = true, progress = '' }) 
     && FILE_WRITE_TOOLS.has(data?.tool);
 
   const content = (
-    <div className="group rounded-md px-2 py-2 transition-colors hover:bg-gray-50 dark:hover:bg-gray-900/40 midnight:hover:bg-slate-900/50">
+    <div className="group rounded-md px-2 py-2 transition-colors hover:bg-hover">
       <div className="flex items-start gap-2.5">
         <div className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded ${status.tone}`}>
           <StatusIcon className={`h-3.5 w-3.5 ${isPending ? 'animate-spin' : ''}`} />
@@ -448,7 +459,7 @@ function ToolEvent({ data, result, onRetryTool, framed = true, progress = '' }) 
             onClick={() => isError && setExpanded(v => !v)}
             className={`flex w-full items-center gap-2 text-left ${isError ? 'cursor-pointer' : 'cursor-default'}`}
           >
-            <Icon className="h-3 w-3 flex-shrink-0 text-gray-400 dark:text-gray-500 midnight:text-slate-500" />
+            <Icon className="h-3 w-3 flex-shrink-0 text-fg-subtle" />
             <span className="text-[13px] font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300">{label}</span>
             {status.label !== 'Done' && (
               <span className={`ml-auto flex-shrink-0 text-[10px] font-medium ${status.tone}`}>{status.label}</span>
@@ -461,7 +472,7 @@ function ToolEvent({ data, result, onRetryTool, framed = true, progress = '' }) 
           </button>
 
           <div className="mt-0.5 flex items-center gap-2 pl-5">
-            <p className="min-w-0 truncate text-[11px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+            <p className="min-w-0 truncate text-[11px] text-fg-subtle">
               {intent.value}
             </p>
             {canReveal && (
@@ -780,7 +791,7 @@ function AudioResultCard({ result }) {
           <p className="truncate text-[11px] font-medium text-gray-600 dark:text-gray-300 midnight:text-slate-300">
             {result.path?.split('/').pop() || 'Generated speech'}
           </p>
-          <span className="text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+          <span className="text-[10px] text-fg-subtle">
             · {result.audio_size || `${(result.audio_bytes / 1024).toFixed(1)} KB`} · {result.voice || 'Piper'} · {result.format || 'WAV'}
           </span>
         </div>
@@ -817,7 +828,7 @@ function ImageResultCard({ result }) {
             <div className="truncate text-xs font-semibold text-gray-700 dark:text-gray-200 midnight:text-slate-200">
               {media.prompt || result.prompt || 'Generated image'}
             </div>
-            <div className="mt-0.5 flex flex-wrap gap-1.5 text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+            <div className="mt-0.5 flex flex-wrap gap-1.5 text-[10px] text-fg-subtle">
               <span>{result.runtime || media.runtime || 'image'}</span>
               {(result.width || media.width) && (result.height || media.height) && <span>{result.width || media.width}x{result.height || media.height}</span>}
               {(result.seed || media.seed) !== undefined && <span>seed {result.seed || media.seed}</span>}
@@ -875,7 +886,7 @@ function ScreenshotResultCard({ result }) {
               Screenshot
             </div>
             {url && (
-              <div className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500 truncate">{url}</div>
+              <div className="mt-0.5 text-[10px] text-fg-subtle truncate">{url}</div>
             )}
           </div>
           <a
@@ -944,7 +955,7 @@ function CompactPermissionEvent({ data, onDecision }) {
       : 'text-gray-500 dark:text-gray-400';
   if (showDecision || historical) {
     return (
-      <div className="group rounded-md px-2 py-1.5 transition-colors hover:bg-gray-50 dark:hover:bg-gray-900/40 midnight:hover:bg-slate-900/50">
+      <div className="group rounded-md px-2 py-1.5 transition-colors hover:bg-hover">
         <div className="flex items-start gap-2.5">
           <span className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center ${negative ? 'text-red-500' : isAllowed ? 'text-emerald-500' : 'text-gray-400'}`}>
             {negative ? <XCircle className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
@@ -1026,7 +1037,7 @@ function CompactPermissionEvent({ data, onDecision }) {
           )}
           {showDetails && (
             <div className="mt-2 space-y-1.5">
-              {data?.workingDir && <p className="truncate text-[11px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">Working directory: {data.workingDir}</p>}
+              {data?.workingDir && <p className="truncate text-[11px] text-fg-subtle">Working directory: {data.workingDir}</p>}
               {data?.diff && (
                 <pre className="max-h-40 overflow-y-auto whitespace-pre rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-gray-950 p-3 font-mono text-[11px] leading-relaxed text-gray-300">
                   {data.diff}
@@ -1036,7 +1047,7 @@ function CompactPermissionEvent({ data, onDecision }) {
           )}
         </div>
       </div>
-      <div className="flex flex-wrap items-center justify-end gap-2 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 px-4 py-2.5">
+      <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line px-4 py-2.5">
             <button
               onClick={() => onDecision?.(data?.requestId, 'deny')}
               disabled={data?.resolving || expired}
@@ -1220,7 +1231,7 @@ function SourceChip({ source }) {
                 <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
                   <Link2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                 </div>
-                <span className="font-semibold text-gray-900 dark:text-white midnight:text-slate-100 text-sm">Web source</span>
+                <span className="font-semibold text-fg text-sm">Web source</span>
               </div>
               <button onClick={() => setOpen(false)} className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-slate-800 transition-colors text-lg leading-none">×</button>
             </div>
@@ -1229,7 +1240,7 @@ function SourceChip({ source }) {
                 <img src={`https://icons.duckduckgo.com/ip3/${domain}.ico`} alt="" className="w-4 h-4 rounded flex-shrink-0 object-contain" onError={(e) => { e.target.style.display = 'none'; }} />
                 <span className="text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400 truncate font-mono select-all">{source.url}</span>
               </div>
-              {source.title && <p className="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100 midnight:text-slate-100 truncate">{source.title}</p>}
+              {source.title && <p className="mt-1 text-sm font-medium text-fg truncate">{source.title}</p>}
               {source.snippet && <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400 line-clamp-3">{source.snippet}</p>}
             </div>
             <div className="flex gap-2 px-5 pb-5">
@@ -1256,7 +1267,7 @@ function SourcesPanel({ searchEvent }) {
     <div className="mt-4 space-y-3 border-t border-gray-100 pt-3 dark:border-gray-800 midnight:border-slate-800">
       {images.length > 0 && (
         <div className="space-y-1.5">
-          <div className="flex items-center gap-1.5 text-[11px] font-medium text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+          <div className="flex items-center gap-1.5 text-[11px] font-medium text-fg-subtle">
             <Image className="w-3 h-3" />
             <span>Images for this answer ({images.length})</span>
           </div>
@@ -1288,7 +1299,7 @@ function SourcesPanel({ searchEvent }) {
       )}
       {sources.length > 0 && (
         <div className="space-y-1.5">
-          <div className="flex items-center gap-1.5 text-[11px] font-medium text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+          <div className="flex items-center gap-1.5 text-[11px] font-medium text-fg-subtle">
             <Link2 className="w-3 h-3" />
             <span>Sources for this answer ({sources.length})</span>
           </div>
@@ -1316,8 +1327,10 @@ function AnswerEvent({
   usage = null,
   elapsedMs = null,
   isStoppedRun = false,
+  isLatest = false,
 }) {
   const [notesExpanded, setNotesExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
   const raw = data?.answer || '';
   const { thinking: thinkFallback, answer } = extractReasoningFromText(raw);
   const variants = Array.isArray(data?.variants) ? data.variants : [];
@@ -1351,8 +1364,16 @@ function AnswerEvent({
     blocks = parseAIResponseToBlocks(displayAnswer);
   } catch { blocks = []; }
 
+  const copyAnswer = async () => {
+    try {
+      await navigator.clipboard.writeText(displayAnswer);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* clipboard unavailable */ }
+  };
+
   const answerBody = (
-    <div className="text-sm text-gray-800 dark:text-gray-200 midnight:text-slate-200 leading-relaxed">
+    <div className={MESSAGE_TEXT}>
       {blocks.length > 0
         ? blocks.map((block, i) => <BlockRenderer key={i} block={block} />)
         : <p className="whitespace-pre-wrap">{displayAnswer}</p>}
@@ -1369,7 +1390,7 @@ function AnswerEvent({
           highlighted ? 'bg-amber-50/80 dark:bg-amber-950/20 midnight:bg-amber-950/20' : ''
         }`}
       >
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-3xl mx-auto">
           {!isStoppedRun && data?.bookmarked && (
             <BookMarked className="mb-2 h-3.5 w-3.5 text-amber-500" />
           )}
@@ -1389,7 +1410,7 @@ function AnswerEvent({
                 {data?.bookmarked && <BookMarked className="ml-0.5 h-3 w-3 text-amber-500" />}
               </button>
               {notesExpanded && (
-                <div className="mt-2 pl-4 border-l-2 border-gray-100 dark:border-gray-800 midnight:border-slate-800">
+                <div className="mt-2 pl-4 border-l-2 border-line">
                   {answerBody}
                 </div>
               )}
@@ -1405,7 +1426,7 @@ function AnswerEvent({
                 loadSrc={() => audioApi.tts.speak(displayAnswer)}
                 showInfo={true}
                 infoContent={
-                  <span className="ml-1 text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">Read aloud</span>
+                  <span className="ml-1 text-[10px] text-fg-subtle">Read aloud</span>
                 }
               />
             </div>
@@ -1415,64 +1436,58 @@ function AnswerEvent({
           {!isStoppedRun && data?.round > 1 && (
             <p className="text-[10px] text-gray-300 dark:text-gray-700 midnight:text-slate-700 mt-2">{data.round} rounds</p>
           )}
-          <div className="mt-3 flex flex-wrap items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-            {hasPerformanceStats && (
-              <span
-                className="mr-1 inline-flex items-center gap-1.5 text-[10px] tabular-nums text-gray-400 dark:text-gray-500 midnight:text-slate-500"
-                title={usageTitle || 'Response performance'}
-                aria-label={usageTitle || 'Response performance'}
-              >
-                {totalTokens > 0 && (
-                  <span>{usage?.estimated ? '~' : ''}{formatTokenCount(totalTokens)} tokens</span>
-                )}
-                {totalTokens > 0 && tokensPerSecond > 0 && <span className="opacity-35">·</span>}
-                {tokensPerSecond > 0 && <span>{tokensPerSecond} tok/s</span>}
-                {(totalTokens > 0 || tokensPerSecond > 0) && elapsedMs > 0 && <span className="opacity-35">·</span>}
-                {elapsedMs > 0 && <span>{formatElapsed(elapsedMs)}</span>}
-              </span>
-            )}
+          <div className={`mt-2 flex flex-wrap items-center gap-0.5 transition-opacity group-hover:opacity-100 focus-within:opacity-100 ${isLatest && !isRunning ? 'opacity-100' : 'opacity-0'}`}>
+            <MessageAction label={copied ? 'Copied' : 'Copy'} onClick={copyAnswer}>
+              {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+            </MessageAction>
+            <MessageAction label="Regenerate" onClick={() => onRegenerateAnswer?.(data?.messageId)} disabled={isRunning}>
+              <RotateCcw className="h-3.5 w-3.5" />
+            </MessageAction>
+            <MessageAction
+              label={data?.bookmarked ? 'Remove bookmark' : 'Bookmark'}
+              active={Boolean(data?.bookmarked)}
+              onClick={() => onToggleMessageFlag?.(data?.messageId, 'bookmarked')}
+            >
+              <BookMarked className="h-3.5 w-3.5" />
+            </MessageAction>
             {variants.length > 1 && (
-              <div className="mr-1 inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-1 py-0.5 text-[11px] text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 midnight:border-slate-800 midnight:bg-slate-900 midnight:text-slate-400">
+              <div className="ml-1 inline-flex items-center gap-0.5 text-[12px] text-fg-subtle">
                 <button
                   type="button"
                   onClick={() => onSelectAnswerVariant?.(data?.messageId, Math.max(0, activeVariantIndex - 1))}
                   disabled={activeVariantIndex <= 0 || isRunning}
-                  className="rounded p-0.5 disabled:opacity-30"
-                  title="Previous variant"
+                  className="flex h-7 w-6 items-center justify-center rounded-md hover:bg-hover hover:text-fg disabled:opacity-30"
+                  aria-label="Previous version"
                 >
-                  <SkipBack className="h-3 w-3" />
+                  <ChevronLeft className="h-3.5 w-3.5" />
                 </button>
                 <span className="min-w-8 text-center tabular-nums">{activeVariantIndex + 1} / {variants.length}</span>
                 <button
                   type="button"
                   onClick={() => onSelectAnswerVariant?.(data?.messageId, Math.min(variants.length - 1, activeVariantIndex + 1))}
                   disabled={activeVariantIndex >= variants.length - 1 || isRunning}
-                  className="rounded p-0.5 disabled:opacity-30"
-                  title="Next variant"
+                  className="flex h-7 w-6 items-center justify-center rounded-md hover:bg-hover hover:text-fg disabled:opacity-30"
+                  aria-label="Next version"
                 >
-                  <SkipForward className="h-3 w-3" />
+                  <ChevronRight className="h-3.5 w-3.5" />
                 </button>
               </div>
             )}
-            <button
-              type="button"
-              onClick={() => onRegenerateAnswer?.(data?.messageId)}
-              disabled={isRunning}
-              className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-medium text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-700 disabled:opacity-40 dark:hover:bg-gray-800 dark:hover:text-gray-200 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
-              title="Regenerate this answer"
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-              Regenerate
-            </button>
-            <button
-              type="button"
-              onClick={() => onToggleMessageFlag?.(data?.messageId, 'bookmarked')}
-              className={`inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-medium transition-colors hover:bg-gray-50 dark:hover:bg-gray-800 midnight:hover:bg-slate-800 ${data?.bookmarked ? 'text-amber-500' : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-slate-200'}`}
-              title={data?.bookmarked ? 'Remove bookmark' : 'Bookmark answer'}
-            >
-              <BookMarked className="h-3.5 w-3.5" />
-              Bookmark
-            </button>
+            {hasPerformanceStats && (
+              <span
+                className="ml-auto inline-flex items-center gap-1.5 text-[11px] tabular-nums text-fg-subtle"
+                title={usageTitle || 'Response performance'}
+                aria-label={usageTitle || 'Response performance'}
+              >
+                {totalTokens > 0 && (
+                  <span>{usage?.estimated ? '~' : ''}{formatTokenCount(totalTokens)} tokens</span>
+                )}
+                {totalTokens > 0 && tokensPerSecond > 0 && <span className="opacity-40">·</span>}
+                {tokensPerSecond > 0 && <span>{tokensPerSecond} tok/s</span>}
+                {(totalTokens > 0 || tokensPerSecond > 0) && elapsedMs > 0 && <span className="opacity-40">·</span>}
+                {elapsedMs > 0 && <span>{formatElapsed(elapsedMs)}</span>}
+              </span>
+            )}
           </div>
         </div>
       </div>}
@@ -1693,7 +1708,7 @@ function RunDivider({ event, data }) {
         <div className="flex items-center gap-3">
           <div className="h-px flex-1 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800" />
           <div
-            className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium text-gray-400 dark:text-gray-500 midnight:text-slate-500"
+            className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium text-fg-subtle"
             title={detail || 'Older context was summarized for the model'}
           >
             <RotateCcw className="h-3 w-3" />
@@ -1846,16 +1861,11 @@ function StreamingPreview({ text, reasoningText = '' }) {
   if (!clean) {
     return (
       <FeedFrame className="mb-2">
-        <div className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-600 py-1 pl-1">
-          <span className="flex gap-0.5">
-            <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 animate-bounce" style={{ animationDelay: '0ms' }} />
-            <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 animate-bounce" style={{ animationDelay: '150ms' }} />
-            <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 animate-bounce" style={{ animationDelay: '300ms' }} />
-          </span>
-          <span>Reasoning…</span>
+        <div className="flex min-w-0 items-center gap-2 py-1 text-[13px]">
+          <span className="shimmer-text shrink-0 font-medium">Thinking</span>
           {liveThinking && (
-            <span className="truncate text-[10px] text-gray-300 dark:text-gray-700">
-              {liveThinking.length > 120 ? `${liveThinking.slice(0, 120)}...` : liveThinking}
+            <span className="truncate text-[12px] text-fg-subtle">
+              {liveThinking.length > 120 ? `…${liveThinking.slice(-120)}` : liveThinking}
             </span>
           )}
         </div>
@@ -1865,18 +1875,11 @@ function StreamingPreview({ text, reasoningText = '' }) {
 
   return (
     <FeedFrame className="mb-3">
-      <div className="text-sm text-gray-800 dark:text-gray-200 midnight:text-slate-200 leading-relaxed [&_.mb-3]:mb-2.5 [&_.mb-5]:mb-3 [&_.mb-6]:mb-3.5 [&_h1]:text-2xl [&_h1]:mb-3 [&_h1]:mt-5 [&_h2]:text-xl [&_h2]:mb-2.5 [&_h2]:mt-4 [&_h3]:text-lg [&_h3]:mb-2 [&_h3]:mt-3 [&_p]:mb-3 [&_ul]:mb-3 [&_ol]:mb-3">
+      <div className={MESSAGE_TEXT}>
         {blocks.length > 0
-          ? blocks.map((block, i) => (
-            <div
-              key={`${block.type}-${i}`}
-              className={i === blocks.length - 1 ? 'animate-in fade-in duration-150' : ''}
-            >
-              <BlockRenderer block={block} />
-            </div>
-          ))
+          ? blocks.map((block, i) => <BlockRenderer key={`${block.type}-${i}`} block={block} />)
           : <p className="whitespace-pre-wrap">{clean}</p>}
-        <span className="inline-block w-0.5 h-4 bg-indigo-400 animate-pulse ml-0.5 align-text-bottom" />
+        <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-fg align-text-bottom" />
       </div>
     </FeedFrame>
   );
@@ -2015,7 +2018,7 @@ export function CurrentPlanPanel({ data, isRunning, sessionId, className = '' })
           )}
           {hasDeps && blockedCount > 0 && (
             <span
-              className="inline-flex items-center gap-1 text-[10px] font-medium text-gray-400 dark:text-gray-500 midnight:text-slate-500"
+              className="inline-flex items-center gap-1 text-[10px] font-medium text-fg-subtle"
               title={`${readyCount} ready to start · ${blockedCount} waiting on dependencies`}
             >
               <GitBranch className="h-3 w-3" />
@@ -2100,13 +2103,13 @@ export function CurrentPlanPanel({ data, isRunning, sessionId, className = '' })
                     : item.status === 'in_progress'
                       ? 'font-medium text-gray-800 dark:text-gray-100 midnight:text-slate-100'
                       : blocked
-                        ? 'text-gray-400 dark:text-gray-500 midnight:text-slate-500'
+                        ? 'text-fg-subtle'
                         : 'text-gray-600 dark:text-gray-400 midnight:text-slate-400'
                 }`}>
                   {item.status === 'in_progress' && item.activeForm ? item.activeForm : item.content}
                 </span>
                 {waits.length > 0 && (
-                  <span className="mt-0.5 flex items-center gap-1 text-[10px] text-gray-400 dark:text-gray-500 midnight:text-slate-500" title={`Waiting on: ${waits.join(', ')} — click to highlight`}>
+                  <span className="mt-0.5 flex items-center gap-1 text-[10px] text-fg-subtle" title={`Waiting on: ${waits.join(', ')} — click to highlight`}>
                     <GitBranch className="h-2.5 w-2.5 shrink-0" />
                     <span className="truncate">Waiting on: {waits.join(', ')}</span>
                   </span>
@@ -2125,17 +2128,12 @@ function RunningIndicator({ runStartedAt }) {
   const elapsed = useElapsedTime(runStartedAt);
   return (
     <FeedFrame>
-    <div className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-600 py-2">
-      <span className="flex gap-0.5">
-        <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 animate-bounce" style={{ animationDelay: '0ms' }} />
-        <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 animate-bounce" style={{ animationDelay: '150ms' }} />
-        <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 animate-bounce" style={{ animationDelay: '300ms' }} />
-      </span>
-      Agent is working…
-      {elapsed > 0 && (
-        <span className="tabular-nums text-gray-400 dark:text-gray-600">{formatElapsed(elapsed)}</span>
-      )}
-    </div>
+      <div className="flex items-center gap-2 py-2 text-[13px]" role="status">
+        <span className="shimmer-text font-medium">Thinking</span>
+        {elapsed > 0 && (
+          <span className="tabular-nums text-[12px] text-fg-subtle">{formatElapsed(elapsed)}</span>
+        )}
+      </div>
     </FeedFrame>
   );
 }
@@ -2364,7 +2362,7 @@ function RunSummaryCard({ events, runStartedAt, sessionId, session, onViewArtifa
 
       {/* Expanded detail — no card border, just indented sections */}
       {expanded && (
-        <div className="mt-2 pl-4 space-y-0 border-l-2 border-gray-100 dark:border-gray-800 midnight:border-slate-800">
+        <div className="mt-2 pl-4 space-y-0 border-l-2 border-line">
           {/* Dev server hint */}
           {previewUrl && (
             <div className="flex items-center gap-2 py-1.5">
@@ -2684,7 +2682,7 @@ function AgentDelegateEvent({ data, result, pending = false, events = [] }) {
 
               {data?.task && (
                 <div className="mt-2.5 flex items-start gap-2 rounded-xl border border-gray-200/70 bg-gray-50/70 px-2.5 py-2 text-gray-500 dark:border-gray-800/70 dark:bg-gray-900/35 dark:text-gray-400 midnight:border-slate-800/70 midnight:bg-slate-900/35 midnight:text-slate-400">
-                  <Brain className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-gray-500 midnight:text-slate-500" />
+                  <Brain className="mt-0.5 h-3.5 w-3.5 shrink-0 text-fg-subtle" />
                   <p className="line-clamp-2 text-[11px] leading-relaxed">{data.task}</p>
                 </div>
               )}
@@ -2695,7 +2693,7 @@ function AgentDelegateEvent({ data, result, pending = false, events = [] }) {
                     <div className="flex h-5 w-5 items-center justify-center rounded-md bg-gray-50 text-gray-400 dark:bg-gray-900/70 dark:text-gray-500 midnight:bg-slate-900/70 midnight:text-slate-500">
                       <MessageCircle className="h-3 w-3" />
                     </div>
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 midnight:text-slate-500">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-fg-subtle">
                       Sub-agent handoff
                     </span>
                   </div>
@@ -2951,6 +2949,7 @@ export default function AgentRunFeed({
                 usage={segUsage}
                 elapsedMs={!isRunning && segElapsedMs > 0 ? segElapsedMs : null}
                 isStoppedRun={hasStopReason}
+                isLatest={si === segments.length - 1}
               />
             )}
           </div>
