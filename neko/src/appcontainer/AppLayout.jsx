@@ -1,5 +1,6 @@
 import { Suspense, useState, useCallback, useEffect, useRef } from "react";
 import { Outlet, useNavigate, useParams, useLocation } from "react-router-dom";
+import PropTypes from 'prop-types';
 import { RotateCw, ServerCrash, WifiOff } from 'lucide-react';
 import { useWorkspace } from '../contexts/WorkspaceContext.jsx';
 import { useCommandCenter } from '../CommandCenter/context/CommandCenterContextEnhanced';
@@ -9,6 +10,8 @@ import { useNetworkStatus } from '../hooks/useNetworkStatus.js';
 
 // Import components
 import Sidebar from '../sidebar/Sidebar.jsx';
+import Button from '../components/ui/Button.jsx';
+import Cat from '../components/ui/Cat.jsx';
 
 const ConnectionNotice = () => {
   const network = useNetworkStatus({ pollMs: 6000 });
@@ -51,6 +54,36 @@ const ConnectionNotice = () => {
           Restart
         </button>
       )}
+    </div>
+  );
+};
+
+// The cat walking along a line, shown while Asyncat starts up.
+const StartupScene = ({ label }) => (
+  <div className="flex min-h-screen flex-col items-center justify-center bg-canvas text-fg" role="status" aria-label={label}>
+    <div className="w-[132px] animate-[fadeIn_300ms_ease-out]">
+      <Cat pose="walk" className="mx-auto -mb-px w-[92px]" outline={6} />
+      <div className="h-0.5 rounded-full bg-[repeating-linear-gradient(90deg,var(--as-line-strong)_0_14px,transparent_14px_22px)] motion-safe:animate-[startup-ground_0.64s_linear_infinite]" />
+    </div>
+    <div className="mt-5 text-[22px] font-bold tracking-[-0.045em]">asyncat</div>
+    <div className="mt-1 text-xs text-fg-subtle">{label}</div>
+  </div>
+);
+
+StartupScene.propTypes = { label: PropTypes.string };
+
+// Pages load from the local server almost instantly; only show something if
+// one takes long enough to notice.
+const PageFallback = () => {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setVisible(true), 350);
+    return () => clearTimeout(timer);
+  }, []);
+  if (!visible) return null;
+  return (
+    <div className="flex h-full items-center justify-center" role="status" aria-label="Loading">
+      <Cat pose="walk" className="w-14 opacity-80" outline={7} />
     </div>
   );
 };
@@ -228,23 +261,7 @@ const AppLayout = () => {
 
   // Show loading while workspaces are being fetched
   if (workspacesLoading) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-white text-gray-950 dark:bg-gray-900 dark:text-gray-100 midnight:bg-slate-950 midnight:text-slate-100">
-        <svg
-          viewBox="0 0 32 32"
-          fill="none"
-          aria-hidden="true"
-          className="h-9 w-9 animate-[fadeIn_300ms_ease-out]"
-        >
-          <path d="M6 25L11.5 8L16 13L20.5 8L26 25" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="M9 20H23" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
-        </svg>
-        <div className="mt-4 text-sm font-semibold tracking-[-0.01em]">Asyncat</div>
-        <div className="mt-5 h-px w-10 overflow-hidden bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700" role="status" aria-label="Loading projects">
-          <div className="h-full w-[45%] bg-gray-900 motion-safe:animate-[loading-line_1.35s_ease-in-out_infinite] dark:bg-gray-100 midnight:bg-slate-100" />
-        </div>
-      </div>
-    );
+    return <StartupScene label="Opening your workspace…" />;
   }
 
   // Show error state when there's an error loading workspaces
@@ -254,32 +271,19 @@ const AppLayout = () => {
                           workspacesError.includes('Failed to fetch');
 
     return (
-      <div className="min-h-screen bg-white dark:bg-gray-900 midnight:bg-gray-950 flex flex-col items-center justify-center">
-        <div className="text-center max-w-md mx-auto px-4">
-          <div className="text-red-500 dark:text-red-400 midnight:text-red-400 text-6xl mb-4">⚠️</div>
-          <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200 midnight:text-gray-300 mb-2">
-             {isNetworkError ? 'Connection Error' : 'Project Error'}
-          </h2>
-          <p className="text-gray-600 dark:text-gray-400 midnight:text-gray-500 mb-6 text-sm leading-relaxed">
-            {isNetworkError
-              ? 'Unable to reach the local Asyncat service. Try again or restart the app.'
-               : 'Asyncat could not load your local Projects. This might be a temporary issue.'
-            }
-          </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <button
-              onClick={() => refreshWorkspaces()}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 midnight:bg-indigo-400 midnight:hover:bg-indigo-500 text-white rounded-lg transition-colors"
-            >
-              Try Again
-            </button>
-            <button
-              onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 midnight:bg-gray-800 midnight:hover:bg-gray-700 text-gray-800 dark:text-gray-200 midnight:text-gray-300 rounded-lg transition-colors"
-            >
-              Refresh Page
-            </button>
-          </div>
+      <div className="flex min-h-screen flex-col items-center justify-center bg-canvas px-5 text-center">
+        <Cat pose="peek" className="w-24" outline={5} />
+        <h2 className="mt-5 text-[17px] font-semibold tracking-[-0.01em] text-fg">
+          {isNetworkError ? "Can't reach Asyncat's local service" : "Couldn't load your projects"}
+        </h2>
+        <p className="mt-1.5 max-w-sm text-[13px] leading-5 text-fg-muted">
+          {isNetworkError
+            ? 'The part of Asyncat that runs in the background is not answering. Try again, or restart the app.'
+            : 'This is usually temporary. Your data has not been changed.'}
+        </p>
+        <div className="mt-5 flex gap-2">
+          <Button variant="primary" size="md" icon={RotateCw} onClick={() => refreshWorkspaces()}>Try again</Button>
+          <Button variant="secondary" size="md" onClick={() => window.location.reload()}>Reload app</Button>
         </div>
       </div>
     );
@@ -289,13 +293,11 @@ const AppLayout = () => {
   // user-facing setup step and should never require a workspace wizard.
   if (projectStorageUnavailable) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-white px-5 text-center dark:bg-gray-900 midnight:bg-slate-950">
-        <div className="max-w-sm">
-          <ServerCrash className="mx-auto h-9 w-9 text-gray-300 dark:text-gray-700" />
-          <h2 className="mt-4 text-base font-semibold text-gray-900 dark:text-gray-100">Project storage is not ready</h2>
-          <p className="mt-1.5 text-sm leading-6 text-gray-500 dark:text-gray-400">Restart the local service or try again. Your existing data has not been changed.</p>
-          <button type="button" onClick={refreshWorkspaces} className="mt-5 inline-flex items-center gap-2 rounded-lg bg-gray-900 px-3 py-2 text-sm font-medium text-white dark:bg-gray-100 dark:text-gray-900"><RotateCw className="h-4 w-4" /> Try again</button>
-        </div>
+      <div className="flex min-h-screen flex-col items-center justify-center bg-canvas px-5 text-center">
+        <Cat pose="sleep" className="w-32" outline={4} />
+        <h2 className="mt-5 text-[17px] font-semibold tracking-[-0.01em] text-fg">Project storage is not ready</h2>
+        <p className="mt-1.5 max-w-sm text-[13px] leading-5 text-fg-muted">Restart the local service or try again. Your existing data has not been changed.</p>
+        <Button variant="primary" size="md" icon={RotateCw} onClick={refreshWorkspaces} className="mt-5">Try again</Button>
       </div>
     );
   }
@@ -303,12 +305,12 @@ const AppLayout = () => {
   const navigationPaddingClass = isSettingsPage
     ? ''
     : sidebarState === 'collapsed'
-      ? 'pl-[72px]'
-      : 'pl-[72px] sm:pl-64';
+      ? 'pl-16'
+      : 'pl-16 sm:pl-64';
 
   // Normal dashboard when user has workspaces
   return (
-    <div className="flex h-screen bg-white dark:bg-gray-900 midnight:bg-gray-950">
+    <div className="flex h-screen bg-canvas">
       <ConnectionNotice />
       {!isSettingsPage && (
         <Sidebar
@@ -325,7 +327,7 @@ const AppLayout = () => {
           className={`${pageTransitionsEnabled ? 'animate-fadeIn' : ''} h-full ${navigationPaddingClass}`}
         >
           {/* Pages other than the chat are code-split; they load from the local server instantly. */}
-          <Suspense fallback={null}>
+          <Suspense fallback={<PageFallback />}>
             <Outlet context={{
                 selectedProject: getProjectValue(true),
                 onProjectSelect: handleProjectSelect,

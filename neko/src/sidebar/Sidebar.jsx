@@ -2,22 +2,30 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PropTypes from "prop-types";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
+  ArrowUpRight,
   BrainCircuit,
-  Cpu,
-  History,
-  Folder,
-  FolderOpen,
-  FolderKanban,
-  KanbanSquare,
-  Check,
   ChevronRight,
-  ListFilter,
+  ChevronsUpDown,
+  CircleArrowUp,
+  Cpu,
+  Folder,
+  FolderKanban,
+  FolderOpen,
+  History,
+  Info,
+  KanbanSquare,
   Loader2,
+  Monitor,
+  Moon,
+  MoonStar,
+  MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
+  Pencil,
   Search,
   Settings,
   SquarePen,
+  Sun,
   Trash2,
   Wrench,
   Zap,
@@ -26,66 +34,81 @@ import {
 import { useCommandCenter } from "../CommandCenter/context/CommandCenterContextEnhanced";
 import { chatApi } from "../CommandCenter/api/chatApi.js";
 import { useUiPreferences } from "../contexts/UiPreferencesContext.jsx";
+import { useUser } from "../contexts/UserContext.jsx";
 import { useWorkspace } from "../contexts/WorkspaceContext.jsx";
+import { useConfirm } from "../components/confirmContext.js";
+import { useToast, errorDetail } from "../components/toastContext.js";
+import AsyncatMark from "../components/ui/AsyncatMark.jsx";
+import Tooltip from "../components/ui/Tooltip.jsx";
+import { Menu, MenuItem, MenuSeparator } from "../components/ui/Menu.jsx";
+import { formatShortcut } from "../components/ui/shortcuts.js";
+import { avatarSrc } from "../assets/dp/avatars.js";
 import eventBus from "../utils/eventBus.js";
 import { loadKeyboardShortcuts } from "../utils/keyboardShortcutsUtils.js";
 import UniversalSearch from "./UniversalSearch";
 import { isAutomationPath, lastAutomationPath } from "../Automations/automationsNav.js";
 
-const iconClass = "h-[18px] w-[18px]";
+// Below the sm breakpoint the rail always shows icons only.
+const labelVisibility = (collapsed) => (collapsed ? "hidden" : "hidden sm:block");
+const rowLayout = (collapsed) => (collapsed ? "justify-center px-0" : "justify-center px-0 sm:justify-start sm:px-2.5");
 
-const AsyncatMark = ({ className = "h-7 w-7" }) => (
-  <svg
-    viewBox="0 0 32 32"
-    aria-hidden="true"
-    className={className}
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-  >
-    <path d="M6 25L11.5 8L16 13L20.5 8L26 25" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M9 20H23" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
-  </svg>
-);
+const THEME_OPTIONS = [
+  { value: "light", label: "Light", icon: Sun },
+  { value: "dark", label: "Dark", icon: Moon },
+  { value: "midnight", label: "Midnight", icon: MoonStar },
+  { value: "system", label: "System", icon: Monitor },
+];
 
-AsyncatMark.propTypes = {
-  className: PropTypes.string,
-};
-
-const SidebarNavItem = memo(({ icon, label, onClick, isActive, collapsed = false }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    title={label}
-    aria-current={isActive ? "page" : undefined}
-    className={`
-      group relative flex h-9 w-full items-center gap-3 rounded-lg px-2.5
-      outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-gray-400/40
-      ${isActive
-        ? "bg-gray-100 text-gray-950 dark:bg-white/[0.07] dark:text-gray-100 midnight:bg-white/[0.06] midnight:text-slate-100"
-        : "text-gray-600 hover:bg-gray-100 hover:text-gray-950 dark:text-gray-400 dark:hover:bg-white/[0.05] dark:hover:text-gray-100 midnight:text-slate-400 midnight:hover:bg-white/[0.05] midnight:hover:text-slate-100"
-      }
-    `}
-  >
-    <span className={`flex h-7 w-7 flex-shrink-0 items-center justify-center transition-colors ${
-      isActive
-        ? "text-current"
-        : "text-gray-400 group-hover:text-gray-700 dark:text-gray-500 dark:group-hover:text-gray-300 midnight:text-slate-500 midnight:group-hover:text-slate-300"
-    }`}>
-      {icon}
-    </span>
-    <span className={`min-w-0 flex-1 truncate text-left text-[13px] font-medium ${collapsed ? "hidden" : "hidden sm:block"}`}>
-      {label}
-    </span>
-  </button>
+const NavRow = memo(({ icon: Icon, label, onClick, isActive = false, collapsed = false, hint = "", badge = null }) => (
+  <Tooltip label={label} shortcut={hint} disabled={!collapsed} className="w-full">
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      aria-current={isActive ? "page" : undefined}
+      className={`group relative flex w-full items-center gap-2.5 rounded-lg text-[13px] outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-accent/40 ${
+        collapsed ? "h-9" : "h-8"
+      } ${rowLayout(collapsed)} ${
+        isActive ? "bg-selected font-medium text-fg" : "text-fg-muted hover:bg-hover hover:text-fg"
+      }`}
+    >
+      <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
+        <Icon className="h-[17px] w-[17px]" strokeWidth={1.75} />
+        {badge}
+      </span>
+      <span className={`min-w-0 flex-1 truncate text-left ${labelVisibility(collapsed)}`}>{label}</span>
+      {hint && !collapsed ? (
+        <kbd className="hidden shrink-0 font-sans text-[11px] font-normal text-fg-subtle opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 sm:block">
+          {hint}
+        </kbd>
+      ) : null}
+    </button>
+  </Tooltip>
 ));
 
-SidebarNavItem.displayName = "SidebarNavItem";
-SidebarNavItem.propTypes = {
-  icon: PropTypes.node,
+NavRow.displayName = "NavRow";
+NavRow.propTypes = {
+  icon: PropTypes.elementType.isRequired,
   label: PropTypes.string.isRequired,
   onClick: PropTypes.func,
   isActive: PropTypes.bool,
   collapsed: PropTypes.bool,
+  hint: PropTypes.string,
+  badge: PropTypes.node,
+};
+
+const NavGroupLabel = ({ collapsed, children }) => (
+  <>
+    <div className={`mx-auto my-2 h-px w-6 bg-line ${collapsed ? "" : "sm:hidden"}`} />
+    {collapsed ? null : (
+      <div className="hidden px-2.5 pb-1 pt-3 text-[11px] font-medium text-fg-subtle sm:block">{children}</div>
+    )}
+  </>
+);
+
+NavGroupLabel.propTypes = {
+  collapsed: PropTypes.bool,
+  children: PropTypes.node,
 };
 
 function conversationProjectId(conversation) {
@@ -104,36 +127,88 @@ function conversationUpdatedAt(conversation) {
   ).getTime() || 0;
 }
 
-const RecentConversationItem = memo(({ conversation, active, running, onOpen, nested = false }) => {
-  const isWork = conversation.mode === "build" || conversation.mode === "work";
-  const modeLabel = isWork ? "Work" : "Chat";
+const RecentConversationItem = memo(({ conversation, active, running, onOpen, onRename, onDelete, nested = false }) => {
+  const title = conversation.title || "Untitled conversation";
+  const menuButtonRef = useRef(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [draft, setDraft] = useState(title);
+  const renameDoneRef = useRef(false);
+
+  const startRename = () => {
+    renameDoneRef.current = false;
+    setDraft(title);
+    setRenaming(true);
+  };
+
+  // Enter and the blur that follows both land here; only the first one counts.
+  const finishRename = (save) => {
+    if (renameDoneRef.current) return;
+    renameDoneRef.current = true;
+    setRenaming(false);
+    const next = draft.trim();
+    if (save && next && next !== title) onRename(conversation.id, next);
+  };
+
+  if (renaming) {
+    return (
+      <div className={`flex h-8 items-center rounded-lg bg-hover pr-1.5 ${nested ? "pl-7" : "pl-1.5"}`}>
+        <input
+          autoFocus
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onFocus={(event) => event.target.select()}
+          onBlur={() => finishRename(true)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") finishRename(true);
+            if (event.key === "Escape") finishRename(false);
+          }}
+          aria-label="Chat name"
+          className="h-6 min-w-0 flex-1 rounded-md border border-line-strong bg-canvas px-1.5 text-[13px] text-fg outline-none focus:border-accent"
+        />
+      </div>
+    );
+  }
 
   return (
-    <button
-      type="button"
-      onClick={() => onOpen(conversation.id)}
-      title={`${conversation.title || "Untitled conversation"} · ${modeLabel}`}
-      aria-current={active ? "page" : undefined}
-      className={`group flex h-8 w-full min-w-0 items-center gap-2 rounded-lg pr-2.5 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-gray-400/40 ${nested ? "pl-7" : "pl-2.5"} ${
-        active
-          ? "bg-gray-100 text-gray-950 dark:bg-white/[0.07] dark:text-gray-100 midnight:bg-white/[0.06] midnight:text-slate-100"
-          : "text-gray-600 hover:bg-gray-100 hover:text-gray-950 dark:text-gray-400 dark:hover:bg-white/[0.05] dark:hover:text-gray-100 midnight:text-slate-400 midnight:hover:bg-white/[0.05] midnight:hover:text-slate-100"
-      }`}
+    <div
+      className={`group relative flex h-8 items-center rounded-lg transition-colors ${
+        active ? "bg-selected text-fg" : "text-fg-muted hover:bg-hover hover:text-fg"
+      } ${menuOpen ? "bg-hover text-fg" : ""}`}
     >
-      <span
-        aria-label={running ? "Generating" : modeLabel}
-        className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-          running
-            ? "animate-pulse bg-indigo-500 ring-2 ring-indigo-500/15"
-            : isWork
-              ? "bg-indigo-400/80 dark:bg-indigo-400/70"
-              : "bg-gray-300 dark:bg-gray-600 midnight:bg-slate-600"
-        }`}
-      />
-      <span className="min-w-0 flex-1 truncate text-[13px] font-normal">
-        {conversation.title || "Untitled conversation"}
+      <button
+        type="button"
+        onClick={() => onOpen(conversation.id)}
+        title={title}
+        aria-current={active ? "page" : undefined}
+        className={`flex h-full min-w-0 flex-1 items-center gap-2 rounded-lg pr-8 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40 ${nested ? "pl-7" : "pl-2.5"}`}
+      >
+        <span className={`min-w-0 flex-1 truncate text-[13px] ${active ? "font-medium" : ""}`}>{title}</span>
+      </button>
+
+      <span className="pointer-events-none absolute right-2 flex h-4 w-4 items-center justify-center group-hover:opacity-0 group-focus-within:opacity-0">
+        {running ? <Loader2 aria-label="Generating" className="h-3.5 w-3.5 animate-spin text-accent" /> : null}
       </span>
-    </button>
+
+      <button
+        ref={menuButtonRef}
+        type="button"
+        onClick={() => setMenuOpen((open) => !open)}
+        aria-label={`Options for ${title}`}
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        className={`absolute right-1 flex h-6 w-6 items-center justify-center rounded-md text-fg-subtle outline-none transition-opacity hover:bg-selected hover:text-fg focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-accent/40 ${
+          menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+        }`}
+      >
+        <MoreHorizontal className="h-4 w-4" />
+      </button>
+      <Menu anchorRef={menuButtonRef} open={menuOpen} onClose={() => setMenuOpen(false)} placement="bottom-end" width={176} label="Chat options">
+        <MenuItem icon={Pencil} label="Rename" onSelect={startRename} />
+        <MenuSeparator />
+        <MenuItem icon={Trash2} label="Delete" danger onSelect={() => onDelete(conversation)} />
+      </Menu>
+    </div>
   );
 });
 
@@ -147,6 +222,8 @@ RecentConversationItem.propTypes = {
   active: PropTypes.bool,
   running: PropTypes.bool,
   onOpen: PropTypes.func.isRequired,
+  onRename: PropTypes.func.isRequired,
+  onDelete: PropTypes.func.isRequired,
   nested: PropTypes.bool,
 };
 
@@ -160,36 +237,41 @@ const ProjectConversationGroup = memo(({
   onToggle,
   onOpenProject,
   onOpenConversation,
+  onRenameConversation,
+  onDeleteConversation,
 }) => {
   const ProjectIcon = expanded ? FolderOpen : Folder;
+  const name = project.name || "Untitled project";
 
   return (
     <div>
-      <div className={`group flex h-8 items-center rounded-lg transition-colors ${active ? "bg-gray-100 dark:bg-white/[0.07] midnight:bg-white/[0.06]" : "hover:bg-gray-100 dark:hover:bg-white/[0.05] midnight:hover:bg-white/[0.05]"}`}>
+      <div className={`group relative flex h-8 items-center rounded-lg transition-colors ${active ? "bg-selected" : "hover:bg-hover"}`}>
         <button
           type="button"
           onClick={onToggle}
-          className="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gray-400/40"
+          className="flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-lg pl-1.5 pr-8 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40"
           aria-expanded={expanded}
-          title={project.name}
+          title={name}
         >
-          <ChevronRight className={`h-3 w-3 shrink-0 text-gray-400 transition-transform ${expanded ? "rotate-90" : ""}`} />
-          <ProjectIcon className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-400 midnight:text-slate-400" />
-          <span className={`min-w-0 flex-1 truncate text-[13px] ${active ? "font-medium text-gray-950 dark:text-gray-100 midnight:text-slate-100" : "font-normal text-gray-700 dark:text-gray-300 midnight:text-slate-300"}`}>
-            {project.name || "Untitled project"}
+          <ChevronRight className={`h-3 w-3 shrink-0 text-fg-subtle transition-transform ${expanded ? "rotate-90" : ""}`} />
+          <ProjectIcon className="h-4 w-4 shrink-0 text-fg-subtle" strokeWidth={1.75} />
+          <span className={`min-w-0 flex-1 truncate text-[13px] ${active ? "font-medium text-fg" : "text-fg-muted group-hover:text-fg"}`}>
+            {name}
           </span>
           {conversations.length > 0 ? (
-            <span className="text-[10px] tabular-nums text-gray-400 dark:text-gray-600 midnight:text-slate-600">{conversations.length}</span>
+            <span className="text-[11px] tabular-nums text-fg-subtle group-hover:opacity-0">{conversations.length}</span>
           ) : null}
         </button>
-        <button
-          type="button"
-          onClick={onOpenProject}
-          className="mr-1 flex h-6 shrink-0 items-center rounded px-1.5 text-[10px] font-medium text-gray-400 opacity-0 transition-[opacity,color,background-color] hover:bg-white hover:text-gray-700 group-hover:opacity-100 focus-visible:opacity-100 dark:hover:bg-white/[0.07] dark:hover:text-gray-200"
-          title={`Open ${project.name || "project"}`}
-        >
-          Open
-        </button>
+        <Tooltip label="Open project" side="top" className="absolute right-1">
+          <button
+            type="button"
+            onClick={onOpenProject}
+            aria-label={`Open ${name}`}
+            className="flex h-6 w-6 items-center justify-center rounded-md text-fg-subtle opacity-0 outline-none transition-opacity hover:bg-selected hover:text-fg group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-accent/40"
+          >
+            <ArrowUpRight className="h-3.5 w-3.5" />
+          </button>
+        </Tooltip>
       </div>
       {expanded ? (
         <div className="mt-px space-y-px">
@@ -200,13 +282,15 @@ const ProjectConversationGroup = memo(({
               active={conversation.id === activeConversationId}
               running={activeConversationIds.has(conversation.id)}
               onOpen={onOpenConversation}
+              onRename={onRenameConversation}
+              onDelete={onDeleteConversation}
               nested
             />
           )) : (
             <button
               type="button"
               onClick={onOpenProject}
-              className="flex h-8 w-full items-center pl-7 pr-2.5 text-left text-[12px] text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-600 dark:hover:text-gray-300 midnight:text-slate-600 midnight:hover:text-slate-300"
+              className="flex h-8 w-full items-center rounded-lg pl-7 pr-2.5 text-left text-xs text-fg-subtle transition-colors hover:bg-hover hover:text-fg-muted"
             >
               No chats yet · Open project
             </button>
@@ -228,11 +312,36 @@ ProjectConversationGroup.propTypes = {
   onToggle: PropTypes.func.isRequired,
   onOpenProject: PropTypes.func.isRequired,
   onOpenConversation: PropTypes.func.isRequired,
+  onRenameConversation: PropTypes.func.isRequired,
+  onDeleteConversation: PropTypes.func.isRequired,
+};
+
+const SectionHeader = ({ label, onLabelClick, labelTitle, children }) => (
+  <div className="group/section flex h-7 items-center justify-between pl-2.5 pr-1">
+    <button
+      type="button"
+      onClick={onLabelClick}
+      title={labelTitle}
+      className="rounded text-[11px] font-medium text-fg-subtle outline-none transition-colors hover:text-fg-muted focus-visible:ring-2 focus-visible:ring-accent/40"
+    >
+      {label}
+    </button>
+    {children}
+  </div>
+);
+
+SectionHeader.propTypes = {
+  label: PropTypes.string.isRequired,
+  onLabelClick: PropTypes.func,
+  labelTitle: PropTypes.string,
+  children: PropTypes.node,
 };
 
 const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const confirm = useConfirm();
+  const toast = useToast();
   const [shortcuts, setShortcuts] = useState(loadKeyboardShortcuts);
   const [updateAvailable, setUpdateAvailable] = useState(
     () => sessionStorage.getItem("asyncatUpdateAvailable") === "true",
@@ -242,13 +351,13 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
   const [projects, setProjects] = useState([]);
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [expandedProjectIds, setExpandedProjectIds] = useState(() => new Set());
-  const [recentMode, setRecentMode] = useState("all");
   const [recentLoading, setRecentLoading] = useState(true);
   const [recentError, setRecentError] = useState(false);
-  const [showRecentFilter, setShowRecentFilter] = useState(false);
-  const recentFilterRef = useRef(null);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const profileButtonRef = useRef(null);
   const recentRequestRef = useRef(0);
-  const { sidebarState, setSidebarState, navItemsVisibility } = useUiPreferences();
+  const { sidebarState, setSidebarState, navItemsVisibility, theme, setTheme } = useUiPreferences();
+  const { user, profileData } = useUser();
   const { getWorkspaceProjects, bustProjectsCache, currentWorkspace } = useWorkspace();
   const {
     currentConversationId,
@@ -259,12 +368,17 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
   } = useCommandCenter();
 
   const collapsed = sidebarState === "collapsed";
+  const displayName = profileData?.name || user?.name || "You";
   const latestChatRun = chatRunPreviews[0];
   const commandCenterTarget = currentConversationId
     ? `/conversations/${currentConversationId}`
     : latestChatRun?.conversationId
       ? `/conversations/${latestChatRun.conversationId}`
       : "/home";
+
+  const shortcutHint = useCallback((action) => (
+    formatShortcut(Object.values(shortcuts).find((shortcut) => shortcut.action === action))
+  ), [shortcuts]);
 
   const openCommandCenter = useCallback(() => {
     navigate(commandCenterTarget);
@@ -300,14 +414,8 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
     const unscopedConversations = conversationCatalog.filter(
       (conversation) => !conversationProjectId(conversation),
     );
-    const filtered = recentMode === "all"
-      ? unscopedConversations
-      : unscopedConversations.filter((conversation) => {
-          const isWork = conversation.mode === "build" || conversation.mode === "work";
-          return recentMode === "work" ? isWork : !isWork;
-        });
-    setRecentConversations(filtered.slice(0, 7));
-  }, [conversationCatalog, recentMode]);
+    setRecentConversations(unscopedConversations.slice(0, 7));
+  }, [conversationCatalog]);
 
   const loadProjects = useCallback(async () => {
     if (!currentWorkspace) {
@@ -346,15 +454,6 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
       setConversationListRefresh(null);
     };
   }, [loadRecentConversations, setConversationListRefresh]);
-
-  useEffect(() => {
-    if (!showRecentFilter) return undefined;
-    const closeOnOutsideClick = (event) => {
-      if (!recentFilterRef.current?.contains(event.target)) setShowRecentFilter(false);
-    };
-    document.addEventListener("mousedown", closeOnOutsideClick);
-    return () => document.removeEventListener("mousedown", closeOnOutsideClick);
-  }, [showRecentFilter]);
 
   useEffect(() => {
     const api = window.electronAPI;
@@ -424,8 +523,6 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
     || location.pathname.startsWith("/profiles");
   const isOnAutomations = isAutomationPath(location.pathname);
   const isOnTools = location.pathname.startsWith("/tools");
-  const isOnTrash = basePage === "trash";
-  const isOnSettings = basePage === "settings";
   const routeConversationId = location.pathname.match(/^\/conversations\/([^/]+)/)?.[1] || null;
   const activeRecentConversationId = routeConversationId;
   const routeProjectId = location.pathname.match(/^\/(?:projects|tasks)\/([^/]+)/)?.[1] || null;
@@ -458,132 +555,164 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
     }));
   }, [conversationCatalog, projects]);
 
+  const openConversation = useCallback((conversationId) => {
+    navigate(`/conversations/${conversationId}`);
+  }, [navigate]);
+
+  const renameConversation = useCallback(async (conversationId, title) => {
+    setConversationCatalog((current) => current.map((conversation) => (
+      conversation.id === conversationId ? { ...conversation, title } : conversation
+    )));
+    try {
+      await chatApi.updateConversation(conversationId, { title });
+    } catch (err) {
+      toast.error("Couldn't rename the chat", { detail: errorDetail(err) });
+      loadRecentConversations();
+    }
+  }, [loadRecentConversations, toast]);
+
+  const deleteConversation = useCallback(async (conversation) => {
+    const confirmed = await confirm({
+      title: "Delete chat?",
+      message: `"${conversation.title || "Untitled conversation"}" will be moved to Trash, where you can restore it.`,
+      confirmLabel: "Move to Trash",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    setConversationCatalog((current) => current.filter((item) => item.id !== conversation.id));
+    if (conversation.id === routeConversationId) navigate("/home");
+    try {
+      await chatApi.deleteConversation(conversation.id);
+    } catch (err) {
+      toast.error("Couldn't delete the chat", { detail: errorDetail(err) });
+      loadRecentConversations();
+    }
+  }, [confirm, loadRecentConversations, navigate, routeConversationId, toast]);
+
   // With labels shown, projects are listed below together with their chats.
   const showProjectsTree = !collapsed && navItemsVisibility.projects !== false;
 
-  const workItems = [
-    { key: "projects", label: "Projects", path: "/projects", active: isOnProjects, icon: <FolderKanban className={iconClass} /> },
-    { key: "tasks", label: "Tasks", path: "/tasks", active: isOnTasks, icon: <KanbanSquare className={iconClass} /> },
+  const workspaceItems = [
+    { key: "projects", label: "Projects", path: "/projects", active: isOnProjects, icon: FolderKanban, hint: shortcutHint("navWorkspace") },
+    { key: "tasks", label: "Tasks", path: "/tasks", active: isOnTasks, icon: KanbanSquare },
     // Workflows, Schedules and Activity; reopens the one used last.
-    { key: "automations", label: "Automations", path: lastAutomationPath, active: isOnAutomations, icon: <Zap className={iconClass} /> },
+    { key: "automations", label: "Automations", path: lastAutomationPath, active: isOnAutomations, icon: Zap },
   ].filter((item) => navItemsVisibility[item.key] !== false && (collapsed || item.key !== "projects"));
 
   const configureItems = [
-    { key: "models", label: "Models", path: "/models", active: isOnModels, icon: <Cpu className={iconClass} /> },
-    { key: "tools", label: "Tools & Skills", path: "/tools", active: isOnTools, icon: <Wrench className={iconClass} /> },
-    { key: "agent", label: "Agents", path: "/agent/profiles", active: isOnAgent, icon: <BrainCircuit className={iconClass} /> },
+    { key: "agent", label: "Agents", path: "/agent/profiles", active: isOnAgent, icon: BrainCircuit, hint: shortcutHint("navAgent") },
+    { key: "models", label: "Models", path: "/models", active: isOnModels, icon: Cpu, hint: shortcutHint("navModels") },
+    { key: "tools", label: "Tools & Skills", path: "/tools", active: isOnTools, icon: Wrench, hint: shortcutHint("navTools") },
   ].filter((item) => navItemsVisibility[item.key] !== false);
 
   const renderItems = (items) => items.map((item) => (
-    <SidebarNavItem
+    <NavRow
       key={item.key}
       icon={item.icon}
       label={item.label}
+      hint={item.hint}
       onClick={() => navigate(typeof item.path === "function" ? item.path() : item.path)}
       isActive={item.active}
       collapsed={collapsed}
     />
   ));
 
-  const CollapseIcon = collapsed ? PanelLeftOpen : PanelLeftClose;
-
   return (
     <>
       <aside
         data-app-sidebar
-        className={`fixed left-0 top-0 z-50 flex h-screen flex-col border-r border-gray-200/70 bg-white transition-[width] duration-200 ease-out dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950 ${
-          collapsed ? "w-[72px]" : "w-[72px] sm:w-64"
+        className={`fixed left-0 top-0 z-50 flex h-screen flex-col border-r border-line bg-sidebar transition-[width] duration-200 ease-out ${
+          collapsed ? "w-16" : "w-16 sm:w-64"
         }`}
       >
-        <div className="flex h-16 items-center gap-2 px-3">
-          <button
-            type="button"
-            onClick={openCommandCenter}
-            title="Command Center"
-            className="group flex min-w-0 flex-1 items-center gap-2.5 rounded-lg p-1 outline-none focus-visible:ring-2 focus-visible:ring-gray-400/40"
-          >
-            <span className="relative flex h-9 w-9 flex-shrink-0 items-center justify-center text-gray-900 dark:text-gray-100 midnight:text-slate-100">
-              <AsyncatMark className="h-8 w-8" />
-              {hasActiveRuns ? <span className="absolute right-0 top-0 h-2 w-2 rounded-full bg-indigo-500 ring-2 ring-white dark:ring-gray-900 midnight:ring-slate-950" /> : null}
-            </span>
-            <span className={`min-w-0 flex-1 truncate text-left text-sm font-semibold tracking-[-0.01em] text-gray-950 dark:text-gray-100 midnight:text-slate-100 ${collapsed ? "hidden" : "hidden sm:block"}`}>
-              <span className="inline-flex items-center gap-1.5">
-                Asyncat
-                <span className="rounded-full border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-indigo-600 dark:border-indigo-400/20 dark:bg-indigo-400/10 dark:text-indigo-300 midnight:border-indigo-400/20 midnight:bg-indigo-400/10 midnight:text-indigo-300">
-                  Beta
+        <div className={`flex h-14 shrink-0 items-center px-3 ${collapsed ? "justify-center" : "justify-center gap-2 sm:justify-between"}`}>
+          {collapsed ? (
+            <Tooltip label="Expand sidebar">
+              <button
+                type="button"
+                onClick={() => setSidebarState("expanded")}
+                aria-label="Expand sidebar"
+                aria-expanded="false"
+                className="group relative flex h-10 w-10 items-center justify-center rounded-lg text-fg outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-accent/40"
+              >
+                <AsyncatMark className="h-7 w-7 transition-opacity group-hover:opacity-0 group-focus-visible:opacity-0" />
+                <PanelLeftOpen className="absolute h-[18px] w-[18px] text-fg-muted opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" strokeWidth={1.75} />
+                {hasActiveRuns ? <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-sidebar" /> : null}
+              </button>
+            </Tooltip>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={openCommandCenter}
+                title="Command Center"
+                className="flex min-w-0 items-center gap-2 rounded-lg p-1 outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+              >
+                <span className="relative flex h-8 w-8 shrink-0 items-center justify-center">
+                  <AsyncatMark className="h-7 w-7" />
+                  {hasActiveRuns ? <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-sidebar" /> : null}
                 </span>
-              </span>
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setSidebarState(collapsed ? "expanded" : "collapsed")}
-            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            aria-expanded={!collapsed}
-            className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-gray-400 outline-none transition-colors hover:bg-gray-100 hover:text-gray-700 focus-visible:ring-2 focus-visible:ring-gray-400/40 dark:text-gray-500 dark:hover:bg-white/[0.05] dark:hover:text-gray-300 midnight:hover:bg-white/[0.05] ${collapsed ? "absolute left-5 top-[72px]" : ""}`}
-          >
-            <CollapseIcon className="h-[17px] w-[17px]" />
-          </button>
+                <span className="hidden min-w-0 items-center gap-1.5 sm:flex">
+                  <span className="truncate text-[18px] font-[680] leading-none tracking-[-0.05em] text-fg">asyncat</span>
+                  <span className="rounded-md bg-accent-soft px-1.5 py-px text-[10px] font-semibold text-accent">Beta</span>
+                </span>
+              </button>
+              <Tooltip label="Collapse sidebar" side="bottom" className="hidden sm:block">
+                <button
+                  type="button"
+                  onClick={() => setSidebarState("collapsed")}
+                  aria-label="Collapse sidebar"
+                  aria-expanded="true"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-fg-subtle outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/40"
+                >
+                  <PanelLeftClose className="h-[18px] w-[18px]" strokeWidth={1.75} />
+                </button>
+              </Tooltip>
+            </>
+          )}
         </div>
 
         {/* Destinations stay pinned here; only the project and chat lists below scroll. */}
-        <nav aria-label="Main" className={`flex-shrink-0 px-3 pb-3 ${collapsed ? "pt-11" : ""}`}>
-          <div className="space-y-0.5">
-            <SidebarNavItem
-              icon={<SquarePen className={iconClass} />}
-              label="New chat"
-              onClick={onNewChat}
-              collapsed={collapsed}
-            />
-            <SidebarNavItem
-              icon={<History className={iconClass} />}
-              label="All chats"
-              onClick={() => navigate("/all-chats")}
-              isActive={isOnChats}
-              collapsed={collapsed}
-            />
-            <SidebarNavItem
-              icon={<Search className={iconClass} />}
-              label="Search"
-              onClick={() => onSearchOpen(true)}
-              collapsed={collapsed}
-            />
+        <nav aria-label="Main" className="shrink-0 px-2 pb-2 sm:px-3">
+          <div className="space-y-px">
+            <NavRow icon={SquarePen} label="New chat" hint={shortcutHint("newChat")} onClick={onNewChat} collapsed={collapsed} />
+            <NavRow icon={Search} label="Search" hint={shortcutHint("openSearch")} onClick={() => onSearchOpen(true)} collapsed={collapsed} />
+            <NavRow icon={History} label="All chats" hint={shortcutHint("navChat")} onClick={() => navigate("/all-chats")} isActive={isOnChats} collapsed={collapsed} />
           </div>
-          {workItems.length ? <div className="mt-3 space-y-0.5">{renderItems(workItems)}</div> : null}
-          {configureItems.length ? <div className="mt-3 space-y-0.5">{renderItems(configureItems)}</div> : null}
+          {workspaceItems.length ? (
+            <>
+              <NavGroupLabel collapsed={collapsed}>Workspace</NavGroupLabel>
+              <div className="space-y-px">{renderItems(workspaceItems)}</div>
+            </>
+          ) : null}
+          {configureItems.length ? (
+            <>
+              <NavGroupLabel collapsed={collapsed}>Configure</NavGroupLabel>
+              <div className="space-y-px">{renderItems(configureItems)}</div>
+            </>
+          ) : null}
         </nav>
 
-        <div className={`min-h-0 flex-1 overflow-y-auto px-3 py-3 ${collapsed ? "" : "sm:border-t sm:border-gray-200/70 sm:dark:border-gray-800 sm:midnight:border-slate-800"}`}>
+        <div className={`min-h-0 flex-1 overflow-y-auto px-3 pb-3 ${collapsed ? "hidden" : "hidden sm:block"}`}>
           {showProjectsTree ? (
-            <section className="relative mb-5 hidden sm:block" aria-label="Projects and their conversations">
-              <div className="flex items-center justify-between px-2.5 pb-1.5">
+            <section className="mt-3" aria-label="Projects and their conversations">
+              <SectionHeader label="Projects" labelTitle="Manage projects" onLabelClick={() => navigate("/projects")}>
                 <button
                   type="button"
                   onClick={() => navigate("/projects")}
-                  className="text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-600 dark:hover:text-gray-300 midnight:text-slate-600 midnight:hover:text-slate-300"
-                  title="Manage projects"
-                >
-                  Projects
-                </button>
-                <button
-                  type="button"
-                  onClick={() => navigate("/projects")}
-                  className="rounded px-1.5 py-0.5 text-[10px] font-medium text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-gray-600 dark:hover:bg-white/[0.05] dark:hover:text-gray-300"
-                  title="View all projects"
+                  className="rounded-md px-1.5 py-0.5 text-[11px] text-fg-subtle opacity-0 outline-none transition-opacity hover:bg-hover hover:text-fg-muted focus-visible:opacity-100 group-hover/section:opacity-100"
                 >
                   View all
                 </button>
-              </div>
+              </SectionHeader>
               <div className="space-y-px">
                 {projectsLoading && projectGroups.length === 0 ? (
-                  <div className="px-2.5 py-2 text-xs text-gray-400 dark:text-gray-600 midnight:text-slate-600">Loading projects…</div>
+                  <div className="px-2.5 py-2 text-xs text-fg-subtle">Loading projects…</div>
                 ) : projectGroups.length === 0 ? (
                   <button
                     type="button"
                     onClick={() => navigate("/projects")}
-                    className="w-full rounded-lg px-2.5 py-2 text-left text-xs text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-white/[0.05] dark:hover:text-gray-300"
+                    className="w-full rounded-lg px-2.5 py-2 text-left text-xs text-fg-subtle transition-colors hover:bg-hover hover:text-fg-muted"
                   >
                     Create your first project
                   </button>
@@ -605,7 +734,9 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
                         return next;
                       })}
                       onOpenProject={() => navigate(`/projects/${project.id}`)}
-                      onOpenConversation={(conversationId) => navigate(`/conversations/${conversationId}`)}
+                      onOpenConversation={openConversation}
+                      onRenameConversation={renameConversation}
+                      onDeleteConversation={deleteConversation}
                     />
                   );
                 })}
@@ -613,107 +744,110 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
             </section>
           ) : null}
 
-          {!collapsed ? (
-            <section className="relative mb-5 hidden sm:block" aria-label="Recent conversations">
-              <div className="flex items-center justify-between px-2.5 pb-1.5">
+          <section className="mt-4" aria-label="Recent conversations">
+            <SectionHeader label="Recents" labelTitle="View all conversations" onLabelClick={() => navigate("/all-chats")} />
+
+            <div className="space-y-px">
+              {recentLoading && recentConversations.length === 0 ? (
+                <div className="flex h-16 items-center justify-center text-fg-subtle">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                </div>
+              ) : recentError ? (
                 <button
                   type="button"
-                  onClick={() => navigate("/all-chats")}
-                  className="text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-600 dark:hover:text-gray-300 midnight:text-slate-600 midnight:hover:text-slate-300"
-                  title="View all conversations"
+                  onClick={loadRecentConversations}
+                  className="w-full rounded-lg px-2.5 py-2 text-left text-xs text-fg-subtle transition-colors hover:bg-hover hover:text-fg-muted"
                 >
-                  Recent chats
+                  Couldn&apos;t load recents · Retry
                 </button>
-                <div ref={recentFilterRef} className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setShowRecentFilter((visible) => !visible)}
-                    aria-label={`Filter recent conversations: ${recentMode}`}
-                    aria-expanded={showRecentFilter}
-                    className={`flex h-6 w-6 items-center justify-center rounded-md outline-none transition-colors focus-visible:ring-2 focus-visible:ring-gray-400/40 ${
-                      showRecentFilter || recentMode !== "all"
-                        ? "bg-gray-100 text-gray-700 dark:bg-white/[0.07] dark:text-gray-300 midnight:bg-white/[0.06] midnight:text-slate-300"
-                        : "text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-600 dark:hover:bg-white/[0.05] dark:hover:text-gray-300 midnight:text-slate-600 midnight:hover:bg-white/[0.05] midnight:hover:text-slate-300"
-                    }`}
-                    title="Filter recent conversations"
-                  >
-                    <ListFilter className="h-3.5 w-3.5" />
-                  </button>
-                  {showRecentFilter ? (
-                    <div className="absolute right-0 top-7 z-50 w-32 rounded-xl border border-gray-200/80 bg-white p-1.5 shadow-xl shadow-black/10 dark:border-gray-700 dark:bg-gray-800 midnight:border-slate-700 midnight:bg-slate-900">
-                      {[['all', 'All'], ['chat', 'Chat'], ['work', 'Work']].map(([value, label]) => (
-                        <button
-                          key={value}
-                          type="button"
-                          onClick={() => {
-                            setRecentMode(value);
-                            setShowRecentFilter(false);
-                          }}
-                          className="flex h-8 w-full items-center rounded-lg px-2.5 text-left text-xs text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-950 dark:text-gray-300 dark:hover:bg-white/[0.07] dark:hover:text-white midnight:text-slate-300 midnight:hover:bg-white/[0.06]"
-                        >
-                          <span className="flex-1">{label}</span>
-                          {recentMode === value ? <Check className="h-3.5 w-3.5" /> : null}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
+              ) : recentConversations.length === 0 ? (
+                <div className="px-2.5 py-2 text-xs text-fg-subtle">
+                  No recent conversations
                 </div>
-              </div>
-
-              <div className="space-y-px">
-                {recentLoading && recentConversations.length === 0 ? (
-                  <div className="flex h-16 items-center justify-center text-gray-400 dark:text-gray-600 midnight:text-slate-600">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  </div>
-                ) : recentError ? (
-                  <button
-                    type="button"
-                    onClick={loadRecentConversations}
-                    className="w-full rounded-lg px-2.5 py-2 text-left text-xs text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-white/[0.05] dark:hover:text-gray-300 midnight:text-slate-500 midnight:hover:bg-white/[0.05] midnight:hover:text-slate-300"
-                  >
-                    Couldn&apos;t load recents · Retry
-                  </button>
-                ) : recentConversations.length === 0 ? (
-                  <div className="px-2.5 py-2 text-xs text-gray-400 dark:text-gray-600 midnight:text-slate-600">
-                    No recent {recentMode === "all" ? "conversations" : `${recentMode} conversations`}
-                  </div>
-                ) : recentConversations.map((conversation) => (
-                  <RecentConversationItem
-                    key={conversation.id}
-                    conversation={conversation}
-                    active={conversation.id === activeRecentConversationId}
-                    running={activeConversationIds.has(conversation.id)}
-                    onOpen={(conversationId) => navigate(`/conversations/${conversationId}`)}
-                  />
-                ))}
-              </div>
-            </section>
-          ) : null}
-
+              ) : recentConversations.map((conversation) => (
+                <RecentConversationItem
+                  key={conversation.id}
+                  conversation={conversation}
+                  active={conversation.id === activeRecentConversationId}
+                  running={activeConversationIds.has(conversation.id)}
+                  onOpen={openConversation}
+                  onRename={renameConversation}
+                  onDelete={deleteConversation}
+                />
+              ))}
+            </div>
+          </section>
         </div>
 
-        <div className="space-y-0.5 border-t border-gray-200/70 p-3 dark:border-gray-800 midnight:border-slate-800">
-          {navItemsVisibility.trash !== false ? (
-            <SidebarNavItem
-              icon={<Trash2 className={iconClass} />}
-              label="Trash"
-              onClick={() => navigate("/trash")}
-              isActive={isOnTrash}
-              collapsed={collapsed}
-            />
-          ) : null}
-          <SidebarNavItem
-            icon={(
-              <span className="relative flex h-5 w-5 items-center justify-center">
-                <Settings className={iconClass} />
-                {updateAvailable ? <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-indigo-500 ring-2 ring-white dark:ring-gray-900 midnight:ring-slate-950" /> : null}
+        {collapsed ? <div className="flex-1" /> : <div className="flex-1 sm:hidden" />}
+
+        <div className="shrink-0 border-t border-line p-2">
+          <Tooltip label={displayName} disabled={!collapsed} className="w-full">
+            <button
+              ref={profileButtonRef}
+              type="button"
+              onClick={() => setProfileMenuOpen((open) => !open)}
+              aria-label="Account and settings"
+              aria-haspopup="menu"
+              aria-expanded={profileMenuOpen}
+              className={`group flex h-11 w-full items-center gap-2.5 rounded-lg outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-accent/40 ${rowLayout(collapsed)} ${
+                profileMenuOpen ? "bg-hover" : ""
+              }`}
+            >
+              <span className="relative shrink-0">
+                <img src={avatarSrc(profileData?.profilePicture)} alt="" className="h-7 w-7 rounded-full object-cover ring-1 ring-line" />
+                {updateAvailable ? <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-accent ring-2 ring-sidebar" /> : null}
               </span>
-            )}
-            label="Settings"
-            onClick={() => navigate(updateAvailable ? "/settings/about" : "/settings/profile")}
-            isActive={isOnSettings}
-            collapsed={collapsed}
-          />
+              <span className={`min-w-0 flex-1 text-left ${labelVisibility(collapsed)}`}>
+                <span className="block truncate text-[13px] font-medium text-fg">{displayName}</span>
+                {updateAvailable ? <span className="block truncate text-[11px] text-accent">Update available</span> : null}
+              </span>
+              <ChevronsUpDown className={`h-4 w-4 shrink-0 text-fg-subtle ${labelVisibility(collapsed)}`} strokeWidth={1.75} />
+            </button>
+          </Tooltip>
+          <Menu
+            anchorRef={profileButtonRef}
+            open={profileMenuOpen}
+            onClose={() => setProfileMenuOpen(false)}
+            placement={collapsed ? "right-end" : "top-start"}
+            width={240}
+            label="Account and settings"
+          >
+            {updateAvailable ? (
+              <>
+                <MenuItem icon={CircleArrowUp} label={<span className="text-accent">Update available</span>} onSelect={() => navigate("/settings/about")} />
+                <MenuSeparator />
+              </>
+            ) : null}
+            <MenuItem icon={Settings} label="Settings" hint={shortcutHint("openSettings")} onSelect={() => navigate("/settings/profile")} />
+            {navItemsVisibility.trash !== false ? (
+              <MenuItem icon={Trash2} label="Trash" onSelect={() => navigate("/trash")} />
+            ) : null}
+            <MenuSeparator />
+            <div className="flex items-center justify-between py-1 pl-2.5 pr-1">
+              <span className="text-[13px] text-fg-muted">Theme</span>
+              <div className="flex items-center gap-0.5 rounded-lg bg-hover p-0.5" role="radiogroup" aria-label="Theme">
+                {THEME_OPTIONS.map(({ value, label, icon: Icon }) => (
+                  <Tooltip key={value} label={label} side="top">
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={theme === value}
+                      aria-label={label}
+                      onClick={() => setTheme(value)}
+                      className={`flex h-6 w-7 items-center justify-center rounded-md outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/40 ${
+                        theme === value ? "bg-elevated text-fg shadow-sm ring-1 ring-line" : "text-fg-subtle hover:text-fg"
+                      }`}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                    </button>
+                  </Tooltip>
+                ))}
+              </div>
+            </div>
+            <MenuSeparator />
+            <MenuItem icon={Info} label="About Asyncat" onSelect={() => navigate("/settings/about")} />
+          </Menu>
         </div>
       </aside>
       <UniversalSearch isOpen={isSearchOpen} onClose={() => onSearchOpen(false)} />

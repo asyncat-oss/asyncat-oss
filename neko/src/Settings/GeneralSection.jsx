@@ -14,30 +14,7 @@ import {
 import { profileApi, workspaceApi, apiUtils } from './settingApi';
 import eventBus from '../utils/eventBus.js';
 import Portal from '../components/Portal';
-
-import catDP      from '../assets/dp/CAT.webp';
-import dogDP      from '../assets/dp/DOG.webp';
-import dolphinDP  from '../assets/dp/DOLPHIN.webp';
-import dragonDP   from '../assets/dp/DRAGON.webp';
-import elephantDP from '../assets/dp/ELEPHANT.webp';
-import foxDP      from '../assets/dp/FOX.webp';
-import lionDP     from '../assets/dp/LION.webp';
-import owlDP      from '../assets/dp/OWL.webp';
-import penguinDP  from '../assets/dp/PENGUIN.webp';
-import wolfDP     from '../assets/dp/WOLF.webp';
-
-const AVATARS = [
-  { id: 'CAT',      src: catDP,      name: 'Cat'      },
-  { id: 'DOG',      src: dogDP,      name: 'Dog'      },
-  { id: 'DOLPHIN',  src: dolphinDP,  name: 'Dolphin'  },
-  { id: 'DRAGON',   src: dragonDP,   name: 'Dragon'   },
-  { id: 'ELEPHANT', src: elephantDP, name: 'Elephant' },
-  { id: 'FOX',      src: foxDP,      name: 'Fox'      },
-  { id: 'LION',     src: lionDP,     name: 'Lion'     },
-  { id: 'OWL',      src: owlDP,      name: 'Owl'      },
-  { id: 'PENGUIN',  src: penguinDP,  name: 'Penguin'  },
-  { id: 'WOLF',     src: wolfDP,     name: 'Wolf'     },
-];
+import { AVATARS, isCustomImageUrl } from '../assets/dp/avatars.js';
 
 const WORKSPACE_EMOJIS = [
   '👥','🚀','💼','⚡','🎯','🔥','💡','🏆','🌟','🎨',
@@ -244,9 +221,6 @@ DeleteWorkspaceDialog.propTypes = {
   onConfirm: PropTypes.func,
   onForceChange: PropTypes.func,
 };
-
-const isCustomImageUrl = (value) =>
-  value && /^https?:\/\//.test(value) && /\/files\/profile-pictures\//.test(value);
 
 const GeneralSection = ({
   view = 'all',
