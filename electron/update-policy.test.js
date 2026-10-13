@@ -15,13 +15,29 @@ test('SemVer comparison handles beta versions correctly', () => {
 
 test('the newest published version above the installed version is selected', () => {
   const releases = [
-    { tag_name: 'v0.7.5-beta.1', draft: false },
-    { tag_name: 'v0.7.6-beta.1', draft: true },
-    { tag_name: 'v0.7.5-beta.3', draft: false },
+    { tag_name: 'v0.7.5-beta.1', draft: false, prerelease: true },
+    { tag_name: 'v0.7.6-beta.1', draft: true, prerelease: true },
+    { tag_name: 'v0.7.5-beta.3', draft: false, prerelease: true },
     { tag_name: 'not-a-version', draft: false },
   ];
-  assert.equal(selectLatestRelease(releases, '0.7.4').tag_name, 'v0.7.5-beta.3');
+  assert.equal(selectLatestRelease(releases, '0.7.5-beta.2').tag_name, 'v0.7.5-beta.3');
+  assert.equal(selectLatestRelease(releases, '0.7.5-beta.3'), null);
   assert.equal(selectLatestRelease(releases, '0.7.5'), null);
+});
+
+test('stable users are offered only stable versions; beta users get betas or stable', () => {
+  const releases = [
+    { tag_name: 'v0.8.0', draft: false, prerelease: false },
+    { tag_name: 'v0.8.1-beta.1', draft: false, prerelease: true },
+    // A tag without a suffix that GitHub still marks as a prerelease.
+    { tag_name: 'v0.8.2', draft: false, prerelease: true },
+  ];
+  assert.equal(selectLatestRelease(releases, '0.7.9').tag_name, 'v0.8.0');
+  assert.equal(selectLatestRelease(releases, '0.8.0'), null);
+  assert.equal(selectLatestRelease(releases, '0.8.0-beta.7').tag_name, 'v0.8.2');
+  assert.equal(selectLatestRelease([releases[0]], '0.8.0-beta.7').tag_name, 'v0.8.0');
+  // A suffixed tag is a prerelease even if the GitHub flag was forgotten.
+  assert.equal(selectLatestRelease([{ tag_name: 'v0.9.0-rc.1', prerelease: false }], '0.8.0'), null);
 });
 
 test('installer selection requires the correct platform and architecture', () => {

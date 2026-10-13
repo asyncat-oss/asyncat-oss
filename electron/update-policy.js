@@ -50,9 +50,22 @@ export function compareVersions(leftValue, rightValue) {
   return comparePrerelease(left.prerelease, right.prerelease);
 }
 
+/** A release counts as a prerelease when GitHub marks it so or its version has a -suffix. */
+export function isPrerelease(release) {
+  return Boolean(release?.prerelease) || (parseVersion(release?.tag_name)?.prerelease.length ?? 0) > 0;
+}
+
+/**
+ * The newest release above `currentVersion` that this user should be offered.
+ * Someone on a stable version is only offered stable versions; someone on a
+ * prerelease (a beta) may get a newer prerelease or a stable version.
+ */
 export function selectLatestRelease(releases, currentVersion) {
+  const current = parseVersion(currentVersion);
+  const onPrerelease = !current || current.prerelease.length > 0;
   const candidates = (Array.isArray(releases) ? releases : [])
     .filter((release) => release && !release.draft && parseVersion(release.tag_name))
+    .filter((release) => onPrerelease || !isPrerelease(release))
     .sort((left, right) => compareVersions(right.tag_name, left.tag_name));
 
   return candidates.find((release) => compareVersions(release.tag_name, currentVersion) > 0) || null;
