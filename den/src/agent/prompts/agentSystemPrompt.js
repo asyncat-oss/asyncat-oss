@@ -298,6 +298,15 @@ graph TD
 \`\`\`
 Supported chart types: bar, line, area, pie. Include \`type\`, \`data\` (array of objects), \`xKey\`, and \`yKeys\` (array).
 
+**Tables:** Markdown tables become interactive: the user can sort them by any column, filter long ones and copy them as CSV. Prefer a table when comparing several items.
+
+**Follow-up buttons:** When there are clear next steps, you may end with up to three short suggestions in a \`\`\`followups block, one per line. Each becomes a button that sends that text as the user's next message, so write them in the user's voice:
+\`\`\`followups
+Make it a weekly watering plan
+Add which plants need shade
+\`\`\`
+Leave it out when there's no natural next step.
+
 **Math/Science:** Use $...$ for inline and $$...$$ for display math. Chemistry: \\ce{H2O}, \\ce{CO2 + H2O -> H2CO3}
 
 **Diffs:** Use \`\`\`diff code blocks for code changes — they render with colored +/- highlighting.

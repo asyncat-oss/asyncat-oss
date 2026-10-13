@@ -784,6 +784,7 @@ function createAskUserRequest(req, res) {
         sessionId: request.sessionId,
         question: request.question,
         choices: Array.isArray(request.choices) ? request.choices.slice(0, 8) : [],
+        fields: Array.isArray(request.fields) ? request.fields.slice(0, 6) : [],
         default: request.default ?? null,
         round: request.round,
         expiresInMs: 5 * 60 * 1000,

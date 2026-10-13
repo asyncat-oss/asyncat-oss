@@ -469,11 +469,16 @@ async function askPermission(cat, entry, request) {
 
 async function askQuestion(cat, entry, request) {
   const choices = Array.isArray(request.choices) ? request.choices : [];
+  const fields = Array.isArray(request.fields) ? request.fields : [];
+  // The inbox answers in words; a form's fields are listed to fill in.
+  const formText = fields.length
+    ? `Please answer with:\n${fields.map((field) => `- ${field.label}${field.choices?.length ? ` (${field.choices.join(' / ')})` : ''}`).join('\n')}`
+    : '';
   const result = await pauseFor(cat, entry, {
     kind: 'question',
     title: String(request.question || 'A question').slice(0, 280),
-    body: choices.length ? `Choices: ${choices.join(' · ')}` : '',
-    data: { choices, default: request.default ?? null },
+    body: [choices.length ? `Choices: ${choices.join(' · ')}` : '', formText].filter(Boolean).join('\n\n'),
+    data: { choices, fields, default: request.default ?? null },
   });
   if (result.status === 'answered') return { success: true, answer: result.answer?.answer || '' };
   if (request.default !== null && request.default !== undefined && request.default !== '') {
