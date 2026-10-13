@@ -941,13 +941,15 @@ export async function startEngineInstallJob({ profile, releaseTag, assetName, re
         ctxSize,
         modelsDir,
         onProgress: progress => {
+          const phase = progress.phase || 'running';
           updateInstallJob(job, {
             status: 'running',
-            phase: progress.phase || 'running',
+            phase,
             message: progress.message || 'Installing managed engine…',
             percent: typeof progress.percent === 'number' ? progress.percent : job.percent,
-            downloadedBytes: progress.downloadedBytes ?? job.downloadedBytes,
-            totalBytes: progress.totalBytes ?? job.totalBytes,
+            // Bytes only mean something while a file downloads.
+            downloadedBytes: phase === 'downloading' ? (progress.downloadedBytes ?? job.downloadedBytes) : null,
+            totalBytes: phase === 'downloading' ? (progress.totalBytes ?? job.totalBytes) : null,
             releaseTag: progress.releaseTag || releaseTag || job.releaseTag,
             assetName: progress.assetName || assetName || job.assetName,
           });

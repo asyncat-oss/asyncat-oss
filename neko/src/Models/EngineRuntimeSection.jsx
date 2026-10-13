@@ -4,6 +4,7 @@ import {
   RotateCcw, Settings2, TerminalSquare, Trash2, TriangleAlert, Wrench, Zap,
 } from 'lucide-react';
 import { Badge } from './modelPageShared.jsx';
+import { downloadProgressText, formatBytes } from './engineProgress.js';
 
 const INSTALL_PROFILE_LABELS = {
   cpu_safe: 'CPU-safe build',
@@ -23,18 +24,6 @@ const capabilityBadgeColor = (hint) => {
   if (hint === 'vulkan') return 'purple';
   if (hint === 'intel') return 'cyan';
   return 'gray';
-};
-
-const formatBytes = (bytes) => {
-  if (!bytes || bytes <= 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let value = bytes;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  return `${value >= 10 || unit === 0 ? value.toFixed(unit === 0 ? 0 : 1) : value.toFixed(2)} ${units[unit]}`;
 };
 
 const readableRuntime = (candidate) => (
@@ -269,6 +258,7 @@ const EngineRuntimeSection = ({
   const jobStatus = activeBuildJob?.status || activeInstallJob?.status;
   const jobMessage = activeBuildJob?.message || activeInstallJob?.message || jobStatus;
   const jobProgress = activeBuildJob?.progress ?? activeBuildJob?.percent ?? activeInstallJob?.progress ?? activeInstallJob?.percent ?? 0;
+  const jobBytes = activeBuildJob ? '' : downloadProgressText(activeInstallJob);
   const PrimaryActionIcon = primaryAction?.icon;
 
   const submitCustom = (retry = false) => {
@@ -399,6 +389,9 @@ const EngineRuntimeSection = ({
                 style={{ width: `${Math.max(5, Math.min(100, jobProgress || 0))}%` }}
               />
             </div>
+            {jobBytes && (
+              <p className="mt-1.5 text-xs tabular-nums text-fg-muted">{jobBytes}</p>
+            )}
           </div>
         </SettingGroup>
       )}

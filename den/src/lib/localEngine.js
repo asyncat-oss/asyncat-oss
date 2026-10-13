@@ -121,6 +121,17 @@ async function discardDownload(file) {
   }
 }
 
+/**
+ * Map a step's own 0–100% onto its slice of the whole install (for example
+ * the download is 2–72%), instead of clamping it, which made the bar sit at
+ * the top of the slice for most of a download.
+ */
+export function scaleProgress(percent, from, to) {
+  if (typeof percent !== 'number' || !Number.isFinite(percent)) return from;
+  const fraction = Math.min(1, Math.max(0, percent / 100));
+  return Math.round((from + (to - from) * fraction) * 10) / 10;
+}
+
 function pathIsInside(candidate, root) {
   if (!candidate || !root) return false;
   const relative = path.relative(path.resolve(root), path.resolve(candidate));
@@ -1051,8 +1062,23 @@ async function installCudartCompanion(release, mainAssetName, targetDir, onProgr
   const extractDir = assertManagedTarget(path.join(path.dirname(targetDir), `.cudart.install-${randomUUID()}`));
   let archivePath = null;
   try {
-    onProgress?.({ phase: 'installing', message: `Downloading CUDA runtime (${companion.name})`, percent: 90 });
-    ({ file: archivePath } = await downloadReleaseAsset({ repo, release, asset: companion, signal }));
+    const message = `Downloading the CUDA runtime (${companion.name})`;
+    onProgress?.({ phase: 'downloading', message, percent: 88, assetName: companion.name });
+    ({ file: archivePath } = await downloadReleaseAsset({
+      repo,
+      release,
+      asset: companion,
+      signal,
+      onProgress: progress => onProgress?.({
+        phase: 'downloading',
+        message,
+        percent: scaleProgress(progress.percent, 88, 92),
+        downloadedBytes: progress.downloadedBytes,
+        totalBytes: progress.totalBytes,
+        assetName: companion.name,
+      }),
+    }));
+    onProgress?.({ phase: 'installing', message: 'Unpacking the CUDA runtime', percent: 92 });
     await ensureFreeSpace(extractDir, fs.statSync(archivePath).size * 3, companion.name);
     await extractArchive(archivePath, extractDir, { signal });
     // Upstream usually puts these DLLs at the archive root, but flatten them
@@ -1093,7 +1119,7 @@ export async function installManagedAsset(asset, release, profile = 'cpu_safe', 
       onProgress?.({
         phase: 'downloading',
         message: `Downloading ${asset.name}`,
-        percent: Math.max(2, Math.min(72, progress.percent ?? 0)),
+        percent: scaleProgress(progress.percent, 2, 72),
         downloadedBytes: progress.downloadedBytes,
         totalBytes: progress.totalBytes,
         assetName: asset.name,
@@ -2060,7 +2086,7 @@ export async function installManagedRuntime(runtimeId, { onProgress = null, capa
     report('downloading', `Downloading ${asset.name}`, 5, { assetName: asset.name });
     let checksum;
     ({ file: archivePath, checksum } = await downloadReleaseAsset({ repo: spec.repo, release, asset, signal, onProgress: p => {
-      report('downloading', `Downloading ${asset.name}`, Math.max(5, Math.min(72, p.percent ?? 0)), {
+      report('downloading', `Downloading ${asset.name}`, scaleProgress(p.percent, 5, 72), {
         assetName: asset.name, downloadedBytes: p.downloadedBytes, totalBytes: p.totalBytes,
       });
     } }));

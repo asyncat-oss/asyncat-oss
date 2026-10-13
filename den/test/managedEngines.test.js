@@ -10,6 +10,7 @@ import {
   isBuildRejectedByMachine,
   listManagedEngineInstalls,
   rankLlamaReleaseAssets,
+  scaleProgress,
   swapManagedDirectory,
 } from '../src/lib/localEngine.js';
 
@@ -194,6 +195,14 @@ test('only a build this machine rejects is worth trying the next build for', () 
   assert.equal(isBuildRejectedByMachine(Object.assign(new Error('x'), { diagnostics: { type: 'llama-server-verification' } })), true);
   assert.equal(isBuildRejectedByMachine(new Error('Download failed: HTTP 503')), false);
   assert.equal(isBuildRejectedByMachine(Object.assign(new Error('checksum'), { code: 'CHECKSUM_MISMATCH' })), false);
+});
+
+test('download progress fills its share of the bar instead of stopping at its top', () => {
+  assert.equal(scaleProgress(0, 2, 72), 2);
+  assert.equal(scaleProgress(50, 2, 72), 37);
+  assert.equal(scaleProgress(100, 2, 72), 72);
+  assert.equal(scaleProgress(150, 2, 72), 72);
+  assert.equal(scaleProgress(null, 5, 72), 5, 'an unknown size stays at the start');
 });
 
 test('a first install has nothing to back up', () => {

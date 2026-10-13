@@ -45,10 +45,14 @@ export function startRuntimeInstallJob(runtimeId) {
 
   installManagedRuntime(runtimeId, {
     onProgress: (p) => {
+      const phase = p.phase || job.progress.phase;
       job.progress = {
         percent: p.percent ?? job.progress.percent,
         message: p.message || job.progress.message,
-        phase: p.phase || job.progress.phase,
+        phase,
+        // Bytes so far and in total while something downloads.
+        downloadedBytes: phase === 'downloading' ? (p.downloadedBytes ?? job.progress.downloadedBytes ?? null) : null,
+        totalBytes: phase === 'downloading' ? (p.totalBytes ?? job.progress.totalBytes ?? null) : null,
       };
     },
   })

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { installApi } from '../CommandCenter/api/installApi.js';
 import { llamaServerApi, runtimeApi } from '../Settings/settingApi.js';
+import { downloadProgressText } from './engineProgress.js';
 
 const PROFILE_LABELS = {
   cpu_safe: 'CPU',
@@ -53,15 +54,18 @@ const StatusDot = ({ ok }) => (
 );
 StatusDot.propTypes = { ok: PropTypes.bool };
 
-const ProgressBar = ({ percent, message }) => (
+const ProgressBar = ({ percent, message, detail = '' }) => (
   <div className="mt-2">
     <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800">
       <div className="h-full rounded-full bg-blue-500 transition-all duration-500" style={{ width: `${Math.min(100, Math.max(2, percent))}%` }} />
     </div>
-    <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400 midnight:text-slate-400">{message || 'Working…'}</p>
+    <div className="mt-1 flex items-center justify-between gap-3 text-[11px] text-gray-500 dark:text-gray-400 midnight:text-slate-400">
+      <p className="min-w-0 truncate">{message || 'Working…'}</p>
+      {detail ? <span className="shrink-0 tabular-nums">{detail}</span> : null}
+    </div>
   </div>
 );
-ProgressBar.propTypes = { percent: PropTypes.number, message: PropTypes.string };
+ProgressBar.propTypes = { percent: PropTypes.number, message: PropTypes.string, detail: PropTypes.string };
 
 // ── One optional engine (Whisper / Piper / sd) with its own install lifecycle ──
 const EngineRow = ({ engine, ready, managedRuntime, ffmpegMissing, onChanged }) => {
@@ -173,7 +177,9 @@ const EngineRow = ({ engine, ready, managedRuntime, ffmpegMissing, onChanged }) 
         </p>
       )}
 
-      {installing && <ProgressBar percent={job?.progress?.percent ?? 2} message={job?.progress?.message} />}
+      {installing && (
+        <ProgressBar percent={job?.progress?.percent ?? 2} message={job?.progress?.message} detail={downloadProgressText(job?.progress)} />
+      )}
 
       {error && (
         <p className="mt-1.5 text-[10px] leading-4 text-amber-600 dark:text-amber-400">
@@ -332,7 +338,7 @@ const RuntimeSetupPanel = ({ compact = false, showChatEngine = true, onReadyChan
         </div>
 
         {(installing || installJob) && !engineInstalled && (
-          <ProgressBar percent={llamaPct} message={llamaMessage} />
+          <ProgressBar percent={llamaPct} message={llamaMessage} detail={downloadProgressText(installJob)} />
         )}
 
         {installError && (
