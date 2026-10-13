@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { trainingApi } from './trainingApi.js';
+import GuidedTraining from './GuidedTraining.jsx';
 
 // Matches the palette used elsewhere in the app (BlockBasedMessageRenderer).
 const CHART_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4'];
@@ -881,7 +882,7 @@ const TrainingPage = () => {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-white midnight:text-white">Training</h1>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Fine-tune a local model with a LoRA adapter.</p>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Teach a small local model from your own chats, notes and files.</p>
             </div>
             <button
               onClick={loadData}
@@ -927,13 +928,31 @@ const TrainingPage = () => {
             onRemove={handleRemove}
           />
 
-          {/* New job form — only show when environment is ready */}
-          {readiness?.canTrain && (
-            <NewJobForm
+          {readiness ? (
+            <GuidedTraining
               readiness={readiness}
-              onSubmit={handleStartJob}
-              submitting={submitting}
+              jobs={jobs}
+              onInstall={handleInstall}
+              installing={installing}
+              onStop={handleStopJob}
+              onJobsChanged={loadData}
             />
+          ) : null}
+
+          {/* Any model and any dataset, with every setting — only when the environment is ready */}
+          {readiness?.canTrain && (
+            <details className="group rounded-xl border border-gray-200 dark:border-gray-800 midnight:border-slate-800" data-advanced-training>
+              <summary className="cursor-pointer list-none px-5 py-3 text-sm font-medium text-gray-700 dark:text-gray-300">
+                Advanced: train any model on any dataset, with every setting
+              </summary>
+              <div className="border-t border-gray-100 p-0 dark:border-gray-800">
+                <NewJobForm
+                  readiness={readiness}
+                  onSubmit={handleStartJob}
+                  submitting={submitting}
+                />
+              </div>
+            </details>
           )}
 
           {/* Jobs list */}
@@ -963,7 +982,7 @@ const TrainingPage = () => {
                 No training jobs yet
               </p>
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                Create a job above, or ask the agent to start fine-tuning.
+                Follow the steps above, or ask the agent to start fine-tuning.
               </p>
             </div>
           )}
