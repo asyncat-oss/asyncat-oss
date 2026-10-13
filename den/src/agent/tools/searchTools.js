@@ -3,6 +3,7 @@
 // Wraps the local DuckDuckGo search helper for agent use.
 
 import { PermissionLevel } from './toolRegistry.js';
+import { agentFetch } from './urlPolicy.js';
 
 function decodeEntities(text) {
   return text
@@ -73,13 +74,12 @@ function extractReadableText(html, selector = null) {
 }
 
 async function fetchTextUrl(url, timeoutMs = 10000) {
-  const res = await fetch(url, {
+  const res = await agentFetch(url, {
     headers: {
       'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,application/json;q=0.7,*/*;q=0.5',
     },
     signal: AbortSignal.timeout(timeoutMs),
-    redirect: 'follow',
   });
 
   const contentType = res.headers.get('content-type') || '';
@@ -87,7 +87,7 @@ async function fetchTextUrl(url, timeoutMs = 10000) {
   if (!contentType.includes('text/html') && !contentType.includes('text/plain') && !contentType.includes('application/json')) {
     return { success: false, status: res.status, statusText: res.statusText, contentType, error: `Non-text content type: ${contentType}` };
   }
-  return { success: true, status: res.status, statusText: res.statusText, contentType, body: await res.text(), finalUrl: res.url };
+  return { success: true, status: res.status, statusText: res.statusText, contentType, body: await res.text(), finalUrl: res.finalUrl || res.url };
 }
 
 export const webSearchTool = {
@@ -249,12 +249,11 @@ export const httpRequestTool = {
         bodyContent = args.body_text;
       }
 
-      const res = await fetch(args.url, {
+      const res = await agentFetch(args.url, {
         method,
         headers,
         body: bodyContent,
         signal: AbortSignal.timeout(timeout),
-        redirect: 'follow',
       });
 
       const ct = res.headers.get('content-type') || '';

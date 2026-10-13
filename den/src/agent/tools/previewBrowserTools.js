@@ -14,6 +14,7 @@
 
 import { randomUUID } from 'crypto';
 import { PermissionLevel } from './toolRegistry.js';
+import { checkAgentUrl } from './urlPolicy.js';
 import { registerBrowserCommand } from '../browserCommandQueue.js';
 
 /**
@@ -46,7 +47,10 @@ Prefers localhost URLs for dev servers started by the agent.`,
       },
       required: ['url'],
     },
-    async execute({ url }, context) {
+    async execute({ url: requestedUrl }, context) {
+      const check = await checkAgentUrl(requestedUrl);
+      if (!check.ok) return { success: false, error: check.reason };
+      const url = check.url;
       // preview_url event opens the Preview tab and loads the URL via React state
       if (typeof context?.emitEvent === 'function') {
         context.emitEvent({ type: 'preview_url', data: { url, title: url } });
@@ -143,7 +147,7 @@ Useful for verifying the page renders the right content without taking a full sc
     description: `Run JavaScript in the Preview panel's page context and return the result.
 Useful for reading DOM state, checking JavaScript variables, or triggering actions
 that don't have a simple CSS selector. Result is JSON-serialised (max 4000 chars).`,
-    permission: PermissionLevel.MODERATE,
+    permission: PermissionLevel.DANGEROUS,
     parameters: {
       type: 'object',
       properties: {
@@ -208,7 +212,12 @@ Useful when you need to open a second page alongside an existing one.`,
       },
     },
     async execute({ url }, context) {
-      return execBrowserCommand('open_tab', { url: url || '' }, context, 8000);
+      if (url) {
+        const check = await checkAgentUrl(url);
+        if (!check.ok) return { success: false, error: check.reason };
+        return execBrowserCommand('open_tab', { url: check.url }, context, 8000);
+      }
+      return execBrowserCommand('open_tab', { url: '' }, context, 8000);
     },
   },
 

@@ -7,6 +7,8 @@
 //
 // No API keys needed. No local browser. Pure server-side HTTP.
 
+import { agentFetch } from './urlPolicy.js';
+
 const DDG_IA_URL   = 'https://api.duckduckgo.com/';
 const DDG_HTML_URL = 'https://html.duckduckgo.com/html/';
 const DDG_IMAGES_URL = 'https://duckduckgo.com/i.js';
@@ -221,7 +223,7 @@ async function fetchPageContent(url) {
 
   let html;
   try {
-    const res = await fetch(url, {
+    const res = await agentFetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -230,7 +232,6 @@ async function fetchPageContent(url) {
         'Cache-Control': 'no-cache',
       },
       signal: AbortSignal.timeout(PAGE_TIMEOUT),
-      redirect: 'follow',
     });
 
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

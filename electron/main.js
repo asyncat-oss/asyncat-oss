@@ -7,7 +7,7 @@
 // 4. Manages the full app lifecycle
 //
 import { app, ipcMain, globalShortcut, Notification, dialog, shell, clipboard, desktopCapturer, nativeImage, session, webContents } from 'electron';
-import { IS_MAC, IS_WIN, IS_DEV, APP_NAME, WINDOWS_APP_ID, ICONS, BACKEND_URL, NEKO_DIST, FRONTEND_PORT, USER_DATA } from './constants.js';
+import { IS_MAC, IS_WIN, IS_DEV, APP_NAME, WINDOWS_APP_ID, ICONS, BACKEND_URL, BACKEND_PORT, NEKO_DIST, FRONTEND_PORT, USER_DATA } from './constants.js';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 import { togglePopup, closePopup } from './popup.js';
@@ -311,11 +311,30 @@ const configuredBrowserSessions = new Set();
 const configuredBrowserGuests = new Set();
 const browserPermissionGrants = new Map();
 
+// Paths on the backend's port that web pages may load: project site
+// previews and raw project files. Everything else there is the API.
+const BACKEND_PAGE_PATHS = ['/api/files/site/', '/api/files/raw', '/files/'];
+
+/**
+ * True for Asyncat's own interface and API. Loaded in the browser panel, the
+ * interface would run with the app's own origin, so it is never shown there.
+ */
+function isAsyncatInternalUrl(url) {
+  const host = url.hostname.replace(/^\[|\]$/g, '');
+  const loopback = host === 'localhost' || host === '::1' || /^127\./.test(host) || host === '0.0.0.0';
+  if (!loopback) return false;
+  const port = Number(url.port || (url.protocol === 'https:' ? 443 : 80));
+  if (port === FRONTEND_PORT) return true;
+  if (port === BACKEND_PORT) return !BACKEND_PAGE_PATHS.some((prefix) => url.pathname.startsWith(prefix));
+  return false;
+}
+
 function isAllowedBrowserUrl(value, { allowBlank = true } = {}) {
   if (allowBlank && value === 'about:blank') return true;
   try {
     const url = new URL(String(value || ''));
-    return url.protocol === 'http:' || url.protocol === 'https:';
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+    return !isAsyncatInternalUrl(url);
   } catch {
     return false;
   }
@@ -340,6 +359,17 @@ function setupBrowserSession(partition) {
   const permissionGrants = new Set();
   browserPermissionGrants.set(partition, permissionGrants);
   const permissionKey = (origin, permission) => `${origin || 'unknown'}|${permission}`;
+
+  // Frames and requests inside pages (iframes, fetches, redirects) get the
+  // same check as the address bar.
+  browserSession.webRequest.onBeforeRequest((details, callback) => {
+    let blocked = false;
+    try {
+      const url = new URL(details.url);
+      blocked = (url.protocol === 'http:' || url.protocol === 'https:') && isAsyncatInternalUrl(url);
+    } catch { /* not a URL we judge */ }
+    callback({ cancel: blocked });
+  });
 
   browserSession.setPermissionCheckHandler((_guest, permission, requestingOrigin) => (
     quietPermissions.has(permission) || permissionGrants.has(permissionKey(requestingOrigin, permission))

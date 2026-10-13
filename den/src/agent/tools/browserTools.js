@@ -9,15 +9,23 @@ import { PermissionLevel } from './toolRegistry.js';
 import { truncate, missingDepError } from './shared.js';
 import { getTmpDir } from '../workspacePaths.js';
 import { launchBrowser } from '../../lib/browserLauncher.js';
+import { checkAgentUrl, guardPuppeteerPage } from './urlPolicy.js';
 
 let browserInstance = null;
 let activePage = null;
 
+/** A new tab whose every request goes through the agent URL policy. */
+async function newGuardedPage(browser) {
+  const page = await browser.newPage();
+  await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36');
+  await guardPuppeteerPage(page);
+  return page;
+}
+
 async function getActivePage() {
   if (activePage && !activePage.isClosed()) return activePage;
   const browser = await getBrowser();
-  activePage = await browser.newPage();
-  await activePage.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36');
+  activePage = await newGuardedPage(browser);
   return activePage;
 }
 
@@ -56,12 +64,13 @@ export const browseUrlTool = {
   },
   execute: async (args) => {
     try {
+      const check = await checkAgentUrl(args.url);
+      if (!check.ok) return { success: false, error: check.reason };
       const browser = await getBrowser();
-      const page = await browser.newPage();
-      await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36');
+      const page = await newGuardedPage(browser);
 
       const timeout = (args.timeout || 15) * 1000;
-      await page.goto(args.url, { waitUntil: 'domcontentloaded', timeout });
+      await page.goto(check.url, { waitUntil: 'domcontentloaded', timeout });
 
       if (args.wait_for) {
         await page.waitForSelector(args.wait_for, { timeout: 5000 }).catch(() => {});
@@ -103,10 +112,12 @@ export const screenshotTool = {
   },
   execute: async (args, context) => {
     try {
+      const check = await checkAgentUrl(args.url);
+      if (!check.ok) return { success: false, error: check.reason };
       const browser = await getBrowser();
-      const page = await browser.newPage();
+      const page = await newGuardedPage(browser);
       await page.setViewport({ width: 1280, height: 720 });
-      await page.goto(args.url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await page.goto(check.url, { waitUntil: 'domcontentloaded', timeout: 15000 });
       await new Promise(r => setTimeout(r, 2000));
 
       const fs = await import('fs');
@@ -144,9 +155,11 @@ export const browserNavigateTool = {
   },
   execute: async (args) => {
     try {
+      const check = await checkAgentUrl(args.url);
+      if (!check.ok) return { success: false, error: check.reason };
       const page = await getActivePage();
       const timeout = (args.timeout || 15) * 1000;
-      await page.goto(args.url, { waitUntil: 'domcontentloaded', timeout });
+      await page.goto(check.url, { waitUntil: 'domcontentloaded', timeout });
       if (args.wait_for) {
         await page.waitForSelector(args.wait_for, { timeout: 5000 }).catch(() => {});
       }

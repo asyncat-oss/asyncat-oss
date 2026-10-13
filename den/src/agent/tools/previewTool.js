@@ -5,6 +5,7 @@
 // picks up and uses to switch to the Preview tab.
 
 import { PermissionLevel } from './toolRegistry.js';
+import { checkAgentUrl } from './urlPolicy.js';
 
 export const openPreviewTool = {
   name: 'open_preview',
@@ -29,6 +30,8 @@ export const openPreviewTool = {
     if (!url || !url.match(/^https?:\/\/(localhost|127\.0\.0\.1)/)) {
       return { success: false, error: 'URL must be a localhost address.' };
     }
+    const check = await checkAgentUrl(url);
+    if (!check.ok) return { success: false, error: check.reason };
     // Emit a preview_url SSE event so the frontend opens the panel.
     // context.emitEvent is wired by AgentRuntime from this.onEvent.
     if (typeof context?.emitEvent === 'function') {
