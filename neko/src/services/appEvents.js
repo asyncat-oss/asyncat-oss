@@ -50,6 +50,25 @@ function connect() {
   };
 }
 
+function disconnect() {
+  if (!source) return;
+  source.close();
+  source = null;
+}
+
+// A page left for another (or kept in the back/forward cache) must let its
+// connection go, or they pile up until the browser's per-server limit
+// stalls every request. Coming back reconnects and tells screens to look
+// again, as events may have been missed.
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', disconnect);
+  window.addEventListener('pageshow', (event) => {
+    if (!listeners.size) return;
+    connect();
+    if (event.persisted) dispatch({ type: 'events.reconnected', data: {} });
+  });
+}
+
 /**
  * Call `handler(event)` for each event of `type` ('*' for every event).
  * Returns a function that stops it.
