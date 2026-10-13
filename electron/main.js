@@ -609,6 +609,10 @@ app.on('before-quit', (event) => {
   }
 });
 
+// A signal (logout, shutdown, kill) quits the same way as Quit does, so the
+// backend and engines stop too instead of being left running.
+for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(signal, () => quitApp());
+
 // ─── App Ready ────────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {

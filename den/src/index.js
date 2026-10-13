@@ -228,7 +228,10 @@ seed().then(async () => {
     process.exit(1);
   });
 
+  let shuttingDown = false;
   const shutdown = async (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     logger.info(`${signal} - shutting down`);
     process.removeAllListeners('SIGTERM');
     process.removeAllListeners('SIGINT');
@@ -301,6 +304,9 @@ seed().then(async () => {
     process.stdin.on('data', (chunk) => {
       if (String(chunk).split('\n').some((line) => line.trim() === 'shutdown')) shutdown('desktop app');
     });
+    // The pipe closes when the desktop app is gone (killed or crashed): don't
+    // keep running without it.
+    process.stdin.on('end', () => shutdown('desktop app closed'));
   }
 }).catch(async (err) => {
   logError('Startup failed:', err);
