@@ -179,7 +179,7 @@ function WorkspaceFilesBrowser({ onFileOpen, navigateTo, workingContext = null }
             </div>
             <Suspense fallback={
               <div className="flex items-center justify-center py-12 text-xs text-gray-400 midnight:text-slate-500">
-                <Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading editor…
+                <Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading file…
               </div>
             }>
               <SyntaxFileViewer

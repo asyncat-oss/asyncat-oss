@@ -1,84 +1,82 @@
 /**
- * SyntaxFileViewer — shows file content with:
- *  - Monaco Editor in read-only mode (syntax highlighting + line numbers + code folding)
- *  - Falls back to hljs-highlighted <pre> if Monaco hasn't loaded yet
- *  - Language auto-detection from file extension
- *  - Copy button
- *  - Binary/large-file guards
+ * SyntaxFileViewer — a read-only view of a file: highlighted code with line
+ * numbers, the language, and a copy button. Highlighting uses highlight.js,
+ * loaded on demand like code in chat, so it works offline; until it loads the
+ * code shows as plain text.
  */
 
-import { useState } from 'react';
-import Editor from '@monaco-editor/react';
+import { useMemo, useState } from 'react';
+import PropTypes from 'prop-types';
 import { Copy, Check } from 'lucide-react';
-import { usePrefersDark } from '../../../utils/usePrefersDark.js';
+import 'highlight.js/styles/github.css';
+import { escapeHtml, useHighlighter } from '../../../utils/lazyRenderers.js';
 
-const EXT_TO_MONACO = {
+// File extension → highlight.js language.
+const EXT_TO_LANG = {
   js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript',
   ts: 'typescript', tsx: 'typescript',
   py: 'python', rs: 'rust', go: 'go', java: 'java',
-  c: 'c', cpp: 'cpp', cc: 'cpp', h: 'cpp', hpp: 'cpp',
+  c: 'c', cpp: 'cpp', cc: 'cpp', h: 'cpp', hpp: 'cpp', cs: 'csharp',
   rb: 'ruby', php: 'php', swift: 'swift', kt: 'kotlin', kts: 'kotlin',
   css: 'css', scss: 'scss', less: 'less',
-  html: 'html', htm: 'html', xml: 'xml', svg: 'xml',
+  html: 'xml', htm: 'xml', xml: 'xml', svg: 'xml', vue: 'xml', svelte: 'xml',
   json: 'json', jsonc: 'json', json5: 'json',
   yaml: 'yaml', yml: 'yaml',
   toml: 'ini', env: 'ini', ini: 'ini',
-  sh: 'shell', bash: 'shell', zsh: 'shell', fish: 'shell',
+  sh: 'bash', bash: 'bash', zsh: 'bash', fish: 'bash', ps1: 'powershell',
   sql: 'sql', md: 'markdown', mdx: 'markdown',
-  tf: 'hcl', dockerfile: 'dockerfile', makefile: 'makefile',
-  graphql: 'graphql', proto: 'protobuf',
-  vue: 'html', svelte: 'html',
-  r: 'r', scala: 'scala', dart: 'dart', lua: 'lua',
+  graphql: 'graphql', r: 'r', lua: 'lua', pl: 'perl', diff: 'diff',
 };
 
-function detectMonacoLang(filePath) {
-  const name = (filePath || '').toLowerCase();
-  if (name === 'dockerfile') return 'dockerfile';
+function detectLanguage(filePath) {
+  const name = String(filePath || '').split(/[\\/]/).pop().toLowerCase();
+  if (name === 'dockerfile' || name.endsWith('.dockerfile')) return 'dockerfile';
   if (name === 'makefile' || name === 'gnumakefile') return 'makefile';
-  const ext = name.split('.').pop();
-  return EXT_TO_MONACO[ext] || 'plaintext';
+  return EXT_TO_LANG[name.includes('.') ? name.split('.').pop() : ''] || 'plaintext';
 }
 
 export default function SyntaxFileViewer({ filePath, content, tooLarge, binary, maxHeight = 'calc(100vh - 240px)' }) {
   const [copied, setCopied] = useState(false);
-  const isDark = usePrefersDark();
-  const lang = detectMonacoLang(filePath);
+  const hljs = useHighlighter();
+  const lang = detectLanguage(filePath);
+  const text = content || '';
+
+  const html = useMemo(() => {
+    if (!hljs || !hljs.getLanguage(lang)) return escapeHtml(text);
+    try {
+      return hljs.highlight(text, { language: lang, ignoreIllegals: true }).value;
+    } catch {
+      return escapeHtml(text);
+    }
+  }, [hljs, lang, text]);
+  const lineCount = useMemo(() => Math.max(1, text.split('\n').length - (text.endsWith('\n') ? 1 : 0)), [text]);
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(content || '');
+      await navigator.clipboard.writeText(text);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch { /* ignore */ }
   };
 
-  if (binary) {
+  if (binary || tooLarge) {
     return (
-      <div className="rounded-lg border border-gray-200 dark:border-slate-800 bg-gray-50 dark:bg-slate-900/60 px-4 py-6 text-center text-xs text-gray-400 dark:text-slate-500">
-        Binary file — preview not available.
-      </div>
-    );
-  }
-
-  if (tooLarge) {
-    return (
-      <div className="rounded-lg border border-gray-200 dark:border-slate-800 bg-gray-50 dark:bg-slate-900/60 px-4 py-6 text-center text-xs text-gray-400 dark:text-slate-500">
-        File is too large to preview.
+      <div className="rounded-lg border border-line bg-surface px-4 py-6 text-center text-xs text-fg-subtle">
+        {binary ? 'Binary file — preview not available.' : 'File is too large to preview.'}
       </div>
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-950">
-      {/* header */}
-      <div className="flex items-center justify-between gap-2 border-b border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-900 px-3 py-1.5">
-        <span className="min-w-0 truncate font-mono text-[11px] text-gray-600 dark:text-slate-400">{filePath}</span>
+    <div className="overflow-hidden rounded-lg border border-line bg-canvas">
+      <div className="flex items-center justify-between gap-2 border-b border-line bg-surface px-3 py-1.5">
+        <span className="min-w-0 truncate font-mono text-[11px] text-fg-muted">{filePath}</span>
         <div className="flex shrink-0 items-center gap-1.5">
-          <span className="text-[10px] text-gray-400 dark:text-slate-600">{lang}</span>
+          <span className="text-[10px] text-fg-subtle">{lang === 'plaintext' ? 'text' : lang}</span>
           <button
             type="button"
             onClick={copy}
-            className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition-colors"
+            className="rounded p-1 text-fg-subtle transition-colors hover:bg-hover hover:text-fg"
             title="Copy"
           >
             {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
@@ -86,39 +84,27 @@ export default function SyntaxFileViewer({ filePath, content, tooLarge, binary, 
         </div>
       </div>
 
-      {/* Monaco editor in read-only mode */}
-      <Editor
-        value={content || ''}
-        language={lang}
-        theme={isDark ? 'vs-dark' : 'vs'}
-        options={{
-          readOnly: true,
-          minimap: { enabled: false },
-          lineNumbers: 'on',
-          folding: true,
-          wordWrap: 'on',
-          scrollBeyondLastLine: false,
-          renderLineHighlight: 'none',
-          overviewRulerLanes: 0,
-          hideCursorInOverviewRuler: true,
-          scrollbar: { verticalScrollbarSize: 6, horizontalScrollbarSize: 6 },
-          fontSize: 12,
-          lineHeight: 20,
-          fontFamily: "'Fira Code', 'Cascadia Code', 'JetBrains Mono', 'Menlo', monospace",
-          fontLigatures: true,
-          padding: { top: 8, bottom: 8 },
-          renderWhitespace: 'none',
-          guides: { indentation: false },
-          contextmenu: false,
-          links: false,
-        }}
-        height={maxHeight}
-        loading={
-          <div className="flex items-center justify-center" style={{ height: maxHeight }}>
-            <span className="text-xs text-gray-400 dark:text-slate-600">Loading editor…</span>
-          </div>
-        }
-      />
+      <div className="overflow-auto" style={{ maxHeight }}>
+        <div className="flex min-w-max font-mono text-[12px] leading-5">
+          <pre
+            aria-hidden="true"
+            className="sticky left-0 select-none border-r border-line bg-canvas px-3 py-2 text-right text-fg-subtle"
+          >
+            {Array.from({ length: lineCount }, (_, i) => i + 1).join('\n')}
+          </pre>
+          <pre className="hljs flex-1 !bg-transparent px-3 py-2 text-fg">
+            <code dangerouslySetInnerHTML={{ __html: html }} />
+          </pre>
+        </div>
+      </div>
     </div>
   );
 }
+
+SyntaxFileViewer.propTypes = {
+  filePath: PropTypes.string,
+  content: PropTypes.string,
+  tooLarge: PropTypes.bool,
+  binary: PropTypes.bool,
+  maxHeight: PropTypes.string,
+};
