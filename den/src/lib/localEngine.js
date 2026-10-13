@@ -8,6 +8,7 @@ import { setConfigValue } from '../config/appConfig.js';
 import { AUTO_DETECT, runtimeHome } from '../config/runtimeConfig.js';
 import { cudaVersionFromReleaseAsset, isCudaRuntimeCompanionAsset } from './releaseAssetUtils.js';
 import { downloadWithResume, verifyDownloadedAsset } from './engineDownload.js';
+import { extractArchive } from './engineArchive.js';
 
 // Persist a runtime path. These used to be written to a source-tree .env; they now
 // live in the DB-backed app_config (hydrated into process.env at boot). We set
@@ -263,7 +264,7 @@ export function listManagedEngineInstalls() {
   }).filter(item => item.exists);
 }
 
-function pointCurrentManagedEngine(targetDir) {
+async function pointCurrentManagedEngine(targetDir) {
   const currentDir = managedEngineDir();
   if (path.resolve(currentDir) === path.resolve(targetDir)) return;
   try {
@@ -273,21 +274,21 @@ function pointCurrentManagedEngine(targetDir) {
       const legacyProfile = metadata?.profile;
       const legacyDir = legacyProfile ? managedEngineDir(legacyProfile) : null;
       if (legacyDir && path.resolve(legacyDir) !== path.resolve(targetDir) && !fs.existsSync(legacyDir)) {
-        fs.mkdirSync(path.dirname(legacyDir), { recursive: true });
-        fs.cpSync(currentDir, legacyDir, { recursive: true });
+        await fs.promises.mkdir(path.dirname(legacyDir), { recursive: true });
+        await fs.promises.cp(currentDir, legacyDir, { recursive: true });
       }
     }
   } catch {}
-  if (fs.existsSync(currentDir)) removeManagedEntry(currentDir);
-  fs.mkdirSync(path.dirname(currentDir), { recursive: true });
+  if (fs.existsSync(currentDir)) await removeManagedEntryAsync(currentDir);
+  await fs.promises.mkdir(path.dirname(currentDir), { recursive: true });
   try {
-    fs.symlinkSync(targetDir, currentDir, isWin ? 'junction' : 'dir');
+    await fs.promises.symlink(targetDir, currentDir, isWin ? 'junction' : 'dir');
   } catch {
-    fs.cpSync(targetDir, currentDir, { recursive: true });
+    await fs.promises.cp(targetDir, currentDir, { recursive: true });
   }
 }
 
-export function removeManagedLlamaEngine(profile) {
+export async function removeManagedLlamaEngine(profile) {
   if (!LLAMA_ENGINE_PROFILES.includes(profile)) {
     throw new Error(`Unknown managed llama.cpp profile: ${profile}`);
   }
@@ -309,7 +310,7 @@ export function removeManagedLlamaEngine(profile) {
 
   const fallback = listManagedEngineInstalls()
     .find(item => path.resolve(item.root) !== path.resolve(currentDir) && item.profile !== profile) || null;
-  if (fallback && !fs.existsSync(currentDir)) pointCurrentManagedEngine(fallback.root);
+  if (fallback && !fs.existsSync(currentDir)) await pointCurrentManagedEngine(fallback.root);
   if (selectedWasRemoved) {
     persistRuntimeConfigValue('LLAMA_BINARY_PATH', fallback?.binary || AUTO_DETECT);
     if (!fallback) persistRuntimeConfigValue('LLAMA_GPU_LAYERS', '0');
@@ -1019,7 +1020,7 @@ export function inspectWindowsCudaRuntimeBundle(targetDir, assetName) {
 }
 
 // Returns details about the companion merged into targetDir.
-async function installCudartCompanion(release, mainAssetName, targetDir, onProgress = null, { repo = 'ggml-org/llama.cpp' } = {}) {
+async function installCudartCompanion(release, mainAssetName, targetDir, onProgress = null, { repo = 'ggml-org/llama.cpp', signal = null } = {}) {
   if (!isWin) return { installed: false, reason: 'not-windows' };
   const lower = String(mainAssetName || '').toLowerCase();
   const requestedVersion = cudaVersionFromReleaseAsset(lower);
@@ -1036,13 +1037,14 @@ async function installCudartCompanion(release, mainAssetName, targetDir, onProgr
   });
   if (!companion) return { installed: false, reason: 'companion-not-published' };
 
-  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'asyncat-cudart-'));
-  const extractDir = path.join(tmpRoot, 'extract');
+  // Unpacked beside the staging folder (same disk, so the DLLs are moved, not
+  // copied); the .install- name lets startup clean-up remove it after a crash.
+  const extractDir = assertManagedTarget(path.join(path.dirname(targetDir), `.cudart.install-${randomUUID()}`));
   let archivePath = null;
   try {
     onProgress?.({ phase: 'installing', message: `Downloading CUDA runtime (${companion.name})`, percent: 90 });
-    ({ file: archivePath } = await downloadReleaseAsset({ repo, release, asset: companion }));
-    extractArchive(archivePath, extractDir);
+    ({ file: archivePath } = await downloadReleaseAsset({ repo, release, asset: companion, signal }));
+    await extractArchive(archivePath, extractDir, { signal });
     // Upstream usually puts these DLLs at the archive root, but flatten them
     // deliberately so a future wrapper directory cannot leave Windows showing
     // a hidden missing-DLL dialog while the headless verification waits forever.
@@ -1050,20 +1052,18 @@ async function installCudartCompanion(release, mainAssetName, targetDir, onProgr
     if (runtimeDlls.length === 0) {
       throw new Error(`CUDA runtime archive ${companion.name} did not contain any DLL files.`);
     }
-    fs.mkdirSync(targetDir, { recursive: true });
+    await fs.promises.mkdir(targetDir, { recursive: true });
     for (const dll of runtimeDlls) {
-      fs.copyFileSync(dll, path.join(targetDir, path.basename(dll)));
+      await fs.promises.rename(dll, path.join(targetDir, path.basename(dll)));
     }
     return { installed: true, asset: companion.name, dlls: runtimeDlls.map(file => path.basename(file)) };
   } finally {
-    fs.rmSync(tmpRoot, { recursive: true, force: true });
+    await fs.promises.rm(extractDir, { recursive: true, force: true });
     await discardDownload(archivePath);
   }
 }
 
-async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgress = null) {
-  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'asyncat-llama-'));
-  const extractDir = path.join(tmpRoot, 'extract');
+export async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgress = null, { signal = null } = {}) {
   let archivePath = null;
   const targetDir = managedEngineDir(profile);
   const stagingDir = assertManagedTarget(path.join(
@@ -1079,7 +1079,7 @@ async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgr
       releaseTag: release.tag_name || release.name || 'latest',
     });
     let checksum;
-    ({ file: archivePath, checksum } = await downloadReleaseAsset({ repo: 'ggml-org/llama.cpp', release, asset, onProgress: progress => {
+    ({ file: archivePath, checksum } = await downloadReleaseAsset({ repo: 'ggml-org/llama.cpp', release, asset, signal, onProgress: progress => {
       onProgress?.({
         phase: 'downloading',
         message: `Downloading ${asset.name}`,
@@ -1097,9 +1097,12 @@ async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgr
       assetName: asset.name,
       releaseTag: release.tag_name || release.name || 'latest',
     });
-    extractArchive(archivePath, extractDir);
-    const serverBinary = findLlamaServerBinary(extractDir);
-    if (!serverBinary) throw new Error(`Archive did not contain ${isWin ? 'llama-server.exe' : 'llama-server'}.`);
+    // Unpack straight into the staging folder (no copy), off the event loop.
+    await fs.promises.mkdir(path.dirname(stagingDir), { recursive: true });
+    await extractArchive(archivePath, stagingDir, { signal });
+    await discardDownload(archivePath);
+    archivePath = null;
+    if (!findLlamaServerBinary(stagingDir)) throw new Error(`Archive did not contain ${isWin ? 'llama-server.exe' : 'llama-server'}.`);
 
     onProgress?.({
       phase: 'installing',
@@ -1108,14 +1111,11 @@ async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgr
       assetName: asset.name,
       releaseTag: release.tag_name || release.name || 'latest',
     });
-    fs.mkdirSync(path.dirname(stagingDir), { recursive: true });
-    fs.mkdirSync(stagingDir, { recursive: true });
-    fs.cpSync(extractDir, stagingDir, { recursive: true });
     ensureLinuxSonameLinks(stagingDir);
     ensureDarwinDylibLinks(stagingDir);
     // Windows CUDA builds need the cudart companion DLLs before they can run
     // (the verification step below launches the binary).
-    const cudaCompanion = await installCudartCompanion(release, asset.name, stagingDir, onProgress);
+    const cudaCompanion = await installCudartCompanion(release, asset.name, stagingDir, onProgress, { signal });
 
     const stagedInstalled = path.join(stagingDir, isWin ? 'llama-server.exe' : 'llama-server');
     let copiedServer = findLlamaServerBinary(stagingDir);
@@ -1130,7 +1130,7 @@ async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgr
         const source = path.join(path.dirname(copiedServer), entry.name);
         const destination = path.join(stagingDir, entry.name);
         if (path.resolve(source) === path.resolve(destination)) continue;
-        fs.cpSync(source, destination, { recursive: entry.isDirectory(), force: true });
+        await fs.promises.cp(source, destination, { recursive: entry.isDirectory(), force: true });
       }
       copiedServer = stagedInstalled;
     } else if (!isWin) {
@@ -1201,7 +1201,7 @@ async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgr
     }, stagingDir);
     swapManagedDirectory(stagingDir, targetDir);
     const installed = managedLlamaBinaryPath(profile);
-    pointCurrentManagedEngine(targetDir);
+    await pointCurrentManagedEngine(targetDir);
     persistRuntimeConfigValue('LLAMA_BINARY_PATH', installed);
     onProgress?.({
       phase: 'complete',
@@ -1212,8 +1212,7 @@ async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgr
     });
     return { binary: installed, asset: asset.name, version: release.tag_name || release.name || 'latest', profile };
   } finally {
-    if (fs.existsSync(stagingDir)) removeManagedEntry(stagingDir);
-    fs.rmSync(tmpRoot, { recursive: true, force: true });
+    if (fs.existsSync(stagingDir)) await removeManagedEntryAsync(stagingDir);
     await discardDownload(archivePath);
   }
 }
@@ -1341,39 +1340,6 @@ export async function fetchLlamaReleaseByTag(tag) {
   });
   if (!res.ok) throw new Error(`GitHub release ${tag} returned ${res.status}`);
   return res.json();
-}
-
-function extractArchive(archivePath, destination) {
-  fs.rmSync(destination, { recursive: true, force: true });
-  fs.mkdirSync(destination, { recursive: true });
-
-  const lower = archivePath.toLowerCase();
-  if (lower.endsWith('.zip')) {
-    if (isWin) {
-      execFileSync('powershell', [
-        '-NoProfile',
-        '-ExecutionPolicy', 'Bypass',
-        '-Command',
-        'Expand-Archive -LiteralPath $env:ASYNCAT_ARCHIVE_PATH -DestinationPath $env:ASYNCAT_ARCHIVE_DESTINATION -Force',
-      ], {
-        env: {
-          ...process.env,
-          ASYNCAT_ARCHIVE_PATH: archivePath,
-          ASYNCAT_ARCHIVE_DESTINATION: destination,
-        },
-        stdio: ['ignore', 'ignore', 'pipe'],
-        timeout: 120000,
-        windowsHide: true,
-      });
-    } else if (commandExists('unzip')) {
-      execFileSync('unzip', ['-q', archivePath, '-d', destination], { stdio: 'ignore', timeout: 120000 });
-    } else {
-      throw new Error('unzip is required to extract the llama.cpp release archive.');
-    }
-    return;
-  }
-
-  execFileSync('tar', ['-xf', archivePath, '-C', destination], { stdio: 'ignore', timeout: 120000 });
 }
 
 function findLlamaServerBinary(dir) {
@@ -1563,7 +1529,7 @@ export async function installManagedLlamaServer(input = 'cpu_safe') {
   for (const asset of candidates) {
     const assetProfile = inferProfileFromAssetName(asset.name, effectiveProfile);
     try {
-      return await installManagedAsset(asset, release, assetProfile, options.onProgress);
+      return await installManagedAsset(asset, release, assetProfile, options.onProgress, { signal: options.signal || null });
     } catch (e) {
       // Only "this build doesn't run here" is worth trying the next build
       // for. A failed download, a full disk, a checksum mismatch or a cancel
@@ -2028,7 +1994,7 @@ async function installManagedPythonRuntime(spec, report) {
   }
 }
 
-export async function installManagedRuntime(runtimeId, { onProgress = null, capability = null } = {}) {
+export async function installManagedRuntime(runtimeId, { onProgress = null, capability = null, signal = null } = {}) {
   const spec = MANAGED_RUNTIME_SPECS[runtimeId];
   if (!spec) throw new Error(`Unknown runtime: ${runtimeId}`);
 
@@ -2073,8 +2039,6 @@ export async function installManagedRuntime(runtimeId, { onProgress = null, capa
   }
 
   const asset = ranked[0];
-  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), `asyncat-${spec.id}-`));
-  const extractDir = path.join(tmpRoot, 'extract');
   let archivePath = null;
   const targetDir = managedRuntimeRoot(spec);
   const stagingDir = assertManagedTarget(path.join(asyncatHome(), `.${spec.dir}.install-${randomUUID()}`));
@@ -2082,28 +2046,29 @@ export async function installManagedRuntime(runtimeId, { onProgress = null, capa
   try {
     report('downloading', `Downloading ${asset.name}`, 5, { assetName: asset.name });
     let checksum;
-    ({ file: archivePath, checksum } = await downloadReleaseAsset({ repo: spec.repo, release, asset, onProgress: p => {
+    ({ file: archivePath, checksum } = await downloadReleaseAsset({ repo: spec.repo, release, asset, signal, onProgress: p => {
       report('downloading', `Downloading ${asset.name}`, Math.max(5, Math.min(72, p.percent ?? 0)), {
         assetName: asset.name, downloadedBytes: p.downloadedBytes, totalBytes: p.totalBytes,
       });
     } }));
 
     report('extracting', `Extracting ${asset.name}`, 80, { assetName: asset.name });
-    extractArchive(archivePath, extractDir);
+    // Unpack straight into the staging folder (no copy), off the event loop.
+    await fs.promises.mkdir(path.dirname(stagingDir), { recursive: true });
+    await extractArchive(archivePath, stagingDir, { signal });
+    await discardDownload(archivePath);
+    archivePath = null;
 
-    const staged = findBinaryByNames(extractDir, spec.binaryNames);
+    const staged = findBinaryByNames(stagingDir, spec.binaryNames);
     if (!staged) {
       throw new Error(`The ${spec.label} archive did not contain ${spec.binaryNames.join(' / ')}.`);
     }
 
     report('installing', 'Installing engine files', 88);
-    fs.mkdirSync(path.dirname(stagingDir), { recursive: true });
-    fs.mkdirSync(stagingDir, { recursive: true });
-    fs.cpSync(extractDir, stagingDir, { recursive: true });
     ensureLinuxSonameLinks(stagingDir);
     ensureDarwinDylibLinks(stagingDir);
     // Windows CUDA image/audio builds need the cudart companion DLLs too.
-    await installCudartCompanion(release, asset.name, stagingDir, onProgress, { repo: spec.repo });
+    await installCudartCompanion(release, asset.name, stagingDir, onProgress, { repo: spec.repo, signal });
 
     let stagedInstalled = findBinaryByNames(stagingDir, spec.binaryNames);
     if (!stagedInstalled) throw new Error(`Could not locate the installed ${spec.label} binary in the staged runtime.`);
@@ -2151,8 +2116,7 @@ export async function installManagedRuntime(runtimeId, { onProgress = null, capa
     report('complete', `${spec.label} (${variantLabel}) installed`, 100, { binary: installed, verified, capability: targetCapability });
     return { runtime: spec.id, binary: installed, envKey: spec.envKey, version, verified, capability: targetCapability };
   } finally {
-    if (fs.existsSync(stagingDir)) removeManagedEntry(stagingDir);
-    fs.rmSync(tmpRoot, { recursive: true, force: true });
+    if (fs.existsSync(stagingDir)) await removeManagedEntryAsync(stagingDir);
     await discardDownload(archivePath);
   }
 }

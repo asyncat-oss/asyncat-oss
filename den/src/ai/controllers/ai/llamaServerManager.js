@@ -1333,7 +1333,7 @@ export async function removeManagedEngine(key) {
   if (removingCurrent) await stopServer();
   const removal = key === 'python'
     ? removeManagedLlamaPython()
-    : removeManagedLlamaEngine(key);
+    : await removeManagedLlamaEngine(key);
   return {
     removal,
     advisor: await getEngineAdvisor(),
