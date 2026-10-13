@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { loadNotifyPrefs, notifyAllowedNow } from '../../services/notifyPrefs.js';
 
 function requestPermission() {
   if (!('Notification' in window)) return;
@@ -7,9 +8,11 @@ function requestPermission() {
   }
 }
 
-function fireNotification(title, body, { tag = 'asyncat-agent', onClick } = {}) {
+// `event` is the choice in Settings → Notifications that covers it.
+function fireNotification(title, body, { tag = 'asyncat-agent', onClick, event = 'done' } = {}) {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   if (document.visibilityState === 'visible') return;
+  if (!notifyAllowedNow(event)) return;
   const n = new Notification(title, {
     body,
     icon: '/pwa-96x96.png',
@@ -33,6 +36,7 @@ export function useAgentNotifications({ isRunning, lastAnswer, lastAskUser, last
 
   useEffect(() => {
     requestPermission();
+    loadNotifyPrefs();
   }, []);
 
   // Notify when agent finishes
@@ -44,7 +48,7 @@ export function useAgentNotifications({ isRunning, lastAnswer, lastAskUser, last
     fireNotification(
       conversationTitle ? `Asyncat — ${conversationTitle}` : 'Asyncat — Done',
       preview,
-      { tag: 'asyncat-agent-done' }
+      { tag: 'asyncat-agent-done', event: 'done' }
     );
   }, [isRunning, lastAnswer, conversationTitle]);
 
@@ -57,7 +61,7 @@ export function useAgentNotifications({ isRunning, lastAnswer, lastAskUser, last
     fireNotification(
       'Asyncat needs your input',
       lastAskUser.question || 'The agent is waiting for your response.',
-      { tag: 'asyncat-ask-user' }
+      { tag: 'asyncat-ask-user', event: 'question' }
     );
   }, [lastAskUser]);
 
@@ -70,7 +74,7 @@ export function useAgentNotifications({ isRunning, lastAnswer, lastAskUser, last
     fireNotification(
       'Asyncat needs approval',
       `Allow: ${lastPermissionRequest.toolName || 'a tool'}?`,
-      { tag: 'asyncat-permission' }
+      { tag: 'asyncat-permission', event: 'approval' }
     );
   }, [lastPermissionRequest]);
 }

@@ -65,6 +65,9 @@ import { startConnectors } from './connectors/connectorManager.js';
 // ─── Voice and pictures: guided setup and the gallery ────────────────────────
 import mediaRouter from './media/mediaRoutes.js';
 
+// Desktop notification choices (Settings → Notifications)
+import notifyRouter from './lib/notifyRoutes.js';
+
 // Where data lives, export everything, delete everything (Settings → Privacy & safety)
 import privacyRouter from './privacy/privacyRoutes.js';
 
@@ -191,6 +194,9 @@ app.use('/api/connectors', connectorRouter);
 
 // Routes: voice and image setup, gallery
 app.use('/api/media', mediaRouter);
+
+// Routes: desktop notification choices
+app.use('/api/notifications', notifyRouter);
 
 // Routes: privacy (data locations, export, delete everything)
 app.use('/api/privacy', privacyRouter);
