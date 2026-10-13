@@ -72,6 +72,9 @@ import notifyRouter from './lib/notifyRoutes.js';
 // Where data lives, export everything, delete everything (Settings → Privacy & safety)
 import privacyRouter from './privacy/privacyRoutes.js';
 
+// Chats and memories from ChatGPT and Claude exports
+import importRouter from './importers/importRoutes.js';
+
 // ─── Database ─────────────────────────────────────────────────────────────────
 import db from './db/client.js';         // opens SQLite, applies schema
 import { seed } from './db/seed.js';     // creates the local profile on first boot
@@ -201,6 +204,9 @@ app.use('/api/notifications', notifyRouter);
 
 // Routes: privacy (data locations, export, delete everything)
 app.use('/api/privacy', privacyRouter);
+
+// Routes: import chats and memories from ChatGPT and Claude
+app.use('/api/import', importRouter);
 
 // ─── Routes: Training / Fine-Tuning ──────────────────────────────────────────
 app.use('/api/training/guide', trainingGuideRouter);
