@@ -20,7 +20,7 @@ const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, title, isDeleting
   return (
     <Portal>
       <div
-        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/35 p-4 dark:bg-black/60"
+        className="fixed inset-0 z-[300] flex items-center justify-center bg-black/35 p-4 dark:bg-black/60"
         onMouseDown={(event) => event.target === event.currentTarget && !isProcessing && onClose()}
       >
         <div

@@ -21,7 +21,8 @@ const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message, confirmLabel
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 sm:p-6 animate-in fade-in duration-200">
+      {/* Above other dialogs (Dialog is z-[200]): a confirm often opens on top of one. */}
+      <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 sm:p-6 animate-in fade-in duration-200">
         <div
           className="bg-white dark:bg-gray-900 midnight:bg-slate-950 w-full max-w-md rounded-2xl shadow-xl overflow-hidden border border-gray-100 dark:border-gray-800 midnight:border-slate-800 flex flex-col animate-in zoom-in-95 duration-200"
           onClick={(e) => e.stopPropagation()}
