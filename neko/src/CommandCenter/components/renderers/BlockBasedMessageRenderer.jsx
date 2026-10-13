@@ -5,6 +5,7 @@ import { Copy, Check, ExternalLink, Globe2, FolderOpen } from 'lucide-react';
 import { fileIconMeta } from '../../../files/fileUtils.js';
 import { useUiPreferences } from '../../../contexts/UiPreferencesContext.jsx';
 import { openWebLink } from '../../../utils/openWebLink.js';
+import { FollowUps, InteractiveTable } from './InteractiveBlocks.jsx';
 
 // mhchem extension — enables \ce{H2O}, \ce{CO2}, chemical equations in KaTeX
 import 'highlight.js/styles/github.css';
@@ -748,6 +749,10 @@ export const BlockRenderer = ({ block, onTermClick }) => {
       if (block.properties?.language?.toLowerCase() === 'diff') {
         return <DiffBlock content={block.content} />;
       }
+      // Follow-up suggestions — buttons that send the next message
+      if (block.properties?.language?.toLowerCase() === 'followups') {
+        return <FollowUps content={block.content} />;
+      }
       // Chart blocks — render as interactive Recharts
       if (block.properties?.language?.toLowerCase() === 'chart') {
         return (
@@ -775,35 +780,8 @@ export const BlockRenderer = ({ block, onTermClick }) => {
       const normalizedRows = tableData.map(row =>
         Array.from({ length: columnCount }, (_, index) => row[index] ?? '')
       );
-
-      return (
-        <div className="mb-4 max-w-full overflow-hidden rounded-xl border border-line">
-          <div className="overflow-x-auto">
-            <table className="min-w-full border-collapse text-[14px]">
-              <thead>
-                <tr className="border-b border-line bg-hover">
-                  {normalizedRows[0]?.map((header, i) => (
-                    <th key={i} className="whitespace-nowrap px-4 py-2 text-left align-top text-[13px] font-semibold leading-6 text-fg [overflow-wrap:anywhere]">
-                      {renderContent(header, { linkVariant: 'chip' })}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {normalizedRows.slice(1).map((row, i) => (
-                  <tr key={i} className="transition-colors hover:bg-hover">
-                    {row.map((cell, j) => (
-                      <td key={j} className="px-4 py-2 align-top leading-6 text-fg [overflow-wrap:anywhere]">
-                        {renderContent(cell, { linkVariant: 'chip' })}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      );
+      // Sortable by column, filterable when long, copyable as CSV.
+      return <InteractiveTable rows={normalizedRows} renderCell={(cell) => renderContent(cell, { linkVariant: 'chip' })} />;
     }
 
     case 'divider':

@@ -21,6 +21,7 @@ import { localModelsApi, llamaServerApi, audioApi, aiProviderApi } from "../../.
 import { filesApi } from "../../api";
 import { dirname, basename, fileIconMeta, rootIcon } from "../../../files/fileUtils.js";
 import { attachmentKind, AttachmentChip, ImageLightbox } from "../shared/AttachmentComponents.jsx";
+import AskUserForm from "../agent/AskUserForm.jsx";
 
 const ToggleSwitch = ({ checked, onChange, disabled }) => {
   return (
@@ -319,6 +320,9 @@ function PendingInteractionInput({ interaction, onPermissionDecision, onAskUserA
     : "Waiting";
 
   if (interaction.type === "ask_user") {
+    const waitText = remainingMs !== null
+      ? expired ? "Expired" : `Answer within ${formatCountdown(remainingMs)}`
+      : "Waiting";
     const submit = (value) => {
       const next = String(value ?? answer ?? "").trim();
       if (!next && !data.default) return;
@@ -337,7 +341,7 @@ function PendingInteractionInput({ interaction, onPermissionDecision, onAskUserA
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">Agent question</span>
-                  <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500">{statusText}</span>
+                  <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500">{waitText}</span>
                 </div>
                 <p className="mt-1 text-sm leading-relaxed text-gray-800 dark:text-gray-100 midnight:text-slate-100">{data.question}</p>
                 {data.error && (
@@ -363,6 +367,9 @@ function PendingInteractionInput({ interaction, onPermissionDecision, onAskUserA
               </div>
             </div>
             <div className="mt-3 border-t border-gray-100 bg-gray-50/80 px-4 py-3 dark:border-gray-800 dark:bg-gray-950/40 midnight:border-slate-800 midnight:bg-slate-950/40">
+              {Array.isArray(data.fields) && data.fields.length > 0 ? (
+                <AskUserForm fields={data.fields} onSubmit={(text) => submit(text)} />
+              ) : (
               <div className="flex items-center gap-2">
                 <input
                   value={answer}
@@ -395,6 +402,7 @@ function PendingInteractionInput({ interaction, onPermissionDecision, onAskUserA
                   {resolving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 </button>
               </div>
+              )}
             </div>
           </div>
         </div>

@@ -63,6 +63,7 @@ import { useAgents } from "../Agent/useAgents.js";
 import Cat from "../components/ui/Cat.jsx";
 import { engineDisplayName, registerEngineNames, resumeCommand } from "../Agent/externalAgentFormat.js";
 import { ALWAYS_ALLOW_EVENT, ALWAYS_ALLOW_KEY, alwaysAllowedChatTools } from "../services/chatDefaults.js";
+import { FOLLOW_UP_EVENT } from "./components/renderers/interactiveEvents.js";
 
 import { buildConversationSourceCatalog } from "./utils/conversationUtils.js";
 import {
@@ -1778,6 +1779,19 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     clearPendingSend();
     handleComposerSubmit({ content: text, agentMentions: [], reasoningEffort: 'auto', enabledIntegrationTools: [] });
   }, [agentRunning, clearPendingSend, handleComposerSubmit, messages.length, pendingSend]);
+
+  // A follow-up button under an answer in this chat sends its text as the
+  // next message.
+  useEffect(() => {
+    const onFollowUp = (event) => {
+      if (!scrollContainerRef.current?.contains(event.target)) return;
+      const text = String(event.detail?.text || '').trim();
+      if (!text || agentRunning) return;
+      handleComposerSubmit({ content: text, agentMentions: [], reasoningEffort: 'auto', enabledIntegrationTools });
+    };
+    document.addEventListener(FOLLOW_UP_EVENT, onFollowUp);
+    return () => document.removeEventListener(FOLLOW_UP_EVENT, onFollowUp);
+  }, [agentRunning, enabledIntegrationTools, handleComposerSubmit]);
 
   const handleEditConversationTurn = useCallback(async (messageId, nextContent) => {
     const messageIndex = messages.findIndex(msg => msg.id === messageId);

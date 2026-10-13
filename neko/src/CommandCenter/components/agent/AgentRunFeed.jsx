@@ -19,6 +19,7 @@ import { openWebLink } from '../../../utils/openWebLink.js';
 import { extractLocalhostUrl } from '../../utils/localhostUrl.js';
 import { connectorToolLabel } from '../../../Connectors/connectorFormat.js';
 import Tooltip from '../../../components/ui/Tooltip.jsx';
+import AskUserForm from './AskUserForm.jsx';
 
 // ── Inline @mention rendering ─────────────────────────────────────────────────
 function renderGoalWithMentions(goal = "", fileAttachments = []) {
@@ -1176,6 +1177,9 @@ function AskUserEvent({ data, onAnswer }) {
                     ))}
                   </div>
                 )}
+                {data?.fields?.length > 0 ? (
+                  <AskUserForm fields={data.fields} onSubmit={(text) => submit(text)} />
+                ) : (
                 <div className="mt-2 flex gap-2">
                   <input
                     ref={inputRef}
@@ -1195,6 +1199,7 @@ function AskUserEvent({ data, onAnswer }) {
                     <Send className="w-3 h-3" />
                   </button>
                 </div>
+                )}
                 {data?.default && (
                   <button
                     onClick={() => submit(data.default)}
