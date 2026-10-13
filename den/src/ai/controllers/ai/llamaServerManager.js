@@ -39,6 +39,7 @@ import {
 import { ensureFreeSpace } from '../../../lib/engineDownload.js';
 import { buildManagedVenv, pythonInVenv, runPythonCommand } from '../../../lib/pythonEnv.js';
 import { runtimeHome } from '../../../config/runtimeConfig.js';
+import { activeAdapterFor } from '../../../training/adapters.js';
 
 const execAsync = promisify(exec);
 const IS_WIN = process.platform === 'win32';
@@ -1451,6 +1452,7 @@ const state = {
   ctxTrain:  null,     // model's n_ctx_train from /props (max supported ctx)
   vision:    false,    // true when a vision projector (mmproj) is loaded
   mmproj:    null,     // filename of that projector
+  adapter:   null,     // { id, name } of a trained adapter loaded with --lora
 };
 
 const subscribers = new Set();
@@ -1514,6 +1516,7 @@ function snapshot() {
     ctxTrain:   state.ctxTrain ?? null,
     vision:     Boolean(state.vision),
     mmproj:     state.mmproj || null,
+    adapter:    state.adapter || null,
     logs:       state.status === 'loading' || state.status === 'error'
       ? state.logLines.slice(-20)
       : [],
@@ -1686,6 +1689,8 @@ export async function startServer(modelFilename, modelsDir, ctxSizeOverride) {
   // Vision models ship a separate projector file; without it llama-server
   // can't read images. Only the native server takes it.
   const projector  = binInfo.isPython ? null : findVisionProjector(modelPath);
+  // A trained adapter switched on for this model (Models → Training) loads with it.
+  const adapter    = binInfo.isPython ? null : activeAdapterFor(modelPath);
 
   emit({
     status:    'loading',
@@ -1699,10 +1704,12 @@ export async function startServer(modelFilename, modelsDir, ctxSizeOverride) {
       `[asyncat] Model: ${modelPath}`,
       `[asyncat] GPU layers: ${nGpuLayers}`,
       ...(projector ? [`[asyncat] Vision projector: ${path.basename(projector)}`] : []),
+      ...(adapter ? [`[asyncat] Adapter: ${adapter.name}`] : []),
     ],
     ctxSize:   parseInt(ctxSize, 10),
     vision:    false,
     mmproj:    projector ? path.basename(projector) : null,
+    adapter:   adapter ? { id: adapter.id, name: adapter.name } : null,
   });
 
   let proc;
@@ -1735,6 +1742,7 @@ export async function startServer(modelFilename, modelsDir, ctxSizeOverride) {
       '-ngl',       nGpuLayers,
       '--threads',  nThreads,
       ...(projector ? ['--mmproj', projector] : []),
+      ...(adapter ? ['--lora', adapter.file] : []),
       // Note: intentionally NOT passing --log-disable so we capture startup errors
     ], { stdio: ['ignore', 'pipe', 'pipe'], detached: false, windowsHide: IS_WIN });
   }
@@ -1897,7 +1905,7 @@ export async function stopServer(options = {}) {
   if (preserveState) {
     emit({ pid: null });
   } else {
-    emit({ status: 'idle', model: null, modelPath: null, pid: null, error: null, ctxTrain: null, ctxSize: null, vision: false, mmproj: null });
+    emit({ status: 'idle', model: null, modelPath: null, pid: null, error: null, ctxTrain: null, ctxSize: null, vision: false, mmproj: null, adapter: null });
   }
 
   if (!proc) return;

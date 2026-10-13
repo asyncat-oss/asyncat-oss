@@ -29,6 +29,8 @@ function makeTree(root) {
   write(path.join(data, 'models', 'm.gguf'), 'model');
   write(path.join(home, 'skills', 'mine.md'));
   write(path.join(home, 'llama.cpp', 'current', 'llama-server'));
+  write(path.join(home, 'training', 'outputs', 'job-1', 'final-adapter', 'adapter_model.safetensors'));
+  write(path.join(home, 'training', 'python', 'bin', 'python'));
   write(path.join(uploads, 'chat', 'photo.jpg'));
   return { data, home, uploads };
 }
@@ -44,6 +46,8 @@ test('a reset waits for the next start, keeps models unless asked, and takes you
   assert.deepEqual(fs.readdirSync(data), ['models'], 'only the models are left');
   assert.equal(fs.existsSync(path.join(home, 'skills')), false, 'your own skills go');
   assert.equal(fs.existsSync(path.join(home, 'llama.cpp')), true, 'engines stay');
+  assert.equal(fs.existsSync(path.join(home, 'training', 'outputs')), false, 'what training made from your data goes');
+  assert.equal(fs.existsSync(path.join(home, 'training', 'python')), true, 'the training tools stay');
   assert.deepEqual(fs.readdirSync(uploads), [], 'uploads kept elsewhere go too');
   assert.equal(fs.existsSync(path.join(data, RESET_MARKER)), false, 'done once');
 });

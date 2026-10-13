@@ -42,6 +42,7 @@ import searchRouter from './search/searchRouter.js';
 
 // ─── Training / Fine-Tuning ───────────────────────────────────────────────────
 import trainingRouter from './ai/routes/trainingRoutes.js';
+import trainingGuideRouter from './training/guideRoutes.js';
 
 // Local browser history (cookies/cache remain in Electron sessions)
 import browserRouter from './browser/browserRouter.js';
@@ -202,6 +203,7 @@ app.use('/api/notifications', notifyRouter);
 app.use('/api/privacy', privacyRouter);
 
 // ─── Routes: Training / Fine-Tuning ──────────────────────────────────────────
+app.use('/api/training/guide', trainingGuideRouter);
 app.use('/api/training', trainingRouter);
 
 // ─── Health check ─────────────────────────────────────────────────────────────

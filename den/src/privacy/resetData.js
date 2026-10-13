@@ -66,8 +66,9 @@ export function cancelReset(dataRoot) {
 /**
  * Carry out a requested reset: everything in the data folder (models only
  * when asked), the database, uploads and logs kept elsewhere, and in
- * Asyncat's home folder the user's own skills (with models asked for: the
- * engines too). Returns what was removed, or null when nothing was asked.
+ * Asyncat's home folder the user's own skills and training results (with
+ * models asked for: the engines too). Returns what was removed, or null
+ * when nothing was asked.
  */
 export function applyReset({ dataRoot, home, dbPath = null, storagePath = null, logDir = null }) {
   const request = pendingReset(dataRoot);
@@ -92,7 +93,8 @@ export function applyReset({ dataRoot, home, dbPath = null, storagePath = null, 
 
   if (home && safeTarget(home)) {
     if (request.includeModels) removeContents(home, removed);
-    else for (const name of ['skills', 'souls']) {
+    // Your own skills, and what training made from your chats and notes.
+    else for (const name of ['skills', 'souls', path.join('training', 'outputs'), path.join('training', 'datasets')]) {
       const target = path.join(home, name);
       if (fs.existsSync(target)) removeEntry(target, removed);
     }

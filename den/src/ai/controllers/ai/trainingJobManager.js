@@ -209,6 +209,7 @@ export function startTrainingJob({
   alpha = 32,
   batchSize = 4,
   maxSeqLen = 2048,
+  extra = null,
 }) {
   // Validate dataset exists
   if (!fs.existsSync(datasetPath)) {
@@ -223,7 +224,8 @@ export function startTrainingJob({
 
   const id = randomUUID();
   const outputDir = path.join(trainingOutputDir(), `${id.slice(0, 8)}-${name.replace(/[^a-z0-9]/gi, '-').toLowerCase()}`);
-  const hyperparams = { epochs, lr, rank, alpha, batchSize, maxSeqLen };
+  // `extra` carries what the guided flow needs later (its model id).
+  const hyperparams = { epochs, lr, rank, alpha, batchSize, maxSeqLen, ...(extra || {}) };
 
   // Insert DB row
   stmts.insert.run(id, userId, name, baseModel, datasetPath, 'lora', backend, JSON.stringify(hyperparams), outputDir);
