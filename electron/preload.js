@@ -54,12 +54,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ─── Screen Capture ───────────────────────────────────────────────────
   captureScreen:    () => ipcRenderer.invoke('screen:captureWindow'),
 
-  // ─── Embedded Browser ─────────────────────────────────────────
-  configureWebview: (payload) => ipcRenderer.invoke('browser:configure-webview', payload),
+  // ─── Built-in browser (tabs live in the main process: browserHost.js) ─
   clearBrowserData: (payload) => ipcRenderer.invoke('browser:clear-data', payload),
-  onBrowserOpenTab: (cb) => subscribe('browser:open-tab', (_event, url) => cb(url)),
-  onBrowserDownload: (cb) => subscribe('browser:download', (_event, download) => cb(download)),
-  onBrowserShortcut: (cb) => subscribe('browser:shortcut', (_event, shortcut) => cb(shortcut)),
+  browser: {
+    getState:    () => ipcRenderer.invoke('browser:get-state'),
+    // rect: the panel's page area in CSS pixels, or null to take the page off screen.
+    setViewport: (payload) => ipcRenderer.invoke('browser:set-viewport', payload),
+    ui:          (action, payload) => ipcRenderer.invoke('browser:ui', action, payload),
+    onState:     (cb) => subscribe('browser:state', (_event, state) => cb(state)),
+    onEvent:     (cb) => subscribe('browser:event', (_event, event) => cb(event)),
+  },
 
   // ─── Dock Badge ───────────────────────────────────────────────────────
   setDockBadge:     (count) => ipcRenderer.send('app:badge', count),

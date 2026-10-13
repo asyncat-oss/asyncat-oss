@@ -6,7 +6,7 @@
 // 3. Sets up system tray, native menu, and global shortcuts
 // 4. Manages the full app lifecycle
 //
-import { app, ipcMain, globalShortcut, Notification, dialog, shell, clipboard, desktopCapturer, nativeImage, session, webContents, powerMonitor } from 'electron';
+import { app, ipcMain, globalShortcut, Notification, dialog, shell, clipboard, desktopCapturer, nativeImage, powerMonitor } from 'electron';
 import { IS_MAC, IS_WIN, IS_DEV, APP_NAME, WINDOWS_APP_ID, ICONS, BACKEND_URL, BACKEND_PORT, NEKO_DIST, FRONTEND_PORT, USER_DATA } from './constants.js';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
@@ -16,6 +16,8 @@ import { initShortcuts, registerShortcutIPC } from './shortcuts.js';
 import { startBackend, stopBackend, isBackendRunning } from './backend.js';
 import { postHostEvent, registerHostHandler, startHostBridge, stopHostBridge } from './hostBridge.js';
 import { keepRunningAfterClose, noteKeptRunning, registerBackgroundIPC, setEnabledTaskCount, startsHidden } from './background.js';
+import { setupBrowserHost, handleAgentCommand, shutdownBrowserHost } from './browserHost.js';
+import { isAllowedBrowserUrl as isAllowedBrowserUrlFor } from './browserPolicy.js';
 import http from 'http';
 import net from 'net';
 import fs from 'fs';
@@ -308,226 +310,13 @@ function setupTerminalIPC() {
   });
 }
 
-// ─── Embedded browser security, sessions, and downloads ───────────────────────
+// ─── Built-in browser ─────────────────────────────────────────────────────────
+// Tabs, their sessions and the agent's browser commands live in browserHost.js.
 
-const BROWSER_PARTITIONS = new Set(['asyncat-web-private', 'persist:asyncat-web']);
-const browserPolicies = new Map();
-const configuredBrowserSessions = new Set();
-const configuredBrowserGuests = new Set();
-const browserPermissionGrants = new Map();
-
-// Paths on the backend's port that web pages may load: project site
-// previews and raw project files. Everything else there is the API.
-const BACKEND_PAGE_PATHS = ['/api/files/site/', '/api/files/raw', '/files/'];
-
-/**
- * True for Asyncat's own interface and API. Loaded in the browser panel, the
- * interface would run with the app's own origin, so it is never shown there.
- */
-function isAsyncatInternalUrl(url) {
-  const host = url.hostname.replace(/^\[|\]$/g, '');
-  const loopback = host === 'localhost' || host === '::1' || /^127\./.test(host) || host === '0.0.0.0';
-  if (!loopback) return false;
-  const port = Number(url.port || (url.protocol === 'https:' ? 443 : 80));
-  if (port === FRONTEND_PORT) return true;
-  if (port === BACKEND_PORT) return !BACKEND_PAGE_PATHS.some((prefix) => url.pathname.startsWith(prefix));
-  return false;
-}
-
-function isAllowedBrowserUrl(value, { allowBlank = true } = {}) {
-  if (allowBlank && value === 'about:blank') return true;
-  try {
-    const url = new URL(String(value || ''));
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
-    return !isAsyncatInternalUrl(url);
-  } catch {
-    return false;
-  }
-}
-
-function isAllowedBrowserPartition(partition) {
-  return BROWSER_PARTITIONS.has(partition)
-    || /^asyncat-web-incognito-[a-zA-Z0-9-]{8,120}$/.test(String(partition || ''));
-}
-
-function sendBrowserEvent(channel, payload) {
-  const win = getMainWindow();
-  if (win && !win.webContents.isDestroyed()) win.webContents.send(channel, payload);
-}
-
-function setupBrowserSession(partition) {
-  if (configuredBrowserSessions.has(partition)) return session.fromPartition(partition);
-  configuredBrowserSessions.add(partition);
-  const browserSession = session.fromPartition(partition);
-  const quietPermissions = new Set(['fullscreen', 'clipboard-sanitized-write']);
-  const promptPermissions = new Set(['media', 'geolocation', 'notifications', 'midiSysex', 'pointerLock']);
-  const permissionGrants = new Set();
-  browserPermissionGrants.set(partition, permissionGrants);
-  const permissionKey = (origin, permission) => `${origin || 'unknown'}|${permission}`;
-
-  // Frames and requests inside pages (iframes, fetches, redirects) get the
-  // same check as the address bar.
-  browserSession.webRequest.onBeforeRequest((details, callback) => {
-    let blocked = false;
-    try {
-      const url = new URL(details.url);
-      blocked = (url.protocol === 'http:' || url.protocol === 'https:') && isAsyncatInternalUrl(url);
-    } catch { /* not a URL we judge */ }
-    callback({ cancel: blocked });
-  });
-
-  browserSession.setPermissionCheckHandler((_guest, permission, requestingOrigin) => (
-    quietPermissions.has(permission) || permissionGrants.has(permissionKey(requestingOrigin, permission))
-  ));
-
-  browserSession.setPermissionRequestHandler(async (_guest, permission, callback, details) => {
-    if (quietPermissions.has(permission)) {
-      callback(true);
-      return;
-    }
-    if (!promptPermissions.has(permission)) {
-      callback(false);
-      return;
-    }
-    let host = 'This site';
-    let origin = details.requestingUrl || details.securityOrigin || '';
-    try {
-      const parsed = new URL(origin);
-      host = parsed.host || host;
-      origin = parsed.origin;
-    } catch { /* use generic host */ }
-    const result = await dialog.showMessageBox(getMainWindow(), {
-      type: 'question',
-      title: 'Website permission',
-      message: `${host} wants permission to use ${permission}.`,
-      detail: 'Only allow this if you trust the site and expected the request.',
-      buttons: ['Block', 'Allow'],
-      defaultId: 0,
-      cancelId: 0,
-      noLink: true,
-    });
-    const granted = result.response === 1;
-    if (granted) permissionGrants.add(permissionKey(origin, permission));
-    callback(granted);
-  });
-
-  browserSession.on('will-download', (_event, item) => {
-    const id = `download_${randomUUID()}`;
-    const snapshot = (state) => ({
-      id,
-      filename: item.getFilename(),
-      url: item.getURL(),
-      totalBytes: item.getTotalBytes(),
-      receivedBytes: item.getReceivedBytes(),
-      savePath: item.getSavePath() || '',
-      state,
-    });
-    sendBrowserEvent('browser:download', snapshot('progressing'));
-    item.on('updated', (_downloadEvent, state) => sendBrowserEvent('browser:download', snapshot(state)));
-    item.once('done', (_downloadEvent, state) => sendBrowserEvent('browser:download', snapshot(state)));
-  });
-
-  return browserSession;
-}
-
-function configureBrowserGuest(guest) {
-  if (!guest || guest.isDestroyed() || configuredBrowserGuests.has(guest.id)) return;
-  configuredBrowserGuests.add(guest.id);
-  browserPolicies.set(guest.id, 'internal');
-
-  guest.setWindowOpenHandler(({ url }) => {
-    if (!isAllowedBrowserUrl(url, { allowBlank: false })) return { action: 'deny' };
-    if (browserPolicies.get(guest.id) === 'system') shell.openExternal(url).catch(() => {});
-    else sendBrowserEvent('browser:open-tab', url);
-    return { action: 'deny' };
-  });
-
-  guest.on('will-navigate', (event, url) => {
-    if (!isAllowedBrowserUrl(url)) event.preventDefault();
-  });
-  guest.on('will-redirect', (event, url) => {
-    if (!isAllowedBrowserUrl(url)) event.preventDefault();
-  });
-  guest.on('before-input-event', (event, input) => {
-    if (input.type !== 'keyDown') return;
-    const command = input.control || input.meta;
-    const key = String(input.key || '').toLowerCase();
-    let shortcut = null;
-    if (key === 'f11') shortcut = 'toggle-fullscreen';
-    else if (key === 'escape') shortcut = 'exit-fullscreen';
-    else if (command && input.shift && key === 't') shortcut = 'reopen-tab';
-    else if (command && key === 'l') shortcut = 'focus-location';
-    else if (command && key === 't') shortcut = 'new-tab';
-    else if (command && key === 'w') shortcut = 'close-tab';
-    else if (command && key === 'r') shortcut = 'reload';
-    else if (command && key === 'h') shortcut = 'history';
-    else if (command && key === 'f') shortcut = 'find';
-    if (shortcut) {
-      // Let the page receive Escape as well (dialogs and native HTML fullscreen
-      // rely on it); the renderer only acts on it when browser fullscreen is on.
-      if (shortcut !== 'exit-fullscreen') event.preventDefault();
-      sendBrowserEvent('browser:shortcut', shortcut);
-      return;
-    }
-    if (input.alt && (key === 'left' || key === 'arrowleft') && guest.canGoBack()) { event.preventDefault(); guest.goBack(); }
-    if (input.alt && (key === 'right' || key === 'arrowright') && guest.canGoForward()) { event.preventDefault(); guest.goForward(); }
-  });
-
-  guest.once('destroyed', () => {
-    configuredBrowserGuests.delete(guest.id);
-    browserPolicies.delete(guest.id);
-  });
-}
-
-function setupBrowserSecurity() {
-  BROWSER_PARTITIONS.forEach(setupBrowserSession);
-
-  app.on('web-contents-created', (_event, contents) => {
-    contents.on('will-attach-webview', (event, webPreferences, params) => {
-      if (!isAllowedBrowserPartition(params.partition) || !isAllowedBrowserUrl(params.src)) {
-        event.preventDefault();
-        return;
-      }
-      setupBrowserSession(params.partition);
-      delete webPreferences.preload;
-      delete webPreferences.preloadURL;
-      webPreferences.nodeIntegration = false;
-      webPreferences.nodeIntegrationInSubFrames = false;
-      webPreferences.contextIsolation = true;
-      webPreferences.sandbox = true;
-      webPreferences.webSecurity = true;
-      webPreferences.allowRunningInsecureContent = false;
-    });
-    if (contents.getType() === 'webview') configureBrowserGuest(contents);
-  });
-
-  ipcMain.handle('browser:configure-webview', (event, payload = {}) => {
-    const guestId = Number(payload.webContentsId);
-    const guest = Number.isInteger(guestId) ? webContents.fromId(guestId) : null;
-    if (!guest || guest.getType() !== 'webview' || guest.hostWebContents?.id !== event.sender.id) return false;
-    configureBrowserGuest(guest);
-    browserPolicies.set(guestId, payload.openLinks === 'system' ? 'system' : 'internal');
-    return true;
-  });
-
-  ipcMain.handle('browser:clear-data', async (_event, payload = {}) => {
-    let partitions;
-    if (payload.partition) {
-      if (!isAllowedBrowserPartition(payload.partition)) return false;
-      partitions = [payload.partition];
-    } else if (payload.profile === 'persistent') {
-      partitions = ['persist:asyncat-web'];
-    } else {
-      partitions = [...configuredBrowserSessions].filter((partition) => partition === 'asyncat-web-private' || partition.startsWith('asyncat-web-incognito-'));
-    }
-    await Promise.all(partitions.flatMap((partition) => {
-      const browserSession = setupBrowserSession(partition);
-      browserPermissionGrants.get(partition)?.clear();
-      return [browserSession.clearCache(), browserSession.clearStorageData()];
-    }));
-    return true;
-  });
-}
+const isAllowedBrowserUrl = (value, opts = {}) => isAllowedBrowserUrlFor(value, {
+  ...opts,
+  ports: { frontendPort: FRONTEND_PORT, backendPort: BACKEND_PORT },
+});
 
 // ─── Desktop IPC (shell, clipboard, dialogs, screen capture, badge) ───────────
 
@@ -835,6 +624,8 @@ function setupHostBridge() {
 
   // How many scheduled tasks are on, to decide what closing the window does.
   registerHostHandler('scheduled.state', ({ enabled } = {}) => setEnabledTaskCount(enabled));
+  // The agent's browser commands (browserHost.js; den's browserCommandQueue.js).
+  registerHostHandler('browser.command', (payload) => handleAgentCommand(payload));
 
   powerMonitor.on('resume', () => postHostEvent('power.resume'));
   powerMonitor.on('unlock-screen', () => postHostEvent('power.resume'));
@@ -857,6 +648,7 @@ async function quitApp() {
 
   // Stop servers gracefully
   stopHostBridge();
+  shutdownBrowserHost();
   await stopFrontendServer();
   await stopBackend();
 
@@ -885,7 +677,7 @@ app.whenReady().then(async () => {
   // Setup IPC handlers
   setupIPC();
   setupTerminalIPC();
-  setupBrowserSecurity();
+  setupBrowserHost({ getMainWindow });
   setupDesktopIPC();
   setupPopupIPC();
   setupUpdaterIPC();

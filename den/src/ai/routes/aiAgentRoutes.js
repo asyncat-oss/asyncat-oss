@@ -51,7 +51,6 @@ import fs from 'fs';
 import { execSync } from 'child_process';
 import { getArtifactsDir, getLegacyArtifactsDir } from '../../agent/workspacePaths.js';
 import { shellSessionManager } from '../../agent/ShellSessionManager.js';
-import { resolveBrowserCommand } from '../../agent/browserCommandQueue.js';
 import { decideExternalApproval, detectExternalEngines, isExternalEngine, openExternalApprovals, runExternalAgent, scratchWorkspace } from '../../agent/externalAgents.js';
 import { listExternalSessions, readExternalSession } from '../../agent/externalSessions.js';
 import { getExternalUsage } from '../../agent/externalUsage.js';
@@ -1073,15 +1072,6 @@ router.delete('/processes/:key', withWorkspaceContext, (req, res) => {
   const key = decodeURIComponent(req.params.key);
   const killed = shellSessionManager.killByKey(key);
   res.json({ success: killed, key });
-});
-
-// ── Preview browser command result (called by the frontend after executing
-//    a browser_command SSE event on the live webview) ──────────────────────
-// No withWorkspaceContext — this is always called from the local Electron renderer.
-router.post('/browser/result/:commandId', (req, res) => {
-  const { commandId } = req.params;
-  const found = resolveBrowserCommand(commandId, req.body || {});
-  res.json({ success: found, commandId });
 });
 
 router.get('/runtime/status', withWorkspaceContext, async (req, res) => {

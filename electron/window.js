@@ -54,7 +54,7 @@ export function createWindow() {
       contextIsolation:   true,
       nodeIntegration:    false,
       sandbox:            true,
-      webviewTag:         true,
+      webviewTag:         false, // the browser panel uses views owned by browserHost.js
       spellcheck:         true,
     },
 

@@ -268,8 +268,6 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
   const messagesEndRef = useRef(null);
   const scrollContainerRef = useRef(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
-  // Ref to the live preview webview executor — set by PreviewPanel when mounted
-  const browserExecutorRef = useRef(null);
 
   const exportMenuRef = useRef(null);
   const branchMenuRef = useRef(null);
@@ -1490,45 +1488,13 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
           if (url) {
             setManualPreviewRequest({
               url,
+              // Set when the agent already opened the page in one of its tabs.
+              tabId: event.data?.tabId || null,
               id: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
             });
             setShowActivitySidebar(true);
             setSidePanelTab('preview');
             try { localStorage.setItem('asyncat_show_command_side_panel', 'true'); } catch { /* storage may be unavailable */ }
-          }
-        }
-
-        // browser_command — execute on the live preview webview and POST result back to den
-        if (event.type === 'browser_command') {
-          const { commandId, action, ...params } = event.data || {};
-          if (commandId) {
-            (async () => {
-              let result = { success: false, error: 'Preview panel not open or webview not loaded. Use preview_navigate first.' };
-              try {
-                // Wait up to 3s for the executor to be available (Preview tab may still be mounting)
-                let executor = browserExecutorRef.current;
-                if (!executor) {
-                  for (let i = 0; i < 6; i++) {
-                    await new Promise(r => setTimeout(r, 500));
-                    executor = browserExecutorRef.current;
-                    if (executor) break;
-                  }
-                }
-                if (executor) {
-                  result = await executor({ action, ...params });
-                }
-              } catch (err) {
-                result = { success: false, error: err.message };
-              }
-              // POST result back to den so the pending promise resolves
-              try {
-                await fetch(`${import.meta.env.VITE_MAIN_URL}/api/agent/browser/result/${commandId}`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(result),
-                });
-              } catch { /* if POST fails, the agent tool will time out gracefully */ }
-            })();
           }
         }
 
@@ -2319,6 +2285,20 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     };
     window.addEventListener('asyncat-open-preview', handler);
     return () => window.removeEventListener('asyncat-open-preview', handler);
+  }, []);
+
+  // The agent handed a page to the user (sign-in, captcha): show the browser.
+  useEffect(() => {
+    const browser = window.electronAPI?.browser;
+    if (!browser) return undefined;
+    const showBrowser = () => {
+      setShowActivitySidebar(true);
+      setSidePanelTab('preview');
+    };
+    browser.getState?.().then((state) => { if (state?.handover) showBrowser(); }).catch(() => {});
+    return browser.onEvent?.((event) => {
+      if (event?.type === 'handover' && event.handover) showBrowser();
+    });
   }, []);
 
   const effectivePreviewUrl = manualPreviewRequest?.url || detectedPreviewUrl;
@@ -3282,6 +3262,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
               onOpenSavedMessage={handleOpenSavedMessage}
               previewUrl={effectivePreviewUrl}
               previewNavigationKey={previewNavigationKey}
+              previewTabId={manualPreviewRequest?.tabId || null}
               artifacts={conversationArtifacts}
               onSelectArtifact={handleViewArtifactInPanel}
               selectedArtifact={selectedArtifact}
@@ -3290,7 +3271,6 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
               runtimeStatusLoading={runtimeStatusLoading}
               onRuntimeStatusRefresh={loadRuntimeStatus}
               agentTerminalOutput={agentTerminalOutput}
-              browserExecutorRef={browserExecutorRef}
               experienceMode={experienceMode}
             />
           </div>
@@ -3350,6 +3330,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
               onOpenSavedMessage={handleOpenSavedMessage}
               previewUrl={effectivePreviewUrl}
               previewNavigationKey={previewNavigationKey}
+              previewTabId={manualPreviewRequest?.tabId || null}
               artifacts={conversationArtifacts}
               onSelectArtifact={handleViewArtifactInPanel}
               selectedArtifact={selectedArtifact}
@@ -3358,7 +3339,6 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
               runtimeStatusLoading={runtimeStatusLoading}
               onRuntimeStatusRefresh={loadRuntimeStatus}
               agentTerminalOutput={agentTerminalOutput}
-              browserExecutorRef={browserExecutorRef}
               experienceMode={experienceMode}
             />
           </div>
