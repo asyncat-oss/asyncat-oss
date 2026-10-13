@@ -183,7 +183,7 @@ def train_mlx(args, dataset_rows):
         "--data", os.path.dirname(args.dataset),
         "--adapter-path", args.output_dir,
         "--batch-size", str(args.batch_size),
-        "--lora-layers", str(args.rank),
+        "--num-layers", "16",  # how many layers get adapters (mlx_lm's default)
         "--iters", str(int(dataset_rows / args.batch_size * args.epochs)),
         "--learning-rate", str(args.lr),
     ]
@@ -234,7 +234,7 @@ def train_transformers(args, dataset_rows):
         "message": f"Using {'CUDA GPU' if use_cuda else 'CPU'} for training.",
         "cudaAvailable": torch.cuda.is_available(),
         "gpuName": torch.cuda.get_device_name(0) if use_cuda else None,
-        "vramGb": round(torch.cuda.get_device_properties(0).total_mem / 1e9, 1) if use_cuda else None,
+        "vramGb": round(torch.cuda.get_device_properties(0).total_memory / 1e9, 1) if use_cuda else None,
     })
 
     nvml_handle = _init_nvml(use_cuda)
@@ -256,7 +256,7 @@ def train_transformers(args, dataset_rows):
         if use_unsloth:
             model, tokenizer = FastLanguageModel.from_pretrained(
                 model_name=args.model,
-                max_seq_length=args.max_seq_len,
+                **seq_len_arg,
                 dtype=None,  # auto
                 load_in_4bit=use_cuda,
             )
@@ -342,20 +342,38 @@ def train_transformers(args, dataset_rows):
     # ── Determine formatting ─────────────────────────────────────────────────
     columns = dataset.column_names
 
+    sharegpt_roles = {"human": "user", "gpt": "assistant", "system": "system", "user": "user", "assistant": "assistant"}
+
+    def chat_text(turns):
+        """A conversation in the model's own chat format, so the adapter learns
+        the format llama.cpp will use with it (the template ships in the GGUF)."""
+        messages = []
+        for turn in turns:
+            if not isinstance(turn, dict):
+                continue
+            role = sharegpt_roles.get(str(turn.get("role", turn.get("from", "user"))), "user")
+            content = turn.get("content", turn.get("value", ""))
+            if isinstance(content, str) and content.strip():
+                messages.append({"role": role, "content": content})
+        if not messages:
+            return ""
+        if getattr(tokenizer, "chat_template", None):
+            try:
+                return tokenizer.apply_chat_template(messages, tokenize=False)
+            except Exception:
+                pass
+        parts = [f"<|{m['role']}|>\n{m['content']}" for m in messages]
+        return "\n".join(parts) + tokenizer.eos_token
+
     def format_sample(sample):
-        """Auto-detect format: Alpaca, ChatML/ShareGPT, or raw text."""
-        # ChatML/ShareGPT: conversations field
-        if "conversations" in sample and isinstance(sample["conversations"], list):
-            parts = []
-            for turn in sample["conversations"]:
-                role = turn.get("role", turn.get("from", "user"))
-                content = turn.get("content", turn.get("value", ""))
-                parts.append(f"<|{role}|>\n{content}")
-            parts.append("<|end|>")
-            return tokenizer.eos_token.join(["".join(parts)])
+        """Auto-detect format: chat messages (OpenAI or ShareGPT), Alpaca,
+        prompt/completion, or raw text."""
+        for key in ("messages", "conversations"):
+            if isinstance(sample.get(key), list):
+                return chat_text(sample[key])
 
         # Alpaca: instruction/input/output
-        if "instruction" in sample:
+        if sample.get("instruction"):
             instruction = sample.get("instruction", "")
             inp = sample.get("input", "")
             output = sample.get("output", "")
@@ -364,13 +382,13 @@ def train_transformers(args, dataset_rows):
             return f"### Instruction:\n{instruction}\n\n### Response:\n{output}{tokenizer.eos_token}"
 
         # Simple prompt/completion
-        if "prompt" in sample and ("completion" in sample or "response" in sample):
+        if sample.get("prompt") and (sample.get("completion") or sample.get("response")):
             completion = sample.get("completion", sample.get("response", ""))
             return f"{sample['prompt']}\n{completion}{tokenizer.eos_token}"
 
-        # Raw text
-        if "text" in sample:
-            return sample["text"]
+        # Raw text (notes, files)
+        if isinstance(sample.get("text"), str):
+            return sample["text"] + tokenizer.eos_token
 
         # Last resort: concatenate all string fields
         parts = [str(v) for v in sample.values() if isinstance(v, str) and v.strip()]
@@ -423,6 +441,15 @@ def train_transformers(args, dataset_rows):
     # ── Training ─────────────────────────────────────────────────────────────
     os.makedirs(args.output_dir, exist_ok=True)
 
+    # TRL renamed some arguments over time (max_seq_length → max_length,
+    # tokenizer → processing_class); use whichever this version has.
+    import dataclasses
+    import inspect
+    config_fields = {f.name for f in dataclasses.fields(SFTConfig)}
+    seq_len_arg = {"max_length": args.max_seq_len} if "max_length" in config_fields else {"max_seq_length": args.max_seq_len}
+    trainer_params = inspect.signature(SFTTrainer.__init__).parameters
+    tokenizer_arg = {"processing_class": tokenizer} if "processing_class" in trainer_params else {"tokenizer": tokenizer}
+
     try:
         training_args = SFTConfig(
             output_dir=args.output_dir,
@@ -437,7 +464,7 @@ def train_transformers(args, dataset_rows):
             save_strategy="steps",
             save_steps=max(50, total_steps // 10),
             save_total_limit=3,
-            max_seq_length=args.max_seq_len,
+            **seq_len_arg,
             fp16=use_cuda and not torch.cuda.is_bf16_supported(),
             bf16=use_cuda and torch.cuda.is_bf16_supported(),
             optim="adamw_8bit" if use_cuda else "adamw_torch",
@@ -448,13 +475,13 @@ def train_transformers(args, dataset_rows):
             dataset_text_field="text",
         )
 
-        # Preprocess dataset: add 'text' column if not present
-        if "text" not in dataset.column_names:
-            dataset = dataset.map(lambda x: {"text": format_sample(x)}, remove_columns=columns)
+        # Every row becomes one "text" (a dataset can mix chats and plain text).
+        dataset = dataset.map(lambda x: {"text": format_sample(x)}, remove_columns=columns)
+        dataset = dataset.filter(lambda x: bool(x["text"] and x["text"].strip()))
 
         trainer = SFTTrainer(
             model=model,
-            tokenizer=tokenizer,
+            **tokenizer_arg,
             train_dataset=dataset,
             args=training_args,
             callbacks=[ProgressCallback(nvml_handle=nvml_handle)],
@@ -476,10 +503,12 @@ def train_transformers(args, dataset_rows):
             })
             sys.exit(0)
 
-        # Save final adapter
+        # Save final adapter, with the base model's config so lora_to_gguf.py
+        # can turn it into a llama.cpp adapter without the base model.
         final_dir = os.path.join(args.output_dir, "final-adapter")
         model.save_pretrained(final_dir)
         tokenizer.save_pretrained(final_dir)
+        save_base_config(model, args.model, final_dir)
 
         emit({
             "type": "complete",
@@ -498,6 +527,23 @@ def train_transformers(args, dataset_rows):
     except Exception as e:
         emit_error(f"Training failed: {e}", "TRAINING_ERROR")
         sys.exit(1)
+
+
+def save_base_config(model, model_id, out_dir):
+    """Write the base model's config.json as base_config.json."""
+    config = None
+    try:
+        config = model.config.to_dict()
+    except Exception:
+        try:
+            from transformers import AutoConfig
+            config = AutoConfig.from_pretrained(model_id).to_dict()
+        except Exception as e:
+            emit({"type": "status", "message": f"Could not save the base model config: {e}"})
+            return
+    config.pop("quantization_config", None)
+    with open(os.path.join(out_dir, "base_config.json"), "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2, default=str)
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────

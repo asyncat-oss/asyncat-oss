@@ -162,7 +162,7 @@ export async function getTrainingReadiness() {
     } else if (gpu.vramGb < 6) {
       vramWarning = 'Less than 6GB VRAM detected. Only small models (1-3B) with 4-bit QLoRA are realistic.';
     } else if (gpu.vramGb < 8) {
-      vramWarning = '6-8GB VRAM: 7B models with 4-bit QLoRA should work, but larger models will need more VRAM.';
+      vramWarning = '6-8GB VRAM: models up to about 3B train well with 4-bit QLoRA; 4B is tight and 7B models won\'t fit.';
     }
   }
 
@@ -171,8 +171,13 @@ export async function getTrainingReadiness() {
     cpuWarning = 'No GPU detected. CPU training is extremely slow — useful only for testing the pipeline with tiny models (<1B). For real training, use a machine with an NVIDIA GPU.';
   }
 
+  // An NVIDIA card whose driver isn't answering can't train until it's fixed.
+  const driverWarning = gpu?.driverIssue
+    ? `${gpu.name} is installed, but its driver is not responding (nvidia-smi failed), so training would run on the CPU. Restarting the computer usually fixes it.`
+    : null;
+
   return {
-    gpu: gpu ? { vendor: gpu.vendor, name: gpu.name, vramGb: gpu.vramGb ?? null } : null,
+    gpu: gpu ? { vendor: gpu.vendor, name: gpu.name, vramGb: gpu.vramGb ?? null, driverIssue: Boolean(gpu.driverIssue) } : null,
     backend,
     envReady,
     venvExists,
@@ -182,7 +187,7 @@ export async function getTrainingReadiness() {
       estimatedVenvSizeGb,
       ok: diskOk,
     },
-    warnings: [vramWarning, cpuWarning].filter(Boolean),
+    warnings: [driverWarning, vramWarning, cpuWarning].filter(Boolean),
     canInstall: diskOk,
     canTrain: envReady && diskOk,
   };
