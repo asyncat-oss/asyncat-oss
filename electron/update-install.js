@@ -100,17 +100,37 @@ export async function downloadFile(url, destination, { fetchImpl = fetch, onProg
   return { bytes: received, sha256: hash.digest('hex') };
 }
 
+/** GitHub's asset `digest` ("sha256:<hex>") as lowercase hex, or null. */
+export function digestSha256(digest) {
+  const match = String(digest || '').trim().match(/^sha256:([0-9a-f]{64})$/i);
+  return match ? match[1].toLowerCase() : null;
+}
+
 /**
- * Check a download against the release's SHA256SUMS.txt. Releases made before
- * checksums were published have none; then only the size check applies.
+ * Check a download against the release: the asset's SHA-256 `digest` from the
+ * GitHub API and the line for it in SHA256SUMS.txt. Every source we have must
+ * match, and at least one must exist. An update that can't be checked is
+ * refused instead of being installed unverified.
  */
-export function verifyChecksum({ sums, assetName, sha256 }) {
-  const expected = sums?.get(assetName);
-  if (!expected) return { verified: false, reason: 'no-checksum' };
-  if (expected !== sha256) {
-    throw new Error("The download doesn't match the release's checksum, so it wasn't installed.");
+export function verifyChecksum({ sums = null, digest = null, assetName, sha256 }) {
+  const actual = String(sha256 || '').toLowerCase();
+  const expected = [
+    ['GitHub', digestSha256(digest)],
+    ['SHA256SUMS.txt', sums?.get(assetName) || null],
+  ].filter(([, value]) => value);
+  if (expected.length === 0) {
+    throw Object.assign(
+      new Error("This update can't be checked: the release has no checksum for it, so it wasn't installed. You can download it from the release page instead."),
+      { code: 'NO_CHECKSUM' },
+    );
   }
-  return { verified: true };
+  if (expected.some(([, value]) => value !== actual)) {
+    throw Object.assign(
+      new Error("The download doesn't match the release's checksum, so it wasn't installed. Try again, or download it from the release page."),
+      { code: 'CHECKSUM_MISMATCH' },
+    );
+  }
+  return { verified: true, sources: expected.map(([source]) => source) };
 }
 
 /** Where the AppImage update is downloaded: next to the running file, so the swap is a rename. */

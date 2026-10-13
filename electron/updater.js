@@ -2,7 +2,8 @@
 //
 // The app checks published releases and picks the installer for this OS/CPU.
 // When the user chooses to update, it downloads that file inside the app,
-// checks it against the release's SHA256SUMS.txt, and then (see
+// checks it against the asset's SHA-256 digest from GitHub and the release's
+// SHA256SUMS.txt (an update that can't be checked is refused), and then (see
 // update-install.js): an AppImage replaces itself and restarts, Windows runs
 // the installer silently and reopens, and macOS / .deb get the file saved and
 // shown for the last step (unsigned builds, or root needed). userData is
@@ -64,6 +65,8 @@ function toUpdateInfo(release) {
     assetName: asset?.name || null,
     assetUrl: asset?.browser_download_url || null,
     assetSize: asset?.size || null,
+    // GitHub's own SHA-256 of the file ("sha256:<hex>"), when the API has it.
+    assetDigest: asset?.digest || null,
     checksumUrl: checksums?.browser_download_url || null,
     strategy: installStrategy({ platform: process.platform, appImagePath: RUNNING_APPIMAGE, assetName: asset?.name || null }),
     platform: process.platform,
@@ -158,6 +161,12 @@ async function startUpdate() {
     await openUpdateDownload();
     return { success: true, opened: true };
   }
+  if (!update.assetDigest && !update.checksumUrl) {
+    // Nothing to check the file against: don't download what we'd refuse.
+    const error = "This update can't be checked: the release has no checksum for it. You can download it from the release page instead.";
+    setDownload({ status: 'error', version: update.version, error });
+    return { success: false, error };
+  }
 
   let strategy = update.strategy;
   let destination;
@@ -184,8 +193,10 @@ async function startUpdate() {
         fetchChecksums(update.checksumUrl),
       ]);
       try {
-        if (update.checksumUrl && !sums) throw new Error("Couldn't fetch the release's checksums to check the download. Try again.");
-        verifyChecksum({ sums, assetName: update.assetName, sha256: result.sha256 });
+        if (update.checksumUrl && !sums && !update.assetDigest) {
+          throw new Error("Couldn't fetch the release's checksums to check the download. Try again.");
+        }
+        verifyChecksum({ sums, digest: update.assetDigest, assetName: update.assetName, sha256: result.sha256 });
       } catch (error) {
         fs.rmSync(destination, { force: true });
         throw error;

@@ -9,6 +9,7 @@ import path from 'path';
 import {
   appImageStagingPath,
   detectAppImage,
+  digestSha256,
   downloadFile,
   installStrategy,
   parseChecksums,
@@ -79,9 +80,7 @@ test('downloads with progress, verifies, and swaps an AppImage in place', async 
     assert.equal(fs.existsSync(`${staging}.part`), false);
 
     const sums = new Map([['Asyncat.AppImage', result.sha256]]);
-    assert.deepEqual(verifyChecksum({ sums, assetName: 'Asyncat.AppImage', sha256: result.sha256 }), { verified: true });
-    assert.throws(() => verifyChecksum({ sums, assetName: 'Asyncat.AppImage', sha256: 'f'.repeat(64) }), /checksum/);
-    assert.equal(verifyChecksum({ sums: new Map(), assetName: 'x', sha256: 'y' }).verified, false);
+    assert.equal(verifyChecksum({ sums, assetName: 'Asyncat.AppImage', sha256: result.sha256 }).verified, true);
 
     replaceAppImage(staging, appImage);
     assert.equal(fs.readFileSync(appImage).length, body.length);
@@ -90,6 +89,23 @@ test('downloads with progress, verifies, and swaps an AppImage in place', async 
     server.close();
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('an update is installed only when a checksum proves the download', () => {
+  const good = 'a'.repeat(64);
+  const bad = 'b'.repeat(64);
+  const sums = new Map([['Asyncat.AppImage', good]]);
+  assert.deepEqual(verifyChecksum({ sums, assetName: 'Asyncat.AppImage', sha256: good }).sources, ['SHA256SUMS.txt']);
+  assert.deepEqual(verifyChecksum({ digest: `sha256:${good.toUpperCase()}`, assetName: 'x', sha256: good }).sources, ['GitHub']);
+  assert.deepEqual(verifyChecksum({ sums, digest: `sha256:${good}`, assetName: 'Asyncat.AppImage', sha256: good }).sources, ['GitHub', 'SHA256SUMS.txt']);
+  // Missing checksums no longer let an update through unverified.
+  assert.throws(() => verifyChecksum({ sums: new Map(), assetName: 'x', sha256: good }), (error) => error.code === 'NO_CHECKSUM' && /release page/.test(error.message));
+  assert.throws(() => verifyChecksum({ assetName: 'x', sha256: good, digest: 'md5:123' }), { code: 'NO_CHECKSUM' });
+  assert.throws(() => verifyChecksum({ sums, assetName: 'Asyncat.AppImage', sha256: bad }), { code: 'CHECKSUM_MISMATCH' });
+  // Both sources must agree when both exist.
+  assert.throws(() => verifyChecksum({ sums, digest: `sha256:${bad}`, assetName: 'Asyncat.AppImage', sha256: good }), { code: 'CHECKSUM_MISMATCH' });
+  assert.equal(digestSha256('sha256:' + good), good);
+  assert.equal(digestSha256('nope'), null);
 });
 
 test('a short download or HTTP error leaves no file behind', async () => {
