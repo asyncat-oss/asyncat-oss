@@ -1,12 +1,12 @@
 # asyncat
 
-**A local-first AI agent desktop app.** 220+ tools. 51 skills. Self-improving. Desktop automation. Fully offline.
+**A local-first AI agent desktop app.** 210+ tools. 51 skills. Self-improving. Desktop automation. Fully offline.
 
 > **v0.8.0-beta.6** · MIT · [Install](#quick-start) · [Screenshots](#screenshots) · [Website](https://asyncat.com)
 
-![Asyncat finding and fixing a failing test](docs/images/demo.gif)
+![Asyncat after fixing a failing test: the steps it took, folded under "Worked for", and its answer](docs/images/chat.png)
 
-<sub>An agent run in a project folder, recorded before the beta.6 redesign: the agent makes a plan, asks before running `npm test` and before editing a file (with the diff), then runs the tests again. The commands and the edit really ran. The model's replies came from a scripted local endpoint, so the recording can be reproduced.</sub>
+<sub>A finished agent run: what the agent did (it ran the tests, read and edited a file, ran them again) and its answer. Screenshots use a demo workspace with example chats.</sub>
 
 ---
 
@@ -22,11 +22,11 @@ It is not a chatbot wrapper. It controls your screen, writes and runs code, mana
 
 | | |
 |---|---|
-| **220+ tools** | Files, shell, git, browser, Docker, screen, keyboard, semantic memory, RAG, notes, kanban, system, network, audio, image, design canvases, code analysis, sandboxes, scheduler, workflows, model management, integrations |
+| **210+ tools** | Files, shell, git, browser, Docker, screen, keyboard, semantic memory, RAG, notes, system, network, audio, image, design canvases, code analysis, sandboxes, scheduler, workflows, model management, integrations |
 | **51 bundled skills** | Reusable instruction modules: code review, debugging, TDD, deployment, security audit, incident response, data engineering, and more |
 | **Basal Ganglia** | Watches which tools succeed for which kinds of goals. After 3 successful runs of the same goal pattern with the same set of tools it writes a new skill automatically. No annotation, no config |
 | **One chat box** | Chat and agent work happen in the same place. The **Tools** setting decides per message: **Auto** runs the agent when the model supports tools or a project, file or mention is involved; **Just chat** talks to the model directly; **Always use tools** always runs the agent. The agent works in `plan` (read-only tools), `action` (full ReAct loop, asks before risky tools) or **Yolo** (`action` with auto-approve). A `design` mode (canvases, artifacts and images; no source edits or shell/git writes) is available through the API |
-| **Claude Code and Codex** | Hand a chat to Claude Code or Codex installed on your computer, signed in with your own account. Pick one, and its model, under the message box; follow-ups continue the same session and its steps show in the chat. Your existing Claude Code and Codex sessions (from the terminal or their apps) are listed in the sidebar: open one and carry on where you left off. In Action mode Claude Code asks through the usual approval card before running commands. **Agents → Coding agents** shows install and sign-in status, plan usage limits, and every session |
+| **Claude Code and Codex** | Hand a chat to Claude Code or Codex installed on your computer, signed in with your own account. Pick one, and its model, under the message box; follow-ups continue the same session and its steps show in the chat. Your existing Claude Code and Codex sessions (from the terminal or their apps) are listed in the sidebar: open one and carry on where you left off. In Action mode Claude Code asks through the usual approval card before running commands. **Customize → Agents → Coding agents** shows install and sign-in status, plan usage limits, and every session |
 | **Approvals** | Before a risky tool runs, the agent asks: approve once, trust it for the rest of the run, or always allow. File edits show the diff before you decide |
 | **Small prompts for local models** | Each agent step sends a core set of tools (about 40, or 24 for models that read tools from the prompt) instead of the full list. The agent finds the rest with `tool_search` when it needs them |
 | **35+ providers** | OpenAI, Anthropic, Gemini, Ollama, llama.cpp, MLX, LM Studio, OpenRouter, DeepSeek, Groq, Together AI, Mistral, Perplexity, Cohere, and more |
@@ -34,15 +34,15 @@ It is not a chatbot wrapper. It controls your screen, writes and runs code, mana
 | **Desktop automation** | Click, type, read screen content via OCR, focus windows — controls your actual machine |
 | **Sandboxes** | Isolated workspace copies. Review changes as a unified diff. Apply or discard. Commit to a branch |
 | **Automations** | Workflows, Schedules and Activity under one sidebar entry. Chain agent steps into a saved workflow and run it on demand or on a schedule, under any agent profile; each step can pass its output to the next. Schedule single agent jobs too, and follow every run in one feed. The agent can trigger workflows itself |
-| **Command palette** | `Cmd/Ctrl+K` from anywhere — jump to any page, or search projects, notes, chats, tasks, and memory |
+| **Command palette** | `Cmd/Ctrl+K` from anywhere — jump to any page, or search projects, notes, chats, and memory |
 | **Semantic memory** | Recall by meaning, not just keywords. Uses your provider's embeddings when available, falls back to an offline keyword (hashed lexical) index |
 | **Built-in browser** | A real tabbed browser the agent shares. Hand it the page you're on with one click, or let it browse on its own |
 | **MCP support** | Add stdio MCP servers to `data/mcp.json` in the backend data folder (`den/data/mcp.json` from source, `<user data>/data/mcp.json` when installed). It is created on first start and hot-reloaded. Also manageable through `/api/agent/mcp` (no UI yet) |
 | **Persistent memory** | SQLite-backed key-value memory with types: `user`, `feedback`, `project`, `reference`, `fact`, `preference`, `context`, `task_state` |
-| **Workspace** | Notes (markdown, delta-based, export to DOCX/PDF), Kanban (columns, cards, checklists) |
+| **Notes** | The agent writes notes as documents in the chat; open one to edit it (rich text, tables, export to DOCX/PDF). `Cmd/Ctrl+K` finds them |
 | **System tray** | Left-click for quick chat, right-click to show Asyncat, restart the backend, or quit. On macOS, closing the window keeps the backend, schedules, and workflows running |
 | **Global shortcuts** | `Cmd/Ctrl+Shift+A` summons Asyncat from any app; `Cmd/Ctrl+Shift+Space` opens quick chat. Change or turn off either one in **Settings → Appearance** |
-| **Fine-tuning (Labs)** | **Models → Training** trains a LoRA adapter for a local model and saves it to disk. Loading the adapter is still up to you |
+| **Fine-tuning (Labs)** | **Customize → Models → Training** trains a LoRA adapter for a local model and saves it to disk. Loading the adapter is still up to you |
 | **Native notifications** | System-level alerts when a background run finishes, asks you a question, or needs tool approval |
 | **Fully offline** | Every feature works with local models. No data leaves your machine (installed builds only check GitHub Releases for updates) |
 
@@ -50,18 +50,12 @@ It is not a chatbot wrapper. It controls your screen, writes and runs code, mana
 
 ## Screenshots
 
-These were taken before the beta.6 redesign (new sidebar, Models page, chat and logo).
-
 | | |
 |---|---|
-| ![Approving a file edit with its diff, dark theme](docs/images/approval.png) | ![Automations: a scheduled workflow, Midnight theme](docs/images/automations.png) |
-| **Approvals** show what a file edit will change before you allow it. | **Automations** keeps Workflows, Schedules and Activity together. |
-| ![Models page, dark theme](docs/images/models.png) | ![A finished agent run](docs/images/agent-run.png) |
-| **Models**: providers, local engines, audio, images, usage and training. | **A finished run**: the answer, what changed, and the steps folded away. |
-
-![System-wide shortcut settings](docs/images/shortcuts.png)
-
-The system-wide shortcuts can be rebound or turned off, and the card says when another app already owns a combination.
+| ![Home screen with the sidebar, light theme](docs/images/home.png) | ![Coding agents page with Claude Code, Codex and their sessions](docs/images/coding-agents.png) |
+| **One chat box**: pick who answers (Asyncat, Claude Code or Codex) and the model; your Claude Code and Codex sessions sit in the sidebar. | **Coding agents**: install and sign-in status, plan usage, and every Claude Code and Codex session on this computer. |
+| ![Models page, Add provider view](docs/images/models.png) | ![Update screen with release notes](docs/images/update.png) |
+| **Models**: the model in use, a searchable provider directory, local models, voice, images, usage and training. | **Updates** download, get checked against the release checksums, and install from inside the app. |
 
 ---
 
@@ -231,7 +225,7 @@ Page navigation shortcuts (`Cmd/Ctrl+1`…) and the two global shortcuts can be 
 
 ### 1. Add a provider
 
-Go to **Models → Language**:
+Go to **Customize → Models → Language**:
 
 - **Local**: under **Local models**, load a GGUF model with the built-in llama.cpp engine (models already in your Hugging Face cache are listed too), or connect Ollama, LM Studio, MLX or another local server under **Add provider**. The last model you loaded is loaded again when Asyncat starts
 - **Cloud**: under **Add provider**, search for OpenAI, Anthropic, Gemini, OpenRouter and others and add your key. Asyncat lists the provider's models so you can pick one before saving
@@ -251,7 +245,7 @@ Go to **Automations → Schedules** and create repeating agent jobs — hourly c
 
 ### 4. Manage skills and memory
 
-Go to **Tools & Skills** to browse the tool inventory, load skill modules, edit agent soul, and review memory entries.
+Go to **Customize → Tools & Skills** to browse the tool inventory, load skill modules, edit agent soul, and review memory entries.
 
 ---
 
@@ -283,7 +277,6 @@ asyncat-oss/
 │   │   ├── files/             # File explorer service (/api/files)
 │   │   ├── install/           # Runtime readiness checks (/api/install)
 │   │   ├── integrations/      # GitHub, Obsidian, RSS, mail, outbound notifications
-│   │   ├── kanban/            # Cards + columns (/api/cards, /api/columns)
 │   │   ├── lib/               # Shared helpers: .env I/O, system deps, engine installs
 │   │   ├── middleware/        # Local profile context, cross-site request guard
 │   │   ├── notes/             # Delta-based notes, export (/api/notes)
@@ -296,7 +289,7 @@ asyncat-oss/
 ├── neko/            # React + Vite frontend
 │   └── src/
 │       ├── CommandCenter/     # Chat and agent runs
-│       ├── Agent/             # Agents page (profiles)
+│       ├── Agent/             # Agents page (profiles, coding agents)
 │       ├── Models/            # LLM providers, local models and runtimes, audio, images
 │       ├── Profiles/          # Agent profiles
 │       ├── Automations/       # Tab bar grouping the next three pages
@@ -306,10 +299,10 @@ asyncat-oss/
 │       ├── Tools/             # Tools & skills browser
 │       ├── Training/          # Fine-tuning jobs (shown as Models → Training)
 │       ├── Settings/          # Settings tabs
-│       ├── projects/          # Projects
-│       ├── sidebar/           # Sidebar and Cmd/Ctrl+K search
-│       ├── notes/             # Notes editor
-│       └── views/             # Kanban, list, tasks
+│       ├── projects/          # Projects (folders the agent works in, and their chats)
+│       ├── sidebar/           # Sidebar, Claude Code & Codex sessions, Cmd/Ctrl+K search
+│       ├── components/        # Shared UI pieces and the update screen
+│       └── notes/             # Notes editor (opened from note documents in chat)
 ├── scripts/         # Install, icon, Node bundling, and release scripts
 ├── build/           # Windows installer customization (installer.nsh)
 └── electron-builder.yml # Electron desktop packaging configuration

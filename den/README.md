@@ -17,7 +17,6 @@ Den is a single Express server that handles everything:
 | Config | `/api/config/*` |
 | Users / Projects | `/api/users/*`, `/api/projects/*` |
 | Workspaces | `/api/teams/*` |
-| Kanban | `/api/cards/*`, `/api/columns/*` |
 | Notes | `/api/notes/*`, `/api/attachments/*` (note attachments) |
 | Files | `/api/files/*` (file explorer) |
 | Storage | `/files/*`, `/api/storage/*` (uploaded files and logs) |
@@ -83,7 +82,7 @@ another `Origin`, or addressed to a non-local `Host`, are rejected.
 
 ## Agent tools
 
-About 220 tools are registered. Each agent step sends the model a core set
+About 215 tools are registered. Each agent step sends the model a core set
 chosen for the task: about 40 with native tool calling, 24 for models that
 read tool definitions from the prompt. The rest stay reachable through the
 `tool_search` tool, which returns matching definitions and makes those tools

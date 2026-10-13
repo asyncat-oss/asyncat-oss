@@ -11,10 +11,11 @@ Built with **React 19**, **Vite 6**, and **TailwindCSS 4**.
 The UI for the full Asyncat experience:
 
 - **Command Center** — one chat box for direct model chat and agent runs (Plan, Action, and Yolo), streaming, tool approvals, memory; a chat can also be answered by Claude Code or Codex
-- **Projects & Tasks** — kanban and list views
-- **Notes** — block-based editor with tables, charts, media, and DOCX/PDF export
+- **Projects** — the folders the agent can work in, with their chats
+- **Notes** — documents the agent writes in chat, opened in a block editor with tables, charts, media, and DOCX/PDF export
+- **Claude Code & Codex** — sessions from this computer in the sidebar, and Agents → Coding agents
 - **Models** — LLM providers, local models and runtimes, audio and image models, and **Training** (LoRA fine-tuning, marked Labs)
-- **Tools & Skills** and **Agents** (profiles)
+- **Customize** — Models, Agents (profiles and coding agents) and Tools & Skills, grouped in the sidebar
 - **Automations** — Workflows, Schedules, and Activity under one sidebar entry, with a tab bar
 - **Terminal** — integrated xterm.js terminal (desktop app) plus live agent process output
 - **Built-in browser** shared with the agent
@@ -33,10 +34,9 @@ Run `npm install` from the repository root. Its postinstall copies
 VITE_USER_URL=http://127.0.0.1:8716
 VITE_MAIN_URL=http://127.0.0.1:8716
 VITE_NOTES_URL=http://127.0.0.1:8716
-VITE_KANBAN_URL=http://127.0.0.1:8716
 ```
 
-All four point at the local den backend.
+All three point at the local den backend.
 
 ### Run
 
