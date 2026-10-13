@@ -30,6 +30,8 @@ import {
   removeManagedLlamaEngine,
   removeManagedLlamaPython,
   swapManagedDirectory,
+  verificationTimeoutForAsset,
+  verifyBinaryDetailedAsync,
   writeManagedPythonEngineMetadata,
 } from '../../../lib/localEngine.js';
 import { ensureFreeSpace } from '../../../lib/engineDownload.js';
@@ -357,7 +359,15 @@ async function pythonHasLlamaServer(pythonCmd) {
   }
 }
 
-async function verifyEngineSelection(runtime, selectedPath) {
+/** The verification time allowance for a selected binary, as at install. */
+export function selectionVerificationTimeout(binaryPath, { install = managedInstallForPath(binaryPath), env = process.env } = {}) {
+  if (install?.metadata?.asset) return verificationTimeoutForAsset(install.metadata.asset, env);
+  // An external CUDA build gets the CUDA allowance too.
+  const hint = capabilityHintFor('binary', 'manual engine', binaryPath);
+  return verificationTimeoutForAsset(hint === 'nvidia' ? 'cuda-12' : '', env);
+}
+
+export async function verifyEngineSelection(runtime, selectedPath) {
   const trimmed = String(selectedPath || '').trim();
   if (!trimmed) throw new Error('Engine path is required.');
   if (runtime !== 'binary' && runtime !== 'python') throw new Error('Engine runtime must be "binary" or "python".');
@@ -366,16 +376,18 @@ async function verifyEngineSelection(runtime, selectedPath) {
     if (path.isAbsolute(trimmed) && !fs.existsSync(trimmed)) {
       throw new Error(`Engine binary not found: ${trimmed}`);
     }
-    const actual = path.isAbsolute(trimmed) ? trimmed : trimmed;
-    try {
-      const { execFileSync } = await import('child_process');
-      try {
-        execFileSync(actual, ['--version'], { stdio: 'ignore', timeout: 5000 });
-      } catch {
-        execFileSync(actual, ['--help'], { stdio: 'ignore', timeout: 5000 });
-      }
-    } catch (err) {
-      throw new Error(`Engine binary failed verification: ${err.message}`);
+    // The same check as an install (--version, then --help), off the event
+    // loop, with the same time allowance: CUDA builds can take a while to
+    // initialise the GPU the first time.
+    const verification = await verifyBinaryDetailedAsync(trimmed, { timeoutMs: selectionVerificationTimeout(trimmed) });
+    if (!verification.ok) {
+      const probe = verification.probes?.at(-1);
+      const reason = probe?.timedOut
+        ? `it did not answer within ${Math.round((probe.timeoutMs || 0) / 1000)} seconds`
+        : (probe?.stderr || probe?.error || `it exited with code ${probe?.status ?? 'unknown'}`).split('\n')[0].slice(0, 300);
+      const err = new Error(`Engine binary failed verification: ${reason}`);
+      err.diagnostics = { type: 'llama-server-verification', binary: trimmed, verification };
+      throw err;
     }
     return { runtime, path: trimmed, normalizedPath: normalizeCandidatePath(trimmed) };
   }

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { pauseForEngineSwap } from '../src/ai/controllers/ai/llamaServerManager.js';
+import { pauseForEngineSwap, selectionVerificationTimeout, verifyEngineSelection } from '../src/ai/controllers/ai/llamaServerManager.js';
 
 function fakeServer(initial) {
   const calls = [];
@@ -56,4 +56,24 @@ test('a model asked for with the install is started; with nothing running, nothi
   const result = await pausedFailing.restart({ modelsDir: '/m' });
   assert.equal(result.success, false);
   assert.equal(result.error, 'OOM');
+});
+
+test('switching engines checks the binary like an install does, without blocking', async () => {
+  // Same allowance as at install: CUDA builds get longer to start.
+  assert.equal(selectionVerificationTimeout('/x/llama-server', { install: { metadata: { asset: 'llama-b1-bin-win-cuda-12.4-x64.zip' } }, env: {} }), 120000);
+  assert.equal(selectionVerificationTimeout('/usr/bin/llama-server', { install: null, env: {} }), 30000);
+  assert.equal(selectionVerificationTimeout('/opt/llama-cuda/bin/llama-server', { install: null, env: {} }), 120000);
+  assert.equal(selectionVerificationTimeout('/usr/bin/llama-server', { install: null, env: { ASYNCAT_LLAMA_VERIFY_TIMEOUT_MS: '45000' } }), 45000);
+
+  let ticks = 0;
+  const timer = setInterval(() => { ticks += 1; }, 5);
+  try {
+    const ok = await verifyEngineSelection('binary', process.execPath);
+    assert.equal(ok.path, process.execPath);
+  } finally {
+    clearInterval(timer);
+  }
+  assert.ok(ticks >= 1, 'the event loop kept running during the check');
+
+  await assert.rejects(verifyEngineSelection('binary', '/no/such/llama-server'), /not found/);
 });
