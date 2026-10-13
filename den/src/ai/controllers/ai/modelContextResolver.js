@@ -9,12 +9,18 @@ const MODEL_CONTEXT_RULES = [
   { providerId: /^minimax(?:-cn)?$/i, model: /m2\.5/i, contextWindow: 200000 },
   { providerId: /^minimax(?:-cn)?$/i, model: /m1/i, contextWindow: 1000000 },
 
+  { providerId: /^gemini$/i, model: /gemini-3/i, contextWindow: 1048576 },
   { providerId: /^gemini$/i, model: /2\.5/i, contextWindow: 1048576 },
   { providerId: /^gemini$/i, model: /1\.5/i, contextWindow: 1048576 },
 
+  // Claude 5 and later (Fable, Opus, Sonnet, Haiku): 1M tokens, 128K out.
+  { providerId: /^anthropic$/i, model: /claude-(?:opus|sonnet|haiku|fable|mythos)-(?:[5-9]|\d{2,})/i, contextWindow: 1000000 },
   { providerId: /^anthropic$/i, model: /claude-(opus|sonnet)-4/i, contextWindow: 1000000 },
   { providerId: /^anthropic$/i, model: /claude/i, contextWindow: 200000 },
 
+  // GPT-6: 1,050,000 in all, at most 922,000 of it input and 128,000 output.
+  // The agent keeps history to 70% of the window, well under the input cap.
+  { providerId: /^openai$/i, model: /gpt-6/i, contextWindow: 1050000 },
   { providerId: /^openai$/i, model: /gpt-4\.1|gpt-4o|o3|o4/i, contextWindow: 128000 },
   { providerId: /^openai$/i, model: /gpt-5/i, contextWindow: 400000 },
 

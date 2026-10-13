@@ -32,7 +32,7 @@ import { toolRegistry } from '../../agent/tools/toolRegistry.js';
 import { formatMultimodalCapabilityPrompt, getMultimodalCapabilities } from '../../agent/multimodalCapabilities.js';
 import { normalizeApprovalDecision } from '../../agent/approvalDecisions.js';
 import { buildChatContext, projectForChat } from '../../knowledge/chatContext.js';
-import { getModelCapabilities } from '../controllers/ai/modelCapabilities.js';
+import { getModelCapabilities, normalizeReasoningEffort } from '../controllers/ai/modelCapabilities.js';
 import { getModelRuntimeStatus } from '../controllers/ai/modelRuntimeStatus.js';
 import { listProfiles, getProfile, getProfileByHandle, createProfile, updateProfile, deleteProfile, toolsForCapabilities, AGENT_CAPABILITIES } from '../../agent/ProfileManager.js';
 import { addKnowledgeFile, deleteKnowledgeFile, deleteOwnerKnowledge, listKnowledgeFiles, MAX_FILE_BYTES } from '../../knowledge/knowledgeStore.js';
@@ -406,14 +406,13 @@ router.post('/chat/stream', withWorkspaceContext, async (req, res) => {
 
   let answer = '';
   try {
-    const reasoningEffort = String(req.body?.reasoningEffort || '').trim();
+    // Only a level the model has, mapped to its nearest one (xhigh → high…).
+    const reasoningEffort = normalizeReasoningEffort(req.body?.reasoningEffort, modelCapabilities);
     const stream = await aiClient.client.chat.completions.create({
       model,
       messages,
       stream: true,
-      ...(reasoningEffort && reasoningEffort !== 'auto'
-        ? { reasoning_effort: reasoningEffort }
-        : {}),
+      ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
     }, { signal: abortController.signal });
 
     for await (const chunk of stream) {

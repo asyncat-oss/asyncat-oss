@@ -7,7 +7,7 @@ export class OpenAIClient {
   constructor(config) {
     this.endpoint = config.endpoint;
     this.apiKey = config.apiKey;
-    this.defaultModel = config.defaultModel || 'gpt-5.2';
+    this.defaultModel = config.defaultModel || 'gpt-6-astra';
     this.providerId = config.providerId || 'custom';
     this.settings = config.settings || {};
 

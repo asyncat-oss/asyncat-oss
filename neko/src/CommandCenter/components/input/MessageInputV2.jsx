@@ -972,11 +972,13 @@ export const MessageInputV2 = ({
       { value: "auto", label: "Auto", short: "Think auto", description: "Let the provider choose." }
     ];
     const tierMap = {
+      none: { value: "off", label: "Off", short: "Think off", description: "Answers straight away, without reasoning first." },
       minimal: { value: "minimal", label: "Minimal", short: "Think min", description: "Fastest reasoning." },
       low: { value: "low", label: "Low", short: "Think low", description: "Faster, lighter reasoning." },
       medium: { value: "medium", label: "Medium", short: "Think med", description: "Balanced reasoning." },
       high: { value: "high", label: "High", short: "Think high", description: "More careful reasoning." },
-      xhigh: { value: "xhigh", label: "Extra high", short: "Think xhigh", description: "Maximum effort where supported." },
+      xhigh: { value: "xhigh", label: "Extra high", short: "Think xhigh", description: "Even more careful reasoning." },
+      max: { value: "max", label: "Max", short: "Think max", description: "The most effort this model offers. Slowest." },
     };
     for (const t of tiers) {
       if (tierMap[t]) baseOptions.push(tierMap[t]);

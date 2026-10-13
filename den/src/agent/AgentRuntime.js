@@ -24,7 +24,7 @@ import { memoryConsolidator } from './MemoryConsolidator.js';
 import { isGitDangerousAction, isGitReadOnlyAction } from './gitService.js';
 import { isReadOnlyPackageCommand, isReadOnlyShellCommand } from './shellSafety.js';
 import { approvalAllows, approvalCoversRun, normalizeApprovalDecision } from './approvalDecisions.js';
-import { getModelCapabilities, normalizeReasoningEffort } from '../ai/controllers/ai/modelCapabilities.js';
+import { getModelCapabilities, nativeToolsAllowed, normalizeReasoningEffort } from '../ai/controllers/ai/modelCapabilities.js';
 import { cleanReasoningAnswer, combineReasoningParts, createStreamTextAccumulator, extractReasoningFromText, reasoningTextFromDelta } from './reasoningParser.js';
 import { resolveContextWindow } from '../ai/controllers/ai/modelContextResolver.js';
 import { getProviderPreset } from '../ai/controllers/ai/providerCatalog.js';
@@ -320,6 +320,13 @@ export class AgentRuntime {
     this.soulOverride = opts.soul || null;
     this.providerInfo = opts.providerInfo || null;
     this.reasoningEffort = opts.reasoningEffort || 'auto';
+    // Some models only take native tool calls in some settings (gpt-6.1-sol
+    // never on Chat Completions, gpt-6-luna only without reasoning); then the
+    // agent uses its text tool format.
+    if (this.supportsNativeTools) {
+      const providerId = this.providerInfo?.providerId || this.providerInfo?.provider_id || '';
+      if (!nativeToolsAllowed(getModelCapabilities(providerId, this.model), this.reasoningEffort)) this.supportsNativeTools = false;
+    }
     this.mentionedAgents = Array.isArray(opts.mentionedAgents) ? opts.mentionedAgents : [];
     this.agentMode = ['plan', 'action', 'design'].includes(opts.agentMode) ? opts.agentMode : 'action';
     this.enabledIntegrationTools = Array.isArray(opts.enabledIntegrationTools)

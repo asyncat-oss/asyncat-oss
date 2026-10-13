@@ -1,6 +1,14 @@
 // modelCapabilities.js — Centralized registry for AI model capabilities
 
+const GPT6_TIERS = ['low', 'medium', 'high', 'xhigh', 'max'];
+
 const CAPABILITIES_REGISTRY = [
+  // OpenAI GPT-6 (developers.openai.com/api/docs/models, Oct 2026). On Chat
+  // Completions, gpt-6.1-sol can't call tools and gpt-6-luna only can with
+  // reasoning set to none; the agent then uses its text tool format.
+  { match: /^gpt-6(?:\.\d+)?-luna/i, supportsReasoning: true, reasoningType: 'effort_string', reasoningTiers: ['none', ...GPT6_TIERS], nativeToolCalls: 'without_reasoning' },
+  { match: /^gpt-6(?:\.\d+)?-sol/i, supportsReasoning: true, reasoningType: 'effort_string', reasoningTiers: GPT6_TIERS, nativeToolCalls: 'never' },
+  { match: /^gpt-6(?:[.-]|$)/i, supportsReasoning: true, reasoningType: 'effort_string', reasoningTiers: GPT6_TIERS },
   // OpenAI
   { match: /^(o1|o3|o4-mini|gpt-5(?:[.-]|$)|gpt-5\.4-thinking|gpt-5\.5)/i, supportsReasoning: true, reasoningType: 'effort_string', reasoningTiers: ['low', 'medium', 'high'] },
   // DeepSeek
@@ -17,7 +25,7 @@ const CAPABILITIES_REGISTRY = [
 ];
 
 const IMAGE_INPUT_PATTERNS = [
-  /(?:^|[\W_])(gpt-4o|gpt-4\.1|gpt-4\.5|gpt-4-(?:turbo|vision)|gpt-5(?:[.-]|$)|o1(?:[.-]|$)|o3(?:[.-]|$)|o4(?:[.-]|$))/i,
+  /(?:^|[\W_])(gpt-4o|gpt-4\.1|gpt-4\.5|gpt-4-(?:turbo|vision)|gpt-5(?:[.-]|$)|gpt-6(?:[.-]|$)|o1(?:[.-]|$)|o3(?:[.-]|$)|o4(?:[.-]|$))/i,
   /(?:^|[\W_])gemini(?:[.-]|$)/i,
   /(?:^|[\W_])claude-(?:(?:opus|sonnet|haiku|fable)-)?(?:3|4|5)(?:[.-]|$)/i,
   /(?:^|[\W_])grok-(?:2-vision|4)(?:[.-]|$)/i,
@@ -76,6 +84,16 @@ function modelSupportsImageInput(providerId, modelId, metadata = null) {
   return IMAGE_INPUT_PATTERNS.some(pattern => pattern.test(modelText));
 }
 
+/**
+ * Whether a run can send this model native tool calls, given the reasoning
+ * effort it will use (see nativeToolCalls in getModelCapabilities).
+ */
+export function nativeToolsAllowed(capabilities, effort) {
+  if (!capabilities || capabilities.nativeToolCalls === 'always' || !capabilities.nativeToolCalls) return true;
+  if (capabilities.nativeToolCalls === 'never') return false;
+  return normalizeReasoningEffort(effort, capabilities) === 'none';
+}
+
 export function getModelCapabilities(providerId, modelId, modelMetadata = null) {
   const normalizedModelId = String(modelId || '').toLowerCase().trim();
   const normalizedProviderId = String(providerId || '').toLowerCase().trim();
@@ -88,6 +106,9 @@ export function getModelCapabilities(providerId, modelId, modelMetadata = null) 
     reasoningType: null,
     reasoningTiers: null,
   };
+  // Whether the model takes native tool calls on Chat Completions: 'always',
+  // 'never', or 'without_reasoning' (only with reasoning effort none).
+  let nativeToolCalls = 'always';
 
   if (normalizedProviderId !== 'anthropic') {
     for (const entry of CAPABILITIES_REGISTRY) {
@@ -97,6 +118,7 @@ export function getModelCapabilities(providerId, modelId, modelMetadata = null) 
         reasoningType: entry.reasoningType,
         reasoningTiers: entry.reasoningTiers,
       };
+      nativeToolCalls = entry.nativeToolCalls || 'always';
       break;
     }
   }
@@ -113,6 +135,7 @@ export function getModelCapabilities(providerId, modelId, modelMetadata = null) 
   const supportsImageInput = modelSupportsImageInput(normalizedProviderId, normalizedModelId, modelMetadata);
   return {
     ...reasoning,
+    nativeToolCalls,
     supportsImageInput,
     inputModalities: supportsImageInput ? ['text', 'image'] : ['text'],
   };
@@ -120,15 +143,21 @@ export function getModelCapabilities(providerId, modelId, modelMetadata = null) 
 
 export function normalizeReasoningEffort(value, capabilities) {
   const effort = String(value || '').trim().toLowerCase();
-  if (!effort || effort === 'auto' || effort === 'off' || effort === 'none') return null;
+  if (!effort || effort === 'auto') return null;
   
   if (!capabilities || !capabilities.supportsReasoning || capabilities.reasoningType !== 'effort_string') {
     return null; // Not supported or uses native tags (no payload parameter needed)
   }
 
   const validTiers = capabilities.reasoningTiers || ['low', 'medium', 'high'];
+
+  // "Off" is sent only to models that can switch reasoning off.
+  if (effort === 'off' || effort === 'none') return validTiers.includes('none') ? 'none' : null;
   
-  // Mapping aliases
+  // Mapping aliases: each level falls back to the strongest one a model has.
+  if (effort === 'max' || effort === 'maximum') {
+    return ['max', 'xhigh', 'high'].find((tier) => validTiers.includes(tier)) || null;
+  }
   if (effort === 'extra_high' || effort === 'extra-high' || effort === 'xhigh') {
     return validTiers.includes('xhigh') ? 'xhigh' : validTiers.includes('high') ? 'high' : null;
   }

@@ -2203,7 +2203,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
   }, []);
 
   const handleReasoningEffortChange = useCallback((next) => {
-    const value = ['auto', 'low', 'medium', 'high', 'xhigh'].includes(next) ? next : 'auto';
+    const value = ['auto', 'off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(next) ? next : 'auto';
     setReasoningEffort(value);
     try { localStorage.setItem('asyncat_reasoning_effort', value); } catch { /* localStorage may be unavailable */ }
   }, []);
