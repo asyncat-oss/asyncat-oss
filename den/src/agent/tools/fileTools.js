@@ -5,10 +5,9 @@
 
 import fs from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
 import * as parser from '@babel/parser';
 import { PermissionLevel } from './toolRegistry.js';
-import { safePath, truncate } from './shared.js';
+import { clampInt, firstLines, hasBin, runFile, safePath, truncate } from './shared.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -510,24 +509,29 @@ export const searchFilesTool = {
   },
   execute: async (args, context) => {
     const searchPath = safePath(args.path || '.', context.workingDir);
-    const max = Math.min(args.max_results || 30, 80);
+    const max = clampInt(args.max_results, 30, 1, 80);
 
-    // Try ripgrep first, fall back to grep
-    let cmd;
-    const escapedPattern = args.pattern.replace(/'/g, "'\\''");
-    const includeFlag = args.include ? `--include='${args.include}'` : '';
-
-    try {
-      // Check if rg (ripgrep) is available
-      execSync('which rg', { stdio: 'ignore' });
-      const rgInclude = args.include ? `--glob '${args.include}'` : '';
-      cmd = `rg --no-heading --line-number --max-count ${max} ${rgInclude} -e '${escapedPattern}' '${searchPath}' 2>/dev/null | head -${max}`;
-    } catch {
-      cmd = `grep -rnI ${includeFlag} --max-count=${max} '${escapedPattern}' '${searchPath}' 2>/dev/null | head -${max}`;
+    // Programs run with argument lists (no shell): the pattern, glob and
+    // path all come from the model.
+    const pattern = String(args.pattern ?? '');
+    let run;
+    if (hasBin('rg')) {
+      run = runFile('rg', [
+        '--no-heading', '--line-number', '--max-count', max,
+        ...(args.include ? ['--glob', String(args.include)] : []),
+        '-e', pattern, '--', searchPath,
+      ], { cwd: context.workingDir, timeout: 15000 });
+    } else {
+      run = runFile('grep', [
+        '-rnI', ...(args.include ? [`--include=${args.include}`] : []), `--max-count=${max}`,
+        '-e', pattern, '--', searchPath,
+      ], { cwd: context.workingDir, timeout: 15000 });
     }
 
     try {
-      const output = execSync(cmd, { cwd: context.workingDir, encoding: 'utf8', timeout: 15000, maxBuffer: 512 * 1024 });
+      // rg and grep exit 1 when nothing matches.
+      if (!run.ok && run.status !== 1) throw new Error(run.error);
+      const output = firstLines(run.stdout, max);
       const rawLines = output.trim().split('\n').filter(Boolean);
 
       // Parse results into structured objects for better agent consumption
@@ -639,11 +643,13 @@ export const findFilesTool = {
   },
   execute: async (args, context) => {
     const searchPath = safePath(args.path || '.', context.workingDir);
-    const escapedPattern = args.pattern.replace(/'/g, "'\\''");
 
     try {
-      const cmd = `find '${searchPath}' -name '${escapedPattern}' -not -path '*/node_modules/*' -not -path '*/.git/*' -not -path '*/__pycache__/*' 2>/dev/null | head -50`;
-      const output = execSync(cmd, { encoding: 'utf8', timeout: 10000 });
+      const run = runFile('find', [
+        searchPath, '-name', String(args.pattern ?? ''),
+        '-not', '-path', '*/node_modules/*', '-not', '-path', '*/.git/*', '-not', '-path', '*/__pycache__/*',
+      ], { timeout: 10000 });
+      const output = firstLines(run.stdout, 50);
       const files = output.trim().split('\n').filter(Boolean).map(f => path.relative(context.workingDir, f));
       return {
         success: true,
@@ -678,13 +684,22 @@ export const fileDiffTool = {
     }
 
     try {
+      // Programs run with argument lists, not a shell: file names inside the
+      // folder can contain $(...) or quotes.
+      const run = (file, argv) => {
+        const res = runFile(file, argv, { cwd: context.workingDir, timeout: 10000 });
+        // diff exits 1 when the files differ; only a failure to run is null.
+        return res.status === null ? null : res.stdout;
+      };
       let output;
       if (args.compare_to) {
         const comparePath = safePath(args.compare_to, context.workingDir);
-        output = execSync(`diff -u "${comparePath}" "${filePath}" 2>/dev/null || true`, { encoding: 'utf8', timeout: 10000 });
+        output = run('diff', ['-u', '--', comparePath, filePath]) ?? '';
       } else {
-        const cl = args.context_lines || 3;
-        output = execSync(`git diff --no-color -U ${cl} -- "${filePath}" 2>/dev/null || diff -u /dev/null "${filePath}" 2>/dev/null || echo "No git repo and no compare_to specified"`, { cwd: context.workingDir, encoding: 'utf8', timeout: 10000 });
+        const cl = Math.min(Math.max(Number.parseInt(args.context_lines, 10) || 3, 0), 50);
+        output = run('git', ['diff', '--no-color', `-U${cl}`, '--', filePath])
+          || run('diff', ['-u', '/dev/null', filePath])
+          || 'No git repo and no compare_to specified';
       }
       if (!output.trim()) return { success: true, path: args.path, diff: '(no changes)', changes: 0 };
 
@@ -720,24 +735,23 @@ export const globFindTool = {
   },
   execute: async (args, context) => {
     const searchPath = safePath(args.path || '.', context.workingDir);
-    const max = args.max_results || 100;
-    const pattern = args.pattern;
+    const max = clampInt(args.max_results, 100, 1, 500);
+    const pattern = String(args.pattern ?? '');
 
     try {
-      // Use fd if available (fast, respects gitignore), otherwise find
-      let cmd;
-      try {
-        execSync('which fd', { stdio: 'ignore' });
-        const escaped = pattern.replace(/'/g, "'\\''");
-        cmd = `fd --type f --glob '${escaped}' '${searchPath}' 2>/dev/null | head -${max}`;
-      } catch {
-        // Fallback: convert simple glob to find pattern
-        // **/*.js → -name '*.js', src/**/*.ts → -path '*/src/**/*.ts'
-        const basename = path.basename(pattern);
-        const escaped = basename.replace(/'/g, "'\\''");
-        cmd = `find '${searchPath}' -path '*/node_modules' -prune -o -path '*/.git' -prune -o -name '${escaped}' -print 2>/dev/null | head -${max}`;
+      // Use fd if available (fast, respects gitignore), otherwise find.
+      // Both run with argument lists, not a shell.
+      let run;
+      if (hasBin('fd')) {
+        run = runFile('fd', ['--type', 'f', '--glob', pattern, searchPath], { timeout: 15000 });
+      } else {
+        // **/*.js → -name '*.js'
+        run = runFile('find', [
+          searchPath, '-path', '*/node_modules', '-prune', '-o', '-path', '*/.git', '-prune', '-o',
+          '-name', path.basename(pattern), '-print',
+        ], { timeout: 15000 });
       }
-      const output = execSync(cmd, { encoding: 'utf8', timeout: 15000 });
+      const output = firstLines(run.stdout, max);
       const files = output.trim().split('\n').filter(Boolean).map(f => path.relative(context.workingDir, f));
       return {
         success: true,

@@ -4,28 +4,60 @@
 //   take_screenshot  — captures the full screen or a window as PNG
 //   screen_click     — moves mouse and clicks at x,y
 //   screen_type      — types text via keyboard
-//   screen_read      — runs OCR on the last screenshot (text extraction)
+//   screen_read      — runs OCR on a screenshot (text extraction)
 //
-// Linux: uses scrot/gnome-screenshot + xdotool (sudo apt install scrot xdotool)
-// macOS: uses screencapture + cliclick
-// Windows: uses native PowerShell commands
-// All output is written to a temp file, path returned to agent.
-// Zero new npm packages — pure child_process.
+// Linux, Wayland: grim for screenshots, hyprctl on Hyprland for windows,
+//   wtype for typing and ydotool for clicks when installed.
+// Linux, X11: scrot/gnome-screenshot/ImageMagick + xdotool.
+// macOS: screencapture + cliclick + osascript.
+// Windows: built-in PowerShell.
+//
+// Every program runs with an argument list, never through a shell: window
+// titles and typed text come from the model.
 
-import { execSync, execFileSync, spawnSync } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { PermissionLevel } from './toolRegistry.js';
-import { hasBin, IS_WIN, PLATFORM, shellQuote, missingDepError } from './shared.js';
+import {
+  hasBin, IS_WIN, PLATFORM, missingDepError, runFile, runPowerShell, runAppleScript,
+  powerShellLiteral, appleScriptLiteral,
+} from './shared.js';
 
 const TMP_DIR = path.join(os.tmpdir(), 'asyncat-screen');
 fs.mkdirSync(TMP_DIR, { recursive: true });
 
+const isWayland = () => PLATFORM === 'linux' && Boolean(process.env.WAYLAND_DISPLAY);
+const isHyprland = () => isWayland() && Boolean(process.env.HYPRLAND_INSTANCE_SIGNATURE) && hasBin('hyprctl');
+
+function coord(value) {
+  const n = Math.round(Number(value));
+  return Number.isFinite(n) ? n : null;
+}
+
+function hyprClients() {
+  const res = runFile('hyprctl', ['clients', '-j'], { timeout: 3000 });
+  if (!res.ok) return [];
+  try {
+    return JSON.parse(res.stdout).filter((c) => c.mapped !== false);
+  } catch {
+    return [];
+  }
+}
+
+function matchesTitle(client, pattern) {
+  const needle = String(pattern || '').toLowerCase();
+  return `${client.title || ''} ${client.class || ''}`.toLowerCase().includes(needle);
+}
+
+function fail(result, fallback) {
+  return { success: false, error: result?.error || fallback };
+}
+
 // ── take_screenshot ───────────────────────────────────────────────────────────
 export const takeScreenshotTool = {
   name: 'take_screenshot',
-  description: 'Capture the current screen or a specific window as a PNG image. Returns the file path. Use before screen_read or to observe UI state. Requires: scrot (Linux) or screencapture (macOS).',
+  description: 'Capture the current screen or a specific window as a PNG image. Returns the file path. Use before screen_read or to observe UI state.',
   category: 'screen',
   permission: PermissionLevel.MODERATE,
   parameters: {
@@ -37,44 +69,55 @@ export const takeScreenshotTool = {
     required: [],
   },
   execute: async (args) => {
-    const fname = args.output_name || `screen_${Date.now()}.png`;
-    const outPath = path.join(TMP_DIR, path.basename(fname));
+    const fname = path.basename(String(args.output_name || `screen_${Date.now()}.png`));
+    const outPath = path.join(TMP_DIR, fname.endsWith('.png') ? fname : `${fname}.png`);
 
     try {
-      if (PLATFORM === 'linux') {
-        if (args.window_title) {
-          // Focus then screenshot with scrot
-          if (hasBin('xdotool') && hasBin('scrot')) {
-            execSync(`xdotool search --name "${args.window_title}" windowfocus --sync 2>/dev/null; scrot "${outPath}" --focused --delay 0 2>/dev/null || scrot "${outPath}" 2>/dev/null`, { timeout: 8000 });
-          } else if (hasBin('gnome-screenshot')) {
-            execSync(`gnome-screenshot -f "${outPath}" 2>/dev/null`, { timeout: 8000 });
-          } else {
-            return { success: false, error: 'No screenshot tool found. Install: sudo apt install scrot xdotool' };
-          }
+      let res;
+      if (isWayland()) {
+        if (!hasBin('grim')) return missingDepError('grim', 'Install grim for screenshots on Wayland (e.g. sudo pacman -S grim).');
+        const geometry = [];
+        if (args.window_title && isHyprland()) {
+          const client = hyprClients().find((c) => matchesTitle(c, args.window_title));
+          if (!client) return { success: false, error: `No window found for: ${args.window_title}` };
+          const [x, y] = client.at;
+          const [w, h] = client.size;
+          geometry.push('-g', `${x},${y} ${w}x${h}`);
+        }
+        res = runFile('grim', [...geometry, outPath], { timeout: 8000 });
+      } else if (PLATFORM === 'linux') {
+        if (args.window_title && hasBin('xdotool')) {
+          runFile('xdotool', ['search', '--name', String(args.window_title), 'windowfocus', '--sync'], { timeout: 5000 });
+        }
+        if (hasBin('scrot')) {
+          res = runFile('scrot', args.window_title ? ['--focused', '--delay', '0', outPath] : [outPath], { timeout: 8000 });
+        } else if (hasBin('gnome-screenshot')) {
+          res = runFile('gnome-screenshot', ['-f', outPath], { timeout: 8000 });
+        } else if (hasBin('import')) {
+          res = runFile('import', ['-window', 'root', outPath], { timeout: 8000 });
         } else {
-          if (hasBin('scrot')) {
-            execSync(`scrot "${outPath}" 2>/dev/null`, { timeout: 8000 });
-          } else if (hasBin('gnome-screenshot')) {
-            execSync(`gnome-screenshot -f "${outPath}" 2>/dev/null`, { timeout: 8000 });
-          } else if (hasBin('import')) {
-            execSync(`import -window root "${outPath}" 2>/dev/null`, { timeout: 8000 });
-          } else {
-            return { success: false, error: 'No screenshot tool found. Install: sudo apt install scrot' };
-          }
+          return { success: false, error: 'No screenshot tool found. Install scrot (X11) or grim (Wayland).' };
         }
       } else if (PLATFORM === 'darwin') {
-        execSync(`screencapture -x "${outPath}" 2>/dev/null`, { timeout: 8000 });
+        res = runFile('screencapture', ['-x', outPath], { timeout: 8000 });
       } else if (IS_WIN) {
-        const psCmd = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Screen]::PrimaryBounds; $bmp = New-Object System.Drawing.Bitmap([System.Windows.Forms.Screen]::PrimaryBounds.Width, [System.Windows.Forms.Screen]::PrimaryBounds.Height); $gfx = [System.Drawing.Graphics]::FromImage($bmp); $gfx.CopyFromScreen([System.Drawing.Point]::Empty, [System.Drawing.Point]::Empty, $bmp.Size); $bmp.Save('${outPath.replace(/\\/g, '\\\\')}'); $gfx.Dispose(); $bmp.Dispose(); Write-Output 'ok'`;
-        execSync(`powershell -NoProfile -Command "${psCmd}"`, { timeout: 15000 });
+        res = runPowerShell([
+          'Add-Type -AssemblyName System.Windows.Forms',
+          'Add-Type -AssemblyName System.Drawing',
+          '$b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds',
+          '$bmp = New-Object System.Drawing.Bitmap($b.Width, $b.Height)',
+          '$gfx = [System.Drawing.Graphics]::FromImage($bmp)',
+          '$gfx.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)',
+          `$bmp.Save(${powerShellLiteral(outPath)})`,
+          '$gfx.Dispose(); $bmp.Dispose()',
+        ].join('; '), { timeout: 15000 });
       } else {
-        return missingDepError('screenshot tool', 'Linux: sudo apt install scrot | macOS: built-in screencapture | Windows: built-in PowerShell');
+        return missingDepError('screenshot tool', 'Linux: grim or scrot | macOS: built-in screencapture | Windows: built-in PowerShell');
       }
 
       if (!fs.existsSync(outPath)) {
-        return { success: false, error: 'Screenshot file not created. ' + (IS_WIN ? 'Check that PowerShell and .NET are available.' : 'Check display environment (DISPLAY variable on Linux).') };
+        return fail(res, 'Screenshot file not created. Check the display environment.');
       }
-
       const stat = fs.statSync(outPath);
       return {
         success: true,
@@ -92,7 +135,7 @@ export const takeScreenshotTool = {
 // ── screen_read (OCR) ─────────────────────────────────────────────────────────
 export const screenReadTool = {
   name: 'screen_read',
-  description: 'Extract text from a screenshot using OCR (tesseract). Call take_screenshot first to get the file path. Returns the recognized text. Requires: tesseract-ocr (sudo apt install tesseract-ocr).',
+  description: 'Extract text from a screenshot using OCR (tesseract). Call take_screenshot first and pass the path it returned.',
   category: 'screen',
   permission: PermissionLevel.SAFE,
   parameters: {
@@ -102,31 +145,33 @@ export const screenReadTool = {
     },
     required: ['image_path'],
   },
-  execute: async (args) => {
-    const imgPath = args.image_path;
+  execute: async (args, context = {}) => {
+    const imgPath = path.resolve(context.workingDir || TMP_DIR, String(args.image_path || ''));
+    // OCR is a way to read files, so only screenshots and project files.
+    const allowedRoots = [TMP_DIR, context.workingDir].filter(Boolean).map((root) => path.resolve(root));
+    if (!allowedRoots.some((root) => imgPath === root || imgPath.startsWith(root + path.sep))) {
+      return { success: false, error: 'screen_read only reads screenshots from take_screenshot or images inside the project folder.' };
+    }
     if (!fs.existsSync(imgPath)) {
-      return { success: false, error: `File not found: ${imgPath}` };
+      return { success: false, error: `File not found: ${args.image_path}` };
     }
     if (!hasBin('tesseract')) {
-      return missingDepError('tesseract', 'macOS: brew install tesseract | Linux: sudo apt install tesseract-ocr | Windows: Install from https://github.com/UB-Mannheim/tesseract/wiki');
+      return missingDepError('tesseract', 'macOS: brew install tesseract | Linux: install tesseract | Windows: https://github.com/UB-Mannheim/tesseract/wiki');
     }
-    try {
-      const outBase = path.join(TMP_DIR, `ocr_${Date.now()}`);
-      execSync(`tesseract "${imgPath}" "${outBase}" 2>/dev/null`, { timeout: 15000 });
-      const txtPath = outBase + '.txt';
-      const text = fs.readFileSync(txtPath, 'utf8').trim();
-      try { fs.unlinkSync(txtPath); } catch {}
-      return { success: true, text: text.slice(0, 8000), chars: text.length };
-    } catch (err) {
-      return { success: false, error: err.message };
-    }
+    const outBase = path.join(TMP_DIR, `ocr_${Date.now()}`);
+    const res = runFile('tesseract', [imgPath, outBase], { timeout: 15000 });
+    const txtPath = `${outBase}.txt`;
+    if (!fs.existsSync(txtPath)) return fail(res, 'OCR produced no text file.');
+    const text = fs.readFileSync(txtPath, 'utf8').trim();
+    try { fs.unlinkSync(txtPath); } catch {}
+    return { success: true, text: text.slice(0, 8000), chars: text.length };
   },
 };
 
 // ── screen_click ──────────────────────────────────────────────────────────────
 export const screenClickTool = {
   name: 'screen_click',
-  description: 'Move the mouse to screen coordinates (x, y) and click. Supports left, right, and double clicks. Use after take_screenshot to identify coordinates. Requires: xdotool (Linux) or cliclick (macOS).',
+  description: 'Move the mouse to screen coordinates (x, y) and click. Supports left, right, and double clicks. Use after take_screenshot to identify coordinates.',
   category: 'screen',
   permission: PermissionLevel.DANGEROUS,
   parameters: {
@@ -139,49 +184,46 @@ export const screenClickTool = {
     required: ['x', 'y'],
   },
   execute: async (args) => {
-    const x = Math.round(args.x);
-    const y = Math.round(args.y);
-    const button = args.button || 'left';
+    const x = coord(args.x);
+    const y = coord(args.y);
+    if (x === null || y === null) return { success: false, error: 'x and y must be numbers.' };
+    const button = ['left', 'right', 'double'].includes(args.button) ? args.button : 'left';
 
-    try {
-      if (PLATFORM === 'linux') {
-        if (!hasBin('xdotool')) {
-          return { success: false, error: 'xdotool not found. Install: sudo apt install xdotool' };
-        }
-        if (button === 'double') {
-          execSync(`xdotool mousemove ${x} ${y} click --clearmodifiers 1 click --clearmodifiers 1`, { timeout: 5000 });
-        } else if (button === 'right') {
-          execSync(`xdotool mousemove ${x} ${y} click --clearmodifiers 3`, { timeout: 5000 });
-        } else {
-          execSync(`xdotool mousemove ${x} ${y} click --clearmodifiers 1`, { timeout: 5000 });
-        }
-      } else if (PLATFORM === 'darwin') {
-        if (!hasBin('cliclick')) {
-          return { success: false, error: 'cliclick not found. Install: brew install cliclick' };
-        }
-        const action = button === 'double' ? 'dc' : button === 'right' ? 'rc' : 'c';
-        execSync(`cliclick ${action}:${x},${y}`, { timeout: 5000 });
-      } else if (IS_WIN) {
-        const btn = button === 'right' ? 'RightClick' : 'LeftClick';
-        const clickCmd = button === 'double'
-          ? `[System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${x},${y}); Start-Sleep -Milliseconds 50; [System.Windows.Forms.SendKeys]::SendWait('{ENTER}'); Start-Sleep -Milliseconds 50; [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')`
-          : `[System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${x},${y}); Start-Sleep -Milliseconds 50; $wshell = New-Object -ComObject WScript.Shell; $wshell.SendKeys('{ENTER}')`;
-        const ps = `Add-Type -AssemblyName System.Windows.Forms; ${clickCmd}`;
-        execSync(`powershell -NoProfile -Command "${ps}"`, { timeout: 10000 });
-      } else {
-        return missingDepError('screen click tool', 'Linux: sudo apt install xdotool | macOS: brew install cliclick | Windows: built-in PowerShell');
-      }
-      return { success: true, x, y, button };
-    } catch (err) {
-      return { success: false, error: err.message };
+    let res;
+    if (isWayland()) {
+      if (!hasBin('ydotool')) return missingDepError('ydotool', 'Clicking on Wayland needs ydotool and its ydotoold service.');
+      const code = button === 'right' ? '0xC1' : '0xC0';
+      res = runFile('ydotool', ['mousemove', '--absolute', '-x', x, '-y', y], { timeout: 5000 });
+      if (res.ok) res = runFile('ydotool', ['click', ...(button === 'double' ? ['--repeat', '2'] : []), code], { timeout: 5000 });
+    } else if (PLATFORM === 'linux') {
+      if (!hasBin('xdotool')) return missingDepError('xdotool', 'Install xdotool (X11).');
+      const clicks = button === 'double' ? ['click', '--repeat', '2', '1'] : ['click', button === 'right' ? '3' : '1'];
+      res = runFile('xdotool', ['mousemove', x, y, ...clicks], { timeout: 5000 });
+    } else if (PLATFORM === 'darwin') {
+      if (!hasBin('cliclick')) return missingDepError('cliclick', 'brew install cliclick');
+      const action = button === 'double' ? 'dc' : button === 'right' ? 'rc' : 'c';
+      res = runFile('cliclick', [`${action}:${x},${y}`], { timeout: 5000 });
+    } else if (IS_WIN) {
+      const [down, up] = button === 'right' ? ['0x0008', '0x0010'] : ['0x0002', '0x0004'];
+      const times = button === 'double' ? 2 : 1;
+      res = runPowerShell([
+        'Add-Type -AssemblyName System.Windows.Forms',
+        // No double quotes: they would need escaping on the Windows command line.
+        "Add-Type -MemberDefinition '[DllImport(''user32.dll'')] public static extern void mouse_event(int f, int x, int y, int d, int e);' -Name M -Namespace W",
+        `[System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${x}, ${y})`,
+        `1..${times} | ForEach-Object { [W.M]::mouse_event(${down}, 0, 0, 0, 0); [W.M]::mouse_event(${up}, 0, 0, 0, 0); Start-Sleep -Milliseconds 60 }`,
+      ].join('; '), { timeout: 10000 });
+    } else {
+      return missingDepError('screen click tool', 'Linux: xdotool or ydotool | macOS: cliclick | Windows: built-in PowerShell');
     }
+    return res.ok ? { success: true, x, y, button } : fail(res, 'Click failed.');
   },
 };
 
 // ── screen_type ───────────────────────────────────────────────────────────────
 export const screenTypeTool = {
   name: 'screen_type',
-  description: 'Type text at the current cursor position using keyboard simulation. Optionally click a location first. Requires: xdotool (Linux) or cliclick (macOS).',
+  description: 'Type text at the current cursor position using keyboard simulation. Optionally click a location first.',
   category: 'screen',
   permission: PermissionLevel.DANGEROUS,
   parameters: {
@@ -195,85 +237,129 @@ export const screenTypeTool = {
     required: ['text'],
   },
   execute: async (args) => {
-    try {
-      if (PLATFORM === 'linux') {
-        if (!hasBin('xdotool')) {
-          return { success: false, error: 'xdotool not found. Install: sudo apt install xdotool' };
-        }
-        if (args.click_x !== undefined && args.click_y !== undefined) {
-          execSync(`xdotool mousemove ${Math.round(args.click_x)} ${Math.round(args.click_y)} click --clearmodifiers 1`, { timeout: 3000 });
-        }
-        // Escape single quotes in text for shell
-        const safe = args.text.replace(/'/g, "'\\''");
-        execSync(`xdotool type --clearmodifiers --delay 30 '${safe}'`, { timeout: 10000 });
-        if (args.press_enter) {
-          execSync(`xdotool key --clearmodifiers Return`, { timeout: 2000 });
-        }
-      } else if (PLATFORM === 'darwin') {
-        if (!hasBin('cliclick')) {
-          return { success: false, error: 'cliclick not found. Install: brew install cliclick' };
-        }
-        if (args.click_x !== undefined && args.click_y !== undefined) {
-          execSync(`cliclick c:${Math.round(args.click_x)},${Math.round(args.click_y)}`, { timeout: 3000 });
-        }
-        // macOS: use osascript for reliable typing
-        const escaped = args.text.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-        execSync(`osascript -e 'tell application "System Events" to keystroke "${escaped}"'`, { timeout: 10000 });
-        if (args.press_enter) {
-          execSync(`osascript -e 'tell application "System Events" to key code 36'`, { timeout: 2000 });
-        }
-      } else if (IS_WIN) {
-        if (args.click_x !== undefined && args.click_y !== undefined) {
-          const posCmd = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${Math.round(args.click_x)},${Math.round(args.click_y)})`;
-          execSync(`powershell -NoProfile -Command "${posCmd}"`, { timeout: 3000 });
-        }
-        const ps = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${args.text.replace(/'/g, "''")}')`;
-        execSync(`powershell -NoProfile -Command "${ps}"`, { timeout: 10000 });
-        if (args.press_enter) {
-          execSync(`powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')"`, { timeout: 3000 });
-        }
-      } else {
-        return missingDepError('screen type', 'Linux: sudo apt install xdotool | macOS: built-in | Windows: built-in PowerShell');
-      }
-      return { success: true, typed: args.text.slice(0, 100) + (args.text.length > 100 ? '...' : ''), pressed_enter: !!args.press_enter };
-    } catch (err) {
-      return { success: false, error: err.message };
+    const text = String(args.text ?? '');
+    if (args.click_x !== undefined && args.click_y !== undefined) {
+      const clicked = await screenClickTool.execute({ x: args.click_x, y: args.click_y });
+      if (!clicked.success) return clicked;
     }
+
+    let res;
+    if (isWayland()) {
+      if (!hasBin('wtype')) return missingDepError('wtype', 'Typing on Wayland needs wtype.');
+      res = runFile('wtype', ['--', text], { timeout: 10000 });
+      if (res.ok && args.press_enter) res = runFile('wtype', ['-k', 'Return'], { timeout: 2000 });
+    } else if (PLATFORM === 'linux') {
+      if (!hasBin('xdotool')) return missingDepError('xdotool', 'Install xdotool (X11).');
+      res = runFile('xdotool', ['type', '--clearmodifiers', '--delay', '30', '--', text], { timeout: 10000 });
+      if (res.ok && args.press_enter) res = runFile('xdotool', ['key', '--clearmodifiers', 'Return'], { timeout: 2000 });
+    } else if (PLATFORM === 'darwin') {
+      res = runAppleScript(`tell application "System Events" to keystroke ${appleScriptLiteral(text)}`, { timeout: 10000 });
+      if (res.ok && args.press_enter) res = runAppleScript('tell application "System Events" to key code 36', { timeout: 2000 });
+    } else if (IS_WIN) {
+      // SendKeys treats + ^ % ~ ( ) { } [ ] as commands; brace them to type them.
+      const sendKeysText = text.replace(/[+^%~(){}[\]]/g, (ch) => `{${ch}}`);
+      res = runPowerShell([
+        'Add-Type -AssemblyName System.Windows.Forms',
+        `[System.Windows.Forms.SendKeys]::SendWait(${powerShellLiteral(sendKeysText)})`,
+        ...(args.press_enter ? ["[System.Windows.Forms.SendKeys]::SendWait('{ENTER}')"] : []),
+      ].join('; '), { timeout: 10000 });
+    } else {
+      return missingDepError('screen type', 'Linux: wtype or xdotool | macOS: built-in | Windows: built-in PowerShell');
+    }
+    return res.ok
+      ? { success: true, typed: text.slice(0, 100) + (text.length > 100 ? '...' : ''), pressed_enter: !!args.press_enter }
+      : fail(res, 'Typing failed.');
   },
 };
 
 // ── screen_key ────────────────────────────────────────────────────────────────
+const KEY_COMBO = /^[A-Za-z0-9_]+(\+[A-Za-z0-9_]+)*$/;
+const MODIFIERS = new Set(['ctrl', 'control', 'shift', 'alt', 'super', 'meta', 'cmd', 'command', 'logo']);
+
 export const screenKeyTool = {
   name: 'screen_key',
-  description: 'Press a keyboard shortcut or special key. Examples: "ctrl+c", "Return", "Escape", "ctrl+shift+t". Requires: xdotool (Linux).',
+  description: 'Press a keyboard shortcut or special key. Examples: "ctrl+c", "Return", "Escape", "ctrl+shift+t".',
   category: 'screen',
   permission: PermissionLevel.DANGEROUS,
   parameters: {
     type: 'object',
     properties: {
-      key: { type: 'string', description: 'Key or combo to press. Use xdotool key syntax: "ctrl+c", "Return", "alt+F4", "super"' },
+      key: { type: 'string', description: 'Key or combo to press, e.g. "ctrl+c", "Return", "alt+F4"' },
     },
     required: ['key'],
   },
   execute: async (args) => {
-    try {
-      if (PLATFORM === 'linux') {
-        if (!hasBin('xdotool')) return { success: false, error: 'xdotool not found. Install: sudo apt install xdotool' };
-        execSync(`xdotool key --clearmodifiers ${args.key}`, { timeout: 3000 });
-      } else if (PLATFORM === 'darwin') {
-        // Map common keys to osascript
-        const keyMap = { 'ctrl+c': 'key code 8 using control down', 'Return': 'key code 36', 'Escape': 'key code 53' };
-        const cmd = keyMap[args.key] || `keystroke "${args.key}"`;
-        execSync(`osascript -e 'tell application "System Events" to ${cmd}'`, { timeout: 3000 });
-      }
-      return { success: true, key: args.key };
-    } catch (err) {
-      return { success: false, error: err.message };
+    const key = String(args.key || '').trim();
+    if (!KEY_COMBO.test(key)) return { success: false, error: 'key must look like "ctrl+c", "Return" or "alt+F4".' };
+    const parts = key.split('+');
+    const main = parts[parts.length - 1];
+    const mods = parts.slice(0, -1).map((m) => m.toLowerCase());
+    if (mods.some((m) => !MODIFIERS.has(m))) return { success: false, error: `Unknown modifier in "${key}".` };
+
+    let res;
+    if (isWayland()) {
+      if (!hasBin('wtype')) return missingDepError('wtype', 'Pressing keys on Wayland needs wtype.');
+      const waylandMod = { control: 'ctrl', cmd: 'logo', command: 'logo', super: 'logo', meta: 'logo' };
+      const modArgs = mods.flatMap((m) => ['-M', waylandMod[m] || m]);
+      const releaseArgs = mods.flatMap((m) => ['-m', waylandMod[m] || m]);
+      res = runFile('wtype', [...modArgs, '-k', main, ...releaseArgs], { timeout: 3000 });
+    } else if (PLATFORM === 'linux') {
+      if (!hasBin('xdotool')) return missingDepError('xdotool', 'Install xdotool (X11).');
+      res = runFile('xdotool', ['key', '--clearmodifiers', key], { timeout: 3000 });
+    } else if (PLATFORM === 'darwin') {
+      const special = { Return: 36, Enter: 36, Escape: 53, Tab: 48, space: 49, BackSpace: 51, Delete: 51 };
+      const using = mods.map((m) => ({ ctrl: 'control down', control: 'control down', shift: 'shift down', alt: 'option down', cmd: 'command down', command: 'command down', super: 'command down', meta: 'command down', logo: 'command down' })[m]);
+      const action = special[main] !== undefined ? `key code ${special[main]}` : `keystroke ${appleScriptLiteral(main.toLowerCase())}`;
+      res = runAppleScript(`tell application "System Events" to ${action}${using.length ? ` using {${using.join(', ')}}` : ''}`, { timeout: 3000 });
+    } else if (IS_WIN) {
+      const winMod = { ctrl: '^', control: '^', shift: '+', alt: '%' };
+      const named = { Return: '{ENTER}', Enter: '{ENTER}', Escape: '{ESC}', Tab: '{TAB}', BackSpace: '{BACKSPACE}', Delete: '{DELETE}' };
+      const body = named[main] || (/^F\d{1,2}$/.test(main) ? `{${main}}` : main.toLowerCase());
+      const combo = mods.map((m) => winMod[m] || '').join('') + body;
+      res = runPowerShell(`Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait(${powerShellLiteral(combo)})`, { timeout: 3000 });
+    } else {
+      return missingDepError('screen key', 'Linux: wtype or xdotool | macOS: built-in | Windows: built-in PowerShell');
     }
+    return res.ok ? { success: true, key } : fail(res, 'Key press failed.');
   },
 };
 
-// ── screen_find_window ────────────────────────────────────────────────────────
+// ── Windows ───────────────────────────────────────────────────────────────────
+function listWindows() {
+  if (isHyprland()) {
+    return hyprClients().map((c) => ({
+      id: c.address,
+      title: c.title,
+      app: c.class,
+      geometry: { x: c.at?.[0], y: c.at?.[1], width: c.size?.[0], height: c.size?.[1] },
+    }));
+  }
+  if (PLATFORM === 'linux') {
+    if (!hasBin('xdotool')) return null;
+    const ids = runFile('xdotool', ['search', '--onlyvisible', '--name', '.'], { timeout: 3000 }).stdout.trim().split('\n').filter(Boolean);
+    return ids.slice(0, 100).map((id) => {
+      const title = runFile('xdotool', ['getwindowname', id], { timeout: 1000 }).stdout.trim() || '(unknown)';
+      const geometry = {};
+      for (const line of runFile('xdotool', ['getwindowgeometry', '--shell', id], { timeout: 1000 }).stdout.split('\n')) {
+        const [k, v] = line.split('=');
+        if (k && v !== undefined) geometry[k.toLowerCase()] = Number(v) || v;
+      }
+      return { id, title, geometry };
+    });
+  }
+  if (PLATFORM === 'darwin') {
+    const res = runAppleScript('tell application "System Events" to get name of every process whose background only is false', { timeout: 3000 });
+    return res.stdout.split(',').map((s) => s.trim()).filter(Boolean).map((title) => ({ title }));
+  }
+  if (IS_WIN) {
+    const res = runPowerShell('Get-Process | Where-Object {$_.MainWindowTitle} | Select-Object Id,MainWindowTitle | ConvertTo-Json', { timeout: 5000 });
+    const parsed = JSON.parse(res.stdout || '[]');
+    const rows = Array.isArray(parsed) ? parsed : [parsed];
+    return rows.map((r) => ({ id: r.Id, title: r.MainWindowTitle }));
+  }
+  return null;
+}
+
 export const screenFindWindowTool = {
   name: 'screen_find_window',
   description: 'Find open windows matching a name pattern. Returns window IDs and titles. Use to focus a specific application before interacting with it.',
@@ -288,37 +374,11 @@ export const screenFindWindowTool = {
   },
   execute: async (args) => {
     try {
-      if (PLATFORM === 'linux') {
-        if (!hasBin('xdotool')) return missingDepError('xdotool', 'sudo apt install xdotool');
-        // Pass the pattern as its own argv entry so it is matched literally and
-        // never interpreted by a shell. xdotool exits non-zero when nothing
-        // matches, so treat a thrown error as "no windows".
-        let out = '';
-        try {
-          out = execFileSync('xdotool', ['search', '--name', String(args.pattern)], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] });
-        } catch { out = ''; }
-        const ids = out.trim().split('\n').filter(Boolean);
-        const windows = ids.map(id => {
-          try {
-            const name = execFileSync('xdotool', ['getwindowname', id], { encoding: 'utf8', timeout: 1000, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-            return { id, title: name };
-          } catch { return { id, title: '(unknown)' }; }
-        });
-        return { success: true, count: windows.length, windows };
-      } else if (PLATFORM === 'darwin') {
-        const script = `tell application "System Events" to get name of every process whose background only is false`;
-        const out = execSync(`osascript -e ${shellQuote(script)}`, { encoding: 'utf8', timeout: 3000 });
-        const windows = out.split(',').map(s => s.trim()).filter(Boolean).filter(s => s.toLowerCase().includes(args.pattern.toLowerCase())).map(title => ({ title }));
-        return { success: true, count: windows.length, windows };
-      } else if (IS_WIN) {
-        const cmd = 'Get-Process | Where-Object {$_.MainWindowTitle} | Select-Object Id,MainWindowTitle | ConvertTo-Json';
-        const out = execSync(`powershell -NoProfile -Command ${JSON.stringify(cmd)}`, { encoding: 'utf8', timeout: 5000 });
-        const parsed = JSON.parse(out || '[]');
-        const rows = Array.isArray(parsed) ? parsed : [parsed];
-        const windows = rows.filter(r => (r.MainWindowTitle || '').toLowerCase().includes(args.pattern.toLowerCase())).map(r => ({ id: r.Id, title: r.MainWindowTitle }));
-        return { success: true, count: windows.length, windows };
-      }
-      return missingDepError('window search', 'Linux: xdotool | macOS: osascript | Windows: PowerShell');
+      const windows = listWindows();
+      if (!windows) return missingDepError('window search', 'Linux: hyprctl or xdotool | macOS: osascript | Windows: PowerShell');
+      const needle = String(args.pattern || '').toLowerCase();
+      const matches = windows.filter((w) => `${w.title || ''} ${w.app || ''}`.toLowerCase().includes(needle));
+      return { success: true, count: matches.length, windows: matches };
     } catch (err) {
       return { success: false, error: err.message };
     }
@@ -333,39 +393,9 @@ export const windowListTool = {
   parameters: { type: 'object', properties: {}, required: [] },
   execute: async () => {
     try {
-      if (PLATFORM === 'linux') {
-        if (!hasBin('xdotool')) return { success: false, error: 'xdotool not found. Install: sudo apt install xdotool' };
-        const ids = execSync('xdotool search --onlyvisible --name "." 2>/dev/null || true', { encoding: 'utf8', timeout: 3000 })
-          .trim().split('\n').filter(Boolean);
-        const windows = ids.slice(0, 100).map(id => {
-          let title = '(unknown)';
-          let geometry = {};
-          try { title = execSync(`xdotool getwindowname ${id}`, { encoding: 'utf8', timeout: 1000 }).trim(); } catch {}
-          try {
-            const g = execSync(`xdotool getwindowgeometry --shell ${id}`, { encoding: 'utf8', timeout: 1000 });
-            for (const line of g.split('\n')) {
-              const [k, v] = line.split('=');
-              if (k) geometry[k.toLowerCase()] = Number(v) || v;
-            }
-          } catch {}
-          return { id, title, geometry };
-        });
-        return { success: true, count: windows.length, windows };
-      }
-      if (PLATFORM === 'darwin') {
-        const script = 'tell application "System Events" to get name of every process whose background only is false';
-        const out = execSync(`osascript -e ${shellQuote(script)}`, { encoding: 'utf8', timeout: 3000 });
-        const windows = out.split(',').map(s => s.trim()).filter(Boolean).map(title => ({ title }));
-        return { success: true, count: windows.length, windows };
-      }
-      if (IS_WIN) {
-        const cmd = 'Get-Process | Where-Object {$_.MainWindowTitle} | Select-Object Id,MainWindowTitle | ConvertTo-Json';
-        const out = execSync(`powershell -NoProfile -Command ${JSON.stringify(cmd)}`, { encoding: 'utf8', timeout: 5000 });
-        const parsed = JSON.parse(out || '[]');
-        const rows = Array.isArray(parsed) ? parsed : [parsed];
-        return { success: true, count: rows.length, windows: rows.map(r => ({ id: r.Id, title: r.MainWindowTitle })) };
-      }
-      return missingDepError('window list', 'Linux: xdotool | macOS: osascript | Windows: PowerShell');
+      const windows = listWindows();
+      if (!windows) return missingDepError('window list', 'Linux: hyprctl or xdotool | macOS: osascript | Windows: PowerShell');
+      return { success: true, count: windows.length, windows };
     } catch (err) {
       return { success: false, error: err.message };
     }
@@ -387,30 +417,35 @@ export const windowFocusTool = {
   },
   execute: async (args) => {
     try {
+      let res;
+      if (isHyprland()) {
+        const client = args.id
+          ? hyprClients().find((c) => c.address === args.id)
+          : hyprClients().find((c) => matchesTitle(c, args.title));
+        if (!client) return { success: false, error: `No window found for: ${args.title || args.id || '(empty)'}` };
+        res = runFile('hyprctl', ['dispatch', 'focuswindow', `address:${client.address}`], { timeout: 3000 });
+        return res.ok ? { success: true, id: client.address, title: client.title } : fail(res, 'Focus failed.');
+      }
       if (PLATFORM === 'linux') {
-        if (!hasBin('xdotool')) return { success: false, error: 'xdotool not found. Install: sudo apt install xdotool' };
-        const id = args.id || execSync(`xdotool search --name ${shellQuote(args.title || '')} 2>/dev/null | head -1`, { encoding: 'utf8', timeout: 3000 }).trim();
+        if (!hasBin('xdotool')) return missingDepError('xdotool', 'Install xdotool (X11).');
+        const id = /^\d+$/.test(String(args.id || ''))
+          ? String(args.id)
+          : runFile('xdotool', ['search', '--name', String(args.title || '')], { timeout: 3000 }).stdout.trim().split('\n')[0];
         if (!id) return { success: false, error: `No window found for: ${args.title || args.id || '(empty)'}` };
-        execSync(`xdotool windowactivate --sync ${id}`, { timeout: 3000 });
-        return { success: true, id, title: args.title || null };
+        res = runFile('xdotool', ['windowactivate', '--sync', id], { timeout: 3000 });
+        return res.ok ? { success: true, id, title: args.title || null } : fail(res, 'Focus failed.');
       }
       if (PLATFORM === 'darwin') {
         if (!args.title) return { success: false, error: 'title is required on macOS' };
-        const script = `tell application "${String(args.title).replace(/"/g, '\\"')}" to activate`;
-        execSync(`osascript -e ${shellQuote(script)}`, { timeout: 3000 });
-        return { success: true, title: args.title };
+        res = runAppleScript(`tell application ${appleScriptLiteral(args.title)} to activate`, { timeout: 3000 });
+        return res.ok ? { success: true, title: args.title } : fail(res, 'Focus failed.');
       }
       if (IS_WIN) {
         if (!args.title) return { success: false, error: 'title is required on Windows' };
-        const psCmd = `(New-Object -ComObject WScript.Shell).AppActivate('${String(args.title).replace(/'/g, "''")}'); Start-Sleep -Milliseconds 200`;
-        try {
-          execSync(`powershell -NoProfile -Command "${psCmd}"`, { timeout: 5000 });
-          return { success: true, title: args.title };
-        } catch (err) {
-          return { success: false, error: `Could not focus window "${args.title}" on Windows: ${err.message}` };
-        }
+        res = runPowerShell(`(New-Object -ComObject WScript.Shell).AppActivate(${powerShellLiteral(args.title)}); Start-Sleep -Milliseconds 200`, { timeout: 5000 });
+        return res.ok ? { success: true, title: args.title } : fail(res, `Could not focus window "${args.title}".`);
       }
-      return missingDepError('window focus', 'Linux: xdotool | macOS: osascript | Windows: built-in PowerShell');
+      return missingDepError('window focus', 'Linux: hyprctl or xdotool | macOS: osascript | Windows: built-in PowerShell');
     } catch (err) {
       return { success: false, error: err.message };
     }

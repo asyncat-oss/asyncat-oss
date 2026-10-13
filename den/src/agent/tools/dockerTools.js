@@ -2,15 +2,18 @@
 // ─── Docker + Sandbox Tools ────────────────────────────────────────────────────
 // Run commands in Docker containers, build images, manage containers.
 
-import { spawn } from 'child_process';
 import path from 'path';
 import { PermissionLevel } from './toolRegistry.js';
-import { hasBin, IS_WIN, runProcess, missingDepError } from './shared.js';
-
-const MAX_OUTPUT = 16000;
+import { clampInt, hasBin, runFile, runProcess, missingDepError, safePath } from './shared.js';
 
 function hasDocker() { return hasBin('docker'); }
-function hasDockerCompose() { return hasBin('docker-compose') || hasBin('docker'); }
+
+/** An image or tag name; anything starting with - would be read as an option. */
+function dockerImageName(value) {
+  const name = String(value ?? '').trim();
+  if (!name || name.startsWith('-') || /\s/.test(name)) throw new Error(`Not a Docker image name: "${name}"`);
+  return name;
+}
 
 export const dockerRunTool = {
   name: 'docker_run',
@@ -35,21 +38,17 @@ export const dockerRunTool = {
       return { success: false, error: missingDepError('docker', 'https://docs.docker.com/get-docker/') };
     }
 
-    const workDir = args.cwd || '/workspace';
-    const timeout = (args.timeout || 60) * 1000;
-    let dockerCmd = `docker run --rm`;
+    const image = dockerImageName(args.image);
+    const workDir = String(args.cwd || '/workspace');
+    const timeout = clampInt(args.timeout, 60, 1, 3600) * 1000;
+    const dockerArgs = ['run', '--rm'];
     if (args.volumes) {
-      const vols = args.volumes.split(',').map(v => v.trim()).filter(Boolean);
-      for (const vol of vols) dockerCmd += ` -v ${vol}`;
+      for (const vol of String(args.volumes).split(',').map(v => v.trim()).filter(Boolean)) dockerArgs.push('-v', vol);
     }
-    if (args.env_vars) {
-      for (const [k, v] of Object.entries(args.env_vars)) {
-        dockerCmd += ` -e "${k}=${v}"`;
-      }
-    }
-    dockerCmd += ` -w ${workDir} ${args.image} sh -c '${args.command.replace(/'/g, "'\\''")}'`;
+    for (const [k, v] of Object.entries(args.env_vars || {})) dockerArgs.push('-e', `${k}=${v}`);
+    dockerArgs.push('-w', workDir, '--', image, 'sh', '-c', String(args.command ?? ''));
 
-    const result = await runProcess('/bin/sh', ['-c', dockerCmd], { cwd: context.workingDir, timeout });
+    const result = await runProcess('docker', dockerArgs, { cwd: context.workingDir, timeout });
     return {
       success: result.success,
       exit_code: result.exit_code,
@@ -81,14 +80,14 @@ export const dockerBuildTool = {
       return { success: false, error: missingDepError('docker', 'https://docs.docker.com/get-docker/') };
     }
 
-    const dockerfilePath = args.path || context.workingDir;
-    const tag = args.tag;
-    const timeout = (args.timeout || 300) * 1000;
-    let cmd = `docker build ${args.no_cache ? '--no-cache' : ''} -t "${tag}"`;
-    if (args.path) cmd += ` -f "${path.join(dockerfilePath, 'Dockerfile')}" "${dockerfilePath}"`;
-    else cmd += ` "${dockerfilePath}"`;
+    const dockerfilePath = args.path ? safePath(args.path, context.workingDir) : context.workingDir;
+    const tag = dockerImageName(args.tag);
+    const timeout = clampInt(args.timeout, 300, 1, 7200) * 1000;
+    const buildArgs = ['build', ...(args.no_cache ? ['--no-cache'] : []), '-t', tag];
+    if (args.path) buildArgs.push('-f', path.join(dockerfilePath, 'Dockerfile'));
+    buildArgs.push(dockerfilePath);
 
-    const result = await runProcess('/bin/sh', ['-c', cmd], { cwd: context.workingDir, timeout });
+    const result = await runProcess('docker', buildArgs, { cwd: context.workingDir, timeout });
     return {
       success: result.success,
       exit_code: result.exit_code,
@@ -118,9 +117,11 @@ export const dockerPsTool = {
       return { success: false, error: missingDepError('docker', 'https://docs.docker.com/get-docker/') };
     }
 
-    const cmd = args.all ? 'docker ps -a --format "table {{.ID}}\t{{.Image}}\t{{.Status}}\t{{.CreatedAt}}\t{{.Names}}"' : 'docker ps --format "table {{.ID}}\t{{.Image}}\t{{.Status}}\t{{.CreatedAt}}\t{{.Names}}"';
+    const format = 'table {{.ID}}\t{{.Image}}\t{{.Status}}\t{{.CreatedAt}}\t{{.Names}}';
     try {
-      const output = execSync(cmd, { encoding: 'utf8', timeout: 10000 });
+      const res = runFile('docker', ['ps', ...(args.all ? ['-a'] : []), '--format', format], { timeout: 10000 });
+      if (!res.ok) throw new Error(res.error);
+      const output = res.stdout;
       const lines = output.trim().split('\n').filter(Boolean);
       const headers = lines[0] ? lines[0].split('\t') : [];
       const rows = lines.slice(1).map(line => {
@@ -154,9 +155,10 @@ export const dockerStopTool = {
       return { success: false, error: missingDepError('docker', 'https://docs.docker.com/get-docker/') };
     }
 
-    const timeout = args.timeout || 10;
+    const timeout = clampInt(args.timeout, 10, 0, 600);
     try {
-      execSync(`docker stop -t ${timeout} "${args.container}"`, { timeout: (timeout + 5) * 1000 });
+      const res = runFile('docker', ['stop', '-t', timeout, '--', dockerImageName(args.container)], { timeout: (timeout + 5) * 1000 });
+      if (!res.ok) throw new Error(res.error);
       return { success: true, stopped: args.container };
     } catch (err) {
       return { success: false, error: err.message };
@@ -183,19 +185,12 @@ export const sandboxExecTool = {
       return { success: false, error: 'Docker not available. Using host execution as fallback.' };
     }
 
-    const image = args.image || 'ubuntu:22.04';
-    const timeout = (args.timeout || 30) * 1000;
-    const safeCmd = `docker run --rm \
-      --memory="256m" \
-      --cpus="0.5" \
-      --pids-limit="50" \
-      --network="none" \
-      --read-only \
-      -w /tmp \
-      ${image} \
-      sh -c '${args.command.replace(/'/g, "'\\''")}'`;
-
-    const result = await runProcess('/bin/sh', ['-c', safeCmd], { cwd: context.workingDir, timeout });
+    const image = dockerImageName(args.image || 'ubuntu:22.04');
+    const timeout = clampInt(args.timeout, 30, 1, 600) * 1000;
+    const result = await runProcess('docker', [
+      'run', '--rm', '--memory=256m', '--cpus=0.5', '--pids-limit=50', '--network=none', '--read-only',
+      '-w', '/tmp', '--', image, 'sh', '-c', String(args.command ?? ''),
+    ], { cwd: context.workingDir, timeout });
     return {
       success: result.success,
       exit_code: result.exit_code,

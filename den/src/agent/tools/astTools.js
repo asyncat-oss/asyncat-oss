@@ -6,9 +6,8 @@
 import fs from 'fs';
 import path from 'path';
 import * as parser from '@babel/parser';
-import { execSync } from 'child_process';
 import { PermissionLevel } from './toolRegistry.js';
-import { safePath } from './shared.js';
+import { runFile, safePath } from './shared.js';
 
 // Helper: Traverse Babel AST
 function traverse(node, callbacks) {
@@ -166,6 +165,13 @@ function getBraceScopedBlock(lines, startLineIdx) {
   return lines.slice(startLineIdx, endLineIdx + 1).join('\n');
 }
 
+/** Parse a Python file with the stdlib ast module, without a shell. */
+function runPythonAst(filePath) {
+  const res = runFile('python3', ['-', filePath], { input: PYTHON_AST_SCRIPT, timeout: 15000 });
+  if (!res.ok) throw new Error(res.error);
+  return res.stdout;
+}
+
 export const astViewOutlineTool = {
   name: 'ast_view_outline',
   description: 'Parse a source file (JavaScript, TypeScript, Python, Rust, Go, Java, Ruby, C++) to extract its structural outline (classes, methods, functions) with line ranges. Low-token alternative to reading the whole file.',
@@ -231,7 +237,7 @@ export const astViewOutlineTool = {
     // Python parsing via stdlib AST
     if (ext === '.py') {
       try {
-        const resultStr = execSync(`python3 - "${filePath}"`, { input: PYTHON_AST_SCRIPT, encoding: 'utf8' });
+        const resultStr = runPythonAst(filePath);
         const result = JSON.parse(resultStr);
         if (!result.success) return { success: false, error: result.error };
 
@@ -306,7 +312,7 @@ export const astGetNodeTool = {
     // 2. Python
     if (ext === '.py') {
       try {
-        const resultStr = execSync(`python3 - "${filePath}"`, { input: PYTHON_AST_SCRIPT, encoding: 'utf8' });
+        const resultStr = runPythonAst(filePath);
         const result = JSON.parse(resultStr);
         if (!result.success) return { success: false, error: result.error };
         const match = result.outline.find(item => item.name === name);

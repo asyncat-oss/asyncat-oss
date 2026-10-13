@@ -1,15 +1,23 @@
 // den/src/agent/tools/desktopTools.js
 // ─── Desktop Integration Tools ───────────────────────────────────────────────
-// Tools that leverage the Electron desktop environment:
+// Tools that leverage the desktop environment:
 //   clipboard_read    — read text from the system clipboard
 //   clipboard_write   — write text to the system clipboard
 //   reveal_in_finder  — reveal a file or folder in Finder / Explorer
+//   app_open / app_list / active_app
 //
-// Uses OS commands to keep the backend process decoupled from Electron IPC.
+// Uses OS programs to keep the backend process decoupled from Electron IPC.
+// Every program runs with an argument list, never through a shell: text,
+// paths and app names come from the model.
 
-import { execSync } from 'child_process';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { spawn } from 'child_process';
 import { PermissionLevel } from './toolRegistry.js';
-import { IS_WIN, PLATFORM } from './shared.js';
+import { IS_WIN, PLATFORM, hasBin, runFile, runPowerShell, runAppleScript, powerShellLiteral } from './shared.js';
+
+const isWayland = () => PLATFORM === 'linux' && Boolean(process.env.WAYLAND_DISPLAY);
 
 // ── clipboard_read ────────────────────────────────────────────────────────────
 
@@ -17,31 +25,27 @@ export const clipboardReadTool = {
   name: 'clipboard_read',
   description: 'Read the current text content of the system clipboard. Useful for grabbing code, URLs, or data the user has copied.',
   category: 'desktop',
-  permission: PermissionLevel.SAFE,
+  // The clipboard often holds passwords and codes, so reading it asks first.
+  permission: PermissionLevel.MODERATE,
   parameters: {
     type: 'object',
     properties: {},
     required: [],
   },
   async execute() {
-    try {
-      let text;
-      if (PLATFORM === 'darwin') {
-        text = execSync('pbpaste', { encoding: 'utf8' });
-      } else if (IS_WIN) {
-        text = execSync('powershell.exe -command "Get-Clipboard"', { encoding: 'utf8' });
-      } else {
-        // Linux — try xclip, fall back to xsel
-        try {
-          text = execSync('xclip -selection clipboard -o', { encoding: 'utf8' });
-        } catch {
-          text = execSync('xsel --clipboard --output', { encoding: 'utf8' });
-        }
-      }
-      return { success: true, text: text ?? '' };
-    } catch (err) {
-      return { success: false, error: err.message };
+    let res;
+    if (PLATFORM === 'darwin') {
+      res = runFile('pbpaste', [], { timeout: 5000 });
+    } else if (IS_WIN) {
+      res = runPowerShell('Get-Clipboard -Raw', { timeout: 5000 });
+    } else if (isWayland() && hasBin('wl-paste')) {
+      res = runFile('wl-paste', ['--no-newline'], { timeout: 5000 });
+    } else if (hasBin('xclip')) {
+      res = runFile('xclip', ['-selection', 'clipboard', '-o'], { timeout: 5000 });
+    } else {
+      res = runFile('xsel', ['--clipboard', '--output'], { timeout: 5000 });
     }
+    return res.ok ? { success: true, text: res.stdout } : { success: false, error: res.error };
   },
 };
 
@@ -60,22 +64,24 @@ export const clipboardWriteTool = {
     required: ['text'],
   },
   async execute({ text }) {
-    try {
-      if (PLATFORM === 'darwin') {
-        execSync(`echo ${JSON.stringify(text)} | pbcopy`);
-      } else if (IS_WIN) {
-        execSync(`powershell.exe -command "Set-Clipboard -Value ${JSON.stringify(text)}"`);
-      } else {
-        try {
-          execSync(`echo ${JSON.stringify(text)} | xclip -selection clipboard`);
-        } catch {
-          execSync(`echo ${JSON.stringify(text)} | xsel --clipboard --input`);
-        }
-      }
+    const input = String(text ?? '');
+    let res;
+    if (PLATFORM === 'darwin') {
+      res = runFile('pbcopy', [], { input, timeout: 5000 });
+    } else if (IS_WIN) {
+      res = runPowerShell(`Set-Clipboard -Value ${powerShellLiteral(input)}`, { timeout: 5000 });
+    } else if (isWayland() && hasBin('wl-copy')) {
+      // wl-copy stays running to serve the clipboard, so don't wait for it.
+      const child = spawn('wl-copy', [], { stdio: ['pipe', 'ignore', 'ignore'], detached: true });
+      child.stdin.end(input);
+      child.unref();
       return { success: true };
-    } catch (err) {
-      return { success: false, error: err.message };
+    } else if (hasBin('xclip')) {
+      res = runFile('xclip', ['-selection', 'clipboard'], { input, timeout: 5000 });
+    } else {
+      res = runFile('xsel', ['--clipboard', '--input'], { input, timeout: 5000 });
     }
+    return res.ok ? { success: true } : { success: false, error: res.error };
   },
 };
 
@@ -93,21 +99,20 @@ export const revealInFinderTool = {
     },
     required: ['path'],
   },
-  async execute({ path: filePath }) {
-    try {
-      if (PLATFORM === 'darwin') {
-        execSync(`open -R ${JSON.stringify(filePath)}`);
-      } else if (IS_WIN) {
-        execSync(`explorer /select,${JSON.stringify(filePath)}`);
-      } else {
-        // Linux — open the parent directory
-        const parent = filePath.replace(/\/[^/]+$/, '') || '/';
-        execSync(`xdg-open ${JSON.stringify(parent)}`);
-      }
-      return { success: true };
-    } catch (err) {
-      return { success: false, error: err.message };
+  async execute({ path: filePath }, context = {}) {
+    const target = path.resolve(context.workingDir || process.cwd(), String(filePath ?? ''));
+    if (!fs.existsSync(target)) return { success: false, error: `Not found: ${filePath}` };
+    let res;
+    if (PLATFORM === 'darwin') {
+      res = runFile('open', ['-R', target], { timeout: 8000 });
+    } else if (IS_WIN) {
+      // explorer.exe exits with 1 even when it worked.
+      res = runFile('explorer', [`/select,${target}`], { timeout: 8000 });
+      res = { ...res, ok: res.status !== null };
+    } else {
+      res = runFile('xdg-open', [fs.statSync(target).isDirectory() ? target : path.dirname(target)], { timeout: 8000 });
     }
+    return res.ok ? { success: true } : { success: false, error: res.error };
   },
 };
 
@@ -127,29 +132,50 @@ export const appOpenTool = {
     required: ['app'],
   },
   async execute({ app, file }) {
-    try {
-      if (PLATFORM === 'darwin') {
-        const target = file ? `${JSON.stringify(app)} ${JSON.stringify(file)}` : `-a ${JSON.stringify(app)}`;
-        execSync(`open ${target}`, { timeout: 8000 });
-      } else if (IS_WIN) {
-        const args = file ? `${JSON.stringify(app)}, ${JSON.stringify(file)}` : JSON.stringify(app);
-        execSync(`powershell.exe -command "Start-Process ${args}"`, { timeout: 8000 });
-      } else {
-        // Linux — try launching directly, fall back to xdg-open
-        try {
-          execSync(`${JSON.stringify(app)} ${file ? JSON.stringify(file) : ''} &`, { timeout: 5000 });
-        } catch {
-          execSync(`xdg-open ${JSON.stringify(file || app)}`, { timeout: 5000 });
-        }
-      }
+    const appName = String(app ?? '').trim();
+    const target = file === undefined || file === null ? null : String(file);
+    if (!appName) return { success: false, error: 'app is required' };
+    const looksLikeTarget = /[/\\:]/.test(appName);
+    let res;
+    if (PLATFORM === 'darwin') {
+      res = looksLikeTarget
+        ? runFile('open', [appName], { timeout: 8000 })
+        : runFile('open', ['-a', appName, ...(target ? [target] : [])], { timeout: 8000 });
+    } else if (IS_WIN) {
+      const argList = target ? ` -ArgumentList ${powerShellLiteral(target)}` : '';
+      res = runPowerShell(`Start-Process -FilePath ${powerShellLiteral(appName)}${argList}`, { timeout: 8000 });
+    } else if (!looksLikeTarget && /^[\w.+-]+$/.test(appName) && hasBin(appName)) {
+      // Launch detached so the app outlives this request.
+      const child = spawn(appName, target ? [target] : [], { detached: true, stdio: 'ignore' });
+      child.on('error', () => {});
+      child.unref();
       return { success: true };
-    } catch (err) {
-      return { success: false, error: err.message };
+    } else {
+      res = runFile('xdg-open', [target || appName], { timeout: 8000 });
     }
+    return res.ok ? { success: true } : { success: false, error: res.error };
   },
 };
 
 // ── app_list ──────────────────────────────────────────────────────────────────
+
+function desktopEntryNames(dir) {
+  try {
+    return fs.readdirSync(dir)
+      .filter((name) => name.endsWith('.desktop'))
+      .map((name) => {
+        try {
+          const line = fs.readFileSync(path.join(dir, name), 'utf8').split('\n').find((l) => l.startsWith('Name='));
+          return line ? line.slice(5).trim() : null;
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
 
 export const appListTool = {
   name: 'app_list',
@@ -167,31 +193,23 @@ export const appListTool = {
     try {
       let apps = [];
       if (PLATFORM === 'darwin') {
-        const dirs = ['/Applications', `${process.env.HOME}/Applications`];
-        for (const dir of dirs) {
+        for (const dir of ['/Applications', path.join(os.homedir(), 'Applications')]) {
           try {
-            const out = execSync(`ls "${dir}"`, { encoding: 'utf8', timeout: 5000 });
-            const entries = out.split('\n').filter(e => e.endsWith('.app')).map(e => e.replace(/\.app$/, ''));
-            apps.push(...entries);
+            apps.push(...fs.readdirSync(dir).filter((e) => e.endsWith('.app')).map((e) => e.replace(/\.app$/, '')));
           } catch { /* dir may not exist */ }
         }
       } else if (IS_WIN) {
-        const out = execSync(
-          `powershell.exe -command "Get-StartApps | Select-Object -ExpandProperty Name"`,
-          { encoding: 'utf8', timeout: 10000 }
-        );
-        apps = out.split('\n').map(l => l.trim()).filter(Boolean);
+        const res = runPowerShell('Get-StartApps | Select-Object -ExpandProperty Name', { timeout: 10000 });
+        apps = res.stdout.split('\n').map((l) => l.trim()).filter(Boolean);
       } else {
-        // Linux — parse .desktop files for app names
-        const out = execSync(
-          `grep -rh "^Name=" /usr/share/applications ~/.local/share/applications 2>/dev/null | sed 's/^Name=//' | sort -u`,
-          { encoding: 'utf8', timeout: 8000 }
-        );
-        apps = out.split('\n').map(l => l.trim()).filter(Boolean);
+        apps = [
+          ...desktopEntryNames('/usr/share/applications'),
+          ...desktopEntryNames(path.join(os.homedir(), '.local/share/applications')),
+        ];
       }
       if (filter) {
-        const lc = filter.toLowerCase();
-        apps = apps.filter(a => a.toLowerCase().includes(lc));
+        const lc = String(filter).toLowerCase();
+        apps = apps.filter((a) => a.toLowerCase().includes(lc));
       }
       apps = [...new Set(apps)].sort();
       return { success: true, apps, count: apps.length };
@@ -214,37 +232,25 @@ export const activeAppTool = {
     required: [],
   },
   async execute() {
-    try {
-      let name;
-      if (PLATFORM === 'darwin') {
-        name = execSync(
-          `osascript -e 'tell application "System Events" to get name of first process whose frontmost is true'`,
-          { encoding: 'utf8', timeout: 5000 }
-        ).trim();
-      } else if (IS_WIN) {
-        name = execSync(
-          `powershell.exe -command "(Get-Process | Where-Object {$_.MainWindowHandle -eq (Add-Type -MemberDefinition '[DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow();' -Name 'Win32' -Namespace 'WinAPI' -PassThru)::GetForegroundWindow()}).Name"`,
-          { encoding: 'utf8', timeout: 5000 }
-        ).trim();
-      } else {
-        // Linux — try xdotool, fall back to xprop
-        try {
-          name = execSync(
-            `xdotool getactivewindow getwindowname`,
-            { encoding: 'utf8', timeout: 3000 }
-          ).trim();
-        } catch {
-          name = execSync(
-            `xprop -id $(xprop -root _NET_ACTIVE_WINDOW | awk '{print $5}') WM_NAME | cut -d '"' -f 2`,
-            { encoding: 'utf8', timeout: 3000 }
-          ).trim();
-        }
-      }
-      return { success: true, name };
-    } catch (err) {
-      return { success: false, error: err.message };
+    let name = '';
+    if (PLATFORM === 'darwin') {
+      name = runAppleScript('tell application "System Events" to get name of first process whose frontmost is true', { timeout: 5000 }).stdout.trim();
+    } else if (IS_WIN) {
+      name = runPowerShell([
+        "Add-Type -MemberDefinition '[DllImport(''user32.dll'')] public static extern IntPtr GetForegroundWindow();' -Name Win32 -Namespace WinAPI",
+        '(Get-Process | Where-Object { $_.MainWindowHandle -eq [WinAPI.Win32]::GetForegroundWindow() }).Name',
+      ].join('; '), { timeout: 5000 }).stdout.trim();
+    } else if (isWayland() && hasBin('hyprctl')) {
+      try {
+        const win = JSON.parse(runFile('hyprctl', ['activewindow', '-j'], { timeout: 3000 }).stdout || '{}');
+        name = win.class || win.title || '';
+      } catch { name = ''; }
+    } else if (hasBin('xdotool')) {
+      name = runFile('xdotool', ['getactivewindow', 'getwindowname'], { timeout: 3000 }).stdout.trim();
     }
+    return name ? { success: true, name } : { success: false, error: 'Could not find the focused application on this desktop.' };
   },
 };
+
 
 export const desktopTools = [clipboardReadTool, clipboardWriteTool, revealInFinderTool, appOpenTool, appListTool, activeAppTool];

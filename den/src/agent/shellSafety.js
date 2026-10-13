@@ -306,3 +306,21 @@ export function isReadOnlyShellCommand(command) {
   if (separators.slice(start).some((sep) => sep !== '|')) return false;
   return segments.slice(start).every((segment) => isReadOnlyProgram(segment));
 }
+
+const PACKAGE_READ_SUBCOMMANDS = new Set([
+  'outdated', 'list', 'ls', 'show', 'info', 'view', 'why', 'explain', 'freeze', '--version', '-v',
+]);
+
+/**
+ * True when a package_manager command only reads: list, outdated, show and
+ * similar. `audit fix` and `version patch` change the project, so they ask.
+ */
+export function isReadOnlyPackageCommand(command) {
+  const parsed = splitShellWords(String(command ?? '').trim());
+  if (!parsed || parsed.segments.length !== 1) return false;
+  const [sub, ...rest] = parsed.segments[0];
+  if (PACKAGE_READ_SUBCOMMANDS.has(sub)) return true;
+  if (sub === 'audit') return !rest.some((word) => word === 'fix' || word.startsWith('--fix'));
+  if (sub === 'version') return rest.every((word) => word === '--json');
+  return false;
+}

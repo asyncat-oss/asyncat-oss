@@ -5,7 +5,7 @@
 import fs from 'fs';
 import path from 'path';
 import { PermissionLevel } from './toolRegistry.js';
-import { runProcess } from './shared.js';
+import { clampInt, runProcess, safePath } from './shared.js';
 
 // ── Framework detection ───────────────────────────────────────────────────────
 
@@ -209,26 +209,31 @@ function parseMochaJson(raw) {
 
 // ── Command builders ──────────────────────────────────────────────────────────
 
+// Each command is a program and an argument list: the filter comes from the
+// model and is passed through as one argument, never through a shell.
 function buildCommand(framework, args) {
-  const filter = args.filter ? `"${args.filter.replace(/"/g, '\\"')}"` : '';
+  const filter = args.filter ? String(args.filter) : '';
+  const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+  const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  const make = (file, argv, parse) => ({ file, argv, parse, cmd: [file, ...argv].join(' ') });
 
   switch (framework) {
     case 'jest':
-      return { cmd: `npx jest --json --no-coverage --forceExit${filter ? ` -t ${filter}` : ''} 2>/dev/null`, parse: 'jest-json' };
+      return make(npx, ['jest', '--json', '--no-coverage', '--forceExit', ...(filter ? ['-t', filter] : [])], 'jest-json');
     case 'vitest':
-      return { cmd: `npx vitest run --reporter=json${filter ? ` -t ${filter}` : ''} 2>/dev/null`, parse: 'vitest-json' };
+      return make(npx, ['vitest', 'run', '--reporter=json', ...(filter ? ['-t', filter] : [])], 'vitest-json');
     case 'mocha':
-      return { cmd: `npx mocha --reporter json${filter ? ` --grep ${filter}` : ''} 2>/dev/null`, parse: 'mocha-json' };
+      return make(npx, ['mocha', '--reporter', 'json', ...(filter ? ['--grep', filter] : [])], 'mocha-json');
     case 'ava':
-      return { cmd: `npx ava --tap${filter ? ` --match ${filter}` : ''} 2>&1`, parse: 'text' };
+      return make(npx, ['ava', '--tap', ...(filter ? ['--match', filter] : [])], 'text');
     case 'npm-script':
-      return { cmd: 'npm test 2>&1', parse: 'text' };
+      return make(npm, ['test'], 'text');
     case 'pytest':
-      return { cmd: `python -m pytest -v --tb=short${filter ? ` -k ${filter}` : ''} 2>&1`, parse: 'pytest' };
+      return make('python', ['-m', 'pytest', '-v', '--tb=short', ...(filter ? ['-k', filter] : [])], 'pytest');
     case 'cargo':
-      return { cmd: `cargo test${filter ? ` ${filter}` : ''} 2>&1`, parse: 'cargo' };
+      return make('cargo', ['test', ...(filter ? ['--', filter] : [])], 'cargo');
     case 'go':
-      return { cmd: `go test ./... -v${filter ? ` -run ${filter}` : ''} 2>&1`, parse: 'go' };
+      return make('go', ['test', './...', '-v', ...(filter ? ['-run', filter] : [])], 'go');
     default:
       return null;
   }
@@ -256,7 +261,7 @@ export const runTestsTool = {
   },
   execute: async (args, context) => {
     const cwd = args.path
-      ? path.resolve(context.workingDir, args.path)
+      ? safePath(args.path, context.workingDir)
       : context.workingDir;
 
     if (!fs.existsSync(cwd)) {
@@ -276,8 +281,8 @@ export const runTestsTool = {
       return { success: false, error: `Cannot build command for framework: ${framework}` };
     }
 
-    const timeout = (args.timeout || 120) * 1000;
-    const result = await runProcess(built.cmd, [], { cwd, timeout });
+    const timeout = clampInt(args.timeout, 120, 1, 3600) * 1000;
+    const result = await runProcess(built.file, built.argv, { cwd, timeout });
 
     // Parse structured output
     let parsed = null;

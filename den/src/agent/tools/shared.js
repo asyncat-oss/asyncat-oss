@@ -2,7 +2,7 @@
 // ─── Shared Utilities for Agent Tools ──────────────────────────────────────
 // Standardized process execution, binary detection, path safety, and timeouts.
 
-import { spawn, execSync } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import path from 'path';
 import os from 'os';
 
@@ -17,19 +17,76 @@ const _binCache = new Map();
 
 export function hasBin(bin) {
   if (_binCache.has(bin)) return _binCache.get(bin);
-  try {
-    const cmd = IS_WIN ? `where ${bin} 2>nul` : `which ${bin} 2>/dev/null`;
-    execSync(cmd, { stdio: 'ignore', timeout: 3000 });
-    _binCache.set(bin, true);
-    return true;
-  } catch {
-    _binCache.set(bin, false);
-    return false;
-  }
+  const found = runFile(IS_WIN ? 'where' : 'which', [String(bin)], { timeout: 3000 }).ok;
+  _binCache.set(bin, found);
+  return found;
 }
 
-export function clearBinCache() {
-  _binCache.clear();
+// ── Running programs without a shell ──────────────────────────────────────
+// Tool arguments come from the model, which may be repeating a web page or a
+// file. Programs therefore run with an argument list: a value containing
+// $(...), quotes or ; is passed through as text and never interpreted.
+
+/**
+ * How to start file with argv. Windows can only start .cmd/.bat files (npx,
+ * npm) through cmd.exe, so those go through it with each argument quoted, and
+ * arguments containing cmd.exe syntax are refused.
+ */
+export function spawnPlan(file, argv = []) {
+  const args = argv.map(String);
+  if (IS_WIN && /\.(cmd|bat)$/i.test(file)) {
+    const unsafe = args.find((arg) => /[&|<>^%!"()\r\n]/.test(arg));
+    if (unsafe !== undefined) throw new Error(`Argument not allowed on Windows: ${unsafe}`);
+    return { file: `"${file}"`, args: args.map((arg) => `"${arg}"`), shell: true };
+  }
+  return { file, args, shell: false };
+}
+
+export function runFile(file, argv = [], { cwd, timeout = DEFAULT_TIMEOUT, input, env, maxBuffer = 8 * 1024 * 1024 } = {}) {
+  let plan;
+  try {
+    plan = spawnPlan(file, argv);
+  } catch (err) {
+    return { ok: false, status: null, stdout: '', stderr: '', error: err.message };
+  }
+  const res = spawnSync(plan.file, plan.args, {
+    cwd, env, input, timeout, maxBuffer, encoding: 'utf8', windowsHide: true, shell: plan.shell,
+  });
+  const stdout = res.stdout || '';
+  const stderr = res.stderr || '';
+  if (res.error) return { ok: false, status: null, stdout, stderr, error: res.error.message };
+  if (res.status !== 0) return { ok: false, status: res.status, stdout, stderr, error: (stderr.trim() || `${file} exited with code ${res.status}`) };
+  return { ok: true, status: 0, stdout, stderr, error: null };
+}
+
+/** A PowerShell string literal: single quotes expand nothing. */
+export function powerShellLiteral(text) {
+  return `'${String(text).replace(/'/g, "''")}'`;
+}
+
+/** An AppleScript string literal. */
+export function appleScriptLiteral(text) {
+  return `"${String(text).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+export function runPowerShell(script, options = {}) {
+  return runFile('powershell', ['-NoProfile', '-NonInteractive', '-Command', script], options);
+}
+
+export function runAppleScript(script, options = {}) {
+  return runFile('osascript', ['-e', script], options);
+}
+
+/** First n lines of text, for output that used to be piped through head. */
+export function firstLines(text, n) {
+  return String(text || '').split('\n').filter(Boolean).slice(0, Math.max(0, n)).join('\n');
+}
+
+/** A positive whole number from a model-supplied value, clamped to [min, max]. */
+export function clampInt(value, fallback, min, max) {
+  const n = Number.parseInt(value, 10);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(Math.max(n, min), max);
 }
 
 // ── Path safety ────────────────────────────────────────────────────────────
@@ -59,10 +116,21 @@ export function runProcess(cmd, args = [], options = {}) {
     let stderr = '';
     let killed = false;
 
-    const [sh, flag] = IS_WIN ? ['cmd.exe', '/c'] : ['/bin/sh', '-c'];
-    const proc = spawn(sh, flag ? [flag, cmd] : [cmd], {
+    // With arguments, run the program directly (no shell, so values from the
+    // model are never interpreted). Without, cmd is a fixed shell command.
+    let plan;
+    try {
+      plan = args.length > 0
+        ? spawnPlan(cmd, args)
+        : (IS_WIN ? { file: 'cmd.exe', args: ['/c', cmd], shell: false } : { file: '/bin/sh', args: ['-c', cmd], shell: false });
+    } catch (err) {
+      resolve({ success: false, exit_code: null, stdout: '', stderr: '', error: err.message });
+      return;
+    }
+    const proc = spawn(plan.file, plan.args, {
+      windowsHide: true,
       cwd: options.cwd || process.cwd(),
-      shell: false,
+      shell: plan.shell,
       env: { ...process.env, ...(options.env || {}) },
       stdio: ['ignore', 'pipe', 'pipe'],
     });

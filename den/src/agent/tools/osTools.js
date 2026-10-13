@@ -6,7 +6,7 @@ import { spawn, execSync, execFileSync, exec } from 'child_process';
 import net from 'net';
 import os from 'os';
 import { PermissionLevel } from './toolRegistry.js';
-import { IS_WIN, PLATFORM } from './shared.js';
+import { IS_WIN, PLATFORM, clampInt, runFile, safePath } from './shared.js';
 
 // Run a binary with an explicit argument vector (no shell), returning stdout as
 // a string. Model-supplied values go in `argv`, so they can never be parsed as
@@ -48,32 +48,34 @@ export const processKillTool = {
     },
   },
   execute: async (args) => {
-    const signal = args.force ? 'SIGKILL' : (args.signal || 'SIGTERM');
+    const SIGNALS = ['SIGTERM', 'SIGINT', 'SIGKILL', 'SIGHUP'];
+    const signal = args.force ? 'SIGKILL' : (SIGNALS.includes(args.signal) ? args.signal : 'SIGTERM');
+    const pid = args.pid === undefined || args.pid === null ? null : Number.parseInt(args.pid, 10);
+    if (pid !== null && (!Number.isInteger(pid) || pid <= 1)) return { success: false, error: 'pid must be a process number.' };
     try {
-      if (IS_WIN) {
-        const flag = args.force ? '/F' : '';
-        if (args.pid) {
-          execSync(`taskkill ${flag} /PID ${args.pid}`, { timeout: 3000 });
-          return { success: true, action: 'killed', pid: args.pid };
+      if (pid) {
+        if (IS_WIN) {
+          const res = runFile('taskkill', [...(args.force ? ['/F'] : []), '/PID', pid], { timeout: 3000 });
+          if (!res.ok) return { success: false, error: res.error };
+        } else {
+          process.kill(pid, signal);
         }
-        if (args.name) {
-          execSync(`taskkill ${flag} /IM "${args.name}" /T`, { timeout: 3000 });
-          return { success: true, action: 'killed', name: args.name };
+        return { success: true, action: 'killed', pid, signal };
+      }
+      if (args.name) {
+        const name = String(args.name);
+        if (IS_WIN) {
+          const res = runFile('taskkill', [...(args.force ? ['/F'] : []), '/IM', name, '/T'], { timeout: 3000 });
+          return res.ok ? { success: true, action: 'killed', name } : { success: false, error: res.error };
         }
-      } else {
-        if (args.pid) {
-          execSync(`kill -${signal} ${args.pid} 2>/dev/null`, { timeout: 3000 });
-          return { success: true, action: 'killed', pid: args.pid, signal };
+        let out = runFile('pgrep', ['-x', '--', name], { timeout: 5000 }).stdout;
+        if (!out.trim()) out = runFile('pgrep', ['--', name], { timeout: 5000 }).stdout;
+        const pids = out.trim().split('\n').filter(Boolean).map(Number).filter((n) => n > 1 && n !== process.pid);
+        if (!pids.length) return { success: false, error: `No process found matching: ${name}` };
+        for (const match of pids) {
+          try { process.kill(match, signal); } catch {}
         }
-        if (args.name) {
-          const out = execSync(`pgrep -x "${args.name}" 2>/dev/null || pgrep "${args.name}" 2>/dev/null || true`, { encoding: 'utf8', timeout: 5000 });
-          const pids = out.trim().split('\n').filter(Boolean).map(Number);
-          if (!pids.length) return { success: false, error: `No process found matching: ${args.name}` };
-          for (const pid of pids) {
-            try { execSync(`kill -${signal} ${pid} 2>/dev/null`, { timeout: 3000 }); } catch {}
-          }
-          return { success: true, action: 'killed', matched: pids.length, signal, pids };
-        }
+        return { success: true, action: 'killed', matched: pids.length, signal, pids };
       }
       return { success: false, error: 'Must specify either pid or name' };
     } catch (err) {
@@ -98,29 +100,23 @@ export const processSpawnTool = {
     required: ['command'],
   },
   execute: async (args, context) => {
-    const cwd = args.cwd || context.workingDir;
+    const cwd = args.cwd ? safePath(args.cwd, context.workingDir) : context.workingDir;
     const env = { ...process.env, ...(args.env_vars || {}) };
     try {
-      if (IS_WIN) {
-        if (args.detached) {
-          // Start-Process creates a fully detached process on Windows
-          const ps = `Start-Process cmd -ArgumentList '/c ${args.command.replace(/'/g, "''")}' -WindowStyle Hidden`;
-          execSync(`powershell -NoProfile -Command "${ps}"`, { cwd, timeout: 5000 });
-          return { success: true, action: 'spawned_detached', pid: null, command: args.command, note: 'Detached on Windows — PID not available via this method.' };
-        } else {
-          const proc = spawn('cmd.exe', ['/c', args.command], { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
-          return { success: true, action: 'spawned', pid: proc.pid, command: args.command, note: 'Process is running. Use process_kill to stop it.' };
-        }
-      } else {
-        if (args.detached) {
-          execSync(`nohup sh -c '${args.command.replace(/'/g, "'\\''")}' > /dev/null 2>&1 &`, { cwd, timeout: 5000 });
-          const pidOut = execSync('echo $!', { encoding: 'utf8', timeout: 3000 }).trim();
-          return { success: true, action: 'spawned_detached', pid: parseInt(pidOut) || null, command: args.command };
-        } else {
-          const proc = spawn('/bin/sh', ['-c', args.command], { cwd, shell: false, env, detached: false, stdio: ['ignore', 'pipe', 'pipe'] });
-          return { success: true, action: 'spawned', pid: proc.pid, command: args.command, note: 'Process is running. Use process_kill to stop it.' };
-        }
+      // The command itself is meant to be a shell command (this tool is
+      // dangerous and asks first); only the way it is started changed.
+      const [shell, shellArgs] = IS_WIN ? ['cmd.exe', ['/c', args.command]] : ['/bin/sh', ['-c', args.command]];
+      const proc = spawn(shell, shellArgs, {
+        cwd, env, shell: false, windowsHide: true,
+        detached: Boolean(args.detached),
+        stdio: args.detached ? 'ignore' : ['ignore', 'pipe', 'pipe'],
+      });
+      proc.on('error', () => {});
+      if (args.detached) {
+        proc.unref();
+        return { success: true, action: 'spawned_detached', pid: proc.pid || null, command: args.command };
       }
+      return { success: true, action: 'spawned', pid: proc.pid, command: args.command, note: 'Process is running. Use process_kill to stop it.' };
     } catch (err) {
       return { success: false, error: err.message };
     }
@@ -235,7 +231,7 @@ export const memoryDetailTool = {
     required: [],
   },
   execute: async (args) => {
-    const top = args.top || 10;
+    const top = clampInt(args.top, 10, 1, 100);
     try {
       const totalMem = os.totalmem();
       const freeMem  = os.freemem();

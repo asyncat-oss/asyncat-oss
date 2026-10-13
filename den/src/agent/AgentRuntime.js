@@ -21,7 +21,7 @@ import { normalizeTags, selectRelevantSkillsWithLlm, synthesizeSkillFromRun } fr
 import { listMemories, searchMemories, enforceMemoryCap, decayMemoryImportance } from './tools/memoryTools.js';
 import { memoryConsolidator } from './MemoryConsolidator.js';
 import { isGitDangerousAction, isGitReadOnlyAction } from './gitService.js';
-import { isReadOnlyShellCommand } from './shellSafety.js';
+import { isReadOnlyPackageCommand, isReadOnlyShellCommand } from './shellSafety.js';
 import { getModelCapabilities, normalizeReasoningEffort } from '../ai/controllers/ai/modelCapabilities.js';
 import { cleanReasoningAnswer, combineReasoningParts, createStreamTextAccumulator, extractReasoningFromText, reasoningTextFromDelta } from './reasoningParser.js';
 import { resolveContextWindow } from '../ai/controllers/ai/modelContextResolver.js';
@@ -32,7 +32,7 @@ import db from '../db/client.js';
 import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 import { lspManager } from './LspManager.js';
 
 const MAX_ROUNDS_DEFAULT = 25;
@@ -2061,9 +2061,7 @@ export class AgentRuntime {
       return 'moderate';
     }
     if (toolName === 'package_manager') {
-      const command = String(args.command || '').trim().toLowerCase();
-      if (/^(audit|outdated|freeze|list|show|info|why|version|--version)\b/.test(command)) return 'safe';
-      return 'moderate';
+      return isReadOnlyPackageCommand(args.command) ? 'safe' : 'moderate';
     }
     return fallbackPermission;
   }
@@ -2272,7 +2270,7 @@ export class AgentRuntime {
       try {
         if (forceSnapshot) throw new Error('snapshot requested');
         execSync('git rev-parse --is-inside-work-tree', { cwd: workspace, stdio: 'ignore', timeout: 3000 });
-        execSync(`git stash push --include-untracked -m ${JSON.stringify(message)}`, { cwd: workspace, stdio: 'ignore', timeout: 15000 });
+        execFileSync('git', ['stash', 'push', '--include-untracked', '-m', message], { cwd: workspace, stdio: 'ignore', timeout: 15000 });
         const list = execSync('git stash list', { cwd: workspace, encoding: 'utf8', timeout: 3000 });
         const first = list.split('\n').find(line => line.includes(message));
         checkpoint = {
@@ -3132,7 +3130,8 @@ export class AgentRuntime {
         const pyFiles = codeFiles.filter(f => f.endsWith('.py')).slice(0, 5);
         for (const pf of pyFiles) {
           try {
-            execSync(`python3 -c "import py_compile; py_compile.compile('${pf}', doraise=True)"`, {
+            // The file name is passed as an argument, not pasted into code.
+            execFileSync('python3', ['-c', 'import py_compile, sys; py_compile.compile(sys.argv[1], doraise=True)', pf], {
               cwd: workDir, timeout: 5000, stdio: 'pipe',
             });
           } catch (err) {
@@ -3187,7 +3186,7 @@ export function deleteCheckpoint(checkpoint) {
         fs.rmSync(cp.dir, { recursive: true, force: true });
       }
     } else if (cp.kind === 'git_stash' && /^stash@\{\d+\}$/.test(cp.ref)) {
-      try { execSync(`git stash drop ${cp.ref}`, { cwd: cp.workspace, stdio: 'ignore', timeout: 15000 }); } catch {}
+      try { execFileSync('git', ['stash', 'drop', cp.ref], { cwd: cp.workspace, stdio: 'ignore', timeout: 15000 }); } catch {}
     }
     CHECKPOINTS.delete(cp.id);
     _deletePersistedCheckpoint(cp.id);
@@ -3204,7 +3203,7 @@ export function restoreCheckpoint(id) {
   if (!cp) return { success: false, error: 'No checkpoint found' };
   try {
     if (cp.kind === 'git_stash') {
-      execSync(`git stash apply ${cp.ref}`, { cwd: cp.workspace, stdio: 'pipe', timeout: 30000 });
+      execFileSync('git', ['stash', 'apply', cp.ref], { cwd: cp.workspace, stdio: 'pipe', timeout: 30000 });
     } else if (cp.kind === 'dir_snapshot') {
       if (!cp.dir || !fs.existsSync(cp.dir)) {
         return { success: false, error: 'Checkpoint snapshot is missing', checkpoint: cp };

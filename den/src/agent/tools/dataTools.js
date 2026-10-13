@@ -3,12 +3,12 @@
 // read_pdf, read_csv, write_csv, zip_files, unzip_files, json_query,
 // diff_apply, ssh_exec
 
-import { execSync, execFileSync, spawn } from 'child_process';
+import { execFileSync, spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { PermissionLevel } from './toolRegistry.js';
-import { hasBin, missingDepError } from './shared.js';
+import { clampInt, hasBin, missingDepError, runFile } from './shared.js';
 import { getStatus as getWhisperStatus, transcribe } from '../../ai/controllers/ai/whisperServerManager.js';
 
 const PLATFORM = os.platform();
@@ -46,11 +46,12 @@ function fileKind(filePath) {
   return { kind: 'binary', ext };
 }
 
-function runProc(cmd, opts = {}) {
+// Runs a program with an argument list, never through a shell: file names and
+// options come from the model.
+function runProc(file, argv, opts = {}) {
   return new Promise((resolve) => {
-    const [sh, flag] = IS_WIN ? ['cmd.exe', '/c'] : ['/bin/sh', '-c'];
     let stdout = '', stderr = '';
-    const proc = spawn(sh, [flag, cmd], { cwd: opts.cwd || process.cwd(), shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
+    const proc = spawn(file, argv.map(String), { cwd: opts.cwd || process.cwd(), shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
     const timer = setTimeout(() => { proc.kill(); resolve({ success: false, error: `Timed out after ${(opts.timeout || 30000) / 1000}s`, stdout, stderr }); }, opts.timeout || 30000);
     proc.stdout?.on('data', d => { stdout += d.toString(); });
     proc.stderr?.on('data', d => { stderr += d.toString(); });
@@ -92,10 +93,14 @@ export const readPdfTool = {
     }
 
     try {
-      const pageFlag = args.pages ? `-f ${args.pages.split('-')[0]} -l ${args.pages.split('-')[1] || args.pages.split('-')[0]}` : '';
-      const layoutFlag = args.layout ? '-layout' : '';
+      // Page numbers are parsed, and pdftotext runs with an argument list.
+      const [firstPage, lastPage] = String(args.pages || '').split('-').map((n) => Number.parseInt(n, 10));
+      const pageArgs = Number.isFinite(firstPage)
+        ? ['-f', firstPage, '-l', Number.isFinite(lastPage) ? lastPage : firstPage]
+        : [];
       const tmpOut = path.join(os.tmpdir(), `asyncat_pdf_${Date.now()}.txt`);
-      execSync(`pdftotext ${pageFlag} ${layoutFlag} "${filePath}" "${tmpOut}"`, { timeout: 30000 });
+      const res = runFile('pdftotext', [...pageArgs, ...(args.layout ? ['-layout'] : []), filePath, tmpOut], { timeout: 30000 });
+      if (!res.ok && !fs.existsSync(tmpOut)) throw new Error(res.error);
       let text = fs.readFileSync(tmpOut, 'utf8');
       try { fs.unlinkSync(tmpOut); } catch {}
       if (text.length > 12000) text = text.slice(0, 12000) + '\n... [truncated]';
@@ -235,8 +240,8 @@ export const zipFilesTool = {
     required: ['output', 'sources'],
   },
   execute: async (args, context) => {
-    const outPath = path.resolve(context.workingDir, args.output);
-    const sources = args.sources.map(s => path.resolve(context.workingDir, s));
+    const outPath = safePath(args.output, context.workingDir);
+    const sources = args.sources.map(s => safePath(s, context.workingDir));
 
     for (const src of sources) {
       if (!fs.existsSync(src)) return { success: false, error: `Source not found: ${src}` };
@@ -249,10 +254,9 @@ export const zipFilesTool = {
       if (IS_WIN) {
         const srcList = sources.map(s => `'${s.replace(/'/g, "''")}'`).join(',');
         const ps = `Compress-Archive -Path ${srcList} -DestinationPath '${outPath.replace(/'/g, "''")}' -Force`;
-        result = await runProc(`powershell -NoProfile -Command "${ps}"`, { cwd: context.workingDir, timeout: 60000 });
+        result = await runProc('powershell', ['-NoProfile', '-NonInteractive', '-Command', ps], { cwd: context.workingDir, timeout: 60000 });
       } else {
-        const srcsStr = sources.map(s => `"${s}"`).join(' ');
-        result = await runProc(`zip -r "${outPath}" ${srcsStr}`, { cwd: context.workingDir, timeout: 60000 });
+        result = await runProc('zip', ['-r', outPath, '--', ...sources], { cwd: context.workingDir, timeout: 60000 });
       }
       if (!result.success) return { success: false, error: result.stderr || result.error };
       const stat = fs.existsSync(outPath) ? fs.statSync(outPath) : null;
@@ -278,19 +282,19 @@ export const unzipFilesTool = {
     required: ['source'],
   },
   execute: async (args, context) => {
-    const srcPath = path.resolve(context.workingDir, args.source);
+    const srcPath = safePath(args.source, context.workingDir);
     if (!fs.existsSync(srcPath)) return { success: false, error: `File not found: ${args.source}` };
 
-    const destPath = path.resolve(context.workingDir, args.destination || path.basename(args.source, '.zip'));
+    const destPath = safePath(args.destination || path.basename(args.source, '.zip'), context.workingDir);
     fs.mkdirSync(destPath, { recursive: true });
 
     try {
       let result;
       if (IS_WIN) {
         const ps = `Expand-Archive -Path '${srcPath.replace(/'/g, "''")}' -DestinationPath '${destPath.replace(/'/g, "''")}' -Force`;
-        result = await runProc(`powershell -NoProfile -Command "${ps}"`, { cwd: context.workingDir, timeout: 60000 });
+        result = await runProc('powershell', ['-NoProfile', '-NonInteractive', '-Command', ps], { cwd: context.workingDir, timeout: 60000 });
       } else {
-        result = await runProc(`unzip -o "${srcPath}" -d "${destPath}"`, { cwd: context.workingDir, timeout: 60000 });
+        result = await runProc('unzip', ['-o', srcPath, '-d', destPath], { cwd: context.workingDir, timeout: 60000 });
       }
       if (!result.success && result.exit_code !== 1) return { success: false, error: result.stderr || result.error };
       return { success: true, source: args.source, destination: destPath };
@@ -401,7 +405,7 @@ export const diffApplyTool = {
 
     try {
       if (args.patch_file) {
-        patchPath = path.resolve(context.workingDir, args.patch_file);
+        patchPath = safePath(args.patch_file, context.workingDir);
         if (!fs.existsSync(patchPath)) return { success: false, error: `Patch file not found: ${args.patch_file}` };
       } else if (args.patch_content) {
         patchPath = path.join(os.tmpdir(), `asyncat_patch_${Date.now()}.diff`);
@@ -410,9 +414,8 @@ export const diffApplyTool = {
         return { success: false, error: 'Provide either patch_file or patch_content.' };
       }
 
-      const strip = args.strip ?? 0;
-      const dryRun = args.dry_run ? '--dry-run' : '';
-      const result = await runProc(`patch -p${strip} ${dryRun} -i "${patchPath}"`, { cwd: context.workingDir, timeout: 30000 });
+      const strip = clampInt(args.strip, 0, 0, 20);
+      const result = await runProc('patch', [`-p${strip}`, ...(args.dry_run ? ['--dry-run'] : []), '-i', patchPath], { cwd: context.workingDir, timeout: 30000 });
 
       return {
         success: result.success,
@@ -450,14 +453,22 @@ export const sshExecTool = {
       return missingDepError('ssh', IS_WIN ? 'Enable OpenSSH Client in Windows Features or install Git for Windows' : 'sudo apt install openssh-client (Linux) / brew install openssh (macOS)');
     }
 
-    const user    = args.user ? `${args.user}@` : '';
-    const port    = args.port || 22;
-    const timeout = args.timeout || 30;
-    const keyFlag = args.key_path ? `-i "${path.resolve(context.workingDir, args.key_path)}"` : '';
-    const cmd     = `ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=${timeout} -p ${port} ${keyFlag} ${user}${args.host} ${JSON.stringify(args.command)}`;
+    const host    = String(args.host ?? '').trim();
+    const user    = args.user ? String(args.user).trim() : '';
+    // A host or user starting with - would be read as an ssh option (-oProxyCommand=...).
+    if (!host || /^-|\s/.test(host) || /^-|[\s@]/.test(user)) {
+      return { success: false, error: 'host and user must be plain names.' };
+    }
+    const port    = clampInt(args.port, 22, 1, 65535);
+    const timeout = clampInt(args.timeout, 30, 1, 600);
+    const argv = [
+      '-o', 'StrictHostKeyChecking=accept-new', '-o', `ConnectTimeout=${timeout}`, '-p', port,
+      ...(args.key_path ? ['-i', path.resolve(context.workingDir, args.key_path)] : []),
+      '--', `${user ? `${user}@` : ''}${host}`, String(args.command ?? ''),
+    ];
 
     try {
-      const result = await runProc(cmd, { cwd: context.workingDir, timeout: (timeout + 5) * 1000 });
+      const result = await runProc('ssh', argv, { cwd: context.workingDir, timeout: (timeout + 5) * 1000 });
       return {
         success: result.success,
         host: args.host,
