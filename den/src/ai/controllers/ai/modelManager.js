@@ -414,6 +414,9 @@ export async function startDownload(url, filename, subDir = '', options = {}) {
     fs.mkdirSync(baseDir, { recursive: true });
   }
   const destPath = path.join(baseDir, safeFilename);
+  // Written beside the final name and renamed at the end, so a half-done
+  // download never shows up as a usable model.
+  const partPath = `${destPath}.part`;
   const downloadId = `dl_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
 
   const abortController = new AbortController();
@@ -431,6 +434,7 @@ export async function startDownload(url, filename, subDir = '', options = {}) {
 
   // Run download in background
   (async () => {
+    let writer = null;
     try {
       const response = await fetch(url, {
         signal: abortController.signal,
@@ -445,7 +449,10 @@ export async function startDownload(url, filename, subDir = '', options = {}) {
       const dl = activeDownloads.get(downloadId);
       if (dl) dl.total = total;
 
-      const writer = createWriteStream(destPath);
+      writer = createWriteStream(partPath);
+      // A full disk mid-download must fail the download, not crash den.
+      let writeError = null;
+      writer.on('error', (err) => { writeError = err; });
       let downloaded = 0;
       let lastProgressReport = 0;
 
@@ -455,6 +462,7 @@ export async function startDownload(url, filename, subDir = '', options = {}) {
         const { done, value } = await reader.read();
         if (done) break;
 
+        if (writeError) throw writeError;
         writer.write(Buffer.from(value));
         downloaded += value.length;
 
@@ -474,9 +482,12 @@ export async function startDownload(url, filename, subDir = '', options = {}) {
 
       writer.end();
       await new Promise((resolve, reject) => {
+        if (writeError) { reject(writeError); return; }
         writer.on('finish', resolve);
         writer.on('error', reject);
       });
+      if (writeError) throw writeError;
+      fs.renameSync(partPath, destPath);
 
       const finalDl = activeDownloads.get(downloadId);
       if (finalDl) {
@@ -489,8 +500,9 @@ export async function startDownload(url, filename, subDir = '', options = {}) {
 
     } catch (err) {
       // Clean up partial file
-      if (fs.existsSync(destPath)) {
-        try { fs.unlinkSync(destPath); } catch {}
+      writer?.destroy();
+      if (fs.existsSync(partPath)) {
+        try { fs.unlinkSync(partPath); } catch {}
       }
 
       const dl = activeDownloads.get(downloadId);
@@ -535,6 +547,7 @@ export function getDownloadStatus(downloadId) {
     downloadedFormatted: formatBytes(dl.downloaded),
     totalFormatted: dl.total > 0 ? formatBytes(dl.total) : 'unknown',
     status: dl.status,
+    error: dl.error || null,
     startedAt: dl.startedAt,
   };
 }
