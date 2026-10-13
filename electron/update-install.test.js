@@ -13,6 +13,7 @@ import {
   digestSha256,
   downloadFile,
   installStrategy,
+  makeExecutable,
   parseChecksums,
   planDownload,
   replaceAppImage,
@@ -55,6 +56,24 @@ test('installers go to the app\'s own update folder; a .deb to Downloads', () =>
     planDownload({ strategy: 'replace-appimage', assetName: 'Asyncat-1.0.0-linux-x64.AppImage', platform: 'linux', appImagePath: '/home/u/Apps/Asyncat.AppImage', canWrite: () => true, ...dirs }),
     { strategy: 'replace-appimage', destination: '/home/u/Apps/.Asyncat.AppImage.update' },
   );
+  // An AppImage in a folder Asyncat can't write to is saved to Downloads and
+  // started from there, not "installed" like a .deb.
+  assert.deepEqual(
+    planDownload({ strategy: 'replace-appimage', assetName: 'Asyncat-1.0.0-linux-x64.AppImage', platform: 'linux', appImagePath: '/opt/Asyncat.AppImage', canWrite: () => false, ...dirs }),
+    { strategy: 'save-appimage', destination: path.join('/home/u/Downloads', 'Asyncat-1.0.0-linux-x64.AppImage') },
+  );
+});
+
+test('a saved AppImage is made executable', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'asyncat-appimage-'));
+  try {
+    const file = path.join(dir, 'Asyncat.AppImage');
+    fs.writeFileSync(file, 'x', { mode: 0o644 });
+    makeExecutable(file);
+    assert.equal(fs.statSync(file).mode & 0o111, 0o111);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('only an app running from its own AppImage is treated as an AppImage', () => {

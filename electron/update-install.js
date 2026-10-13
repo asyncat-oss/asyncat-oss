@@ -3,6 +3,9 @@
 //
 // How an update is applied depends on how Asyncat was installed:
 //   replace-appimage  Linux AppImage: the new file replaces the old one, then restart.
+//   save-appimage     Linux AppImage in a folder Asyncat can't write to: the new
+//                     AppImage is saved to Downloads, made executable, and started
+//                     from there.
 //   run-installer     Windows: the downloaded installer runs silently, then reopens Asyncat.
 //   open-installer    macOS (.dmg, kept in the app's own update folder) and Linux .deb
 //                     (saved to Downloads); the last step is the user's (unsigned
@@ -54,14 +57,21 @@ export function installStrategy({ platform, appImagePath = null, assetName = nul
  * installs it from.
  */
 export function planDownload({ strategy, assetName, platform, appImagePath = null, updateDir, downloadsDir, canWrite = canWriteNextTo }) {
-  if (strategy === 'replace-appimage' && appImagePath && canWrite(appImagePath)) {
-    return { strategy, destination: appImageStagingPath(appImagePath) };
+  if (strategy === 'replace-appimage') {
+    if (appImagePath && canWrite(appImagePath)) return { strategy, destination: appImageStagingPath(appImagePath) };
+    // A read-only folder (/opt, a mounted drive): keep the new AppImage in
+    // Downloads and start it from there.
+    return { strategy: 'save-appimage', destination: path.join(downloadsDir, assetName) };
   }
   if (strategy === 'run-installer' || (strategy === 'open-installer' && platform === 'darwin')) {
     return { strategy, destination: path.join(updateDir, assetName) };
   }
-  // An AppImage in a folder we can't write to is updated like a .deb.
   return { strategy: 'open-installer', destination: path.join(downloadsDir, assetName) };
+}
+
+/** Make a downloaded AppImage runnable. */
+export function makeExecutable(file) {
+  fs.chmodSync(file, 0o755);
 }
 
 /** `sha256sum` output as a Map of file name → lowercase hex digest. */
@@ -199,7 +209,7 @@ export function canWriteNextTo(file) {
  * the new version.
  */
 export function replaceAppImage(downloaded, appImagePath) {
-  fs.chmodSync(downloaded, 0o755);
+  makeExecutable(downloaded);
   fs.renameSync(downloaded, appImagePath);
 }
 

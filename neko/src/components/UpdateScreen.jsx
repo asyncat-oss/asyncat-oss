@@ -20,8 +20,32 @@ function primaryLabel(strategy) {
   return 'Open download page';
 }
 
+function FinishError({ message }) {
+  if (!message) return null;
+  return <p className="mt-3 text-[13px] leading-5 text-red-600 dark:text-red-400" role="alert">{message}</p>;
+}
+
+FinishError.propTypes = { message: PropTypes.string };
+
 function ReadyStep({ download, platform, api }) {
   const [copied, setCopied] = useState(false);
+  const [finishing, setFinishing] = useState(false);
+  const [finishError, setFinishError] = useState('');
+
+  // Restart, run the installer or open it. On success the app usually quits;
+  // otherwise say what went wrong instead of doing nothing.
+  const onFinish = async () => {
+    setFinishing(true);
+    setFinishError('');
+    const result = await api.finishUpdate().catch((error) => ({ success: false, error: error?.message }));
+    if (!result?.success) {
+      setFinishError(result?.error || 'That didn’t work. Try again, or download the update from the release page.');
+      setFinishing(false);
+    } else if (!result.quitting) {
+      setFinishing(false);
+    }
+  };
+
   if (download.strategy === 'replace-appimage' || download.strategy === 'run-installer') {
     return (
       <>
@@ -31,8 +55,23 @@ function ReadyStep({ download, platform, api }) {
             : 'Asyncat will close and open again on the new version. Your chats and settings stay.'}
         </p>
         <div className="mt-5 flex justify-center gap-2">
-          <Button variant="primary" size="md" onClick={() => api.finishUpdate()}>Restart now</Button>
+          <Button variant="primary" size="md" disabled={finishing} onClick={onFinish}>{finishing ? 'Restarting…' : 'Restart now'}</Button>
         </div>
+        <FinishError message={finishError} />
+      </>
+    );
+  }
+  if (download.strategy === 'save-appimage') {
+    return (
+      <>
+        <p className="text-[13px] leading-5 text-fg-muted">
+          Asyncat can’t replace its own file in the folder it runs from, so the new version was saved to your Downloads folder, ready to run. Start it from there; you can move it to where you keep your apps and delete the old one once it works.
+        </p>
+        <div className="mt-5 flex justify-center gap-2">
+          <Button variant="primary" size="md" disabled={finishing} onClick={onFinish}>Start new version</Button>
+          <Button variant="secondary" size="md" icon={FolderOpen} onClick={() => api.showUpdateFile()}>Show in folder</Button>
+        </div>
+        <FinishError message={finishError} />
       </>
     );
   }
@@ -63,13 +102,14 @@ function ReadyStep({ download, platform, api }) {
       <div className="mt-5 flex justify-center gap-2">
         {platform === 'darwin' ? (
           <>
-            <Button variant="primary" size="md" onClick={() => api.finishUpdate()}>Open installer</Button>
+            <Button variant="primary" size="md" onClick={onFinish}>Open installer</Button>
             <Button variant="secondary" size="md" onClick={() => api.quitForUpdate?.()}>Quit Asyncat</Button>
           </>
         ) : (
           <Button variant="secondary" size="md" icon={FolderOpen} onClick={() => api.showUpdateFile()}>Show in folder</Button>
         )}
       </div>
+      <FinishError message={finishError} />
     </>
   );
 }

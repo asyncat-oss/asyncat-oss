@@ -28,6 +28,7 @@ import {
   detectAppImage,
   downloadFile,
   installStrategy,
+  makeExecutable,
   parseChecksums,
   planDownload,
   replaceAppImage,
@@ -212,8 +213,11 @@ async function startUpdate() {
         throw error;
       }
       if (strategy === 'replace-appimage') replaceAppImage(destination, RUNNING_APPIMAGE);
-      // A .deb is installed from Downloads by the user: show it there.
-      if (strategy === 'open-installer' && process.platform === 'linux') shell.showItemInFolder(destination);
+      if (strategy === 'save-appimage') makeExecutable(destination);
+      // A .deb or a saved AppImage is in Downloads: show it there.
+      if ((strategy === 'open-installer' || strategy === 'save-appimage') && process.platform === 'linux') {
+        shell.showItemInFolder(destination);
+      }
       setDownload({ status: 'ready', file: strategy === 'replace-appimage' ? RUNNING_APPIMAGE : destination });
     } catch (error) {
       if (!error.cancelled) console.warn('[updater] download failed:', error.message);
@@ -235,10 +239,14 @@ function cancelUpdate() {
 /** Finish an update that is ready: restart into it, or run the installer. */
 async function finishUpdate() {
   if (download.status !== 'ready') return { success: false, error: 'The update has not finished downloading.' };
-  if (download.strategy === 'replace-appimage') {
-    app.relaunch({ execPath: RUNNING_APPIMAGE, args: process.argv.slice(1) });
-    app.quit();
-    return { success: true };
+  if (download.strategy === 'replace-appimage' || download.strategy === 'save-appimage') {
+    const execPath = download.strategy === 'replace-appimage' ? RUNNING_APPIMAGE : download.file;
+    if (!execPath || !fs.existsSync(execPath)) {
+      return { success: false, error: 'The new version is no longer where it was saved. Download the update again.' };
+    }
+    app.relaunch({ execPath, args: process.argv.slice(1) });
+    setImmediate(() => app.quit());
+    return { success: true, quitting: true };
   }
   if (download.strategy === 'run-installer') {
     spawn(download.file, WINDOWS_INSTALLER_ARGS, { detached: true, stdio: 'ignore' }).unref();
