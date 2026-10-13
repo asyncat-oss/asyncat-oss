@@ -790,8 +790,9 @@ function scoreLlamaReleaseAsset(asset, platform = process.platform, arch = proce
   const hasAnyGpuTag = hasCuda || hasRocm || hasMetal || hasOtherGpu;
 
   if (profile === 'cpu_safe') {
+    // A CPU-safe install must never end up with a GPU build.
+    if (hasAnyGpuTag) return null;
     if (/cpu/.test(name)) score += 30;
-    if (hasAnyGpuTag) score -= 100;
     return score;
   }
 
@@ -1478,6 +1479,12 @@ function installUnixLauncher(targetPath, realBinary, root = path.dirname(targetP
   fs.chmodSync(targetPath, 0o755);
 }
 
+/** The downloaded build was fine, but it doesn't run on this machine. */
+export function isBuildRejectedByMachine(error) {
+  return error?.diagnostics?.type === 'llama-server-verification'
+    || error?.diagnostics?.type === 'llama-cuda-runtime-incomplete';
+}
+
 export async function installManagedLlamaServer(input = 'cpu_safe') {
   const options = typeof input === 'string'
     ? { profile: input }
@@ -1502,7 +1509,9 @@ export async function installManagedLlamaServer(input = 'cpu_safe') {
     }
     candidates = [selectedAsset];
   } else {
-    candidates = rankLlamaReleaseAssets(release.assets || [], process.platform, process.arch, requestedProfile).slice(0, 5);
+    // Only builds for the requested profile, and only a few: a build that
+    // won't run on this CPU (AVX and the like) falls back to the next one.
+    candidates = rankLlamaReleaseAssets(release.assets || [], process.platform, process.arch, requestedProfile).slice(0, 3);
   }
 
   if (candidates.length === 0) {
@@ -1519,6 +1528,10 @@ export async function installManagedLlamaServer(input = 'cpu_safe') {
     try {
       return await installManagedAsset(asset, release, assetProfile, options.onProgress);
     } catch (e) {
+      // Only "this build doesn't run here" is worth trying the next build
+      // for. A failed download, a full disk, a checksum mismatch or a cancel
+      // would fail (or waste a download) the same way again.
+      if (!isBuildRejectedByMachine(e) || candidates.length === 1) throw e;
       failures.push(`${asset.name}: ${e.message}`);
       diagnostics.push({
         asset: asset.name,

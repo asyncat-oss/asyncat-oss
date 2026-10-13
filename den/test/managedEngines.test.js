@@ -5,8 +5,11 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
+  buildReleaseCatalog,
   cleanupManagedEngineLeftovers,
+  isBuildRejectedByMachine,
   listManagedEngineInstalls,
+  rankLlamaReleaseAssets,
   swapManagedDirectory,
 } from '../src/lib/localEngine.js';
 
@@ -150,6 +153,33 @@ test('startup clean-up removes half-made copies and puts back stranded ones', as
     fs.rmSync(tmp, { recursive: true, force: true });
     t.cleanup();
   }
+});
+
+test('a CPU-safe install never picks a GPU build', () => {
+  const asset = (name) => ({ name, browser_download_url: `https://example.invalid/${name}` });
+  const assets = [
+    asset('llama-b6500-bin-ubuntu-vulkan-x64.zip'),
+    asset('llama-b6500-bin-ubuntu-x64.zip'),
+    asset('llama-b6500-bin-win-cuda-12.4-x64.zip'),
+    asset('llama-b6500-bin-win-cpu-x64.zip'),
+    asset('llama-b6500-bin-win-vulkan-x64.zip'),
+    asset('llama-b6500-bin-win-sycl-x64.zip'),
+  ];
+  assert.deepEqual(rankLlamaReleaseAssets(assets, 'linux', 'x64', 'cpu_safe').map((a) => a.name), ['llama-b6500-bin-ubuntu-x64.zip']);
+  assert.deepEqual(rankLlamaReleaseAssets(assets, 'win32', 'x64', 'cpu_safe').map((a) => a.name), ['llama-b6500-bin-win-cpu-x64.zip']);
+  // Only GPU builds published: nothing to install as CPU-safe.
+  assert.deepEqual(rankLlamaReleaseAssets([assets[0]], 'linux', 'x64', 'cpu_safe'), []);
+
+  const [release] = buildReleaseCatalog([{ tag_name: 'b6500', assets }], 'win32', 'x64');
+  const cuda = release.assets.find((a) => a.name.includes('cuda'));
+  assert.equal(cuda.supportedProfiles.includes('cpu_safe'), false);
+  assert.deepEqual(cuda.supportedProfiles, ['nvidia_gpu']);
+});
+
+test('only a build this machine rejects is worth trying the next build for', () => {
+  assert.equal(isBuildRejectedByMachine(Object.assign(new Error('x'), { diagnostics: { type: 'llama-server-verification' } })), true);
+  assert.equal(isBuildRejectedByMachine(new Error('Download failed: HTTP 503')), false);
+  assert.equal(isBuildRejectedByMachine(Object.assign(new Error('checksum'), { code: 'CHECKSUM_MISMATCH' })), false);
 });
 
 test('a first install has nothing to back up', () => {
