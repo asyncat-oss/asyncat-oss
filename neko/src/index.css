@@ -92,6 +92,207 @@
 .midnight .hljs-comment { color: #475569 !important; font-style: italic; }
 @theme {
   --font-sora: "Sora", sans-serif;
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+}
+
+/* ── Inter (bundled, Latin subsets only) ───────────────────────────────── */
+@font-face {
+  font-family: "Inter Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("@fontsource-variable/inter/files/inter-latin-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Inter Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("@fontsource-variable/inter/files/inter-latin-ext-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* ── Design tokens ─────────────────────────────────────────────────────────
+   One class works in every theme: bg-canvas, bg-sidebar, bg-surface,
+   bg-elevated, bg-hover, bg-selected, border-line, border-line-strong,
+   text-fg, text-fg-muted, text-fg-subtle, text-accent, bg-accent-soft.
+   Values match the gray (dark) and slate (midnight) palettes the rest of the
+   app uses, so token-based and hand-themed screens sit together.
+   Radius scale: rounded-lg for rows and buttons, rounded-xl for cards and
+   menus, rounded-2xl for dialogs. */
+:root {
+  --as-canvas: #ffffff;
+  --as-sidebar: #f9f9f9;
+  --as-surface: #ffffff;
+  --as-elevated: #ffffff;
+  --as-hover: rgb(0 0 0 / 0.045);
+  --as-selected: rgb(0 0 0 / 0.07);
+  --as-line: rgb(0 0 0 / 0.08);
+  --as-line-strong: rgb(0 0 0 / 0.14);
+  --as-fg: #111827;
+  --as-fg-muted: #4b5563;
+  --as-fg-subtle: #9ca3af;
+  --as-accent: #2456dc;
+  --as-accent-soft: rgb(36 86 220 / 0.08);
+  --as-bubble: #f2f3f5;
+}
+.dark {
+  --as-canvas: #111827;
+  --as-sidebar: #0c111d;
+  --as-surface: #161e2e;
+  --as-elevated: #1f2937;
+  --as-hover: rgb(255 255 255 / 0.05);
+  --as-selected: rgb(255 255 255 / 0.08);
+  --as-line: rgb(255 255 255 / 0.07);
+  --as-line-strong: rgb(255 255 255 / 0.12);
+  --as-fg: #f3f4f6;
+  --as-fg-muted: #9ca3af;
+  --as-fg-subtle: #6b7280;
+  --as-accent: #8aa8ff;
+  --as-accent-soft: rgb(110 147 255 / 0.12);
+  --as-bubble: #1f2937;
+}
+.midnight {
+  --as-canvas: #030712;
+  --as-sidebar: #020617;
+  --as-surface: #0b1120;
+  --as-elevated: #0f172a;
+  --as-hover: rgb(255 255 255 / 0.05);
+  --as-selected: rgb(255 255 255 / 0.07);
+  --as-line: rgb(255 255 255 / 0.06);
+  --as-line-strong: rgb(255 255 255 / 0.11);
+  --as-fg: #f1f5f9;
+  --as-fg-muted: #94a3b8;
+  --as-fg-subtle: #64748b;
+  --as-accent: #8aa8ff;
+  --as-accent-soft: rgb(110 147 255 / 0.12);
+  --as-bubble: #1e293b;
+}
+
+/* One accent across the app: older screens use Tailwind's indigo, newer ones
+   the asyncat.com blue. Pointing the indigo scale at the blue scale makes them
+   match. Delete this block to bring indigo back. */
+@theme {
+  --color-indigo-50: oklch(97% 0.014 254.604);
+  --color-indigo-100: oklch(93.2% 0.032 255.585);
+  --color-indigo-200: oklch(88.2% 0.059 254.128);
+  --color-indigo-300: oklch(80.9% 0.105 251.813);
+  --color-indigo-400: oklch(70.7% 0.165 254.624);
+  --color-indigo-500: oklch(62.3% 0.214 259.815);
+  --color-indigo-600: oklch(54.6% 0.245 262.881);
+  --color-indigo-700: oklch(48.8% 0.243 264.376);
+  --color-indigo-800: oklch(42.4% 0.199 265.638);
+  --color-indigo-900: oklch(37.9% 0.146 265.522);
+  --color-indigo-950: oklch(28.2% 0.091 267.935);
+}
+
+@theme inline {
+  --color-canvas: var(--as-canvas);
+  --color-sidebar: var(--as-sidebar);
+  --color-surface: var(--as-surface);
+  --color-elevated: var(--as-elevated);
+  --color-hover: var(--as-hover);
+  --color-selected: var(--as-selected);
+  --color-line: var(--as-line);
+  --color-line-strong: var(--as-line-strong);
+  --color-fg: var(--as-fg);
+  --color-fg-muted: var(--as-fg-muted);
+  --color-fg-subtle: var(--as-fg-subtle);
+  --color-accent: var(--as-accent);
+  --color-accent-soft: var(--as-accent-soft);
+  --color-bubble: var(--as-bubble);
+}
+
+/* ── Cat mascot (components/ui/Cat.jsx) ─────────────────────────────────────
+   Same palette as asyncat.com. In dark themes a light outline layer keeps the
+   black cat visible; --cat-o sets its width in drawing units. */
+:root {
+  --cat: #121212;
+  --cat-line: transparent;
+  --cat-eye: #ffe5b4;
+  --cat-nose: #f2a7b8;
+  --cat-detail: #3d3c3a;
+  --cat-whisker: #bdb9b1;
+}
+.dark,
+.midnight {
+  --cat: #0c0c0e;
+  --cat-line: #ece9e2;
+  --cat-whisker: #8e8b85;
+}
+.cat { display: block; height: auto; overflow: visible; }
+.cat .cat-o { display: none; }
+.dark .cat .cat-o,
+.midnight .cat .cat-o { display: inline; }
+.cat-f .s { fill: var(--cat); }
+.cat-f .t { fill: none; stroke: var(--cat); stroke-width: 9; stroke-linecap: round; }
+.cat-o .s { fill: var(--cat-line); stroke: var(--cat-line); stroke-width: var(--cat-o, 5px); stroke-linejoin: round; }
+.cat-o .t { fill: none; stroke: var(--cat-line); stroke-width: calc(9px + var(--cat-o, 5px)); stroke-linecap: round; }
+.cat .eye { fill: var(--cat-eye); }
+.cat .pupil { fill: var(--cat); }
+.cat .shine { fill: #fff; }
+.cat .nose { fill: var(--cat-nose); }
+.cat .inner { fill: var(--cat-detail); }
+.cat .whisker { fill: none; stroke: var(--cat-whisker); stroke-width: 1.2; stroke-linecap: round; }
+.cat .toe { fill: none; stroke: var(--cat-detail); stroke-width: 1.4; stroke-linecap: round; }
+.cat .closed { fill: none; stroke: var(--cat-eye); stroke-width: 2.4; stroke-linecap: round; }
+.cat .cat-z { fill: none; stroke: var(--as-fg-subtle); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Pivot points, in drawing units of each pose's viewBox. */
+.cat .cat-eyes { transform-box: fill-box; transform-origin: center; }
+.cat .cat-ear-l { transform-origin: 32px 20px; }
+.cat .cat-ear-r { transform-origin: 68px 20px; }
+.cat-sit .cat-head { transform-origin: 50px 76px; }
+.cat-sit .cat-tail { transform-origin: 82px 134px; }
+.cat-walk .cat-tail { transform-origin: 26px 42px; }
+.cat-sleep .cat-tail { transform-origin: 146px 70px; }
+.cat-walk .cat-leg { transform-box: fill-box; transform-origin: 50% 8%; }
+.cat-sleep .cat-body { transform-box: fill-box; transform-origin: 50% 100%; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .cat-animated .cat-eyes { animation: cat-blink 4.6s infinite; }
+  .cat-animated .cat-tail { animation: cat-tail 3.2s ease-in-out infinite; }
+  .cat-animated .cat-ear-r { animation: cat-ear 7s ease-in-out infinite; }
+  .cat-animated .cat-ear-l { animation: cat-ear 9.5s ease-in-out 2s infinite; }
+  .cat-animated.cat-sit .cat-head { animation: cat-head 9s ease-in-out infinite; }
+  .cat-animated.cat-walk .cat-leg-a { animation: cat-step 0.64s ease-in-out infinite; }
+  .cat-animated.cat-walk .cat-leg-b { animation: cat-step 0.64s ease-in-out -0.32s infinite; }
+  .cat-animated.cat-walk .cat-trunk { animation: cat-bob 0.32s ease-in-out infinite alternate; }
+  .cat-animated.cat-walk .cat-tail { animation-duration: 1.28s; }
+  .cat-animated.cat-sleep .cat-body { animation: cat-breathe 3.6s ease-in-out infinite; }
+  .cat-animated.cat-sleep .cat-tail { animation-duration: 7s; }
+  .cat-animated .cat-z { opacity: 0; animation: cat-z 3s ease-in-out infinite; }
+  .cat-animated .cat-z2 { animation-delay: 0.6s; }
+  .cat-animated .cat-z3 { animation-delay: 1.2s; }
+}
+/* "Thinking" label: a highlight sweeps across muted text. */
+.shimmer-text {
+  color: transparent;
+  background: linear-gradient(90deg, var(--as-fg-subtle) 0%, var(--as-fg-subtle) 35%, var(--as-fg) 50%, var(--as-fg-subtle) 65%, var(--as-fg-subtle) 100%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: shimmer-text 2s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .shimmer-text { animation: none; background: none; color: var(--as-fg-subtle); }
+}
+@keyframes shimmer-text { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+@keyframes startup-ground { from { background-position: 0 0; } to { background-position: -22px 0; } }
+@keyframes cat-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.1); } }
+@keyframes cat-tail { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(7deg); } }
+@keyframes cat-ear { 0%, 88%, 100% { transform: rotate(0deg); } 91% { transform: rotate(-12deg); } 94% { transform: rotate(4deg); } }
+@keyframes cat-head { 0%, 70%, 100% { transform: rotate(0deg); } 78%, 90% { transform: rotate(-6deg); } }
+@keyframes cat-step { 0%, 100% { transform: rotate(14deg); } 50% { transform: rotate(-14deg); } }
+@keyframes cat-bob { from { transform: translateY(0); } to { transform: translateY(-1.5px); } }
+@keyframes cat-breathe { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(1.05); } }
+@keyframes cat-z { 0% { opacity: 0; transform: translate(0, 4px); } 30% { opacity: 0.8; } 100% { opacity: 0; transform: translate(4px, -6px); } }
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv11";
 }
 
 html::-webkit-scrollbar,

@@ -24,12 +24,14 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png" />
 
-    <!-- Anti-flash: set dark class before React mounts -->
+    <!-- Anti-flash: set the theme class before React mounts -->
     <script>
       (function () {
         try {
           const theme = localStorage.getItem('theme');
-          if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+          if (theme === 'midnight') {
+            document.documentElement.classList.add('midnight');
+          } else if (theme === 'dark' || (theme !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
             document.documentElement.classList.add('dark');
           }
         } catch (_) {}
