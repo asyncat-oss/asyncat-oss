@@ -2,7 +2,6 @@
 
 export const DEFAULT_NAV_ITEMS = Object.freeze({
   projects: true,
-  tasks: true,
   automations: true,
   models: true,
   tools: true,

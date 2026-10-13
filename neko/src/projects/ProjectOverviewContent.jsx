@@ -1,41 +1,19 @@
 import React, { useState, useEffect } from "react";
 import PropTypes from 'prop-types';
-import { useNavigate } from "react-router-dom";
 import {
 	LayoutGrid,
-	KanbanSquare,
-	List,
 	FolderOpen,
-	ChevronRight,
 } from "lucide-react";
 
-// Import view components directly here
-import KanIndex from "../views/kanban/KanIndex";
-import ListView from "../views/list/ListView";
 import ProjectFolders from './components/ProjectFolders.jsx';
-
-// Import context providers
-import { ColumnProvider } from "../views/context/ColumnProvider";
-import { CardProvider } from "../views/context/CardProvider";
-
 
 import { useWorkspace } from "../contexts/WorkspaceContext";
 
 const soraFontBase = "font-sora";
 
-const TASK_VIEWS = [
-	{ key: 'kanban', label: 'Board', Icon: KanbanSquare },
-	{ key: 'list',   label: 'List',  Icon: List },
-];
-
 const PROJECT_VIEWS = [
 	{ key: 'folders', label: 'Folders', Icon: FolderOpen },
 ];
-
-const TASK_VIEW_COMPONENTS = {
-	kanban: KanIndex,
-	list: ListView,
-};
 
 // Comprehensive skeleton component for the project overview
 const ProjectOverviewSkeleton = () => (
@@ -144,11 +122,7 @@ const ProjectOverview = React.memo(({
 	selectedProject,
 	projectId,
 	currentTab,
-	localUser,
-	basePath = '/projects',
-	section = 'projects',
 }) => {
-	const navigate = useNavigate();
 	const [projectInfo, setProjectInfo] = useState(null);
 	const [loading, setLoading] = useState(true);
 	// Only show skeleton on cold load (no project in context yet) or when URL doesn't match
@@ -226,23 +200,7 @@ const ProjectOverview = React.memo(({
 			? selectedProject 
 			: (projectInfo || selectedProject);
 
-		if (section === 'projects') return <ProjectFolders project={projectData} />;
-
-		const ViewComponent = TASK_VIEW_COMPONENTS[currentTab];
-		if (!ViewComponent) return <div>No content available</div>;
-
-		return (
-			<ColumnProvider
-				selectedProject={projectData}
-				viewType={currentTab}
-			>
-				<CardProvider localUser={localUser}>
-					<ViewComponent
-						selectedProject={projectData}
-					/>
-				</CardProvider>
-			</ColumnProvider>
-		);
+		return <ProjectFolders project={projectData} />;
 	};
 
 	// Check skeleton state first - if loading, show skeleton even without selectedProject
@@ -301,36 +259,6 @@ const ProjectOverview = React.memo(({
 
 	return (
 		<div className={`flex flex-col h-full ${soraFontBase} relative`}>
-			{/* Section tab navigation */}
-			{section === 'tasks' && <div className="flex-shrink-0 border-b border-gray-200 dark:border-gray-700 midnight:border-gray-800 bg-white dark:bg-gray-900 midnight:bg-gray-950">
-				<div className="flex min-h-12 items-center justify-between gap-4 px-5">
-					<div className="flex min-w-0 items-center gap-2 text-sm">
-						<span className="shrink-0 text-base leading-none">{selectedProject.emoji || '📁'}</span>
-						<span className="max-w-48 truncate font-medium text-gray-800 dark:text-gray-200 midnight:text-gray-200">{selectedProject.name}</span>
-						<ChevronRight className="h-3.5 w-3.5 shrink-0 text-gray-300 dark:text-gray-600" />
-						<span className="shrink-0 text-gray-500 dark:text-gray-400">Tasks</span>
-					</div>
-					<div className="flex shrink-0 items-center gap-0.5 self-stretch overflow-x-auto scrollbar-none">
-						{TASK_VIEWS.map(({ key, label, Icon }) => {
-							const isActive = currentTab === key;
-							return (
-								<button
-									key={key}
-									onClick={() => navigate(`${basePath}/${projectId}/${key}`)}
-									className={`flex items-center gap-1.5 border-b-2 px-3 text-sm font-medium whitespace-nowrap transition-colors ${
-										isActive
-											? 'border-gray-900 text-gray-900 dark:border-gray-100 dark:text-gray-100 midnight:border-slate-100 midnight:text-slate-100'
-											: 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 midnight:hover:text-gray-200'
-									}`}
-								>
-									<Icon className="w-3.5 h-3.5" />
-									{label}
-								</button>
-							);
-						})}
-					</div>
-				</div>
-			</div>}
 			<div className="flex-1 overflow-auto">
 				{renderViewContent()}
 			</div>
@@ -350,9 +278,6 @@ ProjectOverview.propTypes = {
 	}),
 	projectId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
 	currentTab: PropTypes.string.isRequired,
-	localUser: PropTypes.object,
-	basePath: PropTypes.string,
-	section: PropTypes.oneOf(['projects', 'tasks']),
 };
 
 export default ProjectOverview;

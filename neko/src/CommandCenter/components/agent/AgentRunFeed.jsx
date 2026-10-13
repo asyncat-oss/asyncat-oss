@@ -96,8 +96,6 @@ const TOOL_META = {
   list_memories:     { icon: BookMarked,  label: 'List memories' },
   forget_memory:     { icon: BookMarked,  label: 'Forget memory' },
   optimize_memory:   { icon: Brain,       label: 'Optimize memory' },
-  create_task:       { icon: LayoutList,  label: 'Create task' },
-  list_tasks:        { icon: List,        label: 'List tasks' },
   todo_write:        { icon: LayoutList,  label: 'Update plan' },
   tool_search:       { icon: Search,      label: 'Find tools' },
   create_note:       { icon: FileText,    label: 'Create note' },

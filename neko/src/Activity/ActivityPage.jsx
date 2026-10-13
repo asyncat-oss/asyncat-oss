@@ -1,11 +1,11 @@
-// Unified history for work that runs asynchronously: task agents, scheduled
-// agent jobs, workflows, and outbound notifications.
+// Unified history for work that runs asynchronously: scheduled agent jobs,
+// workflows, and outbound notifications.
 
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle, Bell, Bot, CalendarClock, CheckCircle2, Clock3,
-  Info, Loader2, MessageCircleQuestion, RefreshCw, SquareCheck,
+  Info, Loader2, MessageCircleQuestion, RefreshCw,
   Workflow, XCircle,
 } from 'lucide-react';
 import { agentApi } from '../CommandCenter/api';
@@ -37,7 +37,6 @@ const STATUS_ICON = {
 };
 
 const TYPE_META = {
-  task: { label: 'Task', icon: SquareCheck, cls: 'bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-300' },
   schedule: { label: 'Agent job', icon: CalendarClock, cls: 'bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-300' },
   workflow: { label: 'Workflow', icon: Workflow, cls: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/30 dark:text-indigo-300' },
 };
@@ -58,7 +57,7 @@ function Empty({ children }) {
 }
 
 function RunRow({ item, onOpen }) {
-  const type = TYPE_META[item.type] || TYPE_META.task;
+  const type = TYPE_META[item.type] || TYPE_META.schedule;
   const TypeIcon = type.icon;
   const canOpen = Boolean(item.sessionId || item.type === 'workflow' || item.type === 'schedule');
   return (
@@ -135,7 +134,7 @@ export default function ActivityPage() {
             <Bell className="h-5 w-5 text-gray-500 dark:text-gray-400" />
             <h1 className="text-lg font-semibold tracking-tight">Activity</h1>
           </div>
-          <p className="mt-0.5 text-xs text-gray-400">Task agents, scheduled jobs, workflows, and notifications in one place.</p>
+          <p className="mt-0.5 text-xs text-gray-400">Scheduled jobs, workflows, and notifications in one place.</p>
         </div>
         <button type="button" onClick={() => load(tab, true)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-800 midnight:border-slate-800">
           <RefreshCw className="h-4 w-4" /> Refresh
@@ -165,7 +164,7 @@ export default function ActivityPage() {
               <div className="divide-y divide-gray-100 overflow-hidden rounded-lg border border-gray-200 dark:divide-gray-800/70 dark:border-gray-800 midnight:divide-slate-800 midnight:border-slate-800">
                 {rows.map(item => <RunRow key={`${item.type}-${item.id}`} item={item} onOpen={openRun} />)}
               </div>
-            ) : <Empty>No agent or workflow runs yet. Dispatch a task, run a workflow, or create a schedule to see it here.</Empty>) : null}
+            ) : <Empty>No agent or workflow runs yet. Run a workflow or create a schedule to see it here.</Empty>) : null}
 
             {tab === 'notifications' ? (rows.length ? (
               <div className="divide-y divide-gray-100 overflow-hidden rounded-lg border border-gray-200 dark:divide-gray-800/70 dark:border-gray-800 midnight:divide-slate-800 midnight:border-slate-800">

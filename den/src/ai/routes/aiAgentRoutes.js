@@ -52,7 +52,6 @@ import { getExternalUsage } from '../../agent/externalUsage.js';
 const router = express.Router();
 const pendingPermissions = new Map();
 const pendingUserQuestions = new Map();
-const cancelledTaskRuns = new Set();
 const MCP_CONFIG_PATH = path.resolve(process.cwd(), 'data', 'mcp.json');
 const NO_PROJECT_TOOL_CATEGORIES = new Set([
   'interaction',
@@ -190,118 +189,12 @@ function enrichScheduledJob(job) {
   };
 }
 
-function ensureAgentTaskRunsTable() {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS agent_task_runs (
-      id               TEXT PRIMARY KEY,
-      card_id          TEXT NOT NULL REFERENCES Cards(id) ON DELETE CASCADE,
-      session_id       TEXT REFERENCES agent_sessions(id) ON DELETE SET NULL,
-      profile_id       TEXT REFERENCES agent_profiles(id) ON DELETE SET NULL,
-      user_id          TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      workspace_id     TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-      goal             TEXT NOT NULL,
-      status           TEXT NOT NULL DEFAULT 'queued'
-                         CHECK (status IN ('queued','running','completed','failed','cancelled')),
-      last_event_type  TEXT,
-      last_event_label TEXT,
-      summary          TEXT,
-      error            TEXT,
-      started_at       TEXT,
-      completed_at     TEXT,
-      created_at       TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE INDEX IF NOT EXISTS idx_agent_task_runs_card    ON agent_task_runs(card_id, updated_at);
-    CREATE INDEX IF NOT EXISTS idx_agent_task_runs_user    ON agent_task_runs(user_id, updated_at);
-    CREATE INDEX IF NOT EXISTS idx_agent_task_runs_session ON agent_task_runs(session_id);
-  `);
-}
-
 function getWorkspaceIdForRequest(req) {
   return req.workspaceId || db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id || null;
 }
 
-function loadTaskCard(cardId, workspaceId, userId) {
-  return db.prepare(`
-    SELECT c.*, col.title AS column_title,
-           p.id AS project_id, p.name AS project_name, p.team_id AS workspace_id
-    FROM Cards c
-    JOIN Columns col ON col.id = c.columnId
-    JOIN projects p ON p.id = col.projectId
-    WHERE c.id = ?
-      AND p.team_id = ?
-      AND (p.owner_id = ? OR p.created_by = ?)
-    LIMIT 1
-  `).get(cardId, workspaceId, userId, userId);
-}
-
-function formatTaskCard(row) {
-  if (!row) return null;
-  return {
-    id: row.id,
-    title: row.title,
-    description: row.description,
-    priority: row.priority,
-    dueDate: row.dueDate,
-    startDate: row.startDate,
-    progress: row.progress || 0,
-    tasks: parseJson(row.tasks, { completed: 0, total: 0 }),
-    checklist: parseJson(row.checklist, []),
-    attachments: parseJson(row.attachments, []),
-    columnId: row.columnId,
-    columnTitle: row.column_title,
-    projectId: row.project_id,
-    projectName: row.project_name,
-    updatedAt: row.updatedAt,
-  };
-}
-
-function formatTaskRun(row) {
-  if (!row) return null;
-  const displayStatus = inferTaskRunDisplayStatus(row);
-  return {
-    id: row.id,
-    cardId: row.card_id,
-    sessionId: row.session_id,
-    profileId: row.profile_id,
-    userId: row.user_id,
-    workspaceId: row.workspace_id,
-    goal: row.goal,
-    status: row.status,
-    displayStatus,
-    needsInput: displayStatus === 'needs_input',
-    lastEventType: row.last_event_type,
-    lastEventLabel: row.last_event_label,
-    summary: row.summary,
-    error: row.error,
-    startedAt: row.started_at,
-    completedAt: row.completed_at,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    profile: row.profile_name ? {
-      id: row.profile_id,
-      name: row.profile_name,
-      handle: row.profile_handle,
-      icon: row.profile_icon,
-      color: row.profile_color,
-    } : null,
-  };
-}
-
 function listRecentActivity(userId, workspaceId, limit = 50) {
   const perTypeLimit = Math.max(10, limit);
-  const taskRows = workspaceId ? db.prepare(`
-    SELECT atr.*, c.title AS target_name, p.name AS project_name, ap.name AS profile_name
-    FROM agent_task_runs atr
-    JOIN Cards c ON c.id = atr.card_id
-    JOIN Columns col ON col.id = c.columnId
-    JOIN projects p ON p.id = col.projectId
-    LEFT JOIN agent_profiles ap ON ap.id = atr.profile_id
-    WHERE atr.user_id = ? AND atr.workspace_id = ?
-    ORDER BY COALESCE(atr.started_at, atr.created_at) DESC
-    LIMIT ?
-  `).all(userId, workspaceId, perTypeLimit) : [];
-
   const scheduledRows = workspaceId ? db.prepare(`
     SELECT r.*, j.name AS target_name, j.goal, j.profile_id, ap.name AS profile_name
     FROM scheduled_job_runs r
@@ -323,20 +216,6 @@ function listRecentActivity(userId, workspaceId, limit = 50) {
   `).all(userId, workspaceId, workspaceId, perTypeLimit);
 
   const items = [
-    ...taskRows.map(row => ({
-      id: row.id,
-      type: 'task',
-      name: row.target_name || 'Task',
-      context: row.project_name || null,
-      status: inferTaskRunDisplayStatus(row),
-      detail: row.summary || row.last_event_label || row.goal || null,
-      error: row.error || null,
-      startedAt: row.started_at || row.created_at,
-      finishedAt: row.completed_at || null,
-      sessionId: row.session_id || null,
-      targetId: row.card_id,
-      profileName: row.profile_name || null,
-    })),
     ...scheduledRows.map(row => ({
       id: row.id,
       type: 'schedule',
@@ -374,73 +253,6 @@ function listRecentActivity(userId, workspaceId, limit = 50) {
   return items
     .sort((a, b) => new Date(b.startedAt || 0).getTime() - new Date(a.startedAt || 0).getTime())
     .slice(0, limit);
-}
-
-function inferTaskRunDisplayStatus(row) {
-  if (!row) return null;
-  if (row.status !== 'failed') return row.status;
-  const text = [
-    row.last_event_type,
-    row.last_event_label,
-    row.summary,
-    row.error,
-  ].filter(Boolean).join(' ').toLowerCase();
-  if (
-    text.includes('ask_user') ||
-    text.includes('clarification') ||
-    text.includes('needs user input') ||
-    text.includes('need user clarification') ||
-    text.includes('user did not answer') ||
-    text.includes('missing information')
-  ) {
-    return 'needs_input';
-  }
-  return row.status;
-}
-
-function agentEventLabel(event) {
-  const data = event?.data || {};
-  if (event.type === 'session_start') return 'Agent started';
-  if (event.type === 'skills_loaded') return `Loaded ${(data.skills || []).length} skill(s)`;
-  if (event.type === 'thinking') return 'Thinking';
-  if (event.type === 'tool_start') return `Using ${data.tool || data.toolName || 'tool'}`;
-  if (event.type === 'tool_result') return `${data.tool || data.toolName || 'Tool'} finished`;
-  if (event.type === 'agent_delegate_start') return `Delegating to @${data.profileHandle || 'agent'}`;
-  if (event.type === 'agent_delegate_result') return data.success === false ? 'Delegated agent failed' : 'Delegated agent finished';
-  if (event.type === 'usage_update') return 'Model usage updated';
-  if (event.type === 'plan_update') {
-    const plan = Array.isArray(data.plan) ? data.plan : [];
-    const completed = plan.filter(i => i.status === 'completed').length;
-    return `Plan: ${completed}/${plan.length} done`;
-  }
-  if (event.type === 'answer') return 'Completed';
-  if (event.type === 'error') return data.message || 'Agent error';
-  return event.type || 'Updated';
-}
-
-function updateTaskRun(runId, fields) {
-  const allowed = {
-    sessionId: 'session_id',
-    status: 'status',
-    lastEventType: 'last_event_type',
-    lastEventLabel: 'last_event_label',
-    summary: 'summary',
-    error: 'error',
-    startedAt: 'started_at',
-    completedAt: 'completed_at',
-  };
-  const sets = [];
-  const values = [];
-  for (const [key, value] of Object.entries(fields)) {
-    const column = allowed[key];
-    if (!column) continue;
-    sets.push(`${column} = ?`);
-    values.push(value);
-  }
-  if (!sets.length) return;
-  sets.push('updated_at = ?');
-  values.push(new Date().toISOString(), runId);
-  db.prepare(`UPDATE agent_task_runs SET ${sets.join(', ')} WHERE id = ?`).run(...values);
 }
 
 function resolveAgentMentions(rawMentions = [], userId) {
@@ -614,7 +426,6 @@ const withWorkspaceContext = (req, _res, next) => {
 // ─── Agent init (once on module load) ────────────────────────────────────────
 
 await initializeAgent();
-ensureAgentTaskRunsTable();
 markStaleActiveSessions();
 
 const runScheduledAgent = async ({ goal, userId, workspaceId, workingDir, profileId, providerProfileId, providerSnapshot }) => {
@@ -650,114 +461,6 @@ const runScheduledAgent = async ({ goal, userId, workspaceId, workingDir, profil
 };
 initScheduler(runScheduledAgent);
 initWorkflows(runScheduledAgent);
-
-async function runAgentTaskInBackground(runId) {
-  const run = db.prepare('SELECT * FROM agent_task_runs WHERE id = ?').get(runId);
-  if (!run || run.status === 'cancelled') return;
-
-  try {
-    const profile = run.profile_id ? getProfile(run.profile_id, run.user_id) : getDefaultProfile(run.user_id);
-    const { client: aiClient, model, isLocal, supportsNativeTools, providerInfo } = getAiClientForUser(run.user_id);
-
-    let resolvedSoul = null;
-    if (profile?.soul_override) {
-      resolvedSoul = profile.soul_override.replace(/^---[\s\S]*?---\n?/, '').trim() || null;
-    } else if (profile?.soul_name && profile.soul_name !== 'default') {
-      resolvedSoul = loadSoul(profile.soul_name);
-    }
-
-    const now = new Date().toISOString();
-    updateTaskRun(runId, {
-      status: 'running',
-      startedAt: now,
-      lastEventType: 'status',
-      lastEventLabel: 'Starting agent',
-    });
-
-    const agent = new AgentRuntime({
-      aiClient,
-      model,
-      isLocal,
-      supportsNativeTools,
-      userId: run.user_id,
-      workspaceId: run.workspace_id,
-      workingDir: profile?.working_dir || defaultAgentWorkingDir(),
-      maxRounds: profile?.max_rounds || 25,
-      autoApprove: profile?.auto_approve || false,
-      requestPermission: async ({ tool, permission }) => ({
-        decision: 'deny',
-        reason: `Task runs cannot request live approval for ${permission} tool "${tool}". Pre-approve the tool in the selected profile or enable auto-approve.`,
-      }),
-      askUser: async ({ question }) => {
-        const message = `Needs user input: ${String(question || 'The agent needs clarification before continuing.').trim()}`;
-        updateTaskRun(runId, {
-          status: 'failed',
-          error: message,
-          lastEventType: 'ask_user',
-          lastEventLabel: 'Needs input',
-        });
-        return { success: false, error: message };
-      },
-      soul: resolvedSoul,
-      providerInfo,
-      usageContext: { operation: 'task-run' },
-      onEvent: (event) => {
-        if (event?.type === 'session_start' && event?.data?.sessionId) {
-          updateTaskRun(runId, { sessionId: event.data.sessionId });
-        }
-        updateTaskRun(runId, {
-          lastEventType: event?.type || 'event',
-          lastEventLabel: agentEventLabel(event),
-        });
-      },
-    });
-
-    if (Array.isArray(profile?.always_allowed_tools)) {
-      profile.always_allowed_tools.forEach(tool => {
-        if (typeof tool === 'string' && tool.trim()) agent.sessionApprovedTools.add(tool.trim());
-      });
-    }
-
-    const result = await agent.run(run.goal);
-    const latest = db.prepare('SELECT * FROM agent_task_runs WHERE id = ?').get(runId);
-    if (latest?.status === 'cancelled' || cancelledTaskRuns.has(runId)) {
-      cancelledTaskRuns.delete(runId);
-      return;
-    }
-    if (inferTaskRunDisplayStatus(latest) === 'needs_input') {
-      updateTaskRun(runId, {
-        sessionId: result.session?.id || null,
-        summary: result.answer || latest.summary || '',
-        completedAt: new Date().toISOString(),
-        lastEventType: 'ask_user',
-        lastEventLabel: 'Needs input',
-      });
-      return;
-    }
-
-    updateTaskRun(runId, {
-      status: 'completed',
-      sessionId: result.session?.id || null,
-      summary: result.answer || '',
-      completedAt: new Date().toISOString(),
-      lastEventType: 'answer',
-      lastEventLabel: 'Completed',
-    });
-  } catch (err) {
-    const latest = db.prepare('SELECT status FROM agent_task_runs WHERE id = ?').get(runId);
-    if (latest?.status === 'cancelled' || cancelledTaskRuns.has(runId)) {
-      cancelledTaskRuns.delete(runId);
-      return;
-    }
-    updateTaskRun(runId, {
-      status: 'failed',
-      error: err.message,
-      completedAt: new Date().toISOString(),
-      lastEventType: 'error',
-      lastEventLabel: err.message,
-    });
-  }
-}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // CONVERSATION ROUTES — /api/ai/*
@@ -2189,9 +1892,6 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
       : false;
     const profileTools = Array.isArray(profile?.always_allowed_tools) ? profile.always_allowed_tools : [];
     const mentionedAgentProfiles = resolveAgentMentions(agentMentions, req.user.id);
-    const continuedTaskRun = continueSessionId
-      ? db.prepare('SELECT id FROM agent_task_runs WHERE session_id = ? AND user_id = ? ORDER BY updated_at DESC LIMIT 1').get(continueSessionId, req.user.id)
-      : null;
 
     let resolvedSoul = null;
     if (profile?.soul_override) {
@@ -2234,13 +1934,6 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
         userMessageId,
         assistantMessageId,
       },
-      onEvent: continuedTaskRun ? (event) => {
-        updateTaskRun(continuedTaskRun.id, {
-          ...(event?.type === 'session_start' ? { status: 'running' } : {}),
-          lastEventType: event?.type || 'event',
-          lastEventLabel: agentEventLabel(event),
-        });
-      } : undefined,
     });
 
     const allPreApproved = [...preApprovedTools, ...profileTools];
@@ -2252,17 +1945,7 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
       });
     }
 
-    const result = await agent.runStreaming(goal, conversationHistory, res);
-    if (continuedTaskRun) {
-      updateTaskRun(continuedTaskRun.id, {
-        status: 'completed',
-        sessionId: result.session?.id || continueSessionId,
-        summary: result.answer || '',
-        completedAt: new Date().toISOString(),
-        lastEventType: 'answer',
-        lastEventLabel: 'Completed',
-      });
-    }
+    await agent.runStreaming(goal, conversationHistory, res);
 
   } catch (error) {
     if (error?.name === 'AbortError' || abortController.signal.aborted || clientClosed) {
@@ -2423,185 +2106,6 @@ router.get('/activity', withWorkspaceContext, (req, res) => {
   }
 });
 
-router.get('/task-runs', withWorkspaceContext, (req, res) => {
-  try {
-    const workspaceId = getWorkspaceIdForRequest(req);
-    if (!workspaceId) return res.status(400).json({ success: false, error: 'workspaceId is required' });
-
-    const { projectId = null, cardId = null } = req.query;
-    const rows = db.prepare(`
-      WITH latest_runs AS (
-        SELECT atr.*,
-               ap.name AS profile_name, ap.handle AS profile_handle, ap.icon AS profile_icon, ap.color AS profile_color,
-               ROW_NUMBER() OVER (
-                 PARTITION BY atr.card_id
-                 ORDER BY CASE WHEN atr.status IN ('queued','running') THEN 0 ELSE 1 END, atr.updated_at DESC
-               ) AS rn
-        FROM agent_task_runs atr
-        LEFT JOIN agent_profiles ap ON ap.id = atr.profile_id
-        WHERE atr.user_id = ? AND atr.workspace_id = ?
-      )
-      SELECT c.*, col.title AS column_title,
-             p.id AS project_id, p.name AS project_name,
-             lr.id AS run_id, lr.session_id, lr.profile_id, lr.goal AS run_goal, lr.status AS run_status,
-             lr.last_event_type, lr.last_event_label, lr.summary, lr.error,
-             lr.started_at, lr.completed_at, lr.created_at AS run_created_at, lr.updated_at AS run_updated_at,
-             lr.profile_name, lr.profile_handle, lr.profile_icon, lr.profile_color
-      FROM Cards c
-      JOIN Columns col ON col.id = c.columnId
-      JOIN projects p ON p.id = col.projectId
-      LEFT JOIN latest_runs lr ON lr.card_id = c.id AND lr.rn = 1
-      WHERE p.team_id = ?
-        AND (? IS NULL OR p.id = ?)
-        AND (? IS NULL OR c.id = ?)
-        AND (p.owner_id = ? OR p.created_by = ?)
-      ORDER BY c.updatedAt DESC
-    `).all(req.user.id, workspaceId, workspaceId, projectId, projectId, cardId, cardId, req.user.id, req.user.id);
-
-    let runsByCard = new Map();
-    if (cardId) {
-      const runRows = db.prepare(`
-        SELECT atr.*, ap.name AS profile_name, ap.handle AS profile_handle, ap.icon AS profile_icon, ap.color AS profile_color
-        FROM agent_task_runs atr
-        LEFT JOIN agent_profiles ap ON ap.id = atr.profile_id
-        WHERE atr.user_id = ? AND atr.workspace_id = ? AND atr.card_id = ?
-        ORDER BY atr.updated_at DESC
-      `).all(req.user.id, workspaceId, cardId);
-      runsByCard.set(cardId, runRows.map(formatTaskRun));
-    }
-
-    const tasks = rows.map(row => ({
-      ...formatTaskCard(row),
-      agentRun: row.run_id ? formatTaskRun({
-        id: row.run_id,
-        card_id: row.id,
-        session_id: row.session_id,
-        profile_id: row.profile_id,
-        user_id: req.user.id,
-        workspace_id: workspaceId,
-        goal: row.run_goal,
-        status: row.run_status,
-        last_event_type: row.last_event_type,
-        last_event_label: row.last_event_label,
-        summary: row.summary,
-        error: row.error,
-        started_at: row.started_at,
-        completed_at: row.completed_at,
-        created_at: row.run_created_at,
-        updated_at: row.run_updated_at,
-        profile_name: row.profile_name,
-        profile_handle: row.profile_handle,
-        profile_icon: row.profile_icon,
-        profile_color: row.profile_color,
-      }) : null,
-      agentRuns: runsByCard.get(row.id) || undefined,
-    }));
-
-    res.json({ success: true, count: tasks.length, tasks });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-router.post('/task-runs', withWorkspaceContext, (req, res) => {
-  try {
-    const workspaceId = getWorkspaceIdForRequest(req);
-    const { cardId, profileId = null, goal = null } = req.body || {};
-    if (!workspaceId) return res.status(400).json({ success: false, error: 'workspaceId is required' });
-    if (!cardId) return res.status(400).json({ success: false, error: 'cardId is required' });
-
-    const card = loadTaskCard(cardId, workspaceId, req.user.id);
-    if (!card) return res.status(404).json({ success: false, error: 'Task card not found' });
-
-    const profile = profileId ? getProfile(profileId, req.user.id) : getDefaultProfile(req.user.id);
-    if (profileId && !profile) return res.status(404).json({ success: false, error: 'Agent profile not found' });
-
-    const checklist = parseJson(card.checklist, []);
-    const defaultGoal = [
-      `Work on task card "${card.title}" (${card.id}).`,
-      card.description ? `Description:\n${card.description}` : null,
-      checklist.length ? `Subtasks:\n${checklist.map(item => `- [${item.completed ? 'x' : ' '}] ${item.text || item.title || item.id}`).join('\n')}` : null,
-      'Use workspace task tools to update status, subtasks, or notes when you make concrete progress.',
-      'Return a concise final summary of what changed and what remains.',
-    ].filter(Boolean).join('\n\n');
-
-    const runId = randomUUID();
-    const now = new Date().toISOString();
-    db.prepare(`
-      INSERT INTO agent_task_runs (
-        id, card_id, profile_id, user_id, workspace_id, goal, status,
-        last_event_type, last_event_label, created_at, updated_at
-      )
-      VALUES (?, ?, ?, ?, ?, ?, 'queued', 'status', 'Queued', ?, ?)
-    `).run(runId, card.id, profile?.id || null, req.user.id, workspaceId, goal?.trim() || defaultGoal, now, now);
-
-    setImmediate(() => runAgentTaskInBackground(runId));
-
-    const row = db.prepare(`
-      SELECT atr.*, ap.name AS profile_name, ap.handle AS profile_handle, ap.icon AS profile_icon, ap.color AS profile_color
-      FROM agent_task_runs atr
-      LEFT JOIN agent_profiles ap ON ap.id = atr.profile_id
-      WHERE atr.id = ?
-    `).get(runId);
-
-    res.status(201).json({ success: true, run: formatTaskRun(row), task: formatTaskCard(card) });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-router.get('/task-runs/:id', withWorkspaceContext, (req, res) => {
-  try {
-    const row = db.prepare(`
-      SELECT atr.*, ap.name AS profile_name, ap.handle AS profile_handle, ap.icon AS profile_icon, ap.color AS profile_color
-      FROM agent_task_runs atr
-      LEFT JOIN agent_profiles ap ON ap.id = atr.profile_id
-      WHERE atr.id = ? AND atr.user_id = ?
-    `).get(req.params.id, req.user.id);
-    if (!row) return res.status(404).json({ success: false, error: 'Task run not found' });
-
-    const card = loadTaskCard(row.card_id, row.workspace_id, req.user.id);
-    const session = row.session_id ? AgentSession.load(row.session_id) : null;
-    const audit = row.session_id ? getSessionAuditRows(row.session_id, req.user.id) : [];
-
-    res.json({
-      success: true,
-      run: formatTaskRun(row),
-      task: formatTaskCard(card),
-      session: session && session.userId === req.user.id ? session : null,
-      audit,
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-router.post('/task-runs/:id/cancel', withWorkspaceContext, (req, res) => {
-  try {
-    const row = db.prepare('SELECT * FROM agent_task_runs WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
-    if (!row) return res.status(404).json({ success: false, error: 'Task run not found' });
-    if (!['queued', 'running'].includes(row.status)) {
-      return res.status(409).json({ success: false, error: `Cannot cancel a ${row.status} run` });
-    }
-    cancelledTaskRuns.add(row.id);
-    updateTaskRun(row.id, {
-      status: 'cancelled',
-      completedAt: new Date().toISOString(),
-      lastEventType: 'cancelled',
-      lastEventLabel: 'Cancelled',
-    });
-    const updated = db.prepare(`
-      SELECT atr.*, ap.name AS profile_name, ap.handle AS profile_handle, ap.icon AS profile_icon, ap.color AS profile_color
-      FROM agent_task_runs atr
-      LEFT JOIN agent_profiles ap ON ap.id = atr.profile_id
-      WHERE atr.id = ?
-    `).get(row.id);
-    res.json({ success: true, run: formatTaskRun(updated) });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
 // ── Session management ────────────────────────────────────────────────────────
 
 router.get('/sessions', withWorkspaceContext, (req, res) => {
@@ -2638,42 +2142,6 @@ router.get('/sessions/:id', withWorkspaceContext, (req, res) => {
   const session = AgentSession.load(req.params.id);
   if (!session || session.userId !== req.user.id) {
     return res.status(404).json({ success: false, error: 'Session not found' });
-  }
-  const taskRun = db.prepare(`
-    SELECT atr.id, atr.card_id, atr.status, atr.last_event_label, atr.summary,
-           c.title AS card_title,
-           p.id AS project_id, p.name AS project_name,
-           ap.name AS profile_name, ap.handle AS profile_handle, ap.icon AS profile_icon
-    FROM agent_task_runs atr
-    LEFT JOIN Cards c ON c.id = atr.card_id
-    LEFT JOIN Columns col ON col.id = c.columnId
-    LEFT JOIN projects p ON p.id = col.projectId
-    LEFT JOIN agent_profiles ap ON ap.id = atr.profile_id
-    WHERE atr.session_id = ? AND atr.user_id = ?
-    ORDER BY atr.updated_at DESC
-    LIMIT 1
-  `).get(req.params.id, req.user.id);
-  if (taskRun) {
-    const displayStatus = inferTaskRunDisplayStatus({
-      status: taskRun.status,
-      last_event_label: taskRun.last_event_label,
-      summary: taskRun.summary,
-    });
-    session.taskRun = {
-      id: taskRun.id,
-      cardId: taskRun.card_id,
-      cardTitle: taskRun.card_title,
-      projectId: taskRun.project_id,
-      projectName: taskRun.project_name,
-      status: taskRun.status,
-      displayStatus,
-      needsInput: displayStatus === 'needs_input',
-      activity: taskRun.last_event_label,
-      summary: taskRun.summary,
-      profileName: taskRun.profile_name,
-      profileHandle: taskRun.profile_handle,
-      profileIcon: taskRun.profile_icon,
-    };
   }
   res.json({ success: true, session });
 });

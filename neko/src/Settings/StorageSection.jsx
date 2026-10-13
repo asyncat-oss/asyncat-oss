@@ -240,8 +240,6 @@ const importantTableOrder = [
   'conversations',
   'agent_memory',
   'projects',
-  'cards',
-  'events',
   'users',
 ];
 
@@ -548,7 +546,7 @@ export default function StorageSection() {
               </h4>
             </div>
             <p className={`mt-1 text-xs ${mutedText}`}>
-              Clear local upload files from notes and kanban attachments. Database rows stay intact.
+              Clear local upload files from notes and old task attachments. Database rows stay intact.
             </p>
             {actionMessage ? (
               <div

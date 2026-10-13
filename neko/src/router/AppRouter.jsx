@@ -32,13 +32,10 @@ const SchedulerPage = lazy(() => import('../Scheduler/SchedulerPage'));
 const WorkflowsPage = lazy(() => import('../Workflows/WorkflowsPage'));
 const ActivityPage = lazy(() => import('../Activity/ActivityPage'));
 
-const LegacyWorkspaceRedirect = () => {
-  const { projectId, tab } = useParams();
-  if (projectId && tab === 'folders') {
-    return <Navigate to={`/projects/${projectId}/folders`} replace />;
-  }
-  const taskTab = ['kanban', 'list'].includes(tab) ? tab : null;
-  return <Navigate to={projectId ? (taskTab ? `/tasks/${projectId}/${taskTab}` : `/tasks/${projectId}`) : '/tasks'} replace />;
+// Old /workspace and task-board (/tasks) links open the project instead.
+const LegacyProjectRedirect = () => {
+  const { projectId } = useParams();
+  return <Navigate to={projectId ? `/projects/${projectId}` : '/projects'} replace />;
 };
 
 // /automations opens whichever of Workflows, Schedules or Activity was used last.
@@ -128,39 +125,33 @@ const createRouter = () => createBrowserRouter([
         ],
       },
       {
-        path: "tasks",
-        element: <WorkspaceLayout basePath="/tasks" section="tasks" />,
-        errorElement: <RouteErrorElement />,
-        children: [
-          {
-            index: true,
-            element: <WorkspaceEmpty basePath="/tasks" />,
-          },
-          {
-            path: ":projectId",
-            element: <ProjectOverview />,
-            errorElement: <RouteErrorElement />,
-          },
-          {
-            path: ":projectId/:tab",
-            element: <ProjectOverview />,
-            errorElement: <RouteErrorElement />,
-          },
-        ],
-      },
-      {
         path: "workspace",
-        element: <LegacyWorkspaceRedirect />,
+        element: <LegacyProjectRedirect />,
         errorElement: <RouteErrorElement />
       },
       {
         path: "workspace/:projectId",
-        element: <LegacyWorkspaceRedirect />,
+        element: <LegacyProjectRedirect />,
         errorElement: <RouteErrorElement />
       },
       {
         path: "workspace/:projectId/:tab",
-        element: <LegacyWorkspaceRedirect />,
+        element: <LegacyProjectRedirect />,
+        errorElement: <RouteErrorElement />
+      },
+      {
+        path: "tasks",
+        element: <LegacyProjectRedirect />,
+        errorElement: <RouteErrorElement />
+      },
+      {
+        path: "tasks/:projectId",
+        element: <LegacyProjectRedirect />,
+        errorElement: <RouteErrorElement />
+      },
+      {
+        path: "tasks/:projectId/:tab",
+        element: <LegacyProjectRedirect />,
         errorElement: <RouteErrorElement />
       },
       {

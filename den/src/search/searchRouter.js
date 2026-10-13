@@ -1,5 +1,5 @@
 // den/src/search/searchRouter.js
-// GET /api/search?q=<query>&limit=<n>&types=projects,notes,conversations,cards
+// GET /api/search?q=<query>&limit=<n>&types=projects,notes,conversations
 // Full-text search across user-owned content using SQLite LIKE queries.
 
 import express from 'express';
@@ -43,7 +43,7 @@ router.get('/', (req, res) => {
   const rawLimit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 5));
   const rawTypes = req.query.types
     ? String(req.query.types).split(',').map(t => t.trim())
-    : ['projects', 'notes', 'conversations', 'cards'];
+    : ['projects', 'notes', 'conversations'];
 
   const like = `%${q}%`;
   const results = [];
@@ -112,30 +112,6 @@ router.get('/', (req, res) => {
         id: r.id,
         title: r.title || 'Untitled',
         updatedAt: r.updated_at,
-      }));
-    }
-
-    // ── Cards (Kanban) ───────────────────────────────────────────────────────
-    if (rawTypes.includes('cards')) {
-      const rows = db.prepare(`
-        SELECT c.id, c.title, c.description, c.priority, c.updatedAt,
-               col.projectId
-        FROM Cards c
-        LEFT JOIN Columns col ON c.columnId = col.id
-        WHERE c.createdBy = ?
-          AND (c.title LIKE ? OR c.description LIKE ?)
-        ORDER BY c.updatedAt DESC
-        LIMIT ?
-      `).all(userId, like, like, rawLimit);
-
-      rows.forEach(r => results.push({
-        _type: 'card',
-        id: r.id,
-        title: r.title || 'Untitled Task',
-        snippet: snippet(r.description, q),
-        priority: r.priority,
-        projectId: r.projectId || null,
-        updatedAt: r.updatedAt,
       }));
     }
 

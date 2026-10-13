@@ -10,7 +10,6 @@ import {
   Sun,
   Trash2,
   Wrench,
-  KanbanSquare,
   FolderKanban,
   Zap,
 } from "lucide-react";
@@ -166,12 +165,6 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
           label="Projects"
           checked={navItemsVisibility.projects}
           onChange={() => toggleNavItem("projects")}
-        />
-        <CheckboxRow
-          icon={KanbanSquare}
-          label="Tasks"
-          checked={navItemsVisibility.tasks}
-          onChange={() => toggleNavItem("tasks")}
         />
         <CheckboxRow
           icon={Zap}

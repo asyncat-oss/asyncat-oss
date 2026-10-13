@@ -256,12 +256,6 @@ function ensureLocalProfileSchema() {
   dropColumnIfPresent('users', 'password_hash');
 }
 
-function ensureKanbanSchema() {
-  dropColumnIfPresent('Columns', 'isCompletionColumn');
-  dropColumnIfPresent('Cards', 'dependencies');
-  dropColumnIfPresent('Cards', 'completedAt');
-}
-
 function ensureModelPathsSchema() {
   const table = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'custom_model_paths'").get();
   if (!table) return;
@@ -296,7 +290,6 @@ function ensureModelPathsSchema() {
 cleanupDeadTables();
 ensureLocalProfileSchema();
 ensureProjectSchema();
-ensureKanbanSchema();
 ensureNotesSchema();
 ensureAgentMemorySchema();
 ensureModelPathsSchema();

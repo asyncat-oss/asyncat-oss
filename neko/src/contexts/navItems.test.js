@@ -9,9 +9,10 @@ test('nothing saved shows every destination', () => {
 });
 
 test('saved choices are kept and retired entries dropped', () => {
-  const migrated = migrateNavItems({ tasks: false, training: false, workflows: false, models: 'no' });
-  assert.equal(migrated.tasks, false);
+  const migrated = migrateNavItems({ projects: false, tasks: false, training: false, workflows: false, models: 'no' });
+  assert.equal(migrated.projects, false);
   assert.equal(migrated.models, true, 'non-boolean values fall back to the default');
+  assert.equal('tasks' in migrated, false, 'the removed Tasks entry is dropped');
   assert.equal(migrated.automations, true, 'hiding one old automation page does not hide the group');
   assert.equal('training' in migrated, false);
   assert.equal('workflows' in migrated, false);

@@ -856,7 +856,7 @@ export default function IntegrationsSection() {
         <IntegrationCard
           logo={<GitHubLogo />}
           name="GitHub"
-          description="Link pull requests and issues to kanban cards. Trigger actions on CI events."
+          description="Connect your GitHub account so Asyncat can reach your repositories."
           status={ghStatus}
           configured={ghStatus?.configured ?? false}
           loading={ghLoading}

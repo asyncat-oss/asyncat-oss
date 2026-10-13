@@ -116,7 +116,6 @@ export class PermissionManager {
       file_move: () => `Move file: ${args.source} -> ${args.destination}`,
       file_delete: () => `Delete file: ${args.path}`,
       delete_file: () => `Delete file: ${args.path}`,
-      delete_task: () => `Delete task: ${args.task_id}`,
       delete_note: () => `Delete note: ${args.note_id}`,
       git_clone: () => `Clone repository: ${args.url}`,
       git_pull: () => `Pull remote changes${args.remote ? ` from ${args.remote}` : ''}${args.branch ? ` ${args.branch}` : ''}`,

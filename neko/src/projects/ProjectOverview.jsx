@@ -3,25 +3,20 @@ import { useOutletContext, useParams, useNavigate } from "react-router-dom";
 import ProjectOverviewOriginal from "../projects/ProjectOverviewContent.jsx";
 
 const VALID_PROJECT_TABS = ['folders'];
-const VALID_TASK_TABS = ['kanban', 'list'];
 
 const ProjectOverview = () => {
-  const { selectedProject, localUser, basePath = '/projects', section = 'projects' } = useOutletContext();
+  const { selectedProject, basePath = '/projects' } = useOutletContext();
   const { projectId, tab } = useParams();
   const navigate = useNavigate();
 
-  // Validate tab parameter
-  const validTabs = section === 'tasks' ? VALID_TASK_TABS : VALID_PROJECT_TABS;
-  const currentTab = tab && validTabs.includes(tab)
-    ? tab
-    : section === 'tasks' ? 'kanban' : 'folders';
+  const currentTab = tab && VALID_PROJECT_TABS.includes(tab) ? tab : 'folders';
 
-  // Redirect to kanban if invalid tab is provided
+  // Old links (such as the removed task board) land on the project's folders.
   useEffect(() => {
-    if (tab && !validTabs.includes(tab) && projectId) {
-      navigate(`${basePath}/${projectId}/${section === 'tasks' ? 'kanban' : 'folders'}`, { replace: true });
+    if (tab && !VALID_PROJECT_TABS.includes(tab) && projectId) {
+      navigate(`${basePath}/${projectId}/folders`, { replace: true });
     }
-  }, [basePath, navigate, projectId, section, tab, validTabs]);
+  }, [basePath, navigate, projectId, tab]);
 
   // ProjectOverviewContent handles showing skeleton when selectedProject is null and projectId exists
   return (
@@ -29,9 +24,6 @@ const ProjectOverview = () => {
       selectedProject={selectedProject}
       projectId={projectId}
       currentTab={currentTab}
-      localUser={localUser}
-      basePath={basePath}
-      section={section}
     />
   );
 };

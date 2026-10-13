@@ -55,7 +55,6 @@ const initializeContainer = async (container) => {
 const initializeAllContainers = async () => {
   await Promise.all([
     initializeContainer('notes'),
-    initializeContainer('kanban-attachments'),
   ]);
 };
 

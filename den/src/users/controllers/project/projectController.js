@@ -207,24 +207,6 @@ async function createProject(req, res) {
 
 		if (projectError) throw projectError;
 
-		// Auto-create default columns for every new project
-		const defaultColumns = [
-			{ title: 'To Do', order: 0 },
-			{ title: 'In Progress', order: 1 },
-			{ title: 'Done', order: 2 },
-		];
-		for (const col of defaultColumns) {
-			await db.from('Columns').insert({
-				id: randomUUID(),
-				title: col.title,
-				projectId: project.id,
-				createdBy: userId,
-				order: col.order,
-				createdAt: new Date().toISOString(),
-				updatedAt: new Date().toISOString(),
-			});
-		}
-
 		if (folder_path) createProjectFolder(project.id, folder_path, folder_name, true);
 
 		res.status(201).json({
@@ -393,13 +375,6 @@ async function deleteProject(req, res) {
 
 		if (project.owner_id !== user.id) {
 			return res.status(403).json({ success: false, error: "Only project owners can delete projects" });
-		}
-
-		// Delete related data
-		try {
-			await db.from("Columns").delete().eq("projectId", id);
-		} catch (relatedError) {
-			console.error("Error deleting project related data:", relatedError);
 		}
 
 		const { error: projectDeleteError } = await db

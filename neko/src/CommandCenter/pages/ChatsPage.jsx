@@ -2,11 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import eventBus from '../../utils/eventBus.js';
-import { agentTaskRunsApi, chatApi, chatFoldersApi } from '../api';
+import { chatApi, chatFoldersApi } from '../api';
 import { useCommandCenter } from '../context/CommandCenterContextEnhanced';
-import { Bot, MessageSquare, CheckSquare, Clock, Search, Folder, FolderOpen, Plus, Pencil, Square, Trash2, Wrench, X, BookMarked, Loader2 } from 'lucide-react';
+import { MessageSquare, CheckSquare, Clock, Search, Folder, FolderOpen, Plus, Pencil, Square, Trash2, Wrench, X, BookMarked, Loader2 } from 'lucide-react';
 
-import { getRelativeTime, cleanTaskAgentTitle, parseConversationDate } from '../utils/conversationUtils.js';
+import { getRelativeTime, parseConversationDate } from '../utils/conversationUtils.js';
 import { useConfirm } from '../../components/confirmContext.js';
 import { useToast, errorDetail } from '../../components/toastContext.js';
 
@@ -59,7 +59,6 @@ const ChatsPage = () => {
   }, [handleNewConversation, navigate]);
 
   const [conversations, setConversations] = useState([]);
-  const [taskAgentRuns, setTaskAgentRuns] = useState([]);
   const [folders, setFolders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -90,7 +89,6 @@ const ChatsPage = () => {
   const loadAll = useCallback(async () => {
     if (!currentWorkspace?.id) {
       setConversations([]);
-      setTaskAgentRuns([]);
       setFolders([]);
       setLoading(false);
       return;
@@ -98,10 +96,9 @@ const ChatsPage = () => {
     try {
       setLoading(true);
       setError(null);
-      const [convRes, foldRes, agentRes] = await Promise.all([
+      const [convRes, foldRes] = await Promise.all([
         chatApi.getConversationHistory({ limit: 500, archived: false }),
         chatFoldersApi.getFolders(),
-        agentTaskRunsApi.list()
       ]);
 
       const convs = convRes?.conversations || [];
@@ -111,24 +108,6 @@ const ChatsPage = () => {
         return bTime - aTime;
       });
       setConversations(convs);
-      const runs = (agentRes?.tasks || [])
-        .filter(task => task?.agentRun)
-        .map(task => {
-          const run = task.agentRun;
-          return {
-            ...run,
-            type: 'task-agent',
-            taskId: task.id,
-            taskTitle: task.title,
-            projectName: task.projectName,
-            columnTitle: task.columnTitle,
-            title: cleanTaskAgentTitle(task, run) || 'Task agent run',
-            preview: run.needsInput ? 'Needs input' : (run.lastEventLabel || run.summary || run.goal || ''),
-            updated_at: run.updatedAt,
-          };
-        })
-        .sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0));
-      setTaskAgentRuns(runs);
 
       const loadedFolders = foldRes?.folders || [];
       setFolders(loadedFolders);
@@ -250,14 +229,6 @@ const ChatsPage = () => {
         !q || (c.title || '').toLowerCase().includes(q) || (c.preview || '').toLowerCase().includes(q)
       ).map(c => ({ ...c, type: 'chat', title: c.title || 'Untitled conversation' }));
 
-  const filteredTaskAgentRuns = taskAgentRuns
-    .filter(run =>
-      run.title.toLowerCase().includes(q) ||
-      (run.preview || '').toLowerCase().includes(q) ||
-      (run.projectName || '').toLowerCase().includes(q) ||
-      (run.profile?.name || '').toLowerCase().includes(q)
-    );
-
   const filteredActiveChatRuns = activeChatRuns
     .filter(run => !run.conversationId || !filteredConversations.some(c => c.id === run.conversationId))
     .filter(run => !q || (run.title || '').toLowerCase().includes(q) || (run.preview || '').toLowerCase().includes(q));
@@ -285,7 +256,7 @@ const ChatsPage = () => {
     return true;
   };
 
-  [...filteredActiveChatRuns, ...filteredConversations, ...filteredTaskAgentRuns].forEach(addWorkedFolderItem);
+  [...filteredActiveChatRuns, ...filteredConversations].forEach(addWorkedFolderItem);
 
   const workedFolderGroups = [...workedFolderGroupMap.values()]
     .map(group => ({
@@ -295,7 +266,6 @@ const ChatsPage = () => {
     .sort((a, b) => b.updatedAtMs - a.updatedAtMs || a.label.localeCompare(b.label));
 
   const conversationsWithoutWorkedFolder = filteredConversations.filter(c => !getWorkingContextFilterKey(getWorkingContext(c)));
-  const taskAgentRunsWithoutWorkedFolder = filteredTaskAgentRuns.filter(run => !getWorkingContextFilterKey(getWorkingContext(run)));
   const activeRunsWithoutWorkedFolder = filteredActiveChatRuns.filter(run => !getWorkingContextFilterKey(getWorkingContext(run)));
 
   const folderMap = {};
@@ -323,9 +293,6 @@ const ChatsPage = () => {
   });
   unfiledConversations.forEach(c => {
     topLevelItems.push({ kind: 'chat', sortMs: getItemUpdatedMs(c), data: c });
-  });
-  taskAgentRunsWithoutWorkedFolder.forEach(run => {
-    topLevelItems.push({ kind: 'task-run', sortMs: getItemUpdatedMs(run), data: run });
   });
   topLevelItems.sort((a, b) => b.sortMs - a.sortMs);
 
@@ -380,21 +347,19 @@ const ChatsPage = () => {
   };
 
   const renderChatItem = (chat) => {
-    const isTaskAgent = chat.type === 'task-agent';
     const isActiveRun = chat.type === 'active-run';
     const messages = Array.isArray(chat.messages) ? chat.messages : [];
     const lastAssistant = [...messages].reverse().find(msg => msg.type === 'assistant');
     const running = isActiveRun || activeConversationIds.has(chat.id) || activeConversationIds.has(String(chat.id));
     const actionModeUsed = messages.some(msg => msg.agentMode === 'action' || msg.toolsEnabled === true);
     const planModeUsed = messages.some(msg => msg.agentMode === 'plan' || msg.agentSessionId);
-    const toolsUsed = isTaskAgent || running || actionModeUsed || planModeUsed;
+    const toolsUsed = running || actionModeUsed || planModeUsed;
     const updatedAt = chat.last_message_at || chat.updated_at || chat.updatedAt || chat.created_at;
-    const itemTitle = chat.title || (isTaskAgent ? 'Task agent run' : 'Untitled conversation');
+    const itemTitle = chat.title || 'Untitled conversation';
     const selectionItem = { id: chat.id, type: chat.type, title: itemTitle };
     const isSelected = Boolean(selectedItems[getSelectionKey(selectionItem)]);
     const hasSelection = selectedCount > 0;
-    const canSelect = !isTaskAgent && !isActiveRun;
-    const canOpen = isActiveRun || !isTaskAgent || chat.sessionId;
+    const canSelect = !isActiveRun;
     const workingContext = getWorkingContext(chat);
     const workingContextLabel = formatWorkingContextLabel(workingContext);
     const bookmarkCount = Array.isArray(chat.metadata?.highlights?.bookmarkedMessages)
@@ -405,18 +370,15 @@ const ChatsPage = () => {
       <div
         key={`${chat.type}-${chat.id}`}
         onClick={(e) => {
-          if (!canOpen) return;
           if (hasSelection && canSelect) {
             toggleSelection(e, selectionItem);
           } else {
             navigate(isActiveRun
               ? (chat.conversationId ? `/conversations/${chat.conversationId}` : '/home')
-              : isTaskAgent ? `/agents/${chat.sessionId}` : `/conversations/${chat.id}`);
+              : `/conversations/${chat.id}`);
           }
         }}
-        className={`flex items-center gap-2 px-3 py-2.5 border-b transition-colors group ${
-          canOpen ? 'cursor-pointer' : 'cursor-default'
-        } ${
+        className={`flex items-center gap-2 px-3 py-2.5 border-b transition-colors group cursor-pointer ${
           isSelected
             ? 'rounded-lg bg-gray-100/80 dark:bg-gray-800/50 midnight:bg-slate-900/60 border-transparent'
             : 'rounded-lg border-transparent hover:bg-gray-100/70 dark:hover:bg-gray-800/35 midnight:hover:bg-slate-900/45'
@@ -450,8 +412,8 @@ const ChatsPage = () => {
                     ? 'text-gray-700 dark:text-gray-200 midnight:text-slate-200'
                     : 'text-gray-500 dark:text-gray-400 midnight:text-slate-400'
                 }`}>
-                  {isTaskAgent ? <Bot className="w-3 h-3" /> : <Wrench className="w-3 h-3" />}
-                  {running ? 'Generating' : isTaskAgent ? (chat.profile?.name || 'Agent') : actionModeUsed ? 'Action' : 'Plan'}
+                  <Wrench className="w-3 h-3" />
+                  {running ? 'Generating' : actionModeUsed ? 'Action' : 'Plan'}
                 </span>
               </>
             )}
@@ -476,14 +438,6 @@ const ChatsPage = () => {
                 </span>
               </>
             )}
-            {isTaskAgent && chat.status && (
-              <>
-                <span>•</span>
-                <span className="capitalize flex-shrink-0">
-                  {chat.displayStatus === 'needs_input' || chat.needsInput ? 'Needs input' : chat.status}
-                </span>
-              </>
-            )}
             {(chat.preview || lastAssistant?.content) && (
               <>
                 <span>•</span>
@@ -492,7 +446,7 @@ const ChatsPage = () => {
             )}
           </div>
         </div>
-        {!isTaskAgent && !isActiveRun && (
+        {!isActiveRun && (
         <div className={`flex items-center gap-0.5 transition-opacity flex-shrink-0 ${hasSelection ? 'opacity-0 pointer-events-none' : 'opacity-0 group-hover:opacity-100'}`}>
           <button
             onClick={e => openActionModal(e, { id: chat.id, type: chat.type, title: itemTitle })}
@@ -607,7 +561,7 @@ const ChatsPage = () => {
             </div>
           ) : error ? (
             <div className="text-red-500 text-center py-10 font-medium">{error}</div>
-          ) : filteredConversations.length === 0 && filteredTaskAgentRuns.length === 0 && filteredActiveChatRuns.length === 0 ? (
+          ) : filteredConversations.length === 0 && filteredActiveChatRuns.length === 0 ? (
             <div className="text-center py-20">
               <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-400 dark:border-gray-800 dark:text-gray-500 midnight:border-slate-800 midnight:text-slate-500">
                 <MessageSquare className="w-4 h-4" />

@@ -127,9 +127,6 @@ const DESIGN_BLOCKED_TOOLS = new Set([
   'git_branch',
   'git_clone',
   'package_manager',
-  'create_task',
-  'update_task',
-  'delete_task',
 ]);
 const TOOL_PROFILE_PATTERNS = {
   design: /\b(design|prototype|mockup|wireframe|one[-\s]?pager|pitch\s+deck|landing\s+page|canvas|visual\s+exploration|handoff|figma|ui\s+flow|user\s+flow)\b/i,

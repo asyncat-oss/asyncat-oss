@@ -56,7 +56,7 @@ export default function ProjectCreateModal({ isOpen, onClose, onCreate, isCreati
               </span>
               <div>
                 <h2 id="create-project-title" className="text-base font-semibold text-gray-900 dark:text-gray-100">Create project</h2>
-                <p className="mt-0.5 text-xs leading-5 text-gray-500 dark:text-gray-400">Group related tasks and control which folders they can use.</p>
+                <p className="mt-0.5 text-xs leading-5 text-gray-500 dark:text-gray-400">Choose which folders the agent can work in and keep related chats together.</p>
               </div>
             </div>
             <button

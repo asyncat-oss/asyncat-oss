@@ -1,7 +1,7 @@
 export { chatApi, chatFoldersApi } from './chatApi.js';
 export { projectsApi } from './projectsApi.js';
 export { trashApi } from './trashApi.js';
-export { agentApi, agentTaskRunsApi, profilesApi, sandboxesApi } from './agentApi.js';
+export { agentApi, profilesApi, sandboxesApi } from './agentApi.js';
 export { gitApi } from './gitApi.js';
 export { filesApi } from './filesApi.js';
 export { schedulerApi } from './schedulerApi.js';

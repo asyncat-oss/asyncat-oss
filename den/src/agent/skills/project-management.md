@@ -65,7 +65,7 @@ when_to_use: |
 - Use `create_diagram` for Gantt charts, flowcharts, and dependency maps
 - Use `create_markdown` for project briefs, specs, and retrospectives
 - Use `create_csv` for burndown/velocity data
-- Use `db_query` to analyze workspace task data
+- Use `todo_write` to keep the agent's own plan for multi-step work
 
 ## Risk Assessment Matrix
 | Likelihood \ Impact | Low | Medium | High |

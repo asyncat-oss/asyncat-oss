@@ -34,12 +34,6 @@ const TYPE_CONFIG = {
     bg: 'bg-gray-100 dark:bg-white/[0.05]',
     label: 'Notes',
   },
-  card: {
-    icon: SquareCheck,
-    color: 'text-gray-400 dark:text-gray-500',
-    bg: 'bg-gray-100 dark:bg-white/[0.05]',
-    label: 'Tasks',
-  },
   command: {
     icon: Command,
     color: 'text-indigo-400 dark:text-indigo-400',
@@ -54,7 +48,7 @@ const TYPE_CONFIG = {
   },
 };
 
-const SECTION_ORDER = ['command', 'project', 'note', 'conversation', 'card', 'memory'];
+const SECTION_ORDER = ['command', 'project', 'note', 'conversation', 'memory'];
 
 // Navigation commands surfaced in the palette (always available, filtered by query).
 const COMMANDS = [
@@ -67,7 +61,6 @@ const COMMANDS = [
   { id: 'cmd-training',  label: 'Go to Training',       to: '/models?tab=training', icon: GraduationCap },
   { id: 'cmd-tools',     label: 'Go to Tools & Skills', to: '/tools',        icon: Wrench },
   { id: 'cmd-projects',  label: 'Go to Projects',       to: '/projects',     icon: SquareCheck },
-  { id: 'cmd-tasks',     label: 'Go to Tasks',          to: '/tasks',        icon: SquareCheck },
   { id: 'cmd-settings',  label: 'Go to Settings',       to: '/settings',     icon: Settings },
 ];
 
@@ -120,18 +113,6 @@ const SearchResultItem = memo(
           )}
         </div>
 
-        {/* Priority badge for cards */}
-        {item._type === 'card' && item.priority && (
-          <span className={`flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-            item.priority.toLowerCase() === 'high'
-              ? 'bg-red-100 dark:bg-red-900/30 text-red-500 dark:text-red-400'
-              : item.priority.toLowerCase() === 'medium'
-                ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'
-                : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500'
-          }`}>
-            {item.priority}
-          </span>
-        )}
       </div>
     );
   })
@@ -181,29 +162,8 @@ const UniversalSearch = ({ isOpen, onClose }) => {
     }
 
     // Local filter (instant, no debounce)
-    const PROJECT_TABS = [
-      { id: 'kanban', label: 'Board' },
-      { id: 'list',   label: 'List' },
-    ];
-
-    const expandedProjects = [];
-    localProjects.forEach((p) => {
-      expandedProjects.push({ ...p, _type: 'project', _tab: null });
-      if (term) {
-        PROJECT_TABS.forEach(tab => {
-          expandedProjects.push({
-            ...p,
-            _type: 'project',
-            _tab: tab.id,
-            name: `${p.name} — ${tab.label}`,
-            description: `Go to ${tab.label} in ${p.name}`,
-          });
-        });
-      }
-    });
-
     const all = [
-      ...expandedProjects,
+      ...localProjects.map((p) => ({ ...p, _type: 'project' })),
       ...localConversations.map((c) => ({ ...c, _type: 'conversation' })),
     ];
 
@@ -375,16 +335,13 @@ const UniversalSearch = ({ isOpen, onClose }) => {
         return;
       }
       if (item._type === 'project') {
-        const isTaskView = ['kanban', 'list'].includes(item._tab);
-        navigate(isTaskView ? `/tasks/${item.id}/${item._tab}` : `/projects/${item.id}`);
+        navigate(`/projects/${item.id}`);
       } else if (item._type === 'conversation') {
         navigate(`/conversations/${item.id}`);
       } else if (item._type === 'note') {
         // Notes have no page of their own; they live as artifacts in the chat
         // that created them. Results without a chat are filtered out below.
         navigate(`/conversations/${item.conversationId}`);
-      } else if (item._type === 'card') {
-        navigate(item.projectId ? `/tasks/${item.projectId}/list` : '/tasks');
       }
       onClose();
     },
@@ -452,7 +409,7 @@ const UniversalSearch = ({ isOpen, onClose }) => {
                         const gi = filteredResults.indexOf(item);
                         return (
                           <SearchResultItem
-                            key={`${type}-${item.id}-${item._tab || ''}`}
+                            key={`${type}-${item.id}`}
                             ref={(el) => (itemRefs.current[gi] = el)}
                             item={item}
                             isSelected={selectedIndex === gi}

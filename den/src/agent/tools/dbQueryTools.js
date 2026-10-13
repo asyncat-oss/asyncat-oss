@@ -39,7 +39,7 @@ export const dbQueryTool = {
   description:
     'Run a SQL query against the workspace database. SELECT queries are safe; ' +
     'INSERT/UPDATE/DELETE require DANGEROUS permission. Use for analytics, debugging, ' +
-    'reporting, or understanding workspace data (conversations, tasks, notes, events, memory).',
+    'reporting, or understanding workspace data (conversations, projects, notes, agent sessions, memory).',
   category: 'data',
   permission: PermissionLevel.MODERATE,
   parameters: {

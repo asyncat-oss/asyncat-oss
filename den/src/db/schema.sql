@@ -7,7 +7,6 @@
 --   note_version_groups  aichats.usage_tracking  aichats.ai_credits
 --
 -- Schema prefixes removed (SQLite has no schemas):
---   kanban.Columns  → Columns      kanban.Cards  → Cards
 --   aichats.conversations / chat_folders
 --
 -- SQLite adaptations:
@@ -95,39 +94,6 @@ CREATE TABLE IF NOT EXISTS notes (
   metadata    TEXT NOT NULL DEFAULT '{}'    -- JSON (block data etc.)
 );
 
--- ─── Kanban ───────────────────────────────────────────────────────────────────
--- Table names kept as "Columns" / "Cards" to match the existing
--- service and controller code exactly.
-
-CREATE TABLE IF NOT EXISTS Columns (
-  id                 TEXT PRIMARY KEY,
-  title              TEXT NOT NULL,
-  "order"            REAL NOT NULL DEFAULT 0,
-  projectId          TEXT REFERENCES projects(id) ON DELETE CASCADE,
-  createdBy          TEXT NOT NULL REFERENCES users(id),
-  updatedBy          TEXT REFERENCES users(id),
-  createdAt          TEXT NOT NULL DEFAULT (datetime('now')),
-  updatedAt          TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS Cards (
-  id          TEXT PRIMARY KEY,
-  title       TEXT NOT NULL,
-  description TEXT,
-  priority    TEXT DEFAULT 'Medium'
-                CHECK (priority IN ('high','medium','low','High','Medium','Low')),
-  "order"     REAL NOT NULL DEFAULT 0,
-  columnId    TEXT NOT NULL REFERENCES Columns(id) ON DELETE CASCADE,
-  tasks       TEXT NOT NULL DEFAULT '{"total":0,"completed":0}',  -- JSON
-  progress    INTEGER NOT NULL DEFAULT 0,
-  checklist   TEXT NOT NULL DEFAULT '[]',   -- JSON
-  attachments TEXT NOT NULL DEFAULT '[]',   -- JSON
-  createdBy   TEXT NOT NULL REFERENCES users(id),
-  updatedBy   TEXT REFERENCES users(id),
-  createdAt   TEXT NOT NULL DEFAULT (datetime('now')),
-  updatedAt   TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
 -- ─── AI Chats ─────────────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS chat_folders (
@@ -200,9 +166,6 @@ CREATE INDEX IF NOT EXISTS idx_projects_team_id         ON projects(team_id);
 CREATE INDEX IF NOT EXISTS idx_projects_owner_id        ON projects(owner_id);
 CREATE INDEX IF NOT EXISTS idx_project_folders_project  ON project_folders(project_id, position, created_at);
 CREATE INDEX IF NOT EXISTS idx_notes_createdby          ON notes(createdby);
-CREATE INDEX IF NOT EXISTS idx_Columns_projectId        ON Columns(projectId);
-CREATE INDEX IF NOT EXISTS idx_Cards_columnId           ON Cards(columnId);
-CREATE INDEX IF NOT EXISTS idx_Cards_createdBy          ON Cards(createdBy);
 CREATE INDEX IF NOT EXISTS idx_conversations_user       ON conversations(user_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_workspace  ON conversations(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_deleted    ON conversations(deleted_at);
@@ -499,29 +462,6 @@ CREATE TABLE IF NOT EXISTS agent_tool_audit (
 );
 CREATE INDEX IF NOT EXISTS idx_agent_tool_audit_session ON agent_tool_audit(session_id);
 CREATE INDEX IF NOT EXISTS idx_agent_tool_audit_user    ON agent_tool_audit(user_id, started_at);
-
-CREATE TABLE IF NOT EXISTS agent_task_runs (
-  id               TEXT PRIMARY KEY,
-  card_id          TEXT NOT NULL REFERENCES Cards(id) ON DELETE CASCADE,
-  session_id       TEXT REFERENCES agent_sessions(id) ON DELETE SET NULL,
-  profile_id       TEXT REFERENCES agent_profiles(id) ON DELETE SET NULL,
-  user_id          TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  workspace_id     TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-  goal             TEXT NOT NULL,
-  status           TEXT NOT NULL DEFAULT 'queued'
-                     CHECK (status IN ('queued','running','completed','failed','cancelled')),
-  last_event_type  TEXT,
-  last_event_label TEXT,
-  summary          TEXT,
-  error            TEXT,
-  started_at       TEXT,
-  completed_at     TEXT,
-  created_at       TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE INDEX IF NOT EXISTS idx_agent_task_runs_card    ON agent_task_runs(card_id, updated_at);
-CREATE INDEX IF NOT EXISTS idx_agent_task_runs_user    ON agent_task_runs(user_id, updated_at);
-CREATE INDEX IF NOT EXISTS idx_agent_task_runs_session ON agent_task_runs(session_id);
 
 -- ─── Custom Model Paths ────────────────────────────────────────────────────────
 -- Stores absolute paths to models located outside the default directory.

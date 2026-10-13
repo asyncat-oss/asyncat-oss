@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useState } from "react";
 import PropTypes from 'prop-types';
 import { Outlet, useOutletContext, useNavigate } from "react-router-dom";
-import { ArrowRight, FolderOpen, Plus } from "lucide-react";
+import { FolderOpen, Plus } from "lucide-react";
 import ProjectSidebar from "./ProjectSidebar";
 import { useWorkspace } from "../contexts/WorkspaceContext";
 import eventBus from "../utils/eventBus.js";
@@ -10,7 +10,6 @@ export const WorkspaceEmpty = ({ basePath = '/projects' }) => {
   const { getWorkspaceProjects } = useWorkspace();
   const navigate = useNavigate();
   const [checked, setChecked] = useState(false);
-  const isTaskSection = basePath === '/tasks';
 
   useEffect(() => {
     getWorkspaceProjects()
@@ -39,30 +38,16 @@ export const WorkspaceEmpty = ({ basePath = '/projects' }) => {
           No projects yet
         </h3>
         <p className="text-sm text-gray-400 dark:text-gray-500 midnight:text-gray-500">
-          {isTaskSection
-            ? 'Tasks live inside projects. Create a project first, then return here.'
-            : 'Create a project to organise tasks and choose which folders the agent can use.'}
+          Create a project to choose which folders the agent can work in and keep its chats together.
         </p>
-        {!isTaskSection && (
-          <button
-            type="button"
-            onClick={() => eventBus.emit('projects:create')}
-            className="mx-auto mt-4 inline-flex items-center gap-1.5 rounded-lg bg-gray-900 px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Create project
-          </button>
-        )}
-        {isTaskSection && (
-          <button
-            type="button"
-            onClick={() => navigate('/projects')}
-            className="mx-auto mt-4 inline-flex items-center gap-1.5 rounded-lg bg-gray-900 px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
-          >
-            Open Projects
-            <ArrowRight className="h-3.5 w-3.5" />
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => eventBus.emit('projects:create')}
+          className="mx-auto mt-4 inline-flex items-center gap-1.5 rounded-lg bg-gray-900 px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Create project
+        </button>
       </div>
     </div>
   );
@@ -77,7 +62,7 @@ const WorkspaceLayout = ({ basePath = '/projects', section = 'projects' }) => {
 
   return (
     <div className="flex h-full">
-      <ProjectSidebar basePath={basePath} mode={section} />
+      <ProjectSidebar basePath={basePath} />
       <div className="flex-1 min-w-0 overflow-hidden">
         <Suspense fallback={null}>
           <Outlet context={{ ...outletContext, basePath, section }} />
@@ -89,7 +74,7 @@ const WorkspaceLayout = ({ basePath = '/projects', section = 'projects' }) => {
 
 WorkspaceLayout.propTypes = {
   basePath: PropTypes.string,
-  section: PropTypes.oneOf(['projects', 'tasks']),
+  section: PropTypes.oneOf(['projects']),
 };
 
 export default WorkspaceLayout;

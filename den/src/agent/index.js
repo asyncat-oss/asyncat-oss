@@ -8,7 +8,6 @@ import { shellTools } from './tools/shellTools.js';
 import { searchTools } from './tools/searchTools.js';
 import { memoryTools } from './tools/memoryTools.js';
 import { browserTools } from './tools/browserTools.js';
-import { workspaceTools } from './tools/workspaceTools.js';
 import { agentTools } from './tools/agentTools.js';
 import { systemTools } from './tools/systemTools.js';
 import { gitTools } from './tools/gitTools.js';
@@ -78,7 +77,6 @@ export async function initializeAgent() {
   toolRegistry.registerAll(shellTools);
   toolRegistry.registerAll(searchTools);
   toolRegistry.registerAll(memoryTools);
-  toolRegistry.registerAll(workspaceTools);
   toolRegistry.registerAll(agentTools);
   toolRegistry.registerAll(systemTools);
   toolRegistry.registerAll(gitTools);
