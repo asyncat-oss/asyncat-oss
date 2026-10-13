@@ -1331,6 +1331,44 @@ function runVerifyProbeAsync(binary, arg, timeoutMs, signal = null) {
   });
 }
 
+// ─── llama.cpp versions ───────────────────────────────────────────────────────
+// llama.cpp numbers its builds: release tag "b6123" is build 6123, and
+// `llama-server --version` prints "version: 6123 (abcdef12)".
+
+/** { build, commit } from `llama-server --version` output, or null. */
+export function parseLlamaServerVersion(text) {
+  const match = /version:\s*b?(\d+)(?:\s*\(([0-9a-f]{6,40})\))?/i.exec(String(text || ''));
+  if (!match) return null;
+  return { build: Number(match[1]), commit: match[2] || null };
+}
+
+/** The build number in a llama.cpp release tag ("b6123" → 6123), or null. */
+export function llamaBuildFromTag(tag) {
+  const match = /^b(\d+)$/i.exec(String(tag || '').trim());
+  return match ? Number(match[1]) : null;
+}
+
+const engineVersionCache = new Map();
+
+/**
+ * The version of a llama-server binary (from `--version`), cached per file
+ * (path, size and modification time), so asking again is free.
+ */
+export async function readLlamaServerVersion(binary, { timeoutMs = 15000 } = {}) {
+  let key;
+  try {
+    const stat = await fs.promises.stat(binary);
+    key = `${path.resolve(binary)}:${stat.size}:${stat.mtimeMs}`;
+  } catch {
+    return null;
+  }
+  if (engineVersionCache.has(key)) return engineVersionCache.get(key);
+  const probe = await runVerifyProbeAsync(binary, '--version', timeoutMs);
+  const version = parseLlamaServerVersion(`${probe.stdout}\n${probe.stderr}`);
+  engineVersionCache.set(key, version);
+  return version;
+}
+
 export async function verifyBinaryDetailedAsync(binary, options = {}) {
   const timeoutMs = Math.max(5000, Number(options.timeoutMs) || VERIFY_BINARY_TIMEOUT_MS);
   const signal = options.signal || null;

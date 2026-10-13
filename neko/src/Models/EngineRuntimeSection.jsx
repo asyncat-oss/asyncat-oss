@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { Badge } from './modelPageShared.jsx';
 import { downloadProgressText, formatBytes } from './engineProgress.js';
+import { buildsBehind, buildsNewerText, profileForCapability } from './engineVersions.js';
 
 const INSTALL_PROFILE_LABELS = {
   cpu_safe: 'CPU-safe build',
@@ -147,6 +148,7 @@ const EngineRuntimeSection = ({
   const current = engineData?.current || null;
   const candidates = useMemo(() => engineData?.candidates || [], [engineData?.candidates]);
   const releases = useMemo(() => engineCatalog?.releases || [], [engineCatalog]);
+  const latestBuild = engineCatalog?.latestBuild || null;
   const canRetry = Boolean(retryModel);
   const actionError = switchError || installError || pythonBuildError || removeError;
   const actionSuccess = switchSuccess || installSuccess || pythonBuildSuccess || removeSuccess;
@@ -448,8 +450,12 @@ const EngineRuntimeSection = ({
           const assetInfo = row.assetInfo;
           const installedVersion = row.installed?.managedMetadata?.version;
           const installedAsset = row.installed?.managedMetadata?.asset;
+          // llama.cpp tags a new build several times a day: only a newer
+          // build is an update, and the row says how much newer.
+          const behind = installed && assetInfo ? buildsBehind(installedVersion, assetInfo.release.tagName) : 0;
+          const installedDetail = [installedVersion, installedAsset].filter(Boolean).join(' / ') || row.installed?.path;
           const detail = installed
-            ? [installedVersion, installedAsset].filter(Boolean).join(' / ') || row.installed.path
+            ? (behind > 0 ? `${installedDetail} · ${assetInfo.release.tagName} is out, ${buildsNewerText(behind)}` : installedDetail)
             : assetInfo
               ? `${assetInfo.release.tagName} / ${formatBytes(assetInfo.asset.size)} / ${assetInfo.asset.name}`
               : 'Installed manually or from an older Asyncat layout.';
@@ -500,7 +506,7 @@ const EngineRuntimeSection = ({
                     className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
                   >
                     <RefreshCw className="h-3.5 w-3.5" />
-                    {installedVersion && installedVersion !== assetInfo.release.tagName ? 'Update' : 'Reinstall'}
+                    {behind > 0 ? 'Update' : 'Reinstall'}
                   </button>
                 )}
                 {installed && (
@@ -562,6 +568,12 @@ const EngineRuntimeSection = ({
           )}
           {candidates.map((candidate, index) => {
             const key = engineKey(candidate);
+            const external = candidate.runtime === 'binary' && !candidate.managed;
+            const versionTag = candidate.version?.build ? `b${candidate.version.build}` : null;
+            const externalBehind = external ? buildsBehind(candidate.version?.build, latestBuild) : 0;
+            const managedAlternative = externalBehind > 0
+              ? managedAssetsByProfile.get(profileForCapability(candidate.capabilityHint)) || null
+              : null;
             return (
               <div
                 key={candidate.id || key}
@@ -578,9 +590,34 @@ const EngineRuntimeSection = ({
                       {candidate.isRecommended && <Badge color="amber">Recommended</Badge>}
                       {candidate.managed && <Badge color="gray">Managed</Badge>}
                       <Badge color={capabilityBadgeColor(candidate.capabilityHint)}>{candidate.capabilityLabel}</Badge>
+                      {versionTag && <span className="font-mono text-[11px] text-fg-subtle">{versionTag}</span>}
                     </div>
                     <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">{candidate.source || 'Detected runtime'}</p>
                     <p className="mt-1 truncate font-mono text-[11px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">{candidate.path}</p>
+                    {externalBehind > 0 && (
+                      <div className="mt-2 rounded-lg border border-line bg-surface px-3 py-2 text-xs leading-5 text-fg-muted">
+                        <p>
+                          You have llama.cpp {versionTag}; {engineCatalog?.latestTag || 'a newer build'} is out ({buildsNewerText(externalBehind)}).
+                          {' '}This copy wasn&apos;t installed by Asyncat, so update it the way you installed it, for example with your package manager.
+                          {managedAlternative ? ' Or let Asyncat install and update a build for you.' : ''}
+                        </p>
+                        {managedAlternative && (
+                          <button
+                            type="button"
+                            onClick={() => onInstall?.({
+                              profile: managedAlternative.profile,
+                              releaseTag: managedAlternative.release.tagName,
+                              assetName: managedAlternative.asset.name,
+                            }, false)}
+                            disabled={Boolean(installingKey)}
+                            className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-line bg-canvas px-2.5 py-1 text-[11px] font-semibold text-fg hover:bg-hover disabled:opacity-50"
+                          >
+                            <Download className="h-3 w-3" />
+                            Install {INSTALL_PROFILE_LABELS[managedAlternative.profile] || 'a managed build'}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 lg:justify-end">

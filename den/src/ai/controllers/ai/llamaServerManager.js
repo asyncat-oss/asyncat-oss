@@ -32,6 +32,8 @@ import {
   swapManagedDirectory,
   verificationTimeoutForAsset,
   verifyBinaryDetailedAsync,
+  llamaBuildFromTag,
+  readLlamaServerVersion,
   writeManagedPythonEngineMetadata,
 } from '../../../lib/localEngine.js';
 import { ensureFreeSpace } from '../../../lib/engineDownload.js';
@@ -278,12 +280,15 @@ function addEngineCandidate(map, candidate) {
   const normalizedPath = normalizeCandidatePath(candidate.path);
   const key = `${candidate.runtime}:${normalizedPath}`;
   const existing = map.get(key);
+  const managedInfo = candidate.managed ? managedCapabilityHintFor(candidate.runtime, candidate.path) : null;
   const next = {
     id: key,
     ...candidate,
     path: candidate.path,
     normalizedPath,
     capabilityHint: capabilityHintFor(candidate.runtime, candidate.source, candidate.path),
+    managedProfile: candidate.managedProfile || managedInfo?.profile || null,
+    managedMetadata: candidate.managedMetadata || managedInfo?.metadata || null,
   };
   if (!existing) {
     next.capabilityLabel = capabilityLabelFor(next.capabilityHint);
@@ -719,6 +724,33 @@ function currentSelectionSnapshot(currentEngine = null) {
   };
 }
 
+/**
+ * The llama.cpp build of each binary engine: from Asyncat's metadata for a
+ * managed build, from `llama-server --version` for one installed elsewhere
+ * (so it can be told when a newer build is out).
+ */
+async function addEngineVersions(candidates) {
+  await Promise.all(candidates.map(async (candidate) => {
+    if (candidate.runtime !== 'binary') {
+      candidate.version = null;
+      return;
+    }
+    const tag = candidate.managedMetadata?.version || managedInstallForPath(candidate.path)?.metadata?.version;
+    const managedBuild = llamaBuildFromTag(tag);
+    if (managedBuild) {
+      candidate.version = { build: managedBuild, tag, source: 'asyncat' };
+      return;
+    }
+    try {
+      const version = await readLlamaServerVersion(candidate.path);
+      candidate.version = version ? { ...version, tag: `b${version.build}`, source: 'binary' } : null;
+    } catch {
+      candidate.version = null;
+    }
+  }));
+  return candidates;
+}
+
 export async function getEngineAdvisor() {
   const currentInfo = await checkBinary();
   const currentEnv = {
@@ -728,6 +760,8 @@ export async function getEngineAdvisor() {
   };
   const current = buildCurrentEngine(currentInfo, currentEnv);
   const candidates = await listEngineCandidates(current);
+  await addEngineVersions(candidates);
+  if (current) current.version = candidates.find(candidate => candidate.id === current.id)?.version || null;
   const gpu = await detectGpuInfo();
   const hardware = {
     platform: process.platform,
@@ -747,10 +781,14 @@ export async function getEngineAdvisor() {
 
 export async function getEngineInstallCatalog({ force = false } = {}) {
   const advisor = await getEngineAdvisor();
+  const releases = await loadReleaseCatalog(force);
+  const latestBuild = Math.max(0, ...releases.map(release => llamaBuildFromTag(release.tagName) || 0)) || null;
   return {
     generatedAt: nowIso(),
     activeJob: currentInstallJobSnapshot(),
-    releases: await loadReleaseCatalog(force),
+    latestBuild,
+    latestTag: latestBuild ? `b${latestBuild}` : null,
+    releases,
     current: advisor.current,
     hardware: advisor.hardware,
     recommendation: advisor.recommendation,

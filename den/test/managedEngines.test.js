@@ -9,7 +9,10 @@ import {
   cleanupManagedEngineLeftovers,
   isBuildRejectedByMachine,
   listManagedEngineInstalls,
+  llamaBuildFromTag,
+  parseLlamaServerVersion,
   rankLlamaReleaseAssets,
+  readLlamaServerVersion,
   scaleProgress,
   swapManagedDirectory,
 } from '../src/lib/localEngine.js';
@@ -203,6 +206,28 @@ test('download progress fills its share of the bar instead of stopping at its to
   assert.equal(scaleProgress(100, 2, 72), 72);
   assert.equal(scaleProgress(150, 2, 72), 72);
   assert.equal(scaleProgress(null, 5, 72), 5, 'an unknown size stays at the start');
+});
+
+test('the build of a llama-server installed elsewhere is read from --version, once', { skip: process.platform === 'win32' && 'uses a shell script' }, async () => {
+  assert.deepEqual(parseLlamaServerVersion('version: 6123 (abcdef12)\nbuilt with cc 15 for x86_64'), { build: 6123, commit: 'abcdef12' });
+  assert.deepEqual(parseLlamaServerVersion('llama-server version: b6200'), { build: 6200, commit: null });
+  assert.equal(parseLlamaServerVersion('usage: llama-server [options]'), null);
+  assert.equal(llamaBuildFromTag('b6123'), 6123);
+  assert.equal(llamaBuildFromTag('latest'), null);
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'asyncat-version-'));
+  try {
+    const counter = path.join(dir, 'runs');
+    const binary = path.join(dir, 'llama-server');
+    // Like llama.cpp: the version goes to stderr.
+    fs.writeFileSync(binary, `#!/bin/sh\necho run >> "${counter}"\necho "version: 6123 (abcdef12)" >&2\n`, { mode: 0o755 });
+    assert.deepEqual(await readLlamaServerVersion(binary), { build: 6123, commit: 'abcdef12' });
+    assert.deepEqual(await readLlamaServerVersion(binary), { build: 6123, commit: 'abcdef12' });
+    assert.equal(fs.readFileSync(counter, 'utf8').trim().split('\n').length, 1, 'asked once, then cached');
+    assert.equal(await readLlamaServerVersion(path.join(dir, 'missing')), null);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('a first install has nothing to back up', () => {
