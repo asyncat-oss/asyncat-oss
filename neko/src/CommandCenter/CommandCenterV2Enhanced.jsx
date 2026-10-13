@@ -2730,7 +2730,8 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
         ) : !hasConversationContent ? (
           welcomeScreenJSX
         ) : (
-          <>
+          // Fades in when a chat opens or its first message is sent.
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col animate-[fadeIn_200ms_ease-out]">
             <div className="shrink-0 border-b border-line bg-canvas">
               <div className={`mx-auto px-3 sm:px-4 md:px-6 ${shouldRenderSidePanel ? 'max-w-[min(100vw,96rem)]' : 'max-w-5xl'}`}>
 
@@ -3217,7 +3218,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                 onAskUserAnswer={experienceMode === 'work' ? handleAgentAskUser : undefined}
               />
             </div>
-          </>
+          </div>
         )}
 
         {terminalEverOpened && workingContext?.workingDir && (!isXLScreen || workbenchPreferences.terminalPosition === 'bottom') && (

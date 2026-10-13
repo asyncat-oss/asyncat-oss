@@ -59,6 +59,8 @@ const ConnectionNotice = () => {
 };
 
 // The cat walking along a line, shown while Asyncat starts up.
+const CHAT_PAGES = new Set(['home', 'conversations', 'agents']);
+
 const StartupScene = ({ label }) => (
   <div className="flex min-h-screen flex-col items-center justify-center bg-canvas text-fg" role="status" aria-label={label}>
     <div className="w-[132px] bg-canvas">
@@ -114,7 +116,10 @@ const AppLayout = () => {
   
   const basePage = location.pathname.split('/').filter(Boolean)[0] || 'home';
   const isSettingsPage = basePage === 'settings';
-  const routeTransitionKey = basePage;
+  // All chat URLs are one page: a new chat moves from /home to
+  // /conversations/:id after its first message is saved, and keying on that
+  // would rebuild the whole chat and replay the page fade mid-conversation.
+  const routeTransitionKey = CHAT_PAGES.has(basePage) ? 'chat' : basePage;
   
   // Check if user has any workspaces
   const hasWorkspaces = workspaces && workspaces.length > 0;

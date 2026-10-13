@@ -256,8 +256,10 @@ function useElapsedTime(startMs) {
 
 // ── Individual event components ───────────────────────────────────────────────
 
-function UserGoalEvent({ data, onEditMessage, onToggleMessageFlag, isRunning, highlighted = false }) {
+function UserGoalEvent({ data, onEditMessage, onToggleMessageFlag, isRunning, highlighted = false, animateIn = false }) {
   const goal = data?.goal || data?.content || '';
+  // Only a message that was just sent animates; opening a chat stays still.
+  const [rise] = useState(animateIn);
   const [copied, setCopied] = useState(false);
   const [lightbox, setLightbox] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -291,7 +293,7 @@ function UserGoalEvent({ data, onEditMessage, onToggleMessageFlag, isRunning, hi
     <div
       id={data?.messageId ? `message-${data.messageId}` : undefined}
       data-message-id={data?.messageId || undefined}
-      className={`group mb-6 scroll-mt-24 rounded-2xl transition-colors duration-700 ${
+      className={`group mb-6 scroll-mt-24 rounded-2xl transition-colors duration-700 ${rise ? 'animate-fadeIn' : ''} ${
         highlighted ? 'bg-amber-50/80 dark:bg-amber-950/20 midnight:bg-amber-950/20' : ''
       }`}
     >
@@ -1436,7 +1438,7 @@ function AnswerEvent({
           {!isStoppedRun && data?.round > 1 && (
             <p className="text-[10px] text-gray-300 dark:text-gray-700 midnight:text-slate-700 mt-2">{data.round} rounds</p>
           )}
-          <div className={`mt-2 flex flex-wrap items-center gap-0.5 transition-opacity group-hover:opacity-100 focus-within:opacity-100 ${isLatest && !isRunning ? 'opacity-100' : 'opacity-0'}`}>
+          <div className={`mt-2 flex flex-wrap items-center gap-0.5 transition-opacity group-hover:opacity-100 focus-within:opacity-100 ${isLatest && !isRunning ? 'animate-[fadeIn_240ms_ease-out] opacity-100' : 'opacity-0'}`}>
             <MessageAction label={copied ? 'Copied' : 'Copy'} onClick={copyAnswer}>
               {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
             </MessageAction>
@@ -1873,14 +1875,17 @@ function StreamingPreview({ text, reasoningText = '' }) {
     );
   }
 
+  // Same spacing as the finished answer, including room for its action row,
+  // so nothing shifts when the answer replaces this preview.
   return (
-    <FeedFrame className="mb-3">
+    <FeedFrame className="mb-6">
       <div className={MESSAGE_TEXT}>
         {blocks.length > 0
           ? blocks.map((block, i) => <BlockRenderer key={`${block.type}-${i}`} block={block} />)
           : <p className="whitespace-pre-wrap">{clean}</p>}
         <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-fg align-text-bottom" />
       </div>
+      <div className="mt-2 h-7" aria-hidden="true" />
     </FeedFrame>
   );
 }
@@ -2128,7 +2133,7 @@ function RunningIndicator({ runStartedAt }) {
   const elapsed = useElapsedTime(runStartedAt);
   return (
     <FeedFrame>
-      <div className="flex items-center gap-2 py-2 text-[13px]" role="status">
+      <div className="flex items-center gap-2 py-2 text-[13px] animate-[fadeIn_200ms_ease-out]" role="status">
         <span className="shimmer-text font-medium">Thinking</span>
         {elapsed > 0 && (
           <span className="tabular-nums text-[12px] text-fg-subtle">{formatElapsed(elapsed)}</span>
@@ -2343,7 +2348,7 @@ function RunSummaryCard({ events, runStartedAt, sessionId, session, onViewArtifa
   const summaryLine = summaryParts.join(' · ');
 
   return (
-    <FeedFrame className="mb-3 mt-1">
+    <FeedFrame className="mb-3 mt-1 animate-[fadeIn_240ms_ease-out]">
       {/* Header — same style as ThinkingEvent / AgentWorkDrawer */}
       <button
         type="button"
@@ -2919,6 +2924,7 @@ export default function AgentRunFeed({
                 onEditMessage={onEditMessage}
                 onToggleMessageFlag={onToggleMessageFlag}
                 isRunning={isRunning}
+                animateIn={isLastSeg && isRunning}
                 highlighted={Boolean(seg.goalEvent.data?.messageId && seg.goalEvent.data.messageId === highlightedMessageId)}
               />
             )}
