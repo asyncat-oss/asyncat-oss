@@ -3,35 +3,31 @@ import PropTypes from 'prop-types';
 import { useNavigate, useRouteError } from 'react-router-dom';
 
 export const RouteErrorElement = () => {
-  useRouteError();
+  const error = useRouteError();
   const navigate = useNavigate();
+  const detail = error?.statusText || error?.message || '';
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-white p-8 dark:bg-[#0f0f0f] midnight:bg-black">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-canvas p-8">
       <div className="w-full max-w-sm space-y-6 text-center">
         <div className="space-y-2">
-          <p className="text-sm font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500 midnight:text-gray-600">
-            Error
-          </p>
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 midnight:text-gray-100">
-            Something went wrong
-          </h1>
-          <p className="text-sm leading-relaxed text-gray-500 dark:text-gray-400 midnight:text-gray-500">
-            Asyncat could not open this page.
-          </p>
+          <p className="text-sm font-medium uppercase tracking-wide text-fg-subtle">Error</p>
+          <h1 className="text-2xl font-semibold text-fg">Something went wrong</h1>
+          <p className="text-sm leading-relaxed text-fg-muted">Asyncat could not open this page.</p>
+          {detail && <p className="text-xs text-fg-subtle break-words">{detail}</p>}
         </div>
         <div className="flex items-center justify-center gap-6 pt-2">
           <button
             type="button"
             onClick={() => navigate('/home')}
-            className="text-sm font-medium text-gray-900 hover:text-indigo-600 dark:text-gray-100 dark:hover:text-indigo-400 midnight:text-gray-100 midnight:hover:text-indigo-400"
+            className="text-sm font-medium text-fg hover:text-accent"
           >
             Go home
           </button>
           <button
             type="button"
             onClick={() => window.location.reload()}
-            className="text-sm text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 midnight:text-gray-500 midnight:hover:text-gray-200"
+            className="text-sm text-fg-muted hover:text-fg"
           >
             Refresh
           </button>

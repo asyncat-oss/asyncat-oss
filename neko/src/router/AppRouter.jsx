@@ -9,7 +9,7 @@ import ConfirmProvider from '../components/ConfirmProvider';
 import ToastProvider from '../components/ToastProvider';
 import { CommandCenterProvider } from '../CommandCenter/context/CommandCenterContextEnhanced';
 import ErrorBoundary from '../error/ErrorBoundary';
-import RouteErrorElement from '../error/ErrorBoundary';
+import { RouteErrorElement } from '../error/ErrorBoundary';
 import { lastAutomationPath } from '../Automations/automationsNav.js';
 
 // Page components. The chat (the landing page) and the layout load up front;
