@@ -1,5 +1,5 @@
 // electron/preload.js — Secure bridge between renderer and main process
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 const subscribe = (channel, listener) => {
   ipcRenderer.on(channel, listener);
@@ -32,6 +32,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ─── Native Dialogs ───────────────────────────────────────────────────
   openDirectory:    (opts) => ipcRenderer.invoke('dialog:openDirectory', opts),
   openFilesDialog:  (opts) => ipcRenderer.invoke('dialog:openFiles', opts),
+  // The path on disk of a file or folder dropped onto the page (File.path is
+  // gone in current Electron).
+  getPathForFile:   (file) => {
+    try { return webUtils.getPathForFile(file) || ''; } catch { return ''; }
+  },
 
   // ─── Shell ────────────────────────────────────────────────────────────
   shellOpen:        (filePath) => ipcRenderer.invoke('shell:open', filePath),

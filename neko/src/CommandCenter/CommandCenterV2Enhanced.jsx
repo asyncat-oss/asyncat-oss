@@ -874,12 +874,14 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
   }, [workingContext?.relativePath, workingContext?.rootId]);
 
   const handleDrop = useCallback((e) => {
+    // A folder isn't an attachment: let it through to make a project of it.
+    if (e.dataTransfer.items?.[0]?.webkitGetAsEntry?.()?.isDirectory) return;
     e.preventDefault();
     const files = Array.from(e.dataTransfer.files || []);
     if (!files.length) return;
     const file = files[0]; // handle one file at a time — matches externalFileAttachment (single)
-    // Electron exposes the real absolute path; browsers don't have .path
-    const absPath = file.path || null;
+    // The desktop app knows the real path; browsers don't.
+    const absPath = window.electronAPI?.getPathForFile?.(file) || file.path || null;
     if (file.type.startsWith('image/')) {
       if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(String(file.type || '').toLowerCase())) {
         setError('Image input supports PNG, JPEG, WebP, and GIF files.');

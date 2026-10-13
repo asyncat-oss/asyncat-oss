@@ -13,6 +13,7 @@ import Sidebar from '../sidebar/Sidebar.jsx';
 import Button from '../components/ui/Button.jsx';
 import Cat from '../components/ui/Cat.jsx';
 import UpdateScreen from '../components/UpdateScreen.jsx';
+import FolderDropProject from '../projects/FolderDropProject.jsx';
 
 const ConnectionNotice = () => {
   const network = useNetworkStatus({ pollMs: 6000 });
@@ -327,6 +328,7 @@ const AppLayout = () => {
   return (
     <div className="flex h-screen bg-canvas">
       <ConnectionNotice />
+      <FolderDropProject />
       {!isSettingsPage && (
         <Sidebar
           onNewChat={handleNewChatWithNavigation}
