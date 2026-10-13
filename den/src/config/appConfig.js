@@ -1,8 +1,8 @@
 // config/appConfig.js — DB-backed runtime configuration.
 //
 // Most settings that used to live in den/.env are now stored in the `app_config`
-// table and hydrated into process.env at boot (see hydrateConfigIntoEnv, called
-// from db/client.js right after the schema is applied). This keeps the huge number
+// table and hydrated into process.env at boot (db/client.js does it right
+// after the schema is applied). This keeps the huge number
 // of existing `process.env.X` reads across the codebase working untouched — they
 // just get their values from the DB instead of the file.
 //
@@ -63,20 +63,4 @@ export function setConfigValue(key, value) {
   `).run(key, isSecretConfigKey(key) ? sealSecret(String(value)) : String(value));
   process.env[key] = String(value);
   return true;
-}
-
-export function deleteConfigValue(key) {
-  db.prepare('DELETE FROM app_config WHERE key = ?').run(key);
-  return true;
-}
-
-// Hydrate DB config into process.env. The DB is authoritative for any key it
-// holds (a value edited in the UI wins over a stale .env entry); keys only
-// present in .env are left as dotenv loaded them. Called once at boot.
-export function hydrateConfigIntoEnv() {
-  const config = getAllConfig();
-  for (const [key, value] of Object.entries(config)) {
-    process.env[key] = value;
-  }
-  return Object.keys(config).length;
 }
