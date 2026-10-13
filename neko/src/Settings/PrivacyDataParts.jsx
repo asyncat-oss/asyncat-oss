@@ -4,16 +4,136 @@
 
 import { useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
-import { AlertTriangle, Check, Download, Trash2 } from 'lucide-react';
+import { AlertTriangle, Check, Download, Trash2, Upload } from 'lucide-react';
 import Button from '../components/ui/Button.jsx';
 import Dialog from '../components/ui/Dialog.jsx';
 import { Field, Input } from '../components/ui/Field.jsx';
 import { errorDetail, useToast } from '../components/toastContext.js';
 import { formatBytes } from '../Models/engineProgress.js';
-import privacyApi from '../services/privacyApi.js';
+import privacyApi, { importApi } from '../services/privacyApi.js';
 import { updateApi } from './settingApi.js';
 
 const PHRASE = 'delete everything';
+const SOURCE_NAMES = { chatgpt: 'ChatGPT', claude: 'Claude' };
+
+function monthYear(iso) {
+  return iso ? new Date(iso).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) : '';
+}
+
+/** Chats (and memories) from a ChatGPT or Claude data export. */
+export function ImportChats() {
+  const toast = useToast();
+  const [reading, setReading] = useState(false);
+  const [preview, setPreview] = useState(null); // { token, preview }
+  const [withMemories, setWithMemories] = useState(true);
+  const [importing, setImporting] = useState(false);
+  const [done, setDone] = useState(null);
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasted, setPasted] = useState('');
+  const [savingMemories, setSavingMemories] = useState(false);
+
+  const pick = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setReading(true);
+    setPreview(null);
+    setDone(null);
+    try {
+      setPreview(await importApi.preview(file));
+    } catch (err) {
+      toast.error("Couldn't read that file", { detail: errorDetail(err) });
+    } finally {
+      setReading(false);
+    }
+  };
+
+  const run = async () => {
+    setImporting(true);
+    try {
+      const res = await importApi.importChats(preview.token, withMemories);
+      setDone(res);
+      setPreview(null);
+    } catch (err) {
+      toast.error("Couldn't bring the chats over", { detail: errorDetail(err) });
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const saveMemories = async () => {
+    setSavingMemories(true);
+    try {
+      const res = await importApi.importMemories(pasted);
+      toast.success(`Added ${res.added} ${res.added === 1 ? 'memory' : 'memories'}`, { detail: res.skipped ? `${res.skipped} were already there.` : undefined });
+      setPasted('');
+      setPasteOpen(false);
+    } catch (err) {
+      toast.error("Couldn't add them", { detail: errorDetail(err) });
+    } finally {
+      setSavingMemories(false);
+    }
+  };
+
+  const info = preview?.preview;
+  return (
+    <div className="rounded-xl border border-line px-4 py-3" data-import>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-[13px] font-medium text-fg">Bring your chats from ChatGPT or Claude</p>
+          <p className="mt-0.5 text-[12px] leading-5 text-fg-muted">
+            Ask either for a copy of your data (ChatGPT: Settings → Data controls → Export; Claude: Settings → Privacy → Export data), then pick the .zip it emails you. Chats keep their titles and dates; ones brought over before are skipped.
+          </p>
+        </div>
+        <label className={`inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-line-strong px-3 py-1.5 text-[13px] font-medium text-fg hover:bg-hover ${reading ? 'pointer-events-none opacity-60' : ''}`}>
+          <Upload className="h-3.5 w-3.5" />
+          {reading ? 'Reading…' : 'Pick the export'}
+          <input type="file" accept=".zip,.json,application/zip,application/json" className="sr-only" onChange={pick} aria-label="Export file" />
+        </label>
+      </div>
+      {info ? (
+        <div className="mt-3 rounded-lg bg-hover/50 px-3 py-2.5 text-[12px] leading-5 text-fg-muted" data-import-preview>
+          <p className="text-[13px] font-medium text-fg">
+            From {SOURCE_NAMES[info.format] || info.format}: {info.newChats} new chat{info.newChats === 1 ? '' : 's'}, {info.messages.toLocaleString()} messages
+            {info.from ? `, ${monthYear(info.from)} to ${monthYear(info.to)}` : ''}
+          </p>
+          {info.chats !== info.newChats ? <p>{info.chats - info.newChats} were brought over before and are skipped.</p> : null}
+          {info.sample?.length ? <p className="mt-1 truncate">{info.sample.join(' · ')}</p> : null}
+          {info.memories ? (
+            <label className="mt-2 flex items-center gap-2 text-fg">
+              <input type="checkbox" className="h-4 w-4 accent-[var(--as-accent)]" checked={withMemories} onChange={(event) => setWithMemories(event.target.checked)} />
+              Also add its {info.memories} memor{info.memories === 1 ? 'y' : 'ies'} about you
+            </label>
+          ) : null}
+          <div className="mt-2 flex gap-2">
+            <Button size="sm" variant="primary" loading={importing} disabled={!info.newChats && !(info.memories && withMemories)} onClick={run}>Bring them over</Button>
+            <Button size="sm" variant="ghost" onClick={() => setPreview(null)}>Cancel</Button>
+          </div>
+        </div>
+      ) : null}
+      {done ? (
+        <p className="mt-3 flex items-center gap-2 rounded-lg bg-emerald-500/10 px-3 py-2 text-[12px] text-emerald-800 dark:text-emerald-300" role="status">
+          <Check className="h-3.5 w-3.5 shrink-0" />
+          Brought over {done.chats.imported} chat{done.chats.imported === 1 ? '' : 's'}{done.chats.skipped ? ` (${done.chats.skipped} were already here)` : ''}{done.memories ? ` and ${done.memories.added} memor${done.memories.added === 1 ? 'y' : 'ies'}` : ''}. They&apos;re in your chat list by their dates.
+        </p>
+      ) : null}
+      <div className="mt-3 border-t border-line pt-2.5">
+        {pasteOpen ? (
+          <div className="space-y-2">
+            <p className="text-[12px] leading-5 text-fg-muted">Memories aren&apos;t always in an export. Copy ChatGPT&apos;s from Settings → Personalization → Memory → Manage, and paste them here, one per line.</p>
+            <textarea rows={4} value={pasted} onChange={(event) => setPasted(event.target.value)} aria-label="Memories to add" className="w-full rounded-lg border border-line-strong bg-canvas px-3 py-2 text-[13px] text-fg outline-none focus:border-accent focus:ring-2 focus:ring-accent/20" />
+            <div className="flex gap-2">
+              <Button size="sm" variant="primary" loading={savingMemories} disabled={!pasted.trim()} onClick={saveMemories}>Add memories</Button>
+              <Button size="sm" variant="ghost" onClick={() => setPasteOpen(false)}>Cancel</Button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" onClick={() => setPasteOpen(true)} className="text-[12px] text-accent hover:underline">Paste memories from ChatGPT</button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function ExportEverything() {
   const toast = useToast();

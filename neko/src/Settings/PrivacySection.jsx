@@ -18,7 +18,7 @@ import { connectorToolLabel } from '../Connectors/connectorFormat.js';
 import { configApi } from './settingApi.js';
 import privacyApi from '../services/privacyApi.js';
 import { alwaysAllowedChatTools, newChatMode, setAlwaysAllowedChatTools, setNewChatMode } from '../services/chatDefaults.js';
-import { ExportEverything, DeleteEverything } from './PrivacyDataParts.jsx';
+import { ExportEverything, DeleteEverything, ImportChats } from './PrivacyDataParts.jsx';
 
 export function Section({ icon: Icon, title, hint, children }) {
   return (
@@ -318,6 +318,7 @@ export default function PrivacySection() {
       <Section icon={Archive} title="Your data">
         {overview && !overview.error ? (
           <div className="space-y-4">
+            <ImportChats />
             <ExportEverything />
             <DeleteEverything pending={overview.pendingReset || null} onChanged={load} />
           </div>
