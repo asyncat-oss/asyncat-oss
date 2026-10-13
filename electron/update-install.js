@@ -190,6 +190,91 @@ export function verifyChecksum({ sums = null, digest = null, assetName, sha256 }
   return { verified: true, sources: expected.map(([source]) => source) };
 }
 
+export async function sha256File(file) {
+  const hash = createHash('sha256');
+  for await (const chunk of fs.createReadStream(file)) hash.update(chunk);
+  return hash.digest('hex');
+}
+
+// A small record of the last verified download, so a finished update is not
+// downloaded again (after closing the update screen, or a restart).
+
+export function readDownloadRecord(file) {
+  try {
+    const record = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return record && typeof record === 'object' ? record : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeDownloadRecord(file, record) {
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    if (record) fs.writeFileSync(file, JSON.stringify(record, null, 2));
+    else fs.rmSync(file, { force: true });
+  } catch (error) {
+    console.warn('[updater] could not save the download record:', error.message);
+  }
+}
+
+/**
+ * `record` when it is a verified download of this exact update that is still
+ * on disk unchanged (its SHA-256 is checked again), otherwise null.
+ */
+export async function verifiedDownloadFor(record, { version, assetName, strategy }) {
+  if (!record || record.version !== version || record.assetName !== assetName || record.strategy !== strategy) return null;
+  if (!record.file || !/^[0-9a-f]{64}$/.test(String(record.sha256 || ''))) return null;
+  try {
+    return (await sha256File(record.file)) === record.sha256 ? record : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Remove what earlier updates left behind: partial downloads anywhere we
+ * download to, an interrupted AppImage swap, and installers in the app's
+ * update folder other than a verified update that is still to be installed.
+ * Files the user may want (a .deb or AppImage in Downloads) are left alone.
+ * Returns { removed, keepRecord }.
+ */
+export function cleanupUpdateFiles({ updateDir = null, downloadsDir = null, appImagePath = null, record = null, isPending = () => false }) {
+  const removed = [];
+  const remove = (file) => {
+    try {
+      fs.rmSync(file, { force: true });
+      removed.push(file);
+    } catch { /* in use or gone */ }
+  };
+  const keepRecord = Boolean(record?.version && isPending(record.version));
+  const keepFile = keepRecord && record.file ? path.resolve(record.file) : null;
+
+  if (updateDir) {
+    let entries = [];
+    try { entries = fs.readdirSync(updateDir, { withFileTypes: true }); } catch { /* not created yet */ }
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      const file = path.join(updateDir, entry.name);
+      if (entry.name.endsWith('.part') || path.resolve(file) !== keepFile) remove(file);
+    }
+  }
+  if (downloadsDir) {
+    let entries = [];
+    try { entries = fs.readdirSync(downloadsDir, { withFileTypes: true }); } catch { /* none */ }
+    for (const entry of entries) {
+      if (entry.isFile() && /^Asyncat-.+\.part$/.test(entry.name)) remove(path.join(downloadsDir, entry.name));
+    }
+  }
+  if (appImagePath) {
+    const staging = appImageStagingPath(appImagePath);
+    for (const file of [staging, `${staging}.part`]) {
+      if (fs.existsSync(file)) remove(file);
+    }
+  }
+  return { removed, keepRecord };
+}
+
 /** Where the AppImage update is downloaded: next to the running file, so the swap is a rename. */
 export function appImageStagingPath(appImagePath) {
   return path.join(path.dirname(appImagePath), `.${path.basename(appImagePath)}.update`);

@@ -6,8 +6,11 @@
 // SHA256SUMS.txt (an update that can't be checked is refused), and then (see
 // update-install.js): an AppImage replaces itself and restarts, Windows runs
 // the installer silently and reopens, and macOS / .deb get the file saved and
-// shown for the last step (unsigned builds, or root needed). userData is
-// never touched.
+// shown for the last step (unsigned builds, or root needed). Chats and
+// settings are never touched; the updater keeps only two small files in
+// userData: the last release check (update-check.json, so checks don't use
+// up GitHub's hourly limit) and the last verified download
+// (update-download.json, so a finished download isn't fetched again).
 
 import fs from 'fs';
 import path from 'path';
@@ -15,8 +18,10 @@ import { app, ipcMain, net, shell } from 'electron';
 import { IS_DEV } from './constants.js';
 import { getMainWindow } from './window.js';
 import { startBackend, stopBackend } from './backend.js';
+import { fetchReleasesCached } from './update-check.js';
 import {
   DEFAULT_UPDATE_REPO,
+  compareVersions,
   isTrustedReleaseUrl,
   parseVersion,
   selectLatestRelease,
@@ -25,6 +30,7 @@ import {
 } from './update-policy.js';
 import {
   WINDOWS_INSTALLER_ARGS,
+  cleanupUpdateFiles,
   detectAppImage,
   downloadFile,
   installStrategy,
@@ -33,8 +39,11 @@ import {
   makeExecutable,
   parseChecksums,
   planDownload,
+  readDownloadRecord,
   replaceAppImage,
+  verifiedDownloadFor,
   verifyChecksum,
+  writeDownloadRecord,
 } from './update-install.js';
 
 // ASYNCAT_UPDATE_REPO=owner/repo checks a fork instead (see README.md).
@@ -47,6 +56,9 @@ if (UPDATE_REPO !== DEFAULT_UPDATE_REPO) console.info(`[updater] Checking ${UPDA
 function updateDir() {
   return path.join(app.getPath('temp'), 'asyncat-update');
 }
+
+const checkCacheFile = () => path.join(app.getPath('userData'), 'update-check.json');
+const downloadRecordFile = () => path.join(app.getPath('userData'), 'update-download.json');
 
 let initialized = false;
 let currentUpdate = null;
@@ -86,32 +98,30 @@ function toUpdateInfo(release) {
   };
 }
 
-async function fetchPublishedReleases() {
-  const response = await net.fetch(RELEASES_API_URL, {
+async function fetchPublishedReleases({ force = false } = {}) {
+  const { releases } = await fetchReleasesCached({
+    url: RELEASES_API_URL,
+    cacheFile: checkCacheFile(),
+    fetchImpl: (url, options) => net.fetch(url, options),
+    force,
     headers: {
       Accept: 'application/vnd.github+json',
       'User-Agent': `Asyncat-Desktop/${app.getVersion()}`,
       'X-GitHub-Api-Version': '2022-11-28',
     },
   });
-  if (!response.ok) {
-    const remaining = response.headers.get('x-ratelimit-remaining');
-    const hint = remaining === '0' ? ' GitHub rate limit reached; try again later.' : '';
-    throw new Error(`GitHub update check failed (${response.status}).${hint}`);
-  }
-  const releases = await response.json();
-  if (!Array.isArray(releases)) throw new Error('GitHub returned an invalid releases response.');
   return releases;
 }
 
-async function checkForUpdates() {
+/** `force` is for "Check for updates" pressed by hand; other checks may use a recent answer. */
+async function checkForUpdates(_event, options = {}) {
   if (IS_DEV) return { success: false, error: 'Update checks are only available in packaged builds.' };
   if (pendingCheck) return pendingCheck;
 
   send('update:checking');
   pendingCheck = (async () => {
     try {
-      const release = selectLatestRelease(await fetchPublishedReleases(), app.getVersion());
+      const release = selectLatestRelease(await fetchPublishedReleases({ force: options?.force === true }), app.getVersion());
       hasChecked = true;
       if (!release) {
         currentUpdate = null;
@@ -188,6 +198,19 @@ async function startUpdate() {
     updateDir: updateDir(),
     downloadsDir: app.getPath('downloads'),
   });
+  const perMachine = strategy === 'run-installer' ? isPerMachineInstall() : false;
+
+  // Already downloaded and verified (the screen was closed, or Asyncat was
+  // restarted before installing): go straight to the last step.
+  const finished = await verifiedDownloadFor(readDownloadRecord(downloadRecordFile()), {
+    version: update.version,
+    assetName: update.assetName,
+    strategy,
+  });
+  if (finished) {
+    setDownload({ status: 'ready', version: update.version, strategy, file: finished.file, received: 0, total: 0, error: null, perMachine });
+    return { success: true, reused: true };
+  }
 
   const abort = new AbortController();
   downloadAbort = abort;
@@ -200,7 +223,7 @@ async function startUpdate() {
     file: null,
     error: null,
     // Installed for all users: Windows will ask for permission to update.
-    perMachine: strategy === 'run-installer' ? isPerMachineInstall() : false,
+    perMachine,
   });
   (async () => {
     try {
@@ -230,7 +253,16 @@ async function startUpdate() {
       if ((strategy === 'open-installer' || strategy === 'save-appimage') && process.platform === 'linux') {
         shell.showItemInFolder(destination);
       }
-      setDownload({ status: 'ready', file: strategy === 'replace-appimage' ? RUNNING_APPIMAGE : destination });
+      const file = strategy === 'replace-appimage' ? RUNNING_APPIMAGE : destination;
+      writeDownloadRecord(downloadRecordFile(), {
+        version: update.version,
+        assetName: update.assetName,
+        strategy,
+        file,
+        sha256: result.sha256,
+        savedAt: new Date().toISOString(),
+      });
+      setDownload({ status: 'ready', file });
     } catch (error) {
       if (!error.cancelled) console.warn('[updater] download failed:', error.message);
       setDownload({ status: error.cancelled ? 'idle' : 'error', error: error.cancelled ? null : error.message, received: 0 });
@@ -296,9 +328,31 @@ function showUpdateFile() {
   return { success: Boolean(download.file) };
 }
 
+/** Remove partial downloads and installers of updates that are already installed. */
+function cleanUpOldUpdates() {
+  try {
+    const record = readDownloadRecord(downloadRecordFile());
+    const { removed, keepRecord } = cleanupUpdateFiles({
+      updateDir: updateDir(),
+      downloadsDir: app.getPath('downloads'),
+      appImagePath: RUNNING_APPIMAGE,
+      record,
+      isPending: (version) => {
+        try { return compareVersions(version, app.getVersion()) > 0; } catch { return false; }
+      },
+    });
+    if (record && !keepRecord) writeDownloadRecord(downloadRecordFile(), null);
+    if (removed.length) console.info(`[updater] Removed ${removed.length} leftover update file(s).`);
+  } catch (error) {
+    console.warn('[updater] cleanup failed:', error.message);
+  }
+}
+
 export function setupAutoUpdater() {
   if (IS_DEV || initialized) return;
   initialized = true;
+
+  cleanUpOldUpdates();
 
   setTimeout(() => {
     checkForUpdates();

@@ -71,7 +71,7 @@ const UpdateSection = () => {
   const handleCheckForUpdates = async () => {
     setStatus('checking');
     setError(null);
-    const result = await window.electronAPI?.checkForUpdates();
+    const result = await window.electronAPI?.checkForUpdates({ force: true });
     if (result && !result.success) {
       setStatus('error');
       setError(result.error || 'Update check failed.');

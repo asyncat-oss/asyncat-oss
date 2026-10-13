@@ -74,7 +74,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   resetPet: () => ipcRenderer.invoke('pet:reset'),
 
   // ─── Auto-update ──────────────────────────────────────────────────────
-  checkForUpdates:   () => ipcRenderer.invoke('update:check'),
+  checkForUpdates:   (options) => ipcRenderer.invoke('update:check', options),
   getUpdateState:    () => ipcRenderer.invoke('update:get-state'),
   startUpdate:       () => ipcRenderer.invoke('update:start'),
   cancelUpdate:      () => ipcRenderer.invoke('update:cancel'),

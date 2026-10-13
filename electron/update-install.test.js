@@ -10,6 +10,7 @@ import { Writable } from 'stream';
 
 import {
   appImageStagingPath,
+  cleanupUpdateFiles,
   detectAppImage,
   digestSha256,
   downloadFile,
@@ -19,8 +20,12 @@ import {
   makeExecutable,
   parseChecksums,
   planDownload,
+  readDownloadRecord,
   replaceAppImage,
+  sha256File,
+  verifiedDownloadFor,
   verifyChecksum,
+  writeDownloadRecord,
 } from './update-install.js';
 
 function serve(body, { status = 200, length = body.length } = {}) {
@@ -97,6 +102,82 @@ test('the installer is started and confirmed running before Asyncat quits', asyn
   // A spawn that never confirms times out instead of hanging.
   const silent = () => Object.assign(new EventEmitter(), { unref() {} });
   await assert.rejects(launchDetached('x', [], { spawnImpl: silent, existsImpl: () => true, timeoutMs: 20 }), /did not start/);
+});
+
+test('a finished, verified download is reused instead of downloaded again', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'asyncat-reuse-'));
+  try {
+    const file = path.join(dir, 'Asyncat-0.8.0-beta.9-windows-x64.exe');
+    fs.writeFileSync(file, 'installer bytes');
+    const record = {
+      version: '0.8.0-beta.9',
+      assetName: path.basename(file),
+      strategy: 'run-installer',
+      file,
+      sha256: await sha256File(file),
+    };
+    const recordFile = path.join(dir, 'update-download.json');
+    writeDownloadRecord(recordFile, record);
+    const wanted = { version: '0.8.0-beta.9', assetName: path.basename(file), strategy: 'run-installer' };
+    assert.equal((await verifiedDownloadFor(readDownloadRecord(recordFile), wanted))?.file, file);
+    assert.equal(await verifiedDownloadFor(record, { ...wanted, version: '0.8.0-beta.10' }), null);
+    // A changed (or damaged) file is downloaded again.
+    fs.writeFileSync(file, 'something else');
+    assert.equal(await verifiedDownloadFor(record, wanted), null);
+    fs.rmSync(file);
+    assert.equal(await verifiedDownloadFor(record, wanted), null);
+    writeDownloadRecord(recordFile, null);
+    assert.equal(readDownloadRecord(recordFile), null);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('leftover partial downloads and installed updates are cleaned up', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'asyncat-cleanup-'));
+  try {
+    const updateDir = path.join(root, 'asyncat-update');
+    const downloadsDir = path.join(root, 'Downloads');
+    const appsDir = path.join(root, 'Apps');
+    for (const dir of [updateDir, downloadsDir, appsDir]) fs.mkdirSync(dir);
+    const pending = path.join(updateDir, 'Asyncat-0.9.0-windows-x64.exe');
+    const files = {
+      pending,
+      old: path.join(updateDir, 'Asyncat-0.8.0-windows-x64.exe'),
+      partial: path.join(updateDir, 'Asyncat-0.9.0-windows-x64.exe.part'),
+      downloadsPartial: path.join(downloadsDir, 'Asyncat-0.9.0-linux-x64.deb.part'),
+      downloadsDeb: path.join(downloadsDir, 'Asyncat-0.8.0-linux-x64.deb'),
+      userFile: path.join(downloadsDir, 'notes.part'),
+      appImage: path.join(appsDir, 'Asyncat.AppImage'),
+      appImageStaging: path.join(appsDir, '.Asyncat.AppImage.update.part'),
+    };
+    for (const file of Object.values(files)) fs.writeFileSync(file, 'x');
+
+    const result = cleanupUpdateFiles({
+      updateDir,
+      downloadsDir,
+      appImagePath: files.appImage,
+      record: { version: '0.9.0', file: pending },
+      isPending: (version) => version === '0.9.0',
+    });
+    assert.equal(result.keepRecord, true);
+    const left = (file) => fs.existsSync(file);
+    assert.equal(left(files.pending), true, 'a verified update still to be installed is kept');
+    assert.equal(left(files.old), false);
+    assert.equal(left(files.partial), false);
+    assert.equal(left(files.downloadsPartial), false);
+    assert.equal(left(files.downloadsDeb), true, "the user's own files in Downloads stay");
+    assert.equal(left(files.userFile), true);
+    assert.equal(left(files.appImage), true);
+    assert.equal(left(files.appImageStaging), false);
+
+    // Once that version is installed, its installer goes too.
+    const after = cleanupUpdateFiles({ updateDir, record: { version: '0.9.0', file: pending }, isPending: () => false });
+    assert.equal(after.keepRecord, false);
+    assert.equal(left(files.pending), false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('a saved AppImage is made executable', () => {
