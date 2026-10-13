@@ -109,7 +109,7 @@ function sliceColor(dataset, index) {
 }
 
 /** Saved properties with defaults filled in and old height values converted. */
-export function readChart(type, properties = {}) {
+function readChart(type, properties = {}) {
   const fallback = DEFAULTS[type] || DEFAULTS.bar;
   const data = properties.data?.datasets?.length ? properties.data : fallback.data;
   const config = { ...fallback.config, ...(properties.config || {}) };
@@ -119,7 +119,7 @@ export function readChart(type, properties = {}) {
 }
 
 /** Rows recharts can draw for label-based charts: one row per label. */
-export function labelRows(data) {
+function labelRows(data) {
   const labels = data.labels || [];
   return labels.map((label, i) => {
     const row = { label };
