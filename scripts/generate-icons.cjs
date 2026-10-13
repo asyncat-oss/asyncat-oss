@@ -20,12 +20,7 @@ const pngTargets = [
   ['apple-touch-icon.png', 180],
   ['pwa-72x72.png', 72],
   ['pwa-96x96.png', 96],
-  ['pwa-128x128.png', 128],
-  ['pwa-144x144.png', 144],
-  ['pwa-152x152.png', 152],
   ['pwa-192x192.png', 192],
-  ['pwa-384x384.png', 384],
-  ['pwa-512x512.png', 512],
 ];
 
 const linuxSizes = [16, 32, 48, 64, 128, 256, 512, 1024];
