@@ -54,3 +54,17 @@ test('project site previews served by the backend stay reachable', async () => {
   assert.equal((await checkAgentUrl('http://127.0.0.1:8716/api/files/site/project:abc/index.html', { env })).ok, true);
   assert.equal((await checkAgentUrl('http://127.0.0.1:8716/api/files/raw?path=x', { env })).ok, false);
 });
+
+test('sites the user blocked for agents are refused, subdomains too', async () => {
+  const { setBlockedSites, getBlockedSites, siteBlocked } = await import('../src/privacy/blockedSites.js');
+  assert.deepEqual(setBlockedSites(['https://Bank.example/login', 'bank.example', 'not a site', '*.mail.example']), ['bank.example', '*.mail.example']);
+  assert.deepEqual(getBlockedSites(), ['bank.example', '*.mail.example']);
+  for (const url of ['https://bank.example/', 'https://www.bank.example/account', 'https://inbox.mail.example/']) {
+    const check = await checkAgentUrl(url);
+    assert.equal(check.ok, false, url);
+    assert.match(check.reason, /never to open/);
+  }
+  assert.equal(siteBlocked('https://notbank.example/'), false);
+  setBlockedSites([]);
+  assert.equal(siteBlocked('https://bank.example/'), false, 'an empty list blocks nothing');
+});

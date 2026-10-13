@@ -14,6 +14,7 @@
 
 import { app, BaseWindow, WebContentsView, ipcMain, session, dialog, shell, nativeImage } from 'electron';
 import { randomUUID } from 'crypto';
+import fs from 'fs';
 import path from 'path';
 import { BACKEND_PORT, FRONTEND_PORT } from './constants.js';
 import {
@@ -58,6 +59,9 @@ let handover = null; // { id, tabId, message, conversationId, startedAt, expires
 const agentCurrent = new Map(); // agent owner → tab id it works in
 // A Cat's tabs use its own profile and keep to its sites (from its commands).
 const ownerSettings = new Map(); // agent owner → { partition, allowedSites }
+// Sites the user blocked for every agent (Settings → Privacy & safety); the
+// backend sends the list with each agent command.
+let agentBlockedSites = [];
 const headlessTabs = new Map(); // agent owner → hidden tab id for browse/browser_* tools
 const agentQueues = new Map();
 let agentBusy = 0; // agent commands running; page dialogs are answered meanwhile
@@ -577,7 +581,21 @@ function isAgentAllowedNavigation(tab, url) {
   if (tab.agent && agentRequestBlockReason(url, { ports: PORTS, extraPorts: AGENT_EXTRA_PORTS })) return false;
   // A Cat's own tabs keep to its sites; the user's sign-in tab is free.
   if (tab.agent && tab.allowedSites && /^https?:/i.test(url) && !siteOnList(url, tab.allowedSites)) return false;
+  if (tab.agent && agentBlockedSites.length && /^https?:/i.test(url) && siteOnList(url, agentBlockedSites)) return false;
   return true;
+}
+
+function refusalText(tab, url) {
+  let why = 'Asyncat keeps agents off that address';
+  if (tab.allowedSites && !siteOnList(url, tab.allowedSites)) why = "it isn't on this Cat's list of sites";
+  else if (agentBlockedSites.length && siteOnList(url, agentBlockedSites)) why = 'the user blocked it for agents in Settings';
+  return `Agents may not open ${url}: ${why}`;
+}
+
+// Stop a navigation; an agent is told why instead of seeing an empty page.
+function refuseNavigation(event, tab, url) {
+  event.preventDefault();
+  if (tab.agent && /^https?:/i.test(url)) tab.error = { code: 'BLOCKED', description: refusalText(tab, url), url };
 }
 
 function wireWebContents(tab) {
@@ -641,10 +659,10 @@ function wireWebContents(tab) {
   wc.on('found-in-page', (_event, result) => sendEvent({ type: 'found-in-page', tabId: tab.id, result }));
 
   wc.on('will-navigate', (event, url) => {
-    if (!isAgentAllowedNavigation(tab, url)) event.preventDefault();
+    if (!isAgentAllowedNavigation(tab, url)) refuseNavigation(event, tab, url);
   });
   wc.on('will-redirect', (event, url) => {
-    if (!isAgentAllowedNavigation(tab, url)) event.preventDefault();
+    if (!isAgentAllowedNavigation(tab, url)) refuseNavigation(event, tab, url);
   });
 
   wc.on('before-input-event', (event, input) => {
@@ -909,6 +927,10 @@ async function waitForLoad(tab, timeoutMs = 15000) {
 }
 
 async function navigateAndWait(tab, url, timeoutMs = 25000) {
+  // will-navigate doesn't fire for loads the agent asks for, so check here.
+  if (tab.agent && /^https?:/i.test(String(url)) && !isAgentAllowedNavigation(tab, String(url))) {
+    return { ...pageInfo(tab), loadError: refusalText(tab, String(url)) };
+  }
   try {
     await withTimeout(loadUrl(tab, url), timeoutMs, 'timeout');
   } catch (err) {
@@ -1525,6 +1547,7 @@ async function runAgentCommand(owner, payload) {
 /** Run agent commands one at a time per agent, in the order they arrive. */
 export function handleAgentCommand(payload = {}) {
   const owner = ownerOf(payload);
+  if (Array.isArray(payload.blockedSites)) agentBlockedSites = payload.blockedSites.map(String).filter(Boolean).slice(0, 200);
   if (payload.partition && isCatPartition(payload.partition)) {
     ownerSettings.set(owner, {
       partition: payload.partition,
@@ -1847,6 +1870,30 @@ export function setupBrowserHost(setupOptions = {}) {
       if (others.length === 0 && parking) app.emit('window-all-closed');
     }));
   });
+}
+
+/**
+ * "Delete everything": close every tab and forget all browsing data (the
+ * standard profile, every Cat's profile, private tabs) and the saved tabs.
+ */
+export async function forgetAllBrowsing() {
+  clearTimeout(saveTabsTimer);
+  for (const tab of [...tabs.values()]) closeTab(tab.id);
+  ownerSettings.clear();
+  const partitions = new Set([STANDARD_PARTITION, ...configuredSessions]);
+  // Cat profiles that weren't opened this time still have folders on disk.
+  try {
+    for (const name of fs.readdirSync(path.join(app.getPath('userData'), 'Partitions'))) {
+      const partition = `persist:${name}`;
+      if (isCatPartition(partition)) partitions.add(partition);
+    }
+  } catch { /* no partitions yet */ }
+  await Promise.all([...partitions].filter(isAllowedBrowserPartition).map(clearPartition));
+  if (savedTabsFile) {
+    try { fs.rmSync(savedTabsFile, { force: true }); } catch { /* gone */ }
+    lastSavedTabs = null;
+  }
+  return { success: true, partitions: partitions.size };
 }
 
 /** Close a Cat's tabs and forget its sign-ins (the Cat was deleted). */

@@ -1,6 +1,8 @@
 // den/src/index.js — Asyncat unified backend monolith
 // Merges: ai, users, notes
 import 'dotenv/config';
+// Before anything opens the database or logs: a requested "Delete everything".
+import './boot/applyPendingReset.js';
 import express from 'express';
 import cors from 'cors';
 import compression from 'compression';
@@ -62,6 +64,9 @@ import { startConnectors } from './connectors/connectorManager.js';
 
 // ─── Voice and pictures: guided setup and the gallery ────────────────────────
 import mediaRouter from './media/mediaRoutes.js';
+
+// Where data lives, export everything, delete everything (Settings → Privacy & safety)
+import privacyRouter from './privacy/privacyRoutes.js';
 
 // ─── Database ─────────────────────────────────────────────────────────────────
 import db from './db/client.js';         // opens SQLite, applies schema
@@ -186,6 +191,9 @@ app.use('/api/connectors', connectorRouter);
 
 // Routes: voice and image setup, gallery
 app.use('/api/media', mediaRouter);
+
+// Routes: privacy (data locations, export, delete everything)
+app.use('/api/privacy', privacyRouter);
 
 // ─── Routes: Training / Fine-Tuning ──────────────────────────────────────────
 app.use('/api/training', trainingRouter);

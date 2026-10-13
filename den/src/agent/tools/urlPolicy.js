@@ -16,6 +16,7 @@ import dns from 'dns/promises';
 import net from 'net';
 import { currentScheduledRun } from '../scheduledRunContext.js';
 import { describeSites, siteAllowed } from '../../cats/catSites.js';
+import { siteBlocked } from '../../privacy/blockedSites.js';
 
 /** Ports used by Asyncat itself and the local model servers it starts. */
 export function asyncatPorts(env = process.env) {
@@ -102,6 +103,10 @@ export async function checkAgentUrl(rawUrl, { env = process.env } = {}) {
   const sites = currentScheduledRun()?.allowedSites;
   if (Array.isArray(sites) && sites.length && !siteAllowed(url.href, sites)) {
     return { ok: false, reason: `${url.hostname} isn't on this Cat's list of sites (${describeSites(sites)}). Ask the user to add it if it's needed.` };
+  }
+  // Sites the user told every agent to keep away from (Settings → Privacy & safety).
+  if (siteBlocked(url.href)) {
+    return { ok: false, reason: `The user has asked agents never to open ${url.hostname}. Don't try another way in; tell them if it's needed.` };
   }
   const addresses = await resolveAll(url.hostname);
   const kinds = addresses.map(classifyAddress);

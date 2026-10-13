@@ -16,7 +16,7 @@ import { initShortcuts, registerShortcutIPC } from './shortcuts.js';
 import { startBackend, stopBackend, isBackendRunning } from './backend.js';
 import { postHostEvent, registerHostHandler, startHostBridge, stopHostBridge } from './hostBridge.js';
 import { keepRunningAfterClose, noteKeptRunning, registerBackgroundIPC, setEnabledTaskCount, startsHidden } from './background.js';
-import { setupBrowserHost, handleAgentCommand, shutdownBrowserHost, clearCatBrowserData } from './browserHost.js';
+import { setupBrowserHost, handleAgentCommand, shutdownBrowserHost, clearCatBrowserData, forgetAllBrowsing } from './browserHost.js';
 import { isAllowedBrowserUrl as isAllowedBrowserUrlFor } from './browserPolicy.js';
 import http from 'http';
 import net from 'net';
@@ -571,6 +571,8 @@ function setupHostBridge() {
   registerHostHandler('browser.clearCat', (payload) => clearCatBrowserData(payload));
   // Back to the app after signing in to a connector in the browser.
   registerHostHandler('app.focus', () => bootApp(''));
+  // "Delete everything" (Settings → Privacy & safety): the browser's data too.
+  registerHostHandler('app.forgetBrowsing', () => forgetAllBrowsing());
 
   powerMonitor.on('resume', () => postHostEvent('power.resume'));
   powerMonitor.on('unlock-screen', () => postHostEvent('power.resume'));
