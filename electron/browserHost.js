@@ -14,6 +14,7 @@
 
 import { app, BaseWindow, WebContentsView, ipcMain, session, dialog, shell, nativeImage } from 'electron';
 import { randomUUID } from 'crypto';
+import path from 'path';
 import { BACKEND_PORT, FRONTEND_PORT } from './constants.js';
 import {
   STANDARD_PARTITION, INCOGNITO_PREFIX, isAllowedBrowserPartition, isAllowedBrowserUrl,
@@ -21,6 +22,7 @@ import {
 } from './browserPolicy.js';
 import { PageDriver, withTimeout } from './browserCdp.js';
 import { pageText, describeSensitiveAction, approvalKey } from './browserSnapshot.js';
+import { parseSavedTabs, readSavedTabsFile, serializeTabs, writeSavedTabsFile } from './browserTabsStore.js';
 
 const PORTS = { frontendPort: FRONTEND_PORT, backendPort: BACKEND_PORT };
 const AGENT_EXTRA_PORTS = [
@@ -62,6 +64,13 @@ const permissionGrants = new Map();
 const wiredWindows = new WeakSet();
 let broadcastTimer = null;
 let shuttingDown = false;
+// Standard tabs are saved here and reopened, asleep, at the next start.
+let savedTabsFile = null;
+let restoreTabs = true;
+let saveTabsTimer = null;
+let lastSavedTabs = null;
+let lastStandardActiveId = null;
+let restoredActiveId = null;
 
 // ─── Sessions ─────────────────────────────────────────────────────────────────
 
@@ -344,6 +353,8 @@ function stripTabs() {
 function syncShownView() {
   const win = mainWindow();
   const tab = activeTabId ? tabs.get(activeTabId) : null;
+  // A reopened tab loads its page the first time it is shown.
+  if (viewport && tab?.sleeping) wakeTab(tab);
   const want = viewport && win && tab?.view && tab.url && !tab.crashed && !tab.error && !tab.hidden ? tab : null;
   const previous = shownTab;
   shownTab = want;
@@ -381,6 +392,7 @@ function publicTab(tab) {
     popup: Boolean(tab.popup),
     muted: Boolean(tab.muted),
     audible: Boolean(tab.audible),
+    sleeping: Boolean(tab.sleeping),
     lastAgentAt: tab.lastAgentAt || 0,
   };
 }
@@ -403,7 +415,75 @@ function scheduleBroadcast() {
     broadcastTimer = null;
     const win = mainWindow();
     if (win && !win.webContents.isDestroyed()) win.webContents.send('browser:state', browserState());
+    scheduleSaveTabs();
   }, 30);
+}
+
+// ─── Saved tabs ───────────────────────────────────────────────────────────────
+
+function saveTabsNow() {
+  if (!savedTabsFile || !restoreTabs) return;
+  if (tabs.get(activeTabId)?.profile === 'standard') lastStandardActiveId = activeTabId;
+  const data = serializeTabs(tabs.values(), tabs.has(lastStandardActiveId) ? lastStandardActiveId : null);
+  const key = JSON.stringify({ ...data, savedAt: null });
+  if (key === lastSavedTabs) return;
+  try {
+    writeSavedTabsFile(savedTabsFile, data);
+    lastSavedTabs = key;
+  } catch (err) {
+    console.warn('[Asyncat] Could not save the browser tabs:', err.message);
+  }
+}
+
+function scheduleSaveTabs() {
+  if (shuttingDown || !savedTabsFile) return;
+  if (tabs.get(activeTabId)?.profile === 'standard') lastStandardActiveId = activeTabId;
+  clearTimeout(saveTabsTimer);
+  saveTabsTimer = setTimeout(saveTabsNow, 1000);
+  saveTabsTimer.unref?.();
+}
+
+/** Reopen the Standard tabs saved at the last quit, asleep (no page yet). */
+function restoreSavedTabs() {
+  savedTabsFile = path.join(app.getPath('userData'), 'browser-tabs.json');
+  const saved = parseSavedTabs(
+    readSavedTabsFile(savedTabsFile),
+    (url) => isAllowedBrowserUrl(url, { ports: PORTS, allowBlank: false }),
+  );
+  saved.tabs.forEach((entry, index) => {
+    const tab = createTab({ profile: 'standard' });
+    tab.url = entry.url;
+    tab.title = entry.title || entry.url;
+    tab.sleeping = true;
+    if (index === saved.activeIndex) restoredActiveId = tab.id;
+  });
+  if (restoredActiveId) {
+    activeTabId = restoredActiveId;
+    lastStandardActiveId = restoredActiveId;
+  }
+  lastSavedTabs = JSON.stringify({ ...serializeTabs(tabs.values(), restoredActiveId), savedAt: null });
+}
+
+/** Load a reopened tab's page. */
+function wakeTab(tab) {
+  if (!tab?.sleeping) return;
+  tab.sleeping = false;
+  if (!isAllowedBrowserUrl(tab.url, { ports: PORTS, allowBlank: false })) {
+    tab.url = '';
+    tab.title = 'New tab';
+    ensureView(tab);
+    return;
+  }
+  loadUrl(tab, tab.url).catch(() => {});
+}
+
+/** Restoring was turned off: close the tabs that never woke and forget them. */
+function dropSleepingTabs() {
+  for (const tab of [...tabs.values()]) if (tab.sleeping) closeTab(tab.id);
+  restoredActiveId = null;
+  if (savedTabsFile) {
+    try { writeSavedTabsFile(savedTabsFile, serializeTabs([], null)); } catch { /* best effort */ }
+  }
 }
 
 function sendEvent(event) {
@@ -708,6 +788,11 @@ function goHistory(tab, delta) {
 
 function reloadTab(tab) {
   if (!tab) return;
+  if (tab.sleeping) {
+    wakeTab(tab);
+    syncShownView();
+    return;
+  }
   tab.crashed = false;
   tab.error = null;
   if (!tab.wc || tab.wc.isDestroyed()) return;
@@ -750,7 +835,9 @@ async function setMode(next) {
     mode = 'standard';
     for (const tab of [...tabs.values()]) if (tab.profile === 'incognito') closeTab(tab.id);
     const strip = stripTabs().filter((tab) => !tab.popup);
-    activeTabId = strip.length ? strip[strip.length - 1].id : createTab({ profile: 'standard' }).id;
+    const back = [lastStandardActiveId, restoredActiveId].map((id) => tabs.get(id)).find((tab) => tab && strip.includes(tab));
+    restoredActiveId = null;
+    activeTabId = back ? back.id : strip.length ? strip[strip.length - 1].id : createTab({ profile: 'standard' }).id;
   }
   syncShownView();
   scheduleBroadcast();
@@ -1109,6 +1196,10 @@ async function runAgentCommand(owner, payload) {
     case 'switch_tab': {
       const tab = findListedTab(payload);
       if (!tab) throw new Error('No tab matches. Use preview_list_tabs to see the open tabs.');
+      if (tab.sleeping) {
+        wakeTab(tab);
+        await waitForLoad(tab, 15000);
+      }
       agentCurrent.set(owner, tab.id);
       if (tab.popup) {
         if (!tab.popup.isDestroyed()) tab.popup.showInactive();
@@ -1516,6 +1607,12 @@ async function handleUi(action, payload = {}) {
   switch (action) {
     case 'init': {
       if (payload.openLinks === 'system' || payload.openLinks === 'internal') openLinks = payload.openLinks;
+      if (payload.restoreTabs === false && restoreTabs) {
+        restoreTabs = false;
+        dropSleepingTabs();
+      } else if (payload.restoreTabs === true) {
+        restoreTabs = true;
+      }
       if (!modeChosen && (payload.mode === 'standard' || payload.mode === 'incognito')) {
         mode = payload.mode;
         modeChosen = true;
@@ -1528,6 +1625,16 @@ async function handleUi(action, payload = {}) {
     case 'set-open-links':
       if (payload.openLinks === 'system' || payload.openLinks === 'internal') openLinks = payload.openLinks;
       return true;
+    case 'set-restore-tabs':
+      if (payload.restoreTabs === false) {
+        restoreTabs = false;
+        dropSleepingTabs();
+      } else {
+        restoreTabs = true;
+        lastSavedTabs = null;
+        saveTabsNow();
+      }
+      return restoreTabs;
     case 'new-tab':
       return newUserTab(payload.url && isAllowedBrowserUrl(payload.url, { ports: PORTS, allowHtmlData: true }) ? payload.url : '').id;
     case 'close-tab':
@@ -1679,6 +1786,11 @@ export function setupBrowserHost(setupOptions = {}) {
   options = { ...options, ...setupOptions };
   setupBrowserSession(STANDARD_PARTITION);
   registerIpc();
+  try {
+    restoreSavedTabs();
+  } catch (err) {
+    console.warn('[Asyncat] Could not reopen the browser tabs:', err.message);
+  }
 
   // The app no longer embeds <webview>; refuse any that a page tries to add.
   app.on('web-contents-created', (_event, contents) => {
@@ -1698,6 +1810,9 @@ export function setupBrowserHost(setupOptions = {}) {
 }
 
 export function shutdownBrowserHost() {
+  // Before the tabs close below, which would otherwise be saved as none.
+  clearTimeout(saveTabsTimer);
+  saveTabsNow();
   shuttingDown = true;
   if (handover) finishHandover(handover.id, 'closed');
   for (const tab of [...tabs.values()]) {

@@ -64,6 +64,7 @@ function useHostState(api, prefs) {
     api.ui('init', {
       mode: prefs.browserProfile === 'persistent' ? 'standard' : 'incognito',
       openLinks: prefs.browserOpenLinks,
+      restoreTabs: prefs.browserRestoreTabs !== false,
     }).then((initial) => { if (alive && initial) setState(initial); }).catch(() => {});
     return () => { alive = false; off?.(); };
   // Preferences only seed the first launch; later changes go through set-open-links.
@@ -72,6 +73,9 @@ function useHostState(api, prefs) {
   useEffect(() => {
     api.ui('set-open-links', { openLinks: prefs.browserOpenLinks }).catch(() => {});
   }, [api, prefs.browserOpenLinks]);
+  useEffect(() => {
+    api.ui('set-restore-tabs', { restoreTabs: prefs.browserRestoreTabs !== false }).catch(() => {});
+  }, [api, prefs.browserRestoreTabs]);
   return state;
 }
 

@@ -226,6 +226,7 @@ export default function WorkbenchSection() {
           { value: 'system', label: 'System browser', description: 'Use your operating system’s default browser' },
         ]} />
         <ToggleRow icon={History} label="Save browsing history" description="Standard-mode page titles and URLs are stored locally. Incognito overrides this setting." checked={prefs.browserHistoryEnabled} onChange={(value) => setPreference('browserHistoryEnabled', value)} />
+        <ToggleRow icon={RotateCcw} label="Reopen tabs on start" description="Standard-mode tabs come back after a restart; each loads when you first show it. Incognito and agent tabs never do." checked={prefs.browserRestoreTabs} onChange={(value) => setPreference('browserRestoreTabs', value)} />
         <ToggleRow icon={Wrench} label="Developer tools" description="Show page inspection actions in the compact browser menu." checked={prefs.browserDeveloperTools} onChange={(value) => setPreference('browserDeveloperTools', value)} />
         <div className={row}>
           <span className="flex min-w-0 items-start gap-3"><DatabaseZap className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" /><span><span className="block text-sm font-medium text-gray-800 dark:text-gray-200">Browsing data</span><span className="block text-xs leading-5 text-gray-500 dark:text-gray-400">Clear history, cache, cookies, and site storage. Incognito data is also cleared when you leave Incognito or close its last tab.</span>{clearMessage && <span className="mt-1 block text-xs text-indigo-500">{clearMessage}</span>}</span></span>

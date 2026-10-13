@@ -34,7 +34,7 @@
     "electron:build:linux": "node scripts/bundle-node.js && npm run build -w neko && npx electron-builder --linux --config electron-builder.yml",
     "release:validate": "node scripts/validate-release.js",
     "release:verify": "node scripts/verify-package.js",
-    "test:release": "node --test electron/update-policy.test.js electron/update-install.test.js electron/update-check.test.js electron/update-rollback.test.js electron/shortcut-config.test.js electron/background-config.test.js electron/browserPolicy.test.js electron/browserSnapshot.test.js electron/browserCdp.test.js scripts/validate-release.test.js scripts/release-notes.test.js",
+    "test:release": "node --test electron/update-policy.test.js electron/update-install.test.js electron/update-check.test.js electron/update-rollback.test.js electron/shortcut-config.test.js electron/background-config.test.js electron/browserPolicy.test.js electron/browserSnapshot.test.js electron/browserCdp.test.js electron/browserTabsStore.test.js scripts/validate-release.test.js scripts/release-notes.test.js",
     "test:e2e": "node scripts/e2e-smoke.mjs"
   },
   "engines": {
