@@ -2045,7 +2045,7 @@ async function runExternalEngineTurn(req, res, { engine, baseGoal, workingContex
     });
     writeAgentSse(res, {
       type: 'done',
-      data: { answer: result.answer, stopReason: result.stopReason, engine, externalSessionId: result.externalSessionId, rounds: 1 },
+      data: { answer: result.answer, stopReason: result.stopReason, engine, externalSessionId: result.externalSessionId, workingDir: runDir, rounds: 1 },
     });
   } catch (err) {
     writeAgentSse(res, { type: 'error', data: { message: err.message } });

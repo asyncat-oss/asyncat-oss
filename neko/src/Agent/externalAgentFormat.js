@@ -44,6 +44,17 @@ export function relativeTime(iso, now = Date.now()) {
   return new Date(time).toLocaleDateString([], { day: 'numeric', month: 'short' });
 }
 
+/**
+ * The terminal command that continues a Claude Code or Codex session.
+ * Claude Code only finds a session from the folder it ran in, so cd there first.
+ */
+export function resumeCommand(engine, sessionId, folder, platform = typeof navigator !== 'undefined' ? navigator.platform : '') {
+  const windows = /^win/i.test(platform || '');
+  const quote = (value) => (windows ? `"${value}"` : `'${String(value).replace(/'/g, "'\\''")}'`);
+  const run = engine === 'claude-code' ? `claude --resume ${sessionId}` : `codex resume ${sessionId}`;
+  return folder ? `cd ${windows ? '/d ' : ''}${quote(folder)} && ${run}` : run;
+}
+
 /** The last folder name of a path, for compact labels. */
 export function folderName(dir) {
   if (!dir) return '';

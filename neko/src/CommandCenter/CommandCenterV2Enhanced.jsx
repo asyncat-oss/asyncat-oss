@@ -58,6 +58,7 @@ import {
   Search,
 } from "lucide-react";
 import Cat from "../components/ui/Cat.jsx";
+import { resumeCommand } from "../Agent/externalAgentFormat.js";
 
 import {
   getTaskRunDisplayStatus,
@@ -1311,6 +1312,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     let sawDoneWithoutAnswer = false;
     let runSessionId = isDirectChat ? null : agentCurrentSessionId;
     let doneExternalSessionId = null;
+    let doneWorkingDir = null;
     const runEvents = [
       { type: 'user_goal', data: userGoalEventData },
     ];
@@ -1372,6 +1374,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
             updateChatRun(runKey, { sessionId: event.data.sessionId });
           }
           if (event.data?.externalSessionId) doneExternalSessionId = event.data.externalSessionId;
+          if (event.data?.workingDir) doneWorkingDir = event.data.workingDir;
           const doneAnswer = String(event.data?.answer || '').trim();
           const stopReason = event.data?.stopReason || 'answer';
           if (doneAnswer) {
@@ -1636,6 +1639,8 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
           ...(doneExternalSessionId
             ? { externalSessions: { ...(runMetadata?.externalSessions || {}), [runEngine]: doneExternalSessionId } }
             : {}),
+          // Where the session lives, for "Continue in terminal".
+          ...(isExternalEngine && doneWorkingDir ? { externalRunDir: doneWorkingDir } : {}),
           ...(shouldPersistCompactedHistory ? { compactedConversationHistory: nextHistory } : {}),
         };
         if (runConversationId === currentConversationIdRef.current) {
@@ -2534,6 +2539,19 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
   ];
   const hasConversationContent = messages.length > 0 || persistedAgentEvents.length > 0 || agentRunning;
   const conversationEngine = conversationMetadata?.engine || (hasConversationContent ? 'asyncat' : selectedEngine);
+  const conversationEngineName = conversationEngine === 'claude-code' ? 'Claude Code' : conversationEngine === 'codex' ? 'Codex' : 'Asyncat';
+  const externalSessionId = conversationEngine !== 'asyncat' ? conversationMetadata?.externalSessions?.[conversationEngine] : null;
+  const terminalCommand = externalSessionId
+    ? resumeCommand(conversationEngine, externalSessionId, workingContext?.workingDir || conversationMetadata?.externalCwd || conversationMetadata?.externalRunDir || null)
+    : null;
+  const copyTerminalCommand = async () => {
+    try {
+      await navigator.clipboard.writeText(terminalCommand);
+      toast.success('Command copied', { detail: `Paste it in a terminal to continue this chat in ${conversationEngineName}.` });
+    } catch {
+      toast.error("Couldn't copy the command", { detail: terminalCommand });
+    }
+  };
   const shouldRenderSidePanel = showActivitySidebar && (
     sidePanelTab === 'preview'
     || (experienceMode === 'work' && (
@@ -2773,6 +2791,17 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
 
                   {/* Conversation actions — non-scrollable so dropdowns aren't clipped */}
                   <div className="flex shrink-0 items-center gap-1">
+                    {terminalCommand && (
+                      <button
+                        type="button"
+                        onClick={copyTerminalCommand}
+                        className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-medium text-fg-muted transition-colors hover:bg-hover hover:text-fg sm:px-2.5 sm:text-sm"
+                        title={`Copy a command that continues this chat in ${conversationEngineName}: ${terminalCommand}`}
+                      >
+                        <SquareTerminal className="h-4 w-4" />
+                        <span className="hidden lg:inline">Continue in terminal</span>
+                      </button>
+                    )}
                     {!isGhostMode && (
                       <button
                         type="button"
