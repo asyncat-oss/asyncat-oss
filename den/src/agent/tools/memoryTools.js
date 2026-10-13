@@ -138,7 +138,7 @@ export function enforceMemoryCap(userId, workspaceId) {
 
 const memoryColumnNames = [
   'id', 'key', 'content', 'memory_type', 'tags', 'importance',
-  'last_accessed_at', 'access_count', 'created_at', 'updated_at', 'source', 'project_id', 'cat_id',
+  'last_accessed_at', 'access_count', 'created_at', 'updated_at', 'source', 'project_id', 'cat_id', 'profile_id',
 ];
 const memoryColumns = memoryColumnNames.join(', ');
 const prefixedMemoryColumns = memoryColumnNames.map(name => `m.${name}`).join(', ');
@@ -223,6 +223,8 @@ export function normalizeMemoryRow(row) {
     updated_at: row.updated_at,
     source: row.source || 'agent',
     project_id: row.project_id || null,
+    cat_id: row.cat_id || null,
+    profile_id: row.profile_id || null,
     score: row.score === undefined ? undefined : Number(row.score),
   };
 }

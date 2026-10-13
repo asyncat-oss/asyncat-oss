@@ -27,6 +27,7 @@ import { noProjectToolNames } from '../../agent/toolScopes.js';
 import { getWorkspaceRoot, loadEntry, resolveWorkingDirectoryContext } from '../../files/fileExplorerService.js';
 import { codeSearchTool, listDefinitionsTool, findDefinitionTool, findReferencesTool } from '../../agent/tools/codeSearchTools.js';
 import { listMemories, normalizeMemoryRow, searchMemories, hybridRecall, ALL_PROJECTS, ALL_CATS } from '../../agent/tools/memoryTools.js';
+import { addMemory, nameOwners, ownedBy, ownerFilter, updateMemory } from '../../agent/memoryAdmin.js';
 import { embeddingStatus, embedText } from '../embeddings/embeddingService.js';
 import { toolRegistry } from '../../agent/tools/toolRegistry.js';
 import { formatMultimodalCapabilityPrompt, getMultimodalCapabilities } from '../../agent/multimodalCapabilities.js';
@@ -2175,19 +2176,32 @@ router.get('/memory', withWorkspaceContext, async (req, res) => {
 
     const q = req.query.q?.trim();
     const kind = req.query.kind || req.query.memory_type || 'all';
-    const limit = Math.max(1, Math.min(100, Number(req.query.limit || (q ? 20 : 50))));
-    const rows = q
-      ? searchMemories({
+    // ?scope=project:<id> | agent:<id> | cat:<id> | shared — one owner's memories.
+    const scope = String(req.query.scope || 'all');
+    const limit = Math.max(1, Math.min(200, Number(req.query.limit || (q ? 20 : 50))));
+    let rows;
+    if (q) {
+      rows = searchMemories({
         userId: req.user.id,
         workspaceId,
         projectId: ALL_PROJECTS,
         catId: ALL_CATS,
         query: q,
         kind,
-        limit,
+        limit: scope === 'all' ? limit : 200,
         bumpAccess: true,
-      })
-      : listMemories({
+      }).filter(row => ownedBy(row, scope)).slice(0, limit);
+    } else if (scope !== 'all') {
+      const filter = ownerFilter(scope);
+      const kindClause = kind !== 'all' ? 'AND memory_type = ?' : '';
+      rows = db.prepare(`
+        SELECT * FROM agent_memory
+        WHERE user_id = ? AND workspace_id = ? ${filter.sql} ${kindClause}
+        ORDER BY importance DESC, COALESCE(last_accessed_at, updated_at) DESC
+        LIMIT ?
+      `).all(req.user.id, workspaceId, ...filter.params, ...(kindClause ? [kind] : []), limit).map(normalizeMemoryRow);
+    } else {
+      rows = listMemories({
         userId: req.user.id,
         workspaceId,
         projectId: ALL_PROJECTS,
@@ -2195,17 +2209,9 @@ router.get('/memory', withWorkspaceContext, async (req, res) => {
         kind,
         limit,
       });
-    // Name the project and Cat a memory belongs to, for the Memory page.
-    const namesFor = (table, ids) => new Map(ids.length
-      ? db.prepare(`SELECT id, name FROM ${table} WHERE id IN (${ids.map(() => '?').join(',')})`).all(...ids).map(p => [p.id, p.name])
-      : []);
-    const projectNames = namesFor('projects', [...new Set(rows.map(row => row.project_id).filter(Boolean))]);
-    const catNames = namesFor('cats', [...new Set(rows.map(row => row.cat_id).filter(Boolean))]);
-    const memories = rows.map(row => ({
-      ...row,
-      project_name: row.project_id ? (projectNames.get(row.project_id) || null) : null,
-      cat_name: row.cat_id ? (catNames.get(row.cat_id) || null) : null,
-    }));
+    }
+    // Name the project, agent and Cat a memory belongs to, for the Memory page.
+    const memories = nameOwners(rows);
     res.json({ success: true, count: memories.length, memories });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -2299,6 +2305,29 @@ router.get('/memory/:key', withWorkspaceContext, async (req, res) => {
     res.json({ success: true, memory: normalizeMemoryRow({ ...row, access_count: Number(row.access_count || 0) + 1 }) });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// A memory written by hand: { content, kind, scope: shared | project:<id> | agent:<id> | cat:<id> }.
+router.post('/memory', withWorkspaceContext, (req, res) => {
+  try {
+    const workspaceId = req.workspaceId ||
+      db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
+    if (!workspaceId) return res.status(404).json({ success: false, error: 'Workspace not found' });
+    const row = addMemory({ userId: req.user.id, workspaceId, content: req.body?.content, kind: req.body?.kind, scope: req.body?.scope });
+    res.json({ success: true, memory: nameOwners([normalizeMemoryRow(row)])[0] });
+  } catch (err) {
+    res.status(Number(err.status) || 500).json({ success: false, error: err.message });
+  }
+});
+
+// Edit a memory: { content?, kind?, importance? }.
+router.patch('/memory/by-id/:id', withWorkspaceContext, (req, res) => {
+  try {
+    const row = updateMemory({ userId: req.user.id, id: req.params.id, content: req.body?.content, kind: req.body?.kind, importance: req.body?.importance });
+    res.json({ success: true, memory: nameOwners([normalizeMemoryRow(row)])[0] });
+  } catch (err) {
+    res.status(Number(err.status) || 500).json({ success: false, error: err.message });
   }
 });
 
