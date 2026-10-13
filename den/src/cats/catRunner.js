@@ -93,6 +93,16 @@ export function buildCatGoal({ cat, wake }) {
  * Run a Cat once. `cat` is hydrated (catStore.hydrateCat). Resolves to
  * { answer, sessionId, stopReason, usage }; rejects on failure or abort.
  */
+/**
+ * The connectors a Cat may use: its own choice, or else its brain agent's;
+ * null means all of them.
+ */
+export function catConnectors(cat, profile) {
+  if (Array.isArray(cat?.connectors)) return cat.connectors;
+  if (Array.isArray(profile?.connectors)) return profile.connectors;
+  return null;
+}
+
 export async function runCat({ cat, wake, abortSignal, conversationHistory = [], onEvent, requestPermission, askUser }) {
   const profile = cat.profileId ? getProfile(cat.profileId, cat.userId) : getDefaultProfile(cat.userId);
   const resolvedClient = clientForCat(cat, profile);
@@ -130,6 +140,7 @@ export async function runCat({ cat, wake, abortSignal, conversationHistory = [],
     agentProfileId: profile?.id || null,
     catId: cat.id,
     allowedTools,
+    allowedConnectors: catConnectors(cat, profile),
     knowledgeContext: chatContext.prompt,
     knowledgeSources: chatContext.sources,
     initialImageUrls: chatContext.images,

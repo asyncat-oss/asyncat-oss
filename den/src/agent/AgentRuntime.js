@@ -331,6 +331,10 @@ export class AgentRuntime {
     this.allowedTools = Array.isArray(opts.allowedTools) && opts.allowedTools.length
       ? new Set(opts.allowedTools.filter(Boolean).map(String))
       : null;
+    // Which connectors (MCP servers) this run may use; null means all.
+    this.allowedConnectors = Array.isArray(opts.allowedConnectors)
+      ? new Set(opts.allowedConnectors.filter(Boolean).map(String))
+      : null;
     this.abortSignal = opts.abortSignal || null;
     this.capabilitiesSection = opts.capabilitiesSection || '';
     this.initialImageUrls = Array.isArray(opts.initialImageUrls)
@@ -2130,12 +2134,15 @@ export class AgentRuntime {
           })
         : allTools;
 
-    const visibleTools = this.enabledIntegrationTools
+    const integrationTools = this.enabledIntegrationTools
       ? modeTools.filter(tool => {
       if (tool.category !== 'integrations') return true;
       return this.enabledIntegrationTools.has(tool.name);
     })
       : modeTools;
+    const visibleTools = this.allowedConnectors
+      ? integrationTools.filter(tool => tool.category !== 'mcp' || this.allowedConnectors.has(tool.serverName))
+      : integrationTools;
 
     // Sub-agent tool scoping: keep only the requested tools plus the
     // always-on coordination tools (planning + clarification).

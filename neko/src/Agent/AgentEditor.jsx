@@ -13,6 +13,7 @@ import { aiProviderApi } from '../Settings/settingApi.js';
 import { useCommandCenter } from '../CommandCenter/context/CommandCenterContextEnhanced';
 import eventBus from '../utils/eventBus.js';
 import AgentAvatar from './AgentAvatar.jsx';
+import ConnectorPicker from '../Connectors/ConnectorPicker.jsx';
 
 const EMOJIS = ['🤖', '🧠', '🔍', '✍️', '🧑‍🏫', '🧑‍💻', '🎨', '📊', '🧪', '🩺', '⚖️', '🍳', '🌍', '🎧', '📚', '🐱'];
 const CAPABILITY_HINTS = {
@@ -73,6 +74,7 @@ const blankAgent = () => ({
   starter_prompts: [],
   model_profile_id: null,
   capabilities: DEFAULT_CAPABILITIES,
+  connectors: null,
   is_default: false,
   auto_approve: false,
   max_rounds: 25,
@@ -115,6 +117,7 @@ function toPayload(agent) {
     starterPrompts: agent.starter_prompts.map((s) => s.trim()).filter(Boolean),
     modelProfileId: agent.model_profile_id || null,
     capabilities: agent.capabilities,
+    connectors: agent.connectors ?? null,
     isDefault: Boolean(agent.is_default),
     autoApprove: Boolean(agent.auto_approve),
     maxRounds: Number(agent.max_rounds) || 25,
@@ -180,6 +183,7 @@ export default function AgentEditor({ agentId = null, template = null, onClose }
           instructions: found.instructions || '',
           starter_prompts: found.starter_prompts || [],
           capabilities: found.capabilities ?? null,
+          connectors: found.connectors ?? null,
         });
       } else {
         setError('This agent no longer exists.');
@@ -393,6 +397,10 @@ export default function AgentEditor({ agentId = null, template = null, onClose }
                   </label>
                 ))}
               </div>
+            </section>
+
+            <section>
+              <ConnectorPicker value={agent.connectors ?? null} onChange={(connectors) => update({ connectors })} />
             </section>
 
             <section>

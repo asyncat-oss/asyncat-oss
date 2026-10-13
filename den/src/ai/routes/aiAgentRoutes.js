@@ -1616,6 +1616,7 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
       reasoningEffort,
       agentMode: resolvedAgentMode,
       allowedTools: allowedToolNames,
+      allowedConnectors: Array.isArray(profile?.connectors) ? profile.connectors : null,
       enabledIntegrationTools: Array.isArray(enabledIntegrationTools) ? enabledIntegrationTools : null,
       mentionedAgents: mentionedAgentProfiles,
       capabilitiesSection,
@@ -2214,13 +2215,13 @@ router.post('/profiles', withWorkspaceContext, (req, res) => {
   try {
     const {
       name, handle, description, icon, color, soulName, soulOverride, workingDir, maxRounds, autoApprove,
-      alwaysAllowedTools, isDefault, instructions, avatarImage, starterPrompts, modelProfileId, capabilities,
+      alwaysAllowedTools, isDefault, instructions, avatarImage, starterPrompts, modelProfileId, capabilities, connectors,
     } = req.body;
     if (!name?.trim()) return res.status(400).json({ success: false, error: 'name is required' });
     const profile = createProfile({
       userId: req.user.id, name: name.trim(), handle, description, icon, color,
       soulName, soulOverride, workingDir, maxRounds, autoApprove, alwaysAllowedTools, isDefault,
-      instructions, avatarImage, starterPrompts, modelProfileId, capabilities,
+      instructions, avatarImage, starterPrompts, modelProfileId, capabilities, connectors,
     });
     res.json({ success: true, profile });
   } catch (err) {

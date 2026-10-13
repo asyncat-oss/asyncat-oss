@@ -234,6 +234,13 @@ export function cleanAllowedTools(tools) {
   return names;
 }
 
+/** The connectors a Cat may use: a list of names, or null for its brain's choice. */
+export function cleanConnectors(connectors) {
+  if (connectors === undefined || connectors === null) return null;
+  if (!Array.isArray(connectors)) throw catError('Connectors must be a list of connector names.');
+  return [...new Set(connectors.map((name) => String(name || '').trim()).filter(Boolean))].slice(0, 100);
+}
+
 export function cleanSites(sites) {
   if (sites === undefined || sites === null) return [];
   if (!Array.isArray(sites)) throw catError('Allowed sites must be a list.');
@@ -691,7 +698,7 @@ export function insertCat(userId, input = {}, { workspaceId = null, createdBy = 
       JSON.stringify(cleanLimits(input.limits)),
       JSON.stringify(cleanSites(input.allowedSites)),
       JSON.stringify(cleanAllowedTools(input.allowedTools)),
-      input.connectors === undefined || input.connectors === null ? null : JSON.stringify(input.connectors),
+      input.connectors === undefined || input.connectors === null ? null : JSON.stringify(cleanConnectors(input.connectors)),
       Number.isFinite(timeout) ? Math.max(5, Math.min(7 * 24 * 60, Math.round(timeout))) : 120,
       timezone,
       input.enabled === false ? 0 : 1,
@@ -752,7 +759,7 @@ export function patchCat(userId, id, patch = {}, { now = new Date() } = {}) {
   if (patch.limits !== undefined) sets.limits = JSON.stringify(cleanLimits(patch.limits));
   if (patch.allowedSites !== undefined) sets.allowed_sites = JSON.stringify(cleanSites(patch.allowedSites));
   if (patch.allowedTools !== undefined) sets.allowed_tools = JSON.stringify(cleanAllowedTools(patch.allowedTools));
-  if (patch.connectors !== undefined) sets.connectors = patch.connectors === null ? null : JSON.stringify(patch.connectors);
+  if (patch.connectors !== undefined) sets.connectors = patch.connectors === null ? null : JSON.stringify(cleanConnectors(patch.connectors));
   if (patch.approvalTimeoutMinutes !== undefined) {
     const timeout = Number(patch.approvalTimeoutMinutes);
     if (!Number.isFinite(timeout)) throw catError('The time to wait for an answer must be a number of minutes.');

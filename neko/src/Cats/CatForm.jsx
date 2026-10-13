@@ -11,6 +11,7 @@ import { Field, Input, Select } from '../components/ui/Field.jsx';
 import { AVATARS, FREEDOM, FREEDOM_ORDER } from './catFormat.js';
 import { TEXTAREA } from './catFormState.js';
 import TriggerEditor from './TriggerEditor.jsx';
+import ConnectorPicker from '../Connectors/ConnectorPicker.jsx';
 
 /** A small square picture from an image file, as a data: URL. */
 function shrinkImage(file, size = 160) {
@@ -165,6 +166,14 @@ export function BrainSection({ form, set, options }) {
           {options.models.map((model) => <option key={model.id} value={model.id}>{model.name} · {model.model}</option>)}
         </Select>
       </Field>
+      <ConnectorPicker
+        value={form.connectors}
+        onChange={(connectors) => set({ connectors })}
+        inheritLabel={Array.isArray(agent?.connectors) ? `Same as ${agent.name}` : 'All connectors'}
+        inheritHint={Array.isArray(agent?.connectors)
+          ? `The ${agent.connectors.length} ${agent.connectors.length === 1 ? 'connector' : 'connectors'} its brain may use.`
+          : 'Including ones you add later.'}
+      />
       <Field label="Project it shares with you" htmlFor="cat-project" hint={form.projectId ? 'It gets the project\'s instructions and files, and its chat shows up in the project.' : 'Optional.'}>
         <Select id="cat-project" value={form.projectId} onChange={(event) => set({ projectId: event.target.value, ...(event.target.value ? {} : { folderMode: form.folderMode === 'project' ? 'own' : form.folderMode }) })}>
           <option value="">No project</option>

@@ -46,6 +46,9 @@ const AGENT_COLUMNS = {
   starter_prompts: "TEXT NOT NULL DEFAULT '[]'",
   model_profile_id: 'TEXT',
   capabilities: 'TEXT',
+  // Which connectors (MCP servers) it may use, as a JSON list of names; NULL
+  // means all of them.
+  connectors: 'TEXT',
 };
 for (const [column, definition] of Object.entries(AGENT_COLUMNS)) {
   if (!columnExists('agent_profiles', column)) {
@@ -72,8 +75,9 @@ export const AGENT_CAPABILITIES = {
   computer: { label: 'This computer and Asyncat', categories: ['screen', 'desktop', 'system', 'ai', 'schedule', 'agent'] },
 };
 // Planning, asking the user and searching the agent's own knowledge are
-// always allowed.
-const ALWAYS_ALLOWED_CATEGORIES = ['planning', 'plan', 'interaction'];
+// always allowed. Connector tools ('mcp') are chosen per connector instead
+// (the agent's `connectors` list), so capabilities leave them alone.
+const ALWAYS_ALLOWED_CATEGORIES = ['planning', 'plan', 'interaction', 'mcp'];
 const ALWAYS_ALLOWED_TOOLS = ['knowledge_search', 'tool_search'];
 
 /**
@@ -103,6 +107,12 @@ function cleanCapabilities(value) {
   if (value === null || value === undefined) return null;
   if (!Array.isArray(value)) return null;
   return [...new Set(value.filter((key) => Object.hasOwn(AGENT_CAPABILITIES, key)))];
+}
+
+/** A list of connector names, or null for "all connectors". */
+export function cleanConnectorList(value) {
+  if (value === null || value === undefined || !Array.isArray(value)) return null;
+  return [...new Set(value.map((name) => String(name || '').trim()).filter(Boolean))].slice(0, 100);
 }
 
 function cleanAvatar(value) {
@@ -166,6 +176,7 @@ function parseProfile(row) {
     always_allowed_tools: parseJson(row.always_allowed_tools, []),
     starter_prompts: parseJson(row.starter_prompts, []),
     capabilities: parseJson(row.capabilities, null),
+    connectors: parseJson(row.connectors, null),
   };
 }
 
@@ -191,7 +202,7 @@ export function createProfile({
   userId, name, handle = null, description = '', icon = '🤖', color = 'indigo', soulName = 'default',
   soulOverride = null, workingDir = null, maxRounds = 25, autoApprove = false, alwaysAllowedTools = [],
   isDefault = false, instructions = '', avatarImage = null, starterPrompts = [], modelProfileId = null,
-  capabilities = null,
+  capabilities = null, connectors = null,
 }) {
   const id = randomUUID();
   const resolvedHandle = uniqueHandle(userId, handle || name, id);
@@ -199,13 +210,14 @@ export function createProfile({
     db.prepare('UPDATE agent_profiles SET is_default = 0 WHERE user_id = ?').run(userId);
   }
   const cleanCaps = cleanCapabilities(capabilities);
+  const cleanConnectors = cleanConnectorList(connectors);
   db.prepare(`
     INSERT INTO agent_profiles (
       id, user_id, handle, name, description, icon, color, soul_name, soul_override, working_dir, max_rounds,
       auto_approve, always_allowed_tools, is_default, instructions, avatar_image, starter_prompts,
-      model_profile_id, capabilities
+      model_profile_id, capabilities, connectors
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id, userId, resolvedHandle, name, description, icon, color,
     soulName, soulOverride || null, workingDir || null,
@@ -217,6 +229,7 @@ export function createProfile({
     JSON.stringify(cleanStarters(starterPrompts)),
     modelProfileId || null,
     cleanCaps === null ? null : JSON.stringify(cleanCaps),
+    cleanConnectors === null ? null : JSON.stringify(cleanConnectors),
   );
   return getProfile(id, userId);
 }
@@ -225,7 +238,7 @@ export function updateProfile(id, userId, updates) {
   const allowed = [
     'name', 'handle', 'description', 'icon', 'color', 'soul_name', 'soul_override', 'working_dir', 'max_rounds',
     'auto_approve', 'always_allowed_tools', 'is_default', 'instructions', 'avatar_image', 'starter_prompts',
-    'model_profile_id', 'capabilities',
+    'model_profile_id', 'capabilities', 'connectors',
   ];
   const fields = [];
   const values = [];
@@ -244,6 +257,9 @@ export function updateProfile(id, userId, updates) {
     else if (col === 'capabilities') {
       const caps = cleanCapabilities(v);
       values.push(caps === null ? null : JSON.stringify(caps));
+    } else if (col === 'connectors') {
+      const list = cleanConnectorList(v);
+      values.push(list === null ? null : JSON.stringify(list));
     } else if (col === 'avatar_image') values.push(cleanAvatar(v));
     else if (col === 'instructions') values.push(String(v || '').slice(0, 20000));
     else if (col === 'auto_approve' || col === 'is_default') values.push(v ? 1 : 0);

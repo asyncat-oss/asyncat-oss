@@ -33,6 +33,7 @@ export function formFromCat(cat = null, template = null) {
     },
     allowedSites: cat?.allowedSites || [],
     allowedTools: cat?.allowedTools || [],
+    connectors: Array.isArray(cat?.connectors) ? cat.connectors : null,
     approvalTimeoutMinutes: cat?.approvalTimeoutMinutes || 120,
     timezone: cat?.timezone || localTimeZone(),
   };
@@ -62,6 +63,7 @@ export function payloadFromForm(form, { cat = null } = {}) {
     },
     allowedSites: form.allowedSites,
     allowedTools: form.allowedTools,
+    connectors: Array.isArray(form.connectors) ? form.connectors : null,
     approvalTimeoutMinutes: Number(form.approvalTimeoutMinutes) || 120,
     timezone: form.timezone || localTimeZone(),
   };
