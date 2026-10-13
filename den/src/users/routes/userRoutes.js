@@ -4,9 +4,6 @@ import multer from 'multer';
 import {
   getCurrentUserProfile,
   updateUserProfile,
-  getUserById,
-  getUsersByIds,
-  searchUsers,
   uploadProfilePicture,
   deleteProfilePicture,
 } from '../controllers/userController.js';
@@ -26,8 +23,5 @@ router.get('/me', getCurrentUserProfile);
 router.put('/me', updateUserProfile);
 router.post('/me/profile-picture', upload.single('profilePicture'), uploadProfilePicture);
 router.delete('/me/profile-picture', deleteProfilePicture);
-router.get('/:id', getUserById);
-router.post('/by-ids', getUsersByIds);
-router.get('/search', searchUsers);
 
 export default router;

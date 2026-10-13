@@ -126,43 +126,6 @@ async function getProjects(req, res) {
 }
 
 /**
- * GET /api/teams/:teamId/projects
- * Backwards-compatible internal namespace route.
- */
-async function getTeamProjects(req, res) {
-	try {
-		const { user, db } = req;
-		const { teamId } = req.params;
-
-		// Verify user owns this workspace
-		const { data: workspace, error: wsError } = await db
-			.from("workspaces")
-			.select("id, owner_id")
-			.eq("id", teamId)
-			.single();
-
-		if (wsError || !workspace || workspace.owner_id !== user.id) {
-			return res.status(403).json({ success: false, error: "Workspace not found or access denied" });
-		}
-
-		const { data: projects, error } = await db
-			.from("projects")
-			.select(PROJECT_FIELDS)
-			.eq("team_id", teamId)
-			.eq("owner_id", user.id)
-			.eq("is_archived", false)
-			.order("created_at", { ascending: false });
-
-		if (error) throw error;
-
-		res.json({ success: true, data: (projects || []).map(presentProject) });
-	} catch (error) {
-		console.error("Workspace projects fetch error:", error);
-		res.status(500).json({ success: false, error: error.message || "Failed to fetch workspace projects" });
-	}
-}
-
-/**
  * POST /api/projects
  */
 async function createProject(req, res) {
@@ -410,7 +373,6 @@ async function deleteProject(req, res) {
 
 export {
   getProjects,
-  getTeamProjects,
   createProject,
   updateProject,
   deleteProject,

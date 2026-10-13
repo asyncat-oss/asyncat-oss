@@ -42,30 +42,6 @@ const withWorkspaceParam = (url) => {
 };
 
 // ===========================================
-// WORKSPACE SETTINGS API FUNCTIONS
-// ===========================================
-
-export const workspaceApi = {
-	// Update workspace settings
-	updateWorkspace: async (workspaceId, updateData) => {
-		const result = await apiCall(`${MAIN_URL}/api/teams/${workspaceId}`, {
-			method: "PUT",
-			body: JSON.stringify(updateData),
-		});
-		return result;
-	},
-
-	// Delete workspace
-	deleteWorkspace: async (workspaceId, force = false) => {
-		const result = await apiCall(`${MAIN_URL}/api/teams/${workspaceId}`, {
-			method: "DELETE",
-			body: JSON.stringify({ force }),
-		});
-		return result;
-	},
-};
-
-// ===========================================
 // PROFILE API FUNCTIONS
 // ===========================================
 

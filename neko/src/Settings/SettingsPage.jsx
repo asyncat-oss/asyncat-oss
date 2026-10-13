@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useOutletContext, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Cpu,
@@ -13,7 +13,6 @@ import {
   UserRound,
   Wrench,
 } from 'lucide-react';
-import { useWorkspace } from '../contexts/WorkspaceContext';
 import { useUiPreferences } from '../contexts/UiPreferencesContext';
 import GeneralSection from './GeneralSection';
 import AppearanceSection from './AppearanceSection';
@@ -38,8 +37,6 @@ const TAB_ALIASES = {
 const SettingsPage = () => {
   const { tab } = useParams();
   const navigate = useNavigate();
-  const { localUser } = useOutletContext() || {};
-  const { currentWorkspace, updateCurrentWorkspace } = useWorkspace();
   const { theme, setTheme } = useUiPreferences();
   const [advancedView, setAdvancedView] = useState(tab === 'server' ? 'server' : 'storage');
 
@@ -115,12 +112,7 @@ const SettingsPage = () => {
   }, [navigate, tab]);
 
   const renderProfile = () => (
-    <GeneralSection
-      view="profile"
-      localUser={localUser}
-      workspace={currentWorkspace}
-      onWorkspaceUpdated={updateCurrentWorkspace}
-    />
+    <GeneralSection />
   );
 
   const renderAdvanced = () => (

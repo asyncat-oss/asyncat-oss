@@ -2,7 +2,6 @@ import express from 'express';
 
 import {
   getProjects,
-  getTeamProjects,
   createProject,
   updateProject,
   deleteProject,
@@ -24,7 +23,6 @@ import {
 const router = express.Router();
 
 router.get('/', getProjects);
-router.get('/teams/:teamId/projects', getTeamProjects);
 router.post('/', createProject);
 router.get('/:id/folders', getProjectFolders);
 router.post('/:id/folders', addProjectFolder);

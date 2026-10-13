@@ -1,25 +1,16 @@
-// Settings/GeneralSection.jsx — unified profile + workspace settings
+// Settings/GeneralSection.jsx — profile settings: display name and picture
 import { useState, useEffect, useCallback, useRef } from 'react';
-import PropTypes from 'prop-types';
 import {
-  AlertTriangle,
   Check,
   ChevronDown,
   ChevronUp,
   Loader2,
-  Trash2,
   Upload,
   X,
 } from 'lucide-react';
-import { profileApi, workspaceApi, apiUtils } from './settingApi';
+import { profileApi, apiUtils } from './settingApi';
 import eventBus from '../utils/eventBus.js';
-import Portal from '../components/Portal';
 import { AVATARS, isCustomImageUrl } from '../assets/dp/avatars.js';
-
-const WORKSPACE_EMOJIS = [
-  '👥','🚀','💼','⚡','🎯','🔥','💡','🏆','🌟','🎨',
-  '🔧','📈','💻','🎮','🏢','🌊','📝','🎵','🏃','🌿',
-];
 
 const MAX_NAME = 50;
 
@@ -29,10 +20,6 @@ const inputCls =
   'focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 dark:focus:border-indigo-500 ' +
   'transition-colors placeholder:text-gray-400 dark:placeholder:text-gray-500';
 
-const readCls =
-  'w-full px-3 py-2.5 rounded-lg border border-gray-200/70 dark:border-gray-700/50 midnight:border-gray-700/50 ' +
-  'bg-gray-50/80 dark:bg-gray-800/50 midnight:bg-gray-900/60 text-gray-500 dark:text-gray-400 midnight:text-gray-500 ' +
-  'text-sm cursor-default select-none';
 
 const fieldLabelCls =
   'block text-xs font-medium text-gray-600 dark:text-gray-400 midnight:text-gray-400 mb-1.5';
@@ -92,143 +79,7 @@ const SectionPanel = ({ title, description, action, message, children }) => (
   </section>
 );
 
-const DeleteWorkspaceDialog = ({
-  workspaceName,
-  dangerLoading,
-  dangerMsg,
-  forceDelete,
-  hasProjects,
-  onCancel,
-  onConfirm,
-  onForceChange,
-}) => (
-  <Portal>
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <button
-        type="button"
-        aria-label="Close delete workspace confirmation"
-        className="absolute inset-0 bg-black/45 backdrop-blur-sm"
-        onClick={dangerLoading ? undefined : onCancel}
-      />
-      <div className="relative w-full max-w-md rounded-2xl border border-gray-200 dark:border-gray-800 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 shadow-2xl overflow-hidden">
-        <div className="flex items-start gap-4 px-6 py-5 border-b border-red-100 dark:border-red-900/30 midnight:border-red-900/30 bg-red-50/70 dark:bg-red-900/10 midnight:bg-red-950/20">
-          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/40 midnight:bg-red-900/40">
-            <AlertTriangle size={19} className="text-red-600 dark:text-red-400" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-semibold text-gray-950 dark:text-gray-100 midnight:text-slate-100">
-              Delete workspace?
-            </h3>
-            <p className="mt-1 text-xs leading-5 text-gray-600 dark:text-gray-400 midnight:text-slate-400">
-              This permanently deletes <span className="font-semibold text-gray-900 dark:text-gray-200 midnight:text-slate-200">{workspaceName}</span> and cannot be undone.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={dangerLoading}
-            className="rounded-lg p-1.5 text-gray-400 hover:bg-red-100/70 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200 disabled:opacity-50 transition-colors"
-          >
-            <X size={16} />
-          </button>
-        </div>
-
-        {(dangerMsg || hasProjects) && (
-          <div className="px-6 py-5 space-y-4">
-            <Message msg={dangerMsg} />
-            {hasProjects && (
-              <label className="flex items-start gap-3 rounded-xl border border-amber-200 dark:border-amber-800/60 midnight:border-amber-800/60 bg-amber-50 dark:bg-amber-900/20 midnight:bg-amber-900/20 p-3 text-xs text-amber-800 dark:text-amber-200 midnight:text-amber-200">
-                <input
-                  type="checkbox"
-                  checked={forceDelete}
-                  onChange={e => onForceChange(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded border-amber-300 accent-red-600"
-                />
-                <span>I understand this will delete all associated projects.</span>
-              </label>
-            )}
-          </div>
-        )}
-
-        <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 bg-gray-50 dark:bg-gray-800/50 midnight:bg-slate-900/50">
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={dangerLoading}
-            className="px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-white dark:bg-gray-900 midnight:bg-slate-900 text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300 hover:bg-gray-50 dark:hover:bg-gray-800 midnight:hover:bg-slate-800 disabled:opacity-50 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            disabled={dangerLoading || (hasProjects && !forceDelete)}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-sm font-medium text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {dangerLoading ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-            Delete
-          </button>
-        </div>
-      </div>
-    </div>
-  </Portal>
-);
-
-const messageShape = PropTypes.shape({
-  type: PropTypes.oneOf(['success', 'error']),
-  text: PropTypes.string,
-});
-
-const workspaceShape = PropTypes.shape({
-  id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-  name: PropTypes.string,
-  description: PropTypes.string,
-  emoji: PropTypes.string,
-  owner_id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-  is_personal: PropTypes.bool,
-});
-
-const localUserShape = PropTypes.shape({
-  id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-});
-
-PrimaryButton.propTypes = {
-  loading: PropTypes.bool,
-  onClick: PropTypes.func,
-  disabled: PropTypes.bool,
-  children: PropTypes.node,
-};
-
-Message.propTypes = {
-  msg: messageShape,
-};
-
-SectionPanel.propTypes = {
-  title: PropTypes.string,
-  description: PropTypes.string,
-  action: PropTypes.node,
-  message: messageShape,
-  children: PropTypes.node,
-};
-
-DeleteWorkspaceDialog.propTypes = {
-  workspaceName: PropTypes.string,
-  dangerLoading: PropTypes.bool,
-  dangerMsg: messageShape,
-  forceDelete: PropTypes.bool,
-  hasProjects: PropTypes.bool,
-  onCancel: PropTypes.func,
-  onConfirm: PropTypes.func,
-  onForceChange: PropTypes.func,
-};
-
-const GeneralSection = ({
-  view = 'all',
-  localUser,
-  workspace,
-  onWorkspaceUpdated,
-  onWorkspaceDeleted,
-}) => {
+const GeneralSection = () => {
   const [userData,         setUserData]         = useState(null);
   const [profileLoading,   setProfileLoading]   = useState(true);
   const [profileSaving,    setProfileSaving]    = useState(false);
@@ -255,19 +106,6 @@ const GeneralSection = ({
     return null;
   };
 
-  const [wsName,    setWsName]    = useState('');
-  const [wsDesc,    setWsDesc]    = useState('');
-  const [wsEmoji,   setWsEmoji]   = useState('👥');
-  const [wsSaving,  setWsSaving]  = useState(false);
-  const [wsMsg,     setWsMsg]     = useState(null);
-  const [showEmoji, setShowEmoji] = useState(false);
-
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [forceDelete,     setForceDelete]     = useState(false);
-  const [hasProjects,     setHasProjects]     = useState(false);
-  const [dangerLoading,   setDangerLoading]   = useState(false);
-  const [dangerMsg,       setDangerMsg]       = useState(null);
-
   useEffect(() => {
     profileApi.fetchProfile()
       .then(data => {
@@ -287,14 +125,6 @@ const GeneralSection = ({
       .catch(() => {})
       .finally(() => setProfileLoading(false));
   }, []);
-
-  useEffect(() => {
-    if (workspace) {
-      setWsName(workspace.name || '');
-      setWsDesc(workspace.description || '');
-      setWsEmoji(workspace.emoji || '👥');
-    }
-  }, [workspace]);
 
   const flash = useCallback((setter, msg, ms = 2500) => {
     setter(msg);
@@ -397,72 +227,21 @@ const GeneralSection = ({
     }
   };
 
-  const saveWorkspace = async () => {
-    if (!workspace?.id) return;
-    setWsSaving(true);
-    try {
-      await workspaceApi.updateWorkspace(workspace.id, {
-        name: workspace.is_personal ? workspace.name : wsName,
-        description: wsDesc,
-        emoji: wsEmoji,
-      });
-      await onWorkspaceUpdated?.();
-      flash(setWsMsg, { type: 'success', text: 'Projects saved.' });
-    } catch (err) {
-      flash(setWsMsg, { type: 'error', text: apiUtils.handleError(err, 'Failed to save workspace') });
-    } finally {
-      setWsSaving(false);
-    }
-  };
-
-  const resetDeleteState = () => {
-    setShowDeleteModal(false);
-    setForceDelete(false);
-    setHasProjects(false);
-    setDangerMsg(null);
-  };
-
-  const handleDelete = async () => {
-    setDangerLoading(true);
-    try {
-      await workspaceApi.deleteWorkspace(workspace.id, forceDelete);
-      onWorkspaceDeleted?.(workspace);
-    } catch (err) {
-      const msg = apiUtils.handleError(err, 'Failed to delete workspace');
-      if (err.message?.includes('hasAssociatedResources') || msg.includes('associated projects')) {
-        setHasProjects(true);
-        setDangerMsg({ type: 'error', text: 'This workspace still has projects. Confirm that they should be deleted too.' });
-      } else {
-        setDangerMsg({ type: 'error', text: msg });
-      }
-    } finally {
-      setDangerLoading(false);
-    }
-  };
-
   const currentAvatar = AVATARS.find(a => a.id === avatar) || AVATARS[0];
   const displayImageSrc = customImageUrl || currentAvatar.src;
   const displayImageAlt = customImageUrl ? 'Custom profile picture' : currentAvatar.name;
-  const isOwner = localUser && workspace &&
-    String(localUser.id) === String(workspace?.owner_id);
-  const hasWorkspace = !!workspace;
-  const canEditWorkspace = hasWorkspace && isOwner;
-  const showProfile = view !== 'workspace';
-  const showWorkspace = view !== 'profile';
 
   if (profileLoading) {
     return (
       <div className="space-y-4 animate-pulse">
-        {showProfile && <div className="h-40 rounded-xl bg-gray-100 dark:bg-gray-800 midnight:bg-gray-900" />}
-        {showWorkspace && <div className="h-48 rounded-xl bg-gray-100 dark:bg-gray-800 midnight:bg-gray-900" />}
+        <div className="h-40 rounded-xl bg-gray-100 dark:bg-gray-800 midnight:bg-gray-900" />
       </div>
     );
   }
 
   return (
     <div className="space-y-5">
-      {showProfile && (
-        <SectionPanel
+      <SectionPanel
           title="Profile"
           description="Your display name and avatar are shown across the local workspace. Images are saved instantly; name changes require saving."
           message={profileMsg}
@@ -590,130 +369,9 @@ const GeneralSection = ({
           </div>
         </div>
         </SectionPanel>
-      )}
 
-      {showWorkspace && hasWorkspace && (
-        <SectionPanel
-          title="Workspace"
-          description={canEditWorkspace ? 'Customize the name and icon for your project space.' : 'Project space details are managed by the owner.'}
-          message={wsMsg}
-          action={canEditWorkspace ? <PrimaryButton loading={wsSaving} onClick={saveWorkspace}>Save</PrimaryButton> : null}
-        >
-          <div className="grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
-            <div>
-              <div className="flex items-center gap-4 lg:flex-col lg:items-start">
-                <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-gray-100 dark:bg-gray-800 midnight:bg-gray-900 text-4xl ring-1 ring-gray-200 dark:ring-gray-700 midnight:ring-gray-700">
-                  {wsEmoji}
-                </div>
-                {canEditWorkspace && (
-                  <button
-                    type="button"
-                    onClick={() => setShowEmoji(v => !v)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-gray-700 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 midnight:hover:bg-gray-900 transition-colors"
-                  >
-                    Change icon
-                    {showEmoji ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                  </button>
-                )}
-              </div>
-
-              {showEmoji && canEditWorkspace && (
-                <div className="mt-4 grid grid-cols-5 gap-2 rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-gray-700 bg-gray-50/70 dark:bg-gray-800/60 midnight:bg-gray-900/60 p-3">
-                  {WORKSPACE_EMOJIS.map(e => (
-                    <button
-                      key={e}
-                      type="button"
-                      onClick={() => { setWsEmoji(e); setShowEmoji(false); }}
-                      className={`flex h-9 w-9 items-center justify-center rounded-lg text-base transition-colors
-                        ${wsEmoji === e
-                          ? 'bg-white dark:bg-gray-700 midnight:bg-gray-800 ring-2 ring-indigo-500/30'
-                          : 'hover:bg-white dark:hover:bg-gray-700 midnight:hover:bg-gray-800'}`}
-                    >
-                      {e}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="grid gap-4">
-              <div>
-                <label className={fieldLabelCls}>Name</label>
-                {workspace.is_personal ? (
-                  <div className={readCls}>Personal Projects</div>
-                ) : (
-                  <input
-                    type="text"
-                    value={wsName}
-                    onChange={e => canEditWorkspace && setWsName(e.target.value)}
-                    placeholder="Project space name"
-                    disabled={!canEditWorkspace}
-                    className={canEditWorkspace ? inputCls : readCls}
-                  />
-                )}
-              </div>
-
-              <div>
-                <label className={fieldLabelCls}>Description</label>
-                <textarea
-                  value={wsDesc}
-                  onChange={e => canEditWorkspace && setWsDesc(e.target.value)}
-                  placeholder={canEditWorkspace ? 'What are these projects for?' : ''}
-                  disabled={!canEditWorkspace}
-                  rows={4}
-                  className={`${canEditWorkspace ? inputCls : readCls} resize-none`}
-                />
-              </div>
-            </div>
-          </div>
-
-          {!workspace.is_personal && isOwner && (
-            <div className="mt-6 rounded-xl border border-red-200/80 dark:border-red-900/40 midnight:border-red-900/40 bg-red-50/50 dark:bg-red-950/10 midnight:bg-red-950/20 p-4">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h4 className="text-sm font-semibold text-red-700 dark:text-red-300 midnight:text-red-300">
-                    Delete workspace
-                  </h4>
-                  <p className="mt-1 text-xs leading-5 text-red-600/80 dark:text-red-300/80 midnight:text-red-300/80">
-                    Remove this workspace and its data permanently.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowDeleteModal(true)}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 dark:border-red-800 midnight:border-red-800 bg-white dark:bg-red-950/30 midnight:bg-red-950/30 px-3 py-2 text-sm font-medium text-red-600 dark:text-red-300 midnight:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30 midnight:hover:bg-red-900/30 transition-colors"
-                >
-                  <Trash2 size={15} />
-                  Delete workspace
-                </button>
-              </div>
-            </div>
-          )}
-        </SectionPanel>
-      )}
-
-      {showWorkspace && showDeleteModal && (
-        <DeleteWorkspaceDialog
-          workspaceName={workspace?.name || 'this workspace'}
-          dangerLoading={dangerLoading}
-          dangerMsg={dangerMsg}
-          forceDelete={forceDelete}
-          hasProjects={hasProjects}
-          onCancel={resetDeleteState}
-          onConfirm={handleDelete}
-          onForceChange={setForceDelete}
-        />
-      )}
     </div>
   );
-};
-
-GeneralSection.propTypes = {
-  view: PropTypes.oneOf(['all', 'profile', 'workspace']),
-  localUser: localUserShape,
-  workspace: workspaceShape,
-  onWorkspaceUpdated: PropTypes.func,
-  onWorkspaceDeleted: PropTypes.func,
 };
 
 export default GeneralSection;
