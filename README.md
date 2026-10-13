@@ -163,9 +163,9 @@ npm run electron:dev
 
 ### Pre-built installers
 
-Asyncat checks published GitHub releases after launch. A dot appears on Settings when a newer version exists. Open **Settings → About**, click **Download installer**, quit Asyncat, and run the installer over the existing installation. The updater selects the asset for the current OS and CPU; settings and local data remain in the OS user-data directory.
+Asyncat checks published GitHub releases after launch and every six hours. When a newer version exists, the profile menu shows **Update available**; it opens an update screen with the release notes. Asyncat downloads the file for your OS and CPU and checks it against the release's `SHA256SUMS.txt`. Then an AppImage replaces itself and restarts, and Windows runs the installer silently and reopens. On macOS and with the `.deb` package the file is saved to Downloads for the last step: drag it into Applications, or `sudo apt install ./file.deb`. Settings and local data stay in the OS user-data directory.
 
-Beta builds use assisted installation because they are unsigned. The app will not silently replace itself.
+Builds are unsigned, so macOS asks once before opening a new version; see [Code Signing Warnings](#-code-signing-warnings). Updates never touch your chats, settings or Project folders.
 
 ### Uninstalling on Windows
 
@@ -266,7 +266,7 @@ asyncat-oss/
 │   ├── tray.js      #   System tray icon and menu
 │   ├── popup.js     #   Quick-chat popup
 │   ├── pet.js       #   Optional desktop companion that shows agent status
-│   ├── updater.js   #   Assisted update checks against GitHub Releases
+│   ├── updater.js   #   Update checks, download, checksum and install (update-install.js)
 │   ├── menu.js      #   Native OS menu bar
 │   ├── shortcuts.js #   System-wide shortcuts (settings in shortcut-config.js)
 │   ├── preload.js   #   Secure renderer ↔ main bridge
@@ -394,9 +394,9 @@ sudo apt install libappindicator1
 sudo apt install libayatana-appindicator1
 ```
 
-### Assisted desktop updates (Settings → About)
+### Desktop updates
 
-Packaged builds check GitHub Releases automatically and open the exact installer for their OS and CPU. Quit Asyncat and install the downloaded version over the existing app. Source installations continue to update with `git pull` and `npm install`.
+Packaged builds check GitHub Releases automatically and update from inside the app (see [Pre-built installers](#pre-built-installers) above): AppImage and Windows builds install and restart themselves, macOS and `.deb` builds get the verified file for the last step. Source installations continue to update with `git pull` and `npm install`.
 
 ---
 
