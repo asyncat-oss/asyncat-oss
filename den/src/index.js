@@ -75,6 +75,9 @@ import privacyRouter from './privacy/privacyRoutes.js';
 // Chats and memories from ChatGPT and Claude exports
 import importRouter from './importers/importRoutes.js';
 
+// Everything agents have made (the gallery)
+import madeRouter from './made/madeRoutes.js';
+
 // ─── Database ─────────────────────────────────────────────────────────────────
 import db from './db/client.js';         // opens SQLite, applies schema
 import { seed } from './db/seed.js';     // creates the local profile on first boot
@@ -207,6 +210,9 @@ app.use('/api/privacy', privacyRouter);
 
 // Routes: import chats and memories from ChatGPT and Claude
 app.use('/api/import', importRouter);
+
+// Routes: what agents have made
+app.use('/api/made', madeRouter);
 
 // ─── Routes: Training / Fine-Tuning ──────────────────────────────────────────
 app.use('/api/training/guide', trainingGuideRouter);
