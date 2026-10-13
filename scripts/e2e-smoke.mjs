@@ -3,7 +3,8 @@
 // ports and settings, so your real data is never touched) with a fake
 // OpenAI-compatible model, then drives the app in a headless browser through
 // the main flows: chat, a project with instructions, agents, Cats, a note made
-// by the agent, connectors (with a fake MCP server), and the main pages.
+// by the agent, connectors (with a fake MCP server), an ACP agent (a fake
+// one), and the main pages.
 //
 // Needs a Chromium-based browser (Chrome, Chromium, Edge or Brave), found the
 // same way PDF export finds one; PUPPETEER_EXECUTABLE_PATH picks another.
@@ -22,6 +23,7 @@ const HEADED = process.argv.includes('--headed');
 const KEEP = process.argv.includes('--keep');
 const ANSWER = 'Smoke test answer.';
 const FAKE_MCP_SERVER = path.join(ROOT, 'den/test/fixtures/fakeMcpServer.mjs');
+const FAKE_ACP_AGENT = path.join(ROOT, 'den/test/fixtures/fakeAcpAgent.mjs');
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'asyncat-e2e-'));
 const children = [];
@@ -367,6 +369,23 @@ async function main() {
     const limited = await api('POST', '/api/agent/profiles', { name: 'No connectors', connectors: [] });
     const refused = await runStream({ profileId: limited.profile.id });
     assert(!refused.includes('echo: from the smoke test') && refused.includes('Unknown tool'), 'an agent without connectors still reached the tool');
+  });
+
+  await check('an ACP agent answers a chat and shows in the composer', async () => {
+    await api('POST', '/api/agent/acp-agents', { name: 'fake', title: 'Fake ACP agent', command: process.execPath, args: [FAKE_ACP_AGENT] });
+    const { engines } = await api('GET', '/api/agent/engines');
+    assert(engines.some((engine) => engine.id === 'acp:fake' && engine.installed), 'the ACP agent is not offered');
+    const res = await fetch(`${den}/api/agent/run`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: app },
+      body: JSON.stringify({ goal: 'Say hello', engine: 'acp:fake', agentMode: 'action' }),
+    });
+    const stream = await res.text();
+    assert(stream.includes('Hello from the fake agent'), 'the ACP agent did not answer');
+    assert(/"externalSessionId":"sess_/.test(stream), 'no ACP session id');
+    await page.goto(`${app}/agents?tab=coding`, { waitUntil: 'domcontentloaded' });
+    await waitFor(() => page.evaluate(() => document.querySelector('[data-acp-agent="fake"]')?.innerText.includes('Ready')), { timeout: 15000, what: 'the ACP agent in Coding agents' });
+    await noCrash();
   });
 
   for (const [label, route] of [['Models', '/models'], ['Models → Voice', '/models?tab=audio'], ['Settings → Profile', '/settings/profile'], ['Settings → Connections', '/settings/connections'], ['Settings → Background', '/settings/background'], ['Settings → Engines', '/settings/runtime'], ['Tools & Skills', '/tools']]) {
