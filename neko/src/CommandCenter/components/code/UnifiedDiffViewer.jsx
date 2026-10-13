@@ -10,7 +10,7 @@
 import { useMemo } from 'react';
 // The common build (~36 languages) instead of all ~190: the full build added
 // 1.7 MB to the startup bundle. It shares one core with the chat renderer.
-import hljs from 'highlight.js/lib/common';
+import { highlightCode, useHighlighter } from '../../../utils/lazyRenderers.js';
 import 'highlight.js/styles/github.css';
 
 // ── Diff parser ───────────────────────────────────────────────────────────────
@@ -84,20 +84,11 @@ function detectLangFromPath(filePath) {
   return map[ext] || 'plaintext';
 }
 
-function highlight(code, lang) {
-  if (!code) return '';
-  try {
-    if (lang && lang !== 'plaintext') {
-      return hljs.highlight(code, { language: lang, ignoreIllegals: true }).value;
-    }
-  } catch { /* fallback */ }
-  return hljs.highlightAuto(code).value;
-}
-
 // ── Line component ────────────────────────────────────────────────────────────
 
 function DiffLine({ line, lang }) {
-  const html = useMemo(() => highlight(line.text, lang), [line.text, lang]);
+  const hljs = useHighlighter();
+  const html = useMemo(() => highlightCode(hljs, line.text, lang), [hljs, line.text, lang]);
 
   const rowBg = line.type === 'add'
     ? 'bg-emerald-50/80 dark:bg-emerald-950/30 midnight:bg-emerald-950/30'

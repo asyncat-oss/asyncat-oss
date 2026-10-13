@@ -1,52 +1,16 @@
 // BlockBasedMessageRenderer.jsx - Shared markdown/block renderer for agent answers
 import { lazy, Suspense, useMemo, useState, useCallback, memo, useEffect, useRef } from 'react';
+import { escapeHtml, highlightCode, useHighlighter, useKatex } from '../../../utils/lazyRenderers.js';
 import { Copy, Check, RotateCcw, Zap, ExternalLink, Globe2, FolderOpen } from 'lucide-react';
 import { fileIconMeta } from '../../../files/fileUtils.js';
 import { useUiPreferences } from '../../../contexts/UiPreferencesContext.jsx';
 import { openWebLink } from '../../../utils/openWebLink.js';
 import { tokenTracker } from '../stats/LocalModelStats';
 
-import katex from 'katex';
-import 'katex/dist/katex.min.css';
 // mhchem extension — enables \ce{H2O}, \ce{CO2}, chemical equations in KaTeX
-import 'katex/contrib/mhchem/mhchem.js';
-import hljs from 'highlight.js/lib/core';
-import javascript from 'highlight.js/lib/languages/javascript';
-import typescript from 'highlight.js/lib/languages/typescript';
-import python from 'highlight.js/lib/languages/python';
-import xml from 'highlight.js/lib/languages/xml'; // html
-import css from 'highlight.js/lib/languages/css';
-import json from 'highlight.js/lib/languages/json';
-import sql from 'highlight.js/lib/languages/sql';
-import bash from 'highlight.js/lib/languages/bash';
-import java from 'highlight.js/lib/languages/java';
-import cpp from 'highlight.js/lib/languages/cpp';
-import markdown from 'highlight.js/lib/languages/markdown';
-import dockerfile from 'highlight.js/lib/languages/dockerfile';
-import powershell from 'highlight.js/lib/languages/powershell';
 import 'highlight.js/styles/github.css';
 
 // Register languages
-hljs.registerLanguage('javascript', javascript);
-hljs.registerLanguage('js', javascript);
-hljs.registerLanguage('typescript', typescript);
-hljs.registerLanguage('ts', typescript);
-hljs.registerLanguage('python', python);
-hljs.registerLanguage('py', python);
-hljs.registerLanguage('html', xml);
-hljs.registerLanguage('xml', xml);
-hljs.registerLanguage('css', css);
-hljs.registerLanguage('json', json);
-hljs.registerLanguage('sql', sql);
-hljs.registerLanguage('bash', bash);
-hljs.registerLanguage('sh', bash);
-hljs.registerLanguage('java', java);
-hljs.registerLanguage('cpp', cpp);
-hljs.registerLanguage('c', cpp);
-hljs.registerLanguage('markdown', markdown);
-hljs.registerLanguage('md', markdown);
-hljs.registerLanguage('dockerfile', dockerfile);
-hljs.registerLanguage('powershell', powershell);
 
 // ─── KaTeX Math Renderer ────────────────────────────────────────────────────
 
@@ -58,7 +22,9 @@ hljs.registerLanguage('powershell', powershell);
 const MathSpan = ({ latex, displayMode = false }) => {
   const [copied, setCopied] = useState(false);
 
+  const katex = useKatex();
   const html = useMemo(() => {
+    if (!katex) return escapeHtml(latex);
     try {
       return katex.renderToString(latex, {
         displayMode,
@@ -68,9 +34,9 @@ const MathSpan = ({ latex, displayMode = false }) => {
         strict: 'ignore'
       });
     } catch {
-      return `<span style="color:#cc0000">${latex}</span>`;
+      return `<span style="color:#cc0000">${escapeHtml(latex)}</span>`;
     }
-  }, [latex, displayMode]);
+  }, [katex, latex, displayMode]);
 
   const handleCopy = useCallback(async (e) => {
     e.stopPropagation();
@@ -976,20 +942,8 @@ const CodeBlock = ({ content, language = 'text' }) => {
     document.head.appendChild(style);
   }, []);
 
-  const highlighted = useMemo(() => {
-    const lang = (language || 'text').toLowerCase();
-    try {
-      if (hljs.getLanguage(lang)) {
-        return hljs.highlight(content, { language: lang }).value;
-      }
-      return hljs.highlightAuto(content).value;
-    } catch {
-      return content
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-    }
-  }, [content, language]);
+  const hljs = useHighlighter();
+  const highlighted = useMemo(() => highlightCode(hljs, content, language || 'text'), [hljs, content, language]);
 
   const handleCopy = async () => {
     try {
