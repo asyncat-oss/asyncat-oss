@@ -235,7 +235,9 @@ export function summarizeCodexSession({ file, size, mtimeMs }, threadNames = new
   const { head } = headAndTail(file, size);
   const meta = head.find((line) => line.type === 'session_meta')?.payload || {};
   const idFromName = path.basename(file, '.jsonl').match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i)?.[1];
-  const id = meta.id || idFromName;
+  // The file name carries this rollout's own thread id; a forked thread's file
+  // can begin with a copy of its parent's session_meta.
+  const id = idFromName || meta.id;
   if (!id) return null;
   let firstPrompt = '';
   for (const line of head) {
@@ -293,7 +295,17 @@ export function listExternalSessions({ engine = 'all', limit = 30, hideCwd = nul
     }
   }
   const temp = os.tmpdir();
+  const seen = new Set();
   return sessions
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    // The same session can exist twice (Claude Code copies a session it
+    // resumes from another folder); keep the newest copy.
+    .filter((session) => {
+      const key = `${session.engine}:${session.id}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
     .filter((session) => !hideCwd || !isInside(session.cwd, hideCwd))
     // Sessions in the temp folder are throwaway runs; lists hide them by default.
     .map((session) => ({ ...session, temporary: isInside(session.cwd, temp) || isInside(session.cwd, '/tmp') }))
@@ -305,7 +317,8 @@ export function listExternalSessions({ engine = 'all', limit = 30, hideCwd = nul
 export function findSessionFile(engine, id, env = process.env) {
   if (!/^[0-9a-zA-Z-]{8,80}$/.test(String(id || ''))) return null;
   if (engine === 'claude-code') {
-    return claudeSessionFiles(env).find((file) => path.basename(file, '.jsonl') === id) || null;
+    const matches = claudeSessionFiles(env).filter((file) => path.basename(file, '.jsonl') === id);
+    return newestFiles(matches, 1)[0]?.file || null;
   }
   if (engine === 'codex') {
     const root = path.join(codexHome(env), 'sessions');

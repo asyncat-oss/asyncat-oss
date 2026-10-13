@@ -146,3 +146,29 @@ test('reads plan usage from Claude Code events and Codex session files', () => {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('a session copied to another folder or a forked Codex thread is listed once', () => {
+  const { env, root, project } = fixtureHomes();
+  try {
+    // Claude Code keeps a copy when a session is resumed from another folder.
+    const copy = path.join(env.CLAUDE_CONFIG_DIR, 'projects', '-old-place', `${CLAUDE_ID}.jsonl`);
+    writeJsonl(copy, [
+      { type: 'user', cwd: project, entrypoint: 'cli', timestamp: '2026-09-01T10:00:00.000Z', message: { role: 'user', content: 'older copy' } },
+    ]);
+    fs.utimesSync(copy, new Date('2026-09-01'), new Date('2026-09-01'));
+    // A forked thread's file starts with its parent's session_meta.
+    const forkId = '01a00000-0000-7000-8000-000000000003';
+    writeJsonl(path.join(env.CODEX_HOME, 'sessions', '2026', '10', '03', `rollout-2026-10-03T09-00-00-${forkId}.jsonl`), [
+      { type: 'session_meta', payload: { id: CODEX_ID, cwd: project, originator: 'codex-tui' } },
+      { type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Forked question' }] } },
+    ]);
+
+    const keys = listExternalSessions({ env, limit: 20 }).map((session) => `${session.engine}:${session.id}`);
+    assert.equal(keys.length, new Set(keys).size);
+    assert.ok(keys.includes(`codex:${forkId}`));
+    assert.ok(keys.includes(`codex:${CODEX_ID}`));
+    assert.notEqual(findSessionFile('claude-code', CLAUDE_ID, env), copy);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
