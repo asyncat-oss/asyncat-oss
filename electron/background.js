@@ -1,9 +1,9 @@
-// electron/background.js — Running in the background for scheduled tasks.
+// electron/background.js — Running in the background for Cats.
 //
 // Decides whether closing the window quits Asyncat or leaves it in the tray
 // (Settings → Background), shows the one-time "still running" notice, and
 // starts Asyncat at login, hidden in the tray, when asked to. The rules are in
-// background-config.js; the backend reports how many scheduled tasks are on.
+// background-config.js; the backend reports how many Cats are on.
 
 import { app, Notification, nativeImage } from 'electron';
 import fs from 'fs';
@@ -41,7 +41,7 @@ function current() {
   return settings;
 }
 
-/** The backend's count of scheduled tasks that are on (host bridge message). */
+/** The backend's count of Cats that are on (host bridge message). */
 export function setEnabledTaskCount(count) {
   const value = Number(count);
   enabledTasks = Number.isFinite(value) && value >= 0 ? value : null;
@@ -49,7 +49,7 @@ export function setEnabledTaskCount(count) {
 
 async function fetchEnabledTaskCount() {
   try {
-    const res = await fetch(`${BACKEND_URL}/api/agent/scheduled-tasks`, { signal: AbortSignal.timeout(2000) });
+    const res = await fetch(`${BACKEND_URL}/api/cats`, { signal: AbortSignal.timeout(2000) });
     if (!res.ok) return null;
     const body = await res.json();
     return Number.isFinite(body?.enabledCount) ? body.enabledCount : null;

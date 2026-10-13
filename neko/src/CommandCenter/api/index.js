@@ -4,7 +4,7 @@ export { trashApi } from './trashApi.js';
 export { agentApi, profilesApi, sandboxesApi } from './agentApi.js';
 export { gitApi } from './gitApi.js';
 export { filesApi } from './filesApi.js';
-export { scheduledTasksApi } from './scheduledTasksApi.js';
+export { catsApi } from './catsApi.js';
 export { workspaceUtils } from './workspaceUtils.js';
 export { apiUtils, cacheUtils, cachedProjectsApi } from './apiUtils.js';
 export { installApi } from './installApi.js';
@@ -23,7 +23,7 @@ import { cachedProjectsApi } from './apiUtils.js';
 import { workspaceUtils } from './workspaceUtils.js';
 import { chatFoldersApi } from './chatApi.js';
 import { installApi } from './installApi.js';
-import { scheduledTasksApi } from './scheduledTasksApi.js';
+import { catsApi } from './catsApi.js';
 import { searchApi } from './searchApi.js';
 
 export default {
@@ -40,6 +40,6 @@ export default {
   workspace: workspaceUtils,
   files: filesApi,
   install: installApi,
-  scheduledTasks: scheduledTasksApi,
+  cats: catsApi,
   search: searchApi,
 };

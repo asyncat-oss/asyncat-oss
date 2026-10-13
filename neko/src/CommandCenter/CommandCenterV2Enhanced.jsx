@@ -18,7 +18,7 @@ import {
   useCallback,
   useMemo,
 } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { MessageInputV2 } from "./components/input/MessageInputV2";
 import AgentRunFeed, { CurrentPlanPanel, buildEventSegments } from './components/agent/AgentRunFeed';
 import { extractLocalhostUrl } from './utils/localhostUrl.js';
@@ -28,6 +28,8 @@ import ConversationLoadingSkeleton from './components/loading/ConversationLoadin
 import DeleteConfirmationModal from "./components/modals/DeleteConfirmationModal";
 import { useAudioStatus } from "./hooks/useAudioStatus";
 import { useAgentNotifications } from './hooks/useAgentNotifications';
+import { catsApi } from './api/catsApi.js';
+import { useCat } from '../Cats/useCats.js';
 import { useCommandCenter } from "./context/CommandCenterContextEnhanced";
 import useActiveBrainStatus from "./hooks/useActiveBrainStatus.js";
 import { useUiPreferences } from '../contexts/UiPreferencesContext.jsx';
@@ -71,6 +73,8 @@ import {
 } from "./utils/exportUtils.js";
 
 // The terminal loads the first time its dock opens, not with the app.
+const CatChatBanner = lazy(() => import('../Cats/CatChatBanner.jsx'));
+const CatWaitingBar = lazy(() => import('../Cats/CatChatBanner.jsx').then((module) => ({ default: module.CatWaitingBar })));
 const TerminalPanel = lazy(() => import('./components/sidebars/TerminalPanel'));
 
 const EMPTY_AGENT_EVENTS = [];
@@ -421,6 +425,8 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
   });
   // The agent picked for this chat in the composer (saved with the chat).
   const selectedProfileId = conversationMetadata?.agentProfileId || null;
+  // A Cat's chat: messages go to the Cat (see handleAgentRun).
+  const { cat: catChat } = useCat(conversationMetadata?.catId || null);
   const { agents } = useAgents();
   const selectedAgent = useMemo(() => agents.find((agent) => agent.id === selectedProfileId) || null, [agents, selectedProfileId]);
   const setSelectedAgent = useCallback((agentId) => {
@@ -1135,6 +1141,20 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     const goal = typeof messageObj === 'string' ? messageObj : messageObj?.content;
     if (!goal?.trim() || agentRunning) return;
     const submittedGoal = goal.trim();
+    // A Cat's chat: the message goes to the Cat, which answers here when its
+    // run ends (the chat refreshes live).
+    if (conversationMetadata?.catId && !runOptions.regenerateAssistantMessageId && !runOptions.baseMessages) {
+      try {
+        await catsApi.wake(conversationMetadata.catId, submittedGoal);
+      } catch (catError) {
+        toast.error("Couldn't send it to the Cat", { detail: errorDetail(catError) });
+        if (runOptions?.fromComposer) {
+          setComposerRestore({ text: submittedGoal });
+          throw catError;
+        }
+      }
+      return;
+    }
     const runExperienceMode = runOptions.experienceMode || experienceMode;
     // A conversation keeps the engine it started with; new ones use the picker.
     const runEngine = runOptions.engine || conversationMetadata?.engine || (messages.length > 0 ? 'asyncat' : selectedEngine);
@@ -2288,6 +2308,14 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     return () => window.removeEventListener('asyncat-open-preview', handler);
   }, []);
 
+  // The Cats page opened a tab in a Cat's browser profile: show the browser.
+  const location = useLocation();
+  useEffect(() => {
+    if (!location.state?.openBrowser) return;
+    setShowActivitySidebar(true);
+    setSidePanelTab('preview');
+  }, [location.state]);
+
   // The agent handed a page to the user (sign-in, captcha): show the browser.
   useEffect(() => {
     const browser = window.electronAPI?.browser;
@@ -3101,6 +3129,11 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                 style={{ maxHeight: '100%' }}
               >
                 <div className="max-w-5xl mx-auto px-4 md:px-8 pt-10 pb-16 min-h-full">
+                  {conversationMetadata?.catId ? (
+                    <Suspense fallback={null}>
+                      <CatChatBanner catId={conversationMetadata.catId} />
+                    </Suspense>
+                  ) : null}
                   <AgentRunFeed
                     events={persistedAgentEvents}
                     isRunning={agentRunning}
@@ -3129,6 +3162,11 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
             </div>
 
             <div className="shrink-0">
+              {conversationMetadata?.catId ? (
+                <Suspense fallback={null}>
+                  <CatWaitingBar catId={conversationMetadata.catId} />
+                </Suspense>
+              ) : null}
               {currentPlanEvent && (
                 <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 pt-3">
                   <CurrentPlanPanel
@@ -3139,6 +3177,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                 </div>
               )}
               <MessageInputV2
+                lockedTo={catChat ? { name: catChat.name, avatar: catChat.avatar } : null}
                 prefillValue={composerRestore?.text}
                 key={`conversation-input-${currentConversationId || 'draft'}`}
                 onSubmit={handleComposerSubmit}

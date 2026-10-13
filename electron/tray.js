@@ -86,8 +86,8 @@ function buildContextMenu() {
     },
     ...(IS_LINUX && onTrayClick ? [{ label: 'Quick chat', click: () => onTrayClick(null) }] : []),
     {
-      label: 'Scheduled tasks',
-      click: () => onShow?.('/scheduled'),
+      label: 'Cats',
+      click: () => onShow?.('/cats'),
     },
     { type: 'separator' },
     {

@@ -25,7 +25,8 @@ const SettingsPage = lazy(() => import('../Settings/SettingsPage'));
 const ModelsPage = lazy(() => import('../Models/ModelsPage'));
 const ToolsSkillsPage = lazy(() => import('../Tools/ToolsSkillsPage'));
 const AgentPage = lazy(() => import('../Agent/AgentPage'));
-const ScheduledPage = lazy(() => import('../Scheduled/ScheduledPage'));
+const CatsPage = lazy(() => import('../Cats/CatsPage'));
+const CatPage = lazy(() => import('../Cats/CatPage'));
 
 // Old /workspace and task-board (/tasks) links open the project instead.
 const LegacyProjectRedirect = () => {
@@ -33,8 +34,9 @@ const LegacyProjectRedirect = () => {
   return <Navigate to={projectId ? `/projects/${projectId}` : '/projects'} replace />;
 };
 
-// Automations (Workflows, Schedules, Activity) became one Scheduled page.
-const OLD_SCHEDULED_PATHS = ['automations', 'workflows', 'schedules', 'activity', 'scheduler', 'agent/scheduler'];
+// Automations (Workflows, Schedules, Activity) became one Scheduled page,
+// and scheduled tasks became Cats.
+const OLD_SCHEDULED_PATHS = ['scheduled', 'automations', 'workflows', 'schedules', 'activity', 'scheduler', 'agent/scheduler'];
 
 const LocalApp = ({ children }) => {
   return (
@@ -175,13 +177,18 @@ const createRouter = () => createBrowserRouter([
         errorElement: <RouteErrorElement />
       },
       {
-        path: "scheduled",
-        element: <ScheduledPage />,
+        path: "cats",
+        element: <CatsPage />,
+        errorElement: <RouteErrorElement />
+      },
+      {
+        path: "cats/:catId",
+        element: <CatPage />,
         errorElement: <RouteErrorElement />
       },
       ...OLD_SCHEDULED_PATHS.map((path) => ({
         path,
-        element: <Navigate to="/scheduled" replace />,
+        element: <Navigate to="/cats" replace />,
         errorElement: <RouteErrorElement />
       })),
       {

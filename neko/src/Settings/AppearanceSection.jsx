@@ -11,8 +11,8 @@ import {
   Trash2,
   Wrench,
   FolderKanban,
-  CalendarClock,
-} from "lucide-react";
+  Cat as CatIcon,
+} from 'lucide-react';
 import KeyboardShortcutsSection from "./KeyboardShortcutsSection.jsx";
 import GlobalShortcutsSection from "./GlobalShortcutsSection.jsx";
 import PetSection from "./PetSection.jsx";
@@ -167,11 +167,11 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
           onChange={() => toggleNavItem("projects")}
         />
         <CheckboxRow
-          icon={CalendarClock}
-          label="Scheduled"
-          description="Tasks that run on a schedule"
-          checked={navItemsVisibility.scheduled}
-          onChange={() => toggleNavItem("scheduled")}
+          icon={CatIcon}
+          label="Cats"
+          description="Agents that work on their own"
+          checked={navItemsVisibility.cats}
+          onChange={() => toggleNavItem("cats")}
         />
         <CheckboxRow
           icon={Cpu}

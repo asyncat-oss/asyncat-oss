@@ -1,4 +1,5 @@
 import PropTypes from 'prop-types';
+import { Cat as CatIcon } from 'lucide-react';
 import { ProviderGlyph } from '../Models/modelLogos.jsx';
 import AsyncatMark from './ui/AsyncatMark.jsx';
 import AgentAvatar from '../Agent/AgentAvatar.jsx';
@@ -9,6 +10,14 @@ import { conversationAgentId, conversationEngine, engineDisplayName } from '../A
  * agent) mark, with the custom agent's picture beside it when one was used.
  */
 export default function ConversationBadge({ conversation, agentsById = null, className = '' }) {
+  // A Cat's chat: the Cat answers there.
+  if (conversation?.metadata?.catId) {
+    return (
+      <span className={`relative inline-flex h-4 w-4 shrink-0 items-center justify-center ${className}`} title="A Cat's chat" aria-label="A Cat's chat">
+        <CatIcon className="h-3.5 w-3.5 text-fg-subtle" />
+      </span>
+    );
+  }
   const engine = conversationEngine(conversation);
   const agentId = conversationAgentId(conversation);
   const agent = agentId && agentsById ? agentsById.get(String(agentId)) : null;

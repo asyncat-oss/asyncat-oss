@@ -4,8 +4,8 @@
 // applies these settings.
 //
 // "When the window is closed":
-//   scheduled — keep running in the tray while at least one scheduled task is
-//               on, otherwise quit (the default)
+//   scheduled — keep running in the tray while at least one Cat is on,
+//               otherwise quit (the default; the name is from before Cats)
 //   always    — keep running in the tray until Quit is chosen there
 //   quit      — quit
 // On macOS closing the last window never quit Asyncat (it stays in the Dock),
@@ -48,7 +48,7 @@ export function applyBackgroundUpdate(settings, patch = {}) {
 
 /**
  * Should the app keep running after its window closes? `enabledTasks` is the
- * number of scheduled tasks that are on (null when the backend hasn't said).
+ * number of Cats that are on (null when the backend hasn't said).
  */
 export function keepRunningOnClose({ whenClosed, enabledTasks, platform }) {
   if (whenClosed === 'quit') return false;
@@ -60,7 +60,7 @@ export function keepRunningOnClose({ whenClosed, enabledTasks, platform }) {
 export function stillRunningMessage(whenClosed) {
   return whenClosed === 'always'
     ? 'Asyncat is still running in the background. Quit from the tray icon.'
-    : 'Asyncat is still running so your scheduled tasks can run. Quit from the tray icon.';
+    : 'Asyncat is still running so your Cats can keep working. Quit from the tray icon.';
 }
 
 /**
@@ -92,7 +92,7 @@ export function autostartDesktopEntry({ target, name = 'Asyncat' }) {
     '[Desktop Entry]',
     'Type=Application',
     `Name=${name}`,
-    'Comment=Runs your scheduled tasks in the background',
+    'Comment=Keeps your Cats working in the background',
     `Exec=${quoteDesktopExecArg(target)} --hidden`,
     'Terminal=false',
     'X-GNOME-Autostart-enabled=true',

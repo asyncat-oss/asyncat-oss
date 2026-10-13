@@ -74,7 +74,7 @@ const SettingsPage = () => {
       id: 'background',
       group: 'System',
       label: 'Background',
-      description: 'Keep Asyncat running for scheduled tasks after you close the window, and start it when you log in.',
+      description: 'Keep Asyncat running for your Cats after you close the window, and start it when you log in.',
       icon: Power,
     },
     {

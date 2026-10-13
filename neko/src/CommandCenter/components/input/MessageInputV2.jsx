@@ -817,6 +817,9 @@ export const MessageInputV2 = ({
   pendingInteraction = null,
   onPermissionDecision,
   onAskUserAnswer,
+  // { name, avatar }: messages go to a Cat, which has its own model and
+  // settings, so the pickers are replaced by who you're writing to.
+  lockedTo = null,
 }) => {
   const navigate = useNavigate();
   const isWorkExperience = experienceMode === "work";
@@ -2121,13 +2124,21 @@ export const MessageInputV2 = ({
                   )}
                 </div>
 
-                {(engines.some(item => item.installed) || usesExternalEngine) && (
+                {lockedTo ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium text-fg-muted" title={`Messages go to ${lockedTo.name}, which uses its own brain, model and freedom`}>
+                    {lockedTo.avatar?.startsWith?.('data:image/')
+                      ? <img src={lockedTo.avatar} alt="" className="h-4 w-4 rounded object-cover" />
+                      : <span aria-hidden="true">{lockedTo.avatar || '🐱'}</span>}
+                    To {lockedTo.name}
+                  </span>
+                ) : null}
+                {!lockedTo && (engines.some(item => item.installed) || usesExternalEngine) && (
                   <EnginePicker engine={engine} engines={engines} onChange={onEngineChange} disabled={disabled} />
                 )}
-                {usesExternalEngine && (
+                {!lockedTo && usesExternalEngine && (
                   <EngineModelPicker engine={engine} engines={engines} value={engineModel} onChange={onEngineModelChange} disabled={disabled} />
                 )}
-                {onAgentChange && (agentProfiles.length > 0 || selectedAgentId) && (
+                {!lockedTo && onAgentChange && (agentProfiles.length > 0 || selectedAgentId) && (
                   <AgentPicker
                     agents={agentProfiles}
                     selectedAgentId={selectedAgentId || null}
@@ -2137,7 +2148,7 @@ export const MessageInputV2 = ({
                   />
                 )}
 
-                <div className={usesExternalEngine ? "hidden" : "relative"}>
+                <div className={usesExternalEngine || lockedTo ? "hidden" : "relative"}>
                   <button
                     type="button"
                     onClick={() => setOpenMenu((current) => (current === "model" ? null : "model"))}
@@ -2306,7 +2317,7 @@ export const MessageInputV2 = ({
               </div>
             </div>
 
-              {isWorkExperience && (activeWorkingContext || onWorkingContextChange) && (
+              {isWorkExperience && !lockedTo && (activeWorkingContext || onWorkingContextChange) && (
                 <div className="mt-2 flex flex-wrap items-center gap-1.5 select-none">
             {/* Project and working-folder selector */}
             {activeWorkingContext && (

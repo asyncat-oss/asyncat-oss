@@ -27,7 +27,7 @@ import {
   Sun,
   Trash2,
   Wrench,
-  CalendarClock,
+  Cat as CatIcon,
 } from "lucide-react";
 
 import { useCommandCenter } from "../CommandCenter/context/CommandCenterContextEnhanced";
@@ -41,6 +41,7 @@ import AsyncatMark from "../components/ui/AsyncatMark.jsx";
 import ExternalSessionsSection from "./ExternalSessionsSection.jsx";
 import ConversationBadge from "../components/ConversationBadge.jsx";
 import { useAgents } from "../Agent/useAgents.js";
+import { useWaitingCount } from "../Cats/useCats.js";
 import { isSkippedUpdate, openUpdateScreen } from "../components/updateEvents.js";
 import Tooltip from "../components/ui/Tooltip.jsx";
 import { Menu, MenuItem, MenuSeparator } from "../components/ui/Menu.jsx";
@@ -594,7 +595,8 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
         case "navModels": navigate("/models"); break;
         case "navTools": navigate("/tools"); break;
         case "navScheduled":
-        case "navScheduler": navigate("/scheduled"); break;
+        case "navScheduler":
+        case "navCats": navigate("/cats"); break;
         case "navProfiles": navigate("/agents"); break;
         case "navAgent": navigate("/agents"); break;
         default: break;
@@ -613,7 +615,8 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
   const isOnProjects = basePage === "projects";
   const isOnModels = basePage === "models";
   const isOnAgent = location.pathname === "/agents";
-  const isOnScheduled = location.pathname.startsWith("/scheduled");
+  const isOnCats = location.pathname.startsWith("/cats");
+  const catsWaiting = useWaitingCount();
   const isOnTools = location.pathname.startsWith("/tools");
   const routeConversationId = location.pathname.match(/^\/conversations\/([^/]+)/)?.[1] || null;
   const activeRecentConversationId = routeConversationId;
@@ -685,7 +688,20 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
   const showProjectsTree = !collapsed && navItemsVisibility.projects !== false;
 
   const workspaceItems = [
-    { key: "scheduled", label: "Scheduled", path: "/scheduled", active: isOnScheduled, icon: CalendarClock, hint: shortcutHint("navScheduled") },
+    {
+      key: "cats",
+      label: "Cats",
+      path: "/cats",
+      active: isOnCats,
+      icon: CatIcon,
+      hint: shortcutHint("navScheduled"),
+      // Steps and questions waiting for your answer.
+      badge: catsWaiting > 0 ? (
+        <span aria-label={`${catsWaiting} waiting for you`} className="absolute -right-1.5 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-semibold leading-none text-white">
+          {catsWaiting > 9 ? '9+' : catsWaiting}
+        </span>
+      ) : null,
+    },
     // The full sidebar lists projects below; the rail needs a way in.
     { key: "projects", label: "Projects", path: "/projects", active: isOnProjects, icon: FolderKanban, hint: shortcutHint("navWorkspace") },
   ].filter((item) => navItemsVisibility[item.key] !== false && (collapsed || item.key !== "projects"));
@@ -705,6 +721,7 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
       onClick={() => navigate(typeof item.path === "function" ? item.path() : item.path)}
       isActive={item.active}
       collapsed={collapsed}
+      badge={item.badge || null}
     />
   ));
 

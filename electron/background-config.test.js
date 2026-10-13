@@ -33,7 +33,7 @@ test('closing the window keeps the app only when it should', () => {
   // macOS keeps its usual behaviour unless the user chose Quit.
   assert.equal(keepRunningOnClose({ whenClosed: 'scheduled', enabledTasks: 0, platform: 'darwin' }), true);
   assert.equal(keepRunningOnClose({ whenClosed: 'quit', enabledTasks: 3, platform: 'darwin' }), false);
-  assert.match(stillRunningMessage('scheduled'), /scheduled tasks can run/);
+  assert.match(stillRunningMessage('scheduled'), /Cats can keep working/);
   assert.match(stillRunningMessage('always'), /in the background/);
 });
 

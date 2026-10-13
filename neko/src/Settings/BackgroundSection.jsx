@@ -1,20 +1,20 @@
 // Settings → Background: what closing the window does, and starting Asyncat
-// at login. Scheduled tasks only run while Asyncat is running, so by default
-// it stays in the tray while a task is on. Desktop app only; the rules live
-// in electron/background-config.js.
+// at login. Cats only work while Asyncat is running, so by default it stays
+// in the tray while a Cat is on. Desktop app only; the rules live in
+// electron/background-config.js.
 
 import { useCallback, useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
-import { CalendarClock, Loader2 } from 'lucide-react';
+import { Cat, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Panel } from '../Models/modelPageShared.jsx';
-import { scheduledTasksApi } from '../CommandCenter/api/scheduledTasksApi.js';
+import { catsApi } from '../CommandCenter/api/catsApi.js';
 
 const CHOICES = [
   {
     value: 'scheduled',
-    label: 'Keep running for scheduled tasks',
-    description: 'Asyncat stays in the tray while at least one scheduled task is on, and quits when none are.',
+    label: 'Keep running for Cats',
+    description: 'Asyncat stays in the tray while at least one Cat is on, and quits when none are.',
   },
   {
     value: 'always',
@@ -24,7 +24,7 @@ const CHOICES = [
   {
     value: 'quit',
     label: 'Quit',
-    description: 'Closing the window quits Asyncat. Scheduled tasks only run while it is open.',
+    description: 'Closing the window quits Asyncat. Cats only work while it is open.',
   },
 ];
 
@@ -54,8 +54,8 @@ function closingSummary(settings, enabledTasks) {
   }
   if (enabledTasks === null || enabledTasks === undefined) return '';
   return enabledTasks > 0
-    ? `${enabledTasks} scheduled task${enabledTasks === 1 ? ' is' : 's are'} on, so closing the window leaves Asyncat running in the tray.`
-    : 'No scheduled task is on, so closing the window quits Asyncat.';
+    ? `${enabledTasks} Cat${enabledTasks === 1 ? ' is' : 's are'} on, so closing the window leaves Asyncat running in the tray.`
+    : 'No Cat is on, so closing the window quits Asyncat.';
 }
 
 export default function BackgroundSection() {
@@ -80,7 +80,7 @@ export default function BackgroundSection() {
 
   useEffect(() => {
     let cancelled = false;
-    scheduledTasksApi.list()
+    catsApi.list()
       .then((result) => { if (!cancelled) setEnabledTasks(Number(result.enabledCount) || 0); })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -104,7 +104,7 @@ export default function BackgroundSection() {
     return (
       <Panel className="p-5">
         <p className="text-[13px] text-fg-muted">
-          These settings are for the Asyncat desktop app. In a browser, scheduled tasks run while the Asyncat server is running.
+          These settings are for the Asyncat desktop app. In a browser, Cats work while the Asyncat server is running.
         </p>
       </Panel>
     );
@@ -122,7 +122,7 @@ export default function BackgroundSection() {
         <div className="border-b border-line px-5 py-4">
           <h3 className="text-[15px] font-semibold tracking-[-0.01em] text-fg">When the window is closed</h3>
           <p className="mt-1 text-[13px] leading-5 text-fg-muted">
-            Scheduled tasks run only while Asyncat is running. Closing the window always frees the memory it used.
+            Cats only work while Asyncat is running. Closing the window always frees the memory it used.
           </p>
         </div>
         <div role="radiogroup" aria-label="When the window is closed" className="divide-y divide-line">
@@ -151,11 +151,11 @@ export default function BackgroundSection() {
           })}
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line px-5 py-3 text-[12px] text-fg-subtle">
-          <CalendarClock className="h-3.5 w-3.5" />
+          <Cat className="h-3.5 w-3.5" />
           <span>{closingSummary(settings, enabledTasks)}</span>
           {isMac ? <span>On a Mac, Asyncat stays in the Dock after the window closes unless you choose Quit.</span> : null}
-          <button type="button" onClick={() => navigate('/scheduled')} className="font-medium text-fg-muted underline-offset-2 hover:text-fg hover:underline">
-            Scheduled tasks
+          <button type="button" onClick={() => navigate('/cats')} className="font-medium text-fg-muted underline-offset-2 hover:text-fg hover:underline">
+            Cats
           </button>
         </div>
       </Panel>
@@ -165,7 +165,7 @@ export default function BackgroundSection() {
           <h3 className="text-sm font-medium text-fg">Start Asyncat when you log in</h3>
           <p className="mt-0.5 text-[13px] leading-5 text-fg-muted">
             {settings.loginSupported
-              ? 'Opens in the tray without a window, so scheduled tasks keep running after a restart.'
+              ? 'Opens in the tray without a window, so Cats keep working after a restart.'
               : 'Available in the installed app.'}
           </p>
         </div>
