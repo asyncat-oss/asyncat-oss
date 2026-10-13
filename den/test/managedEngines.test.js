@@ -139,7 +139,21 @@ test('startup clean-up removes half-made copies and puts back stranded ones', as
     const old = Date.now() / 1000 - 24 * 60 * 60;
     fs.utimesSync(legacyTmp, old, old);
 
+    // Downloads: a finished archive is never needed after a restart; a recent
+    // partial one is kept so a retry continues it; an old one goes.
+    const release = path.join(t.home, 'downloads', 'ggml-org_llama.cpp', 'b6500');
+    fs.mkdirSync(release, { recursive: true });
+    fs.writeFileSync(path.join(release, 'llama.zip'), 'done');
+    fs.writeFileSync(path.join(release, 'llama-cuda.zip.part'), 'half');
+    const staleRelease = path.join(t.home, 'downloads', 'ggml-org_llama.cpp', 'b6000');
+    fs.mkdirSync(staleRelease, { recursive: true });
+    fs.writeFileSync(path.join(staleRelease, 'llama.zip.part'), 'old half');
+    const weekAgo = Date.now() / 1000 - 8 * 24 * 60 * 60;
+    fs.utimesSync(path.join(staleRelease, 'llama.zip.part'), weekAgo, weekAgo);
+
     const report = await cleanupManagedEngineLeftovers({ tmpDir: tmp });
+    assert.deepEqual(fs.readdirSync(release), ['llama-cuda.zip.part']);
+    assert.equal(fs.existsSync(staleRelease), false);
     assert.equal(read(path.join(profiles, 'cpu-safe')), 'new');
     assert.equal(read(path.join(profiles, 'vulkan')), 'vulkan');
     assert.deepEqual(fs.readdirSync(profiles).sort(), ['cpu-safe', 'vulkan']);

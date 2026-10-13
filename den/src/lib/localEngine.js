@@ -2,12 +2,12 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { execFileSync, execSync, spawn, spawnSync } from 'child_process';
-import { once } from 'events';
 import { randomUUID } from 'crypto';
 import { ENV_FILE, readEnv, setKey } from './env.js';
 import { setConfigValue } from '../config/appConfig.js';
 import { AUTO_DETECT, runtimeHome } from '../config/runtimeConfig.js';
 import { cudaVersionFromReleaseAsset, isCudaRuntimeCompanionAsset } from './releaseAssetUtils.js';
+import { downloadWithResume } from './engineDownload.js';
 
 // Persist a runtime path. These used to be written to a source-tree .env; they now
 // live in the DB-backed app_config (hydrated into process.env at boot). We set
@@ -64,6 +64,42 @@ export function managedPythonDir() {
 export function managedPythonBinaryPath() {
   if (isWin) return path.join(managedPythonDir(), 'Scripts', 'python.exe');
   return path.join(managedPythonDir(), 'bin', 'python');
+}
+
+// Engine downloads live here while they install. An interrupted download
+// stays as `<file>.part` so the next attempt continues where it stopped;
+// finished archives are deleted once they are unpacked.
+export function managedDownloadsDir() {
+  return path.join(asyncatHome(), 'downloads');
+}
+
+function managedDownloadPath(repo, tag, assetName) {
+  const safe = (value) => String(value || 'latest').replace(/[^A-Za-z0-9._-]+/g, '_');
+  return path.join(managedDownloadsDir(), safe(repo), safe(tag), path.basename(String(assetName)));
+}
+
+async function downloadReleaseAsset({ repo, release, asset, onProgress = null, signal = null }) {
+  const destination = managedDownloadPath(repo, release.tag_name || release.name, asset.name);
+  await downloadWithResume(asset.browser_download_url, destination, {
+    onProgress,
+    signal,
+    expectedSize: Number(asset.size) || 0,
+  });
+  return destination;
+}
+
+/** Delete a finished archive (a `.part` file for a later resume stays). */
+async function discardDownload(file) {
+  if (!file) return;
+  await fs.promises.rm(file, { force: true }).catch(() => {});
+  // Remove the release and repo folders once they are empty.
+  for (let dir = path.dirname(file); pathIsInside(dir, managedDownloadsDir()) && dir !== managedDownloadsDir(); dir = path.dirname(dir)) {
+    try {
+      await fs.promises.rmdir(dir);
+    } catch {
+      break;
+    }
+  }
 }
 
 function pathIsInside(candidate, root) {
@@ -379,6 +415,32 @@ export async function cleanupManagedEngineLeftovers({ now = Date.now(), tmpDir =
       }
     }
   }
+
+  // Finished archives are never needed after a restart; a partial download
+  // is kept for a week so a retry can continue it.
+  const walk = async (dir) => {
+    let entries = [];
+    try {
+      entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await walk(full);
+        await fs.promises.rmdir(full).catch(() => {});
+        continue;
+      }
+      try {
+        const { mtimeMs } = await fs.promises.stat(full);
+        if (entry.name.endsWith('.part') && now - mtimeMs < 7 * 24 * 60 * 60 * 1000) continue;
+        await fs.promises.rm(full, { force: true });
+        report.removed.push(full);
+      } catch { /* gone */ }
+    }
+  };
+  await walk(managedDownloadsDir());
 
   // Older versions unpacked into the temp folder; anything left there is stale.
   try {
@@ -948,7 +1010,7 @@ export function inspectWindowsCudaRuntimeBundle(targetDir, assetName) {
 }
 
 // Returns details about the companion merged into targetDir.
-async function installCudartCompanion(release, mainAssetName, targetDir, onProgress = null) {
+async function installCudartCompanion(release, mainAssetName, targetDir, onProgress = null, { repo = 'ggml-org/llama.cpp' } = {}) {
   if (!isWin) return { installed: false, reason: 'not-windows' };
   const lower = String(mainAssetName || '').toLowerCase();
   const requestedVersion = cudaVersionFromReleaseAsset(lower);
@@ -966,11 +1028,11 @@ async function installCudartCompanion(release, mainAssetName, targetDir, onProgr
   if (!companion) return { installed: false, reason: 'companion-not-published' };
 
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'asyncat-cudart-'));
-  const archivePath = path.join(tmpRoot, companion.name);
   const extractDir = path.join(tmpRoot, 'extract');
+  let archivePath = null;
   try {
     onProgress?.({ phase: 'installing', message: `Downloading CUDA runtime (${companion.name})`, percent: 90 });
-    await downloadFile(companion.browser_download_url, archivePath);
+    archivePath = await downloadReleaseAsset({ repo, release, asset: companion });
     extractArchive(archivePath, extractDir);
     // Upstream usually puts these DLLs at the archive root, but flatten them
     // deliberately so a future wrapper directory cannot leave Windows showing
@@ -986,13 +1048,14 @@ async function installCudartCompanion(release, mainAssetName, targetDir, onProgr
     return { installed: true, asset: companion.name, dlls: runtimeDlls.map(file => path.basename(file)) };
   } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
+    await discardDownload(archivePath);
   }
 }
 
 async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgress = null) {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'asyncat-llama-'));
-  const archivePath = path.join(tmpRoot, asset.name);
   const extractDir = path.join(tmpRoot, 'extract');
+  let archivePath = null;
   const targetDir = managedEngineDir(profile);
   const stagingDir = assertManagedTarget(path.join(
     path.dirname(targetDir),
@@ -1006,7 +1069,7 @@ async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgr
       assetName: asset.name,
       releaseTag: release.tag_name || release.name || 'latest',
     });
-    await downloadFile(asset.browser_download_url, archivePath, progress => {
+    archivePath = await downloadReleaseAsset({ repo: 'ggml-org/llama.cpp', release, asset, onProgress: progress => {
       onProgress?.({
         phase: 'downloading',
         message: `Downloading ${asset.name}`,
@@ -1016,7 +1079,7 @@ async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgr
         assetName: asset.name,
         releaseTag: release.tag_name || release.name || 'latest',
       });
-    });
+    } });
     onProgress?.({
       phase: 'extracting',
       message: `Extracting ${asset.name}`,
@@ -1140,6 +1203,7 @@ async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgr
   } finally {
     if (fs.existsSync(stagingDir)) removeManagedEntry(stagingDir);
     fs.rmSync(tmpRoot, { recursive: true, force: true });
+    await discardDownload(archivePath);
   }
 }
 
@@ -1266,44 +1330,6 @@ export async function fetchLlamaReleaseByTag(tag) {
   });
   if (!res.ok) throw new Error(`GitHub release ${tag} returned ${res.status}`);
   return res.json();
-}
-
-export async function downloadFile(url, destination, onProgress = null) {
-  const res = await fetch(url, {
-    headers: { 'User-Agent': 'asyncat-installer' },
-    signal: AbortSignal.timeout(900000),
-  });
-  if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`);
-  if (!res.body) throw new Error('Download failed: empty response body');
-  fs.mkdirSync(path.dirname(destination), { recursive: true });
-  const totalBytes = Number(res.headers.get('content-length')) || 0;
-  const reader = res.body.getReader();
-  const stream = fs.createWriteStream(destination);
-  let downloadedBytes = 0;
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      const chunk = Buffer.from(value);
-      downloadedBytes += chunk.length;
-      if (!stream.write(chunk)) {
-        await once(stream, 'drain');
-      }
-      onProgress?.({
-        downloadedBytes,
-        totalBytes,
-        percent: totalBytes > 0 ? Math.round((downloadedBytes / totalBytes) * 100) : null,
-      });
-    }
-    await new Promise((resolve, reject) => {
-      stream.on('error', reject);
-      stream.end(resolve);
-    });
-  } catch (err) {
-    stream.destroy();
-    throw err;
-  }
 }
 
 function extractArchive(archivePath, destination) {
@@ -2037,18 +2063,18 @@ export async function installManagedRuntime(runtimeId, { onProgress = null, capa
 
   const asset = ranked[0];
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), `asyncat-${spec.id}-`));
-  const archivePath = path.join(tmpRoot, asset.name);
   const extractDir = path.join(tmpRoot, 'extract');
+  let archivePath = null;
   const targetDir = managedRuntimeRoot(spec);
   const stagingDir = assertManagedTarget(path.join(asyncatHome(), `.${spec.dir}.install-${randomUUID()}`));
 
   try {
     report('downloading', `Downloading ${asset.name}`, 5, { assetName: asset.name });
-    await downloadFile(asset.browser_download_url, archivePath, p => {
+    archivePath = await downloadReleaseAsset({ repo: spec.repo, release, asset, onProgress: p => {
       report('downloading', `Downloading ${asset.name}`, Math.max(5, Math.min(72, p.percent ?? 0)), {
         assetName: asset.name, downloadedBytes: p.downloadedBytes, totalBytes: p.totalBytes,
       });
-    });
+    } });
 
     report('extracting', `Extracting ${asset.name}`, 80, { assetName: asset.name });
     extractArchive(archivePath, extractDir);
@@ -2065,7 +2091,7 @@ export async function installManagedRuntime(runtimeId, { onProgress = null, capa
     ensureLinuxSonameLinks(stagingDir);
     ensureDarwinDylibLinks(stagingDir);
     // Windows CUDA image/audio builds need the cudart companion DLLs too.
-    await installCudartCompanion(release, asset.name, stagingDir, onProgress);
+    await installCudartCompanion(release, asset.name, stagingDir, onProgress, { repo: spec.repo });
 
     let stagedInstalled = findBinaryByNames(stagingDir, spec.binaryNames);
     if (!stagedInstalled) throw new Error(`Could not locate the installed ${spec.label} binary in the staged runtime.`);
@@ -2108,5 +2134,6 @@ export async function installManagedRuntime(runtimeId, { onProgress = null, capa
   } finally {
     if (fs.existsSync(stagingDir)) removeManagedEntry(stagingDir);
     fs.rmSync(tmpRoot, { recursive: true, force: true });
+    await discardDownload(archivePath);
   }
 }
