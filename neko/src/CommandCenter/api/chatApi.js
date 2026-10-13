@@ -24,6 +24,7 @@ export const chatApi = {
         conversationHistory: requestHistory,
         reasoningEffort: opts.reasoningEffort || 'auto',
         fileAttachments: Array.isArray(opts.fileAttachments) ? opts.fileAttachments : [],
+        projectId: opts.projectId || null,
       }),
     });
 

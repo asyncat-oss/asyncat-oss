@@ -27,6 +27,7 @@ const ActionTypes = {
   SET_CONVERSATION_SUMMARIES: 'SET_CONVERSATION_SUMMARIES',
   SET_WORKING_CONTEXT: 'SET_WORKING_CONTEXT',
   SET_CONVERSATION_METADATA: 'SET_CONVERSATION_METADATA',
+  SET_PENDING_SEND: 'SET_PENDING_SEND',
 };
 
 const initialState = {
@@ -44,6 +45,9 @@ const initialState = {
   conversationSummaries: [],
   workingContext: null,
   conversationMetadata: {},
+  // A first message to send as soon as a new chat opens (e.g. typed on a
+  // project page).
+  pendingSend: null,
 };
 
 function normalizeWorkingContext(context) {
@@ -52,6 +56,17 @@ function normalizeWorkingContext(context) {
   // resumes only through a folder that is still attached to a Project.
   if (context.rootId === 'none' || context.noWorkspace) return null;
   const rootId = context.rootId || context.root?.id || null;
+  // A project used without a folder keeps its instructions and knowledge.
+  if (!rootId && context.projectId) {
+    return {
+      rootId: null,
+      projectId: String(context.projectId),
+      projectName: context.projectName || null,
+      projectEmoji: context.projectEmoji || null,
+      relativePath: '.',
+      workingDir: null,
+    };
+  }
   if (!rootId || !String(rootId).startsWith('project:')) return null;
   const relativePath = context.relativePath || context.path || '.';
   return {
@@ -100,6 +115,8 @@ function commandCenterReducer(state, action) {
         currentWorkspace: state.currentWorkspace,
         isGhostMode: action.payload?.keepMode ? state.isGhostMode : false,
       };
+    case ActionTypes.SET_PENDING_SEND:
+      return { ...state, pendingSend: action.payload || null };
     case ActionTypes.SET_CURRENT_CONVERSATION_ID:
       return { ...state, currentConversationId: action.payload };
     case ActionTypes.SET_CONVERSATION_TITLE:
@@ -381,6 +398,14 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
         },
       });
     }
+    const initialMessage = String(options.initialMessage || '').trim();
+    if (initialMessage) {
+      dispatch({ type: ActionTypes.SET_PENDING_SEND, payload: { text: initialMessage, at: Date.now() } });
+    }
+  }, []);
+
+  const clearPendingSend = useCallback(() => {
+    dispatch({ type: ActionTypes.SET_PENDING_SEND, payload: null });
   }, []);
 
   const loadConversation = useCallback(async (conversationId) => {
@@ -510,6 +535,8 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     conversationSummaries: state.conversationSummaries,
     workingContext: state.workingContext,
     conversationMetadata: state.conversationMetadata,
+    pendingSend: state.pendingSend,
+    clearPendingSend,
     justLoadedConversation: state.justLoadedConversation,
     toolsEnabled,
 

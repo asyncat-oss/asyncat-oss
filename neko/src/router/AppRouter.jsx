@@ -20,9 +20,8 @@ import NotFound from '../error/NotFound';
 
 const ChatsPage = lazy(() => import('../CommandCenter/pages/ChatsPage'));
 const TrashPage = lazy(() => import('../CommandCenter/pages/TrashPage'));
-const WorkspaceLayout = lazy(() => import('../projects/WorkspaceLayout'));
-const WorkspaceEmpty = lazy(() => import('../projects/WorkspaceLayout').then((m) => ({ default: m.WorkspaceEmpty })));
-const ProjectOverview = lazy(() => import('../projects/ProjectOverview'));
+const ProjectsHome = lazy(() => import('../projects/ProjectsHome'));
+const ProjectPage = lazy(() => import('../projects/ProjectPage'));
 const SettingsPage = lazy(() => import('../Settings/SettingsPage'));
 const ModelsPage = lazy(() => import('../Models/ModelsPage'));
 const ToolsSkillsPage = lazy(() => import('../Tools/ToolsSkillsPage'));
@@ -105,24 +104,19 @@ const createRouter = () => createBrowserRouter([
       },
       {
         path: "projects",
-        element: <WorkspaceLayout basePath="/projects" section="projects" />,
+        element: <ProjectsHome />,
         errorElement: <RouteErrorElement />,
-        children: [
-          {
-            index: true,
-            element: <WorkspaceEmpty basePath="/projects" />,
-          },
-          {
-            path: ":projectId",
-            element: <ProjectOverview />,
-            errorElement: <RouteErrorElement />,
-          },
-          {
-            path: ":projectId/:tab",
-            element: <ProjectOverview />,
-            errorElement: <RouteErrorElement />,
-          },
-        ],
+      },
+      {
+        path: "projects/:projectId",
+        element: <ProjectPage />,
+        errorElement: <RouteErrorElement />,
+      },
+      {
+        // Old links such as /projects/:id/folders.
+        path: "projects/:projectId/:tab",
+        element: <ProjectPage />,
+        errorElement: <RouteErrorElement />,
       },
       {
         path: "workspace",

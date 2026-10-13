@@ -36,7 +36,7 @@ const CommandCenterV2Enhanced = () => {
   useEffect(() => {
     const startProjectChat = location.state?.startProjectChat;
     if (conversationId || !startProjectChat) return;
-    const requestKey = `${startProjectChat.workingContext?.rootId || 'none'}:${location.key}`;
+    const requestKey = `${startProjectChat.workingContext?.rootId || startProjectChat.workingContext?.projectId || 'none'}:${location.key}`;
     if (handledProjectStartRef.current === requestKey) return;
     handledProjectStartRef.current = requestKey;
 

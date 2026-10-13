@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
-  BriefcaseBusiness,
   Cpu,
   Database,
   Info,
@@ -23,7 +22,6 @@ import StorageSection from './StorageSection';
 import IntegrationsSection from './IntegrationsSection';
 import RuntimeSection from './RuntimeSection';
 import WorkbenchSection from './WorkbenchSection';
-import ProjectsSection from './ProjectsSection';
 
 const TAB_ALIASES = {
   general: 'profile',
@@ -33,7 +31,6 @@ const TAB_ALIASES = {
   server: 'advanced',
   storage: 'advanced',
   updates: 'about',
-  workspace: 'projects',
 };
 
 const SettingsPage = () => {
@@ -51,13 +48,6 @@ const SettingsPage = () => {
       label: 'Profile',
       description: 'Your local display name and avatar.',
       icon: UserRound,
-    },
-    {
-      id: 'projects',
-      group: 'Personal',
-      label: 'Projects',
-      description: 'Create Projects and control their local folder access.',
-      icon: BriefcaseBusiness,
     },
     {
       id: 'appearance',
@@ -111,7 +101,9 @@ const SettingsPage = () => {
   useEffect(() => {
     if (tab === 'server') setAdvancedView('server');
     if (tab === 'storage') setAdvancedView('storage');
-  }, [tab]);
+    // Projects moved out of Settings to their own pages.
+    if (tab === 'projects' || tab === 'workspace') navigate('/projects', { replace: true });
+  }, [navigate, tab]);
 
   const renderProfile = () => (
     <GeneralSection
@@ -152,8 +144,6 @@ const SettingsPage = () => {
     switch (activeTab) {
       case 'profile':
         return renderProfile();
-      case 'projects':
-        return <ProjectsSection />;
       case 'appearance':
         return <AppearanceSection theme={theme} setThemeMode={setTheme} />;
       case 'connections':

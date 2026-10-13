@@ -9,6 +9,7 @@ import { folderName, usageHint } from "../../../Agent/externalAgentFormat.js";
 import eventBus from "../../../utils/eventBus.js";
 import ConfirmModal from "../modals/ConfirmModal.jsx";
 import { WorkingContextModal } from "../modals/WorkingContextModal.jsx";
+import { projectApi } from "../../../projects/projectApi.js";
 import { useLocalModelStatus } from "../../hooks/useLocalModelStatus.js";
 import { useModelConfig } from "../../hooks/useModelConfig.js";
 import { useActiveBrainStatus } from "../../hooks/useActiveBrainStatus.js";
@@ -848,7 +849,19 @@ export const MessageInputV2 = ({
     return fileRoots.find(root => root.id === workingContext?.rootId) || null;
   }, [fileRoots, workingContext?.rootId]);
   const activeWorkingContext = useMemo(() => {
-    if (!isWorkExperience || !activeRoot) return null;
+    if (!isWorkExperience) return null;
+    // A project used without one of its folders: instructions and knowledge only.
+    if (!activeRoot && workingContext?.projectId && !workingContext?.rootId) {
+      return {
+        rootId: null,
+        projectId: workingContext.projectId,
+        projectName: workingContext.projectName,
+        projectEmoji: workingContext.projectEmoji,
+        relativePath: ".",
+        workingDir: null,
+      };
+    }
+    if (!activeRoot) return null;
     const relativePath = workingContext?.relativePath || ".";
     return {
       rootId: activeRoot.id,
@@ -861,7 +874,7 @@ export const MessageInputV2 = ({
       relativePath,
       workingDir: workingContext?.workingDir || absoluteFromRoot(activeRoot.path, relativePath),
     };
-  }, [activeRoot, isWorkExperience, workingContext?.relativePath, workingContext?.rootId, workingContext?.workingDir]);
+  }, [activeRoot, isWorkExperience, workingContext?.projectEmoji, workingContext?.projectId, workingContext?.projectName, workingContext?.relativePath, workingContext?.rootId, workingContext?.workingDir]);
 
   // A removed or unavailable Project folder is cleared only after roots finish
   // loading. Crucially, a null context remains null; it is never replaced with
@@ -1515,6 +1528,24 @@ export const MessageInputV2 = ({
   }, []);
 
   const selectWorkingContext = useCallback((rootId, relativePath = ".") => {
+    if (rootId && typeof rootId === 'object' && rootId.projectOnly) {
+      const project = rootId.project || {};
+      const nextContext = {
+        rootId: null,
+        projectId: project.id,
+        projectName: project.name,
+        projectEmoji: project.emoji,
+        relativePath: ".",
+        workingDir: null,
+      };
+      if (hasMessages && activeWorkingContext?.projectId !== project.id) {
+        setPendingContextSwitch(nextContext);
+        return;
+      }
+      onWorkingContextChange?.(nextContext);
+      setContextModalOpen(false);
+      return;
+    }
     if (rootId === 'none' || !rootId) {
       if (hasMessages && activeWorkingContext) {
         setPendingContextSwitch({ noProject: true });
@@ -1547,8 +1578,15 @@ export const MessageInputV2 = ({
     setContextModalOpen(false);
   }, [activeWorkingContext, fileRoots, hasMessages, onWorkingContextChange]);
 
+  const [projectList, setProjectList] = useState([]);
   const openWorkingContextMenu = useCallback(async () => {
     setContextModalOpen(true);
+    try {
+      const res = await projectApi.getProjects();
+      setProjectList(Array.isArray(res?.data) ? res.data : []);
+    } catch {
+      // The folder list still shows projects that have folders.
+    }
   }, []);
 
   const confirmContextSwitch = useCallback(() => {
@@ -2212,7 +2250,9 @@ export const MessageInputV2 = ({
                 type="button"
                 onClick={openWorkingContextMenu}
                 disabled={disabled || !onWorkingContextChange}
-                title={`This chat can access: ${activeWorkingContext.workingDir}`}
+                title={activeWorkingContext.workingDir
+                  ? `This chat can access: ${activeWorkingContext.workingDir}`
+                  : "Uses this project's instructions and knowledge. No folder is selected, so local files are unavailable."}
                 className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:text-slate-400 midnight:hover:bg-slate-800 midnight:hover:text-slate-100 disabled:opacity-60"
               >
                 {(() => {
@@ -2220,9 +2260,15 @@ export const MessageInputV2 = ({
                   return <RootIcon className="h-3.5 w-3.5 shrink-0 opacity-80" />;
                 })()}
                 <span className="truncate">{activeWorkingContext.projectEmoji || '📁'} {activeWorkingContext.projectName || "Project"}</span>
-                <span className="text-gray-300 dark:text-gray-700 midnight:text-slate-700">/</span>
-                <Folder className="h-3.5 w-3.5 shrink-0 opacity-70" />
-                <span className="truncate">{activeContextLabel}</span>
+                {activeWorkingContext.rootId ? (
+                  <>
+                    <span className="text-gray-300 dark:text-gray-700 midnight:text-slate-700">/</span>
+                    <Folder className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                    <span className="truncate">{activeContextLabel}</span>
+                  </>
+                ) : (
+                  <span className="text-fg-subtle">· no folder</span>
+                )}
                 <ChevronDown className="h-3 w-3 opacity-60" />
               </button>
             )}
@@ -2371,6 +2417,8 @@ export const MessageInputV2 = ({
         onClose={() => setContextModalOpen(false)}
         onSelect={selectWorkingContext}
         fileRoots={fileRoots}
+        projects={projectList}
+        activeProjectId={activeWorkingContext?.projectId || null}
         initialRootId={activeWorkingContext?.rootId || "none"}
         initialRelativePath={activeWorkingContext?.relativePath || "."}
         activeWorkingDir={activeWorkingContext?.workingDir || ""}

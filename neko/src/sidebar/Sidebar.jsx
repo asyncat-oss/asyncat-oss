@@ -786,7 +786,7 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
                 ) : projectGroups.length === 0 ? (
                   <button
                     type="button"
-                    onClick={() => navigate("/projects")}
+                    onClick={() => navigate("/projects", { state: { createProject: true } })}
                     className="w-full rounded-lg px-2.5 py-2 text-left text-xs text-fg-subtle transition-colors hover:bg-hover hover:text-fg-muted"
                   >
                     Create your first project

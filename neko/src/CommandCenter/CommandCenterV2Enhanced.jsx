@@ -258,6 +258,8 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     setWorkingContext = () => {},
     conversationMetadata = {},
     setConversationMetadata = () => {},
+    pendingSend = null,
+    clearPendingSend = () => {},
   } = commandCenterContext || {};
 
   const messagesEndRef = useRef(null);
@@ -1312,6 +1314,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
         ? chatApi.runStream(submittedGoal, activeConversationHistory, controller.signal, {
             reasoningEffort: selectedReasoningEffort,
             fileAttachments,
+            projectId: workingContext?.projectId || null,
           })
         : agentApi.runStream(submittedGoal, activeConversationHistory, activeWorkingContext?.workingDir || null, 25, controller.signal, runOptions.continueSessionId !== undefined ? runOptions.continueSessionId : agentCurrentSessionId, {
         autoApprove: effectiveAgentMode === 'action' ? agentAutoApprove : false,
@@ -1763,6 +1766,15 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     (messageObj) => handleAgentRun(messageObj, { fromComposer: true, experienceMode: pickRunMode(messageObj) }),
     [handleAgentRun, pickRunMode],
   );
+
+  // A message typed elsewhere (a project page's "Start a chat") is sent once
+  // the new chat has opened with its project.
+  useEffect(() => {
+    if (!pendingSend?.text || messages.length > 0 || agentRunning) return;
+    const text = pendingSend.text;
+    clearPendingSend();
+    handleComposerSubmit({ content: text, agentMentions: [], reasoningEffort: 'auto', enabledIntegrationTools: [] });
+  }, [agentRunning, clearPendingSend, handleComposerSubmit, messages.length, pendingSend]);
 
   const handleEditConversationTurn = useCallback(async (messageId, nextContent) => {
     const messageIndex = messages.findIndex(msg => msg.id === messageId);
