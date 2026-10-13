@@ -211,6 +211,13 @@ test('download progress fills its share of the bar instead of stopping at its to
 test('the build of a llama-server installed elsewhere is read from --version, once', { skip: process.platform === 'win32' && 'uses a shell script' }, async () => {
   assert.deepEqual(parseLlamaServerVersion('version: 6123 (abcdef12)\nbuilt with cc 15 for x86_64'), { build: 6123, commit: 'abcdef12' });
   assert.deepEqual(parseLlamaServerVersion('llama-server version: b6200'), { build: 6200, commit: null });
+  // Newer builds print a semantic version with the build number beside it.
+  assert.deepEqual(
+    parseLlamaServerVersion('E ggml_cuda_init: failed\nversion: 0.5.0-dev (build 11160, commit a3c12db9d)\nbuilt with GNU 11.4.0'),
+    { build: 11160, commit: 'a3c12db9d' },
+  );
+  assert.equal(parseLlamaServerVersion('version: 0.5.0-dev\nbuilt with GNU 11.4.0'), null, 'a semantic version alone is not a build number');
+  assert.equal(parseLlamaServerVersion('version: 0 (unknown)'), null, 'build 0 means unknown');
   assert.equal(parseLlamaServerVersion('usage: llama-server [options]'), null);
   assert.equal(llamaBuildFromTag('b6123'), 6123);
   assert.equal(llamaBuildFromTag('latest'), null);

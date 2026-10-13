@@ -1332,14 +1332,20 @@ function runVerifyProbeAsync(binary, arg, timeoutMs, signal = null) {
 }
 
 // ─── llama.cpp versions ───────────────────────────────────────────────────────
-// llama.cpp numbers its builds: release tag "b6123" is build 6123, and
-// `llama-server --version` prints "version: 6123 (abcdef12)".
+// llama.cpp numbers its builds: release tag "b6123" is build 6123.
+// `llama-server --version` prints "version: 6123 (abcdef12)", or in newer
+// builds "version: 0.5.0-dev (build 11160, commit a3c12db9d)".
 
 /** { build, commit } from `llama-server --version` output, or null. */
 export function parseLlamaServerVersion(text) {
-  const match = /version:\s*b?(\d+)(?:\s*\(([0-9a-f]{6,40})\))?/i.exec(String(text || ''));
-  if (!match) return null;
-  return { build: Number(match[1]), commit: match[2] || null };
+  const value = String(text || '');
+  const labelled = /\(build\s+(\d+)(?:,\s*commit\s+([0-9a-f]{6,40}))?\)/i.exec(value);
+  const plain = labelled ? null : /version:\s*b?(\d+)(?:\s*\(([0-9a-f]{6,40})\)|\s*$)/im.exec(value);
+  const match = labelled || plain;
+  const build = match ? Number(match[1]) : 0;
+  // Builds made without git information report build 0: unknown.
+  if (!build) return null;
+  return { build, commit: match[2] || null };
 }
 
 /** The build number in a llama.cpp release tag ("b6123" → 6123), or null. */
