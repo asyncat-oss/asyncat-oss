@@ -21,12 +21,12 @@ import {
   parseChecksums,
   planDownload,
   readDownloadRecord,
-  replaceAppImage,
   sha256File,
   verifiedDownloadFor,
   verifyChecksum,
   writeDownloadRecord,
 } from './update-install.js';
+import { installAppImageUpdate } from './update-rollback.js';
 
 function serve(body, { status = 200, length = body.length } = {}) {
   return new Promise((resolve) => {
@@ -238,10 +238,10 @@ test('downloads with progress, verifies, and swaps an AppImage in place', async 
 
     const sums = new Map([['Asyncat.AppImage', result.sha256]]);
     assert.equal(verifyChecksum({ sums, assetName: 'Asyncat.AppImage', sha256: result.sha256 }).verified, true);
-
-    replaceAppImage(staging, appImage);
+    installAppImageUpdate({ downloaded: staging, appImagePath: appImage, stateFile: path.join(dir, 'update-state.json'), newVersion: '1.0.1', currentVersion: '1.0.0' });
     assert.equal(fs.readFileSync(appImage).length, body.length);
     assert.equal(fs.statSync(appImage).mode & 0o111, 0o111);
+    assert.equal(fs.readFileSync(`${appImage}.previous`, 'utf8'), 'old version');
   } finally {
     server.close();
     fs.rmSync(dir, { recursive: true, force: true });

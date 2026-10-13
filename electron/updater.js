@@ -4,21 +4,31 @@
 // When the user chooses to update, it downloads that file inside the app,
 // checks it against the asset's SHA-256 digest from GitHub and the release's
 // SHA256SUMS.txt (an update that can't be checked is refused), and then (see
-// update-install.js): an AppImage replaces itself and restarts, Windows runs
+// update-install.js): an AppImage replaces itself (keeping the old one until
+// the new one has started, see update-rollback.js) and restarts, Windows runs
 // the installer silently and reopens, and macOS / .deb get the file saved and
 // shown for the last step (unsigned builds, or root needed). Chats and
-// settings are never touched; the updater keeps only two small files in
+// settings are never touched; the updater keeps only small files in
 // userData: the last release check (update-check.json, so checks don't use
-// up GitHub's hourly limit) and the last verified download
-// (update-download.json, so a finished download isn't fetched again).
+// up GitHub's hourly limit), the last verified download
+// (update-download.json, so a finished download isn't fetched again) and a
+// pending AppImage swap (update-state.json).
 
 import fs from 'fs';
 import path from 'path';
-import { app, ipcMain, net, shell } from 'electron';
+import { app, dialog, ipcMain, net, shell } from 'electron';
 import { IS_DEV } from './constants.js';
 import { getMainWindow } from './window.js';
 import { startBackend, stopBackend } from './backend.js';
 import { fetchReleasesCached } from './update-check.js';
+import {
+  dismissRollback,
+  installAppImageUpdate,
+  markBooted,
+  noteLaunch,
+  readUpdateState,
+  rollBack,
+} from './update-rollback.js';
 import {
   DEFAULT_UPDATE_REPO,
   compareVersions,
@@ -40,7 +50,6 @@ import {
   parseChecksums,
   planDownload,
   readDownloadRecord,
-  replaceAppImage,
   verifiedDownloadFor,
   verifyChecksum,
   writeDownloadRecord,
@@ -59,6 +68,7 @@ function updateDir() {
 
 const checkCacheFile = () => path.join(app.getPath('userData'), 'update-check.json');
 const downloadRecordFile = () => path.join(app.getPath('userData'), 'update-download.json');
+const updateStateFile = () => path.join(app.getPath('userData'), 'update-state.json');
 
 let initialized = false;
 let currentUpdate = null;
@@ -247,7 +257,17 @@ async function startUpdate() {
         fs.rmSync(destination, { force: true });
         throw error;
       }
-      if (strategy === 'replace-appimage') replaceAppImage(destination, RUNNING_APPIMAGE);
+      if (strategy === 'replace-appimage') {
+        // The running version stays as <AppImage>.previous until the new one
+        // has started once (see update-rollback.js).
+        installAppImageUpdate({
+          downloaded: destination,
+          appImagePath: RUNNING_APPIMAGE,
+          stateFile: updateStateFile(),
+          newVersion: update.version,
+          currentVersion: app.getVersion(),
+        });
+      }
       if (strategy === 'save-appimage') makeExecutable(destination);
       // A .deb or a saved AppImage is in Downloads: show it there.
       if ((strategy === 'open-installer' || strategy === 'save-appimage') && process.platform === 'linux') {
@@ -328,6 +348,88 @@ function showUpdateFile() {
   return { success: Boolean(download.file) };
 }
 
+// ── After an AppImage update: keep it, or go back ───────────────────────────
+
+// How long a new version gets to bring up its window and backend. Shorter
+// when its last start never got there.
+const BOOT_GRACE_MS = 3 * 60 * 1000;
+const RETRY_BOOT_GRACE_MS = 45 * 1000;
+let bootWatch = null;
+let bootReported = false;
+let offeringRollback = false;
+let bootedWhileOffering = false;
+
+async function offerRollback(pending, reason) {
+  if (offeringRollback) return;
+  offeringRollback = true;
+  try {
+    const current = app.getVersion();
+    const previous = pending.previousVersion || 'the previous version';
+    const options = {
+      type: 'warning',
+      title: 'Asyncat update',
+      message: reason === 'backend'
+        ? `Asyncat ${current} couldn't start its backend.`
+        : `Asyncat ${current} isn't starting properly.`,
+      detail: `You can go back to version ${previous}, which you used before this update. Your chats and settings stay. You can update again later.`,
+      buttons: [`Go back to ${previous}`, 'Keep this version'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    };
+    const win = getMainWindow();
+    const { response } = win ? await dialog.showMessageBox(win, options) : await dialog.showMessageBox(options);
+    if (response !== 0) {
+      // It came up while the question was open: nothing left to watch.
+      if (bootedWhileOffering) markBooted(updateStateFile(), { currentVersion: app.getVersion() });
+      else dismissRollback(updateStateFile());
+      return;
+    }
+    try {
+      const execPath = rollBack(updateStateFile());
+      app.relaunch({ execPath, args: process.argv.slice(1) });
+      app.quit();
+    } catch (error) {
+      dialog.showErrorBox("Couldn't go back", `${error.message}\n\nYou can download an earlier version from ${RELEASES_URL}.`);
+    }
+  } finally {
+    offeringRollback = false;
+  }
+}
+
+/** At startup: is this the first start of an AppImage update? Then watch it. */
+function watchUpdatedAppImage() {
+  if (!RUNNING_APPIMAGE) return;
+  const decision = noteLaunch(updateStateFile(), { currentVersion: app.getVersion(), appImagePath: RUNNING_APPIMAGE });
+  if (decision.action === 'none' || !decision.canRollBack || decision.pending.dismissed) return;
+  // 'offer-rollback': its last start never finished, so ask sooner.
+  const grace = decision.action === 'offer-rollback' ? RETRY_BOOT_GRACE_MS : BOOT_GRACE_MS;
+  bootWatch = setTimeout(() => {
+    if (!bootReported) offerRollback(decision.pending, 'slow');
+  }, grace);
+  bootWatch.unref?.();
+}
+
+/**
+ * main.js calls this once the first window and the backend are up (ok) or
+ * the backend failed (not ok). A new version that came up keeps itself and
+ * its `.previous` copy is removed; one that didn't is offered a way back.
+ */
+export function reportBootResult(ok) {
+  if (IS_DEV || !RUNNING_APPIMAGE || bootReported) return;
+  bootReported = true;
+  clearTimeout(bootWatch);
+  if (ok) {
+    if (offeringRollback) bootedWhileOffering = true;
+    else markBooted(updateStateFile(), { currentVersion: app.getVersion() });
+    return;
+  }
+  const pending = readUpdateState(updateStateFile()).pending;
+  if (pending && pending.version === app.getVersion() && !pending.dismissed && fs.existsSync(pending.previous || '')) {
+    offerRollback(pending, 'backend');
+  }
+}
+
 /** Remove partial downloads and installers of updates that are already installed. */
 function cleanUpOldUpdates() {
   try {
@@ -352,6 +454,7 @@ export function setupAutoUpdater() {
   if (IS_DEV || initialized) return;
   initialized = true;
 
+  watchUpdatedAppImage();
   cleanUpOldUpdates();
 
   setTimeout(() => {

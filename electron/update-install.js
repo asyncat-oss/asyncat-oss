@@ -289,16 +289,6 @@ export function canWriteNextTo(file) {
   }
 }
 
-/**
- * Put a downloaded AppImage in place of the running one. Linux keeps the old
- * file open for the running app, so replacing it is safe; the next start runs
- * the new version.
- */
-export function replaceAppImage(downloaded, appImagePath) {
-  makeExecutable(downloaded);
-  fs.renameSync(downloaded, appImagePath);
-}
-
 /** Arguments for electron-builder's NSIS installer: silent update, then start the app. */
 export const WINDOWS_INSTALLER_ARGS = ['--updated', '/S', '--force-run'];
 

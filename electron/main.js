@@ -11,7 +11,7 @@ import { IS_MAC, IS_WIN, IS_DEV, APP_NAME, WINDOWS_APP_ID, ICONS, BACKEND_URL, B
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 import { togglePopup, closePopup } from './popup.js';
-import { setupAutoUpdater, setupUpdaterIPC } from './updater.js';
+import { reportBootResult, setupAutoUpdater, setupUpdaterIPC } from './updater.js';
 import { initShortcuts, registerShortcutIPC } from './shortcuts.js';
 import { startBackend, stopBackend, isBackendRunning } from './backend.js';
 import { postHostEvent, registerHostHandler, startHostBridge, stopHostBridge } from './hostBridge.js';
@@ -763,6 +763,7 @@ async function bootApp() {
 
   refreshTray();
   setupHostBridge();
+  return !backendError;
 }
 
 // ─── Backend ↔ desktop bridge ─────────────────────────────────────────────────
@@ -916,7 +917,8 @@ app.whenReady().then(async () => {
   });
 
   // Boot the app
-  await bootApp();
+  // A new version that came up properly keeps itself; see update-rollback.js.
+  reportBootResult(await bootApp());
 
   // Re-apply the saved icon now that the window and tray exist.
   applyAppIcon();

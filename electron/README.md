@@ -17,6 +17,7 @@ This directory contains the Electron main-process code that wraps the asyncat de
 | `updater.js` | In-app updates from GitHub Releases (packaged builds): check, download, verify, install |
 | `update-policy.js`, `update-policy.test.js` | Pure version, release and installer-asset selection helpers, and their tests |
 | `update-install.js`, `update-install.test.js` | Pure download, checksum, install and clean-up helpers for the updater, and their tests |
+| `update-rollback.js`, `update-rollback.test.js` | Keeps the previous AppImage as `<AppImage>.previous` until an update has started once, and offers to go back if it doesn't, and their tests |
 | `update-check.js`, `update-check.test.js` | Cached release checks (ETag, saved in `update-check.json`) so checks don't use up GitHub's hourly limit, and their tests |
 | `icon.js` | Lets users pick or upload the running app icon (Dock, window, tray) |
 | `constants.js` | Shared paths, ports, and platform flags |
