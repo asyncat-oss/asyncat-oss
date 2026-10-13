@@ -1895,8 +1895,22 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     setMessages,
   ]);
 
-  const handleToggleMessageFlag = useCallback((messageId, field) => {
-    if (!messageId || field !== 'bookmarked') return;
+  const handleToggleMessageFlag = useCallback((messageId, field, value) => {
+    if (!messageId) return;
+    if (field === 'rating') {
+      // 👍 / 👎 on the answer as shown (its version); the same again takes it
+      // back. 👍 answers can teach a model in Models → Training.
+      const nextMessages = messages.map((msg) => {
+        if (msg.id !== messageId) return msg;
+        const shown = Number.isInteger(msg.activeVariantIndex) ? msg.activeVariantIndex : 0;
+        const { rating, ratedVariant, ...rest } = msg;
+        const same = rating === value && (ratedVariant ?? 0) === shown;
+        return same ? rest : { ...rest, rating: value, ratedVariant: shown };
+      });
+      persistMessageMutation(nextMessages);
+      return;
+    }
+    if (field !== 'bookmarked') return;
     const nextMessages = messages.map(msg => (
       msg.id === messageId ? { ...msg, [field]: !msg[field] } : msg
     ));

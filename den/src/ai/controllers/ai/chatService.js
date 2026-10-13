@@ -277,6 +277,12 @@ class ChatService {
         baseMessage.bookmarked = true;
       }
 
+      // 👍 / 👎 on an answer (which variant was rated); 👍 answers can train a model.
+      if (msg.rating === 1 || msg.rating === -1) {
+        baseMessage.rating = msg.rating;
+        if (Number.isInteger(msg.ratedVariant)) baseMessage.ratedVariant = msg.ratedVariant;
+      }
+
       if (msg.suggestions && Array.isArray(msg.suggestions)) {
         baseMessage.suggestions = msg.suggestions;
       }
@@ -398,6 +404,12 @@ class ChatService {
 
       if (msg.bookmarked === true) {
         baseMessage.bookmarked = true;
+      }
+
+      // 👍 / 👎 on an answer (which variant was rated); 👍 answers can train a model.
+      if (msg.rating === 1 || msg.rating === -1) {
+        baseMessage.rating = msg.rating;
+        if (Number.isInteger(msg.ratedVariant)) baseMessage.ratedVariant = msg.ratedVariant;
       }
 
       if (msg.suggestions && Array.isArray(msg.suggestions)) {

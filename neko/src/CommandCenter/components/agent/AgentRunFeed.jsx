@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
   ChevronDown, ChevronRight, CheckCircle2, XCircle,
-  Loader2, Terminal, Globe, File, FolderOpen, BookMarked,
+  Loader2, Terminal, Globe, File, FolderOpen, BookMarked, ThumbsUp, ThumbsDown,
   Search, Pencil, Trash2, List, Zap, FilePlus, FileDown,
   FileText, LayoutList, ShieldAlert, MessageCircle, Send, GitBranch,
   ShieldOff, Brain, RotateCcw, Link2, Image, ExternalLink, Copy, Volume2, Square, Loader2 as Spinner, Download, Mic, SkipBack, SkipForward,
@@ -1349,6 +1349,8 @@ function AnswerEvent({
   const { thinking: thinkFallback, answer } = extractReasoningFromText(raw);
   const variants = Array.isArray(data?.variants) ? data.variants : [];
   const activeVariantIndex = Number.isInteger(data?.activeVariantIndex) ? data.activeVariantIndex : Math.max(variants.length - 1, 0);
+  // A rating belongs to the version of the answer that was rated.
+  const shownRating = data?.rating && (data?.ratedVariant ?? 0) === (variants.length ? activeVariantIndex : 0) ? data.rating : null;
   const totalTokens = usage?.cumulativeTotalTokens
     || usage?.totalTokens
     || usage?.lastTotalTokens
@@ -1463,6 +1465,20 @@ function AnswerEvent({
               onClick={() => onToggleMessageFlag?.(data?.messageId, 'bookmarked')}
             >
               <BookMarked className="h-3.5 w-3.5" />
+            </MessageAction>
+            <MessageAction
+              label={shownRating === 1 ? 'Remove rating' : 'Good answer'}
+              active={shownRating === 1}
+              onClick={() => onToggleMessageFlag?.(data?.messageId, 'rating', 1)}
+            >
+              <ThumbsUp className="h-3.5 w-3.5" />
+            </MessageAction>
+            <MessageAction
+              label={shownRating === -1 ? 'Remove rating' : 'Not a good answer'}
+              active={shownRating === -1}
+              onClick={() => onToggleMessageFlag?.(data?.messageId, 'rating', -1)}
+            >
+              <ThumbsDown className="h-3.5 w-3.5" />
             </MessageAction>
             {variants.length > 1 && (
               <div className="ml-1 inline-flex items-center gap-0.5 text-[12px] text-fg-subtle">

@@ -241,6 +241,8 @@ function buildEventsFromMessages(messages = []) {
               activeVariantIndex: msg.activeVariantIndex,
               pinned: Boolean(msg.pinned),
               bookmarked: Boolean(msg.bookmarked),
+              rating: msg.rating ?? null,
+              ratedVariant: msg.ratedVariant ?? null,
             },
       });
     }
