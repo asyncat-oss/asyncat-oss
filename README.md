@@ -1,6 +1,6 @@
 # asyncat
 
-**A local-first AI agent desktop app.** 210+ tools. 51 skills. Self-improving. Desktop automation. Fully offline.
+**A local-first AI agent desktop app.** 230+ tools. 51 skills. Agents that work on their own. Self-improving. Desktop automation. Fully offline.
 
 > **v0.8.0-beta.8** · MIT · [Install](#quick-start) · [Screenshots](#screenshots) · [Website](https://asyncat.com)
 
@@ -14,7 +14,7 @@
 
 asyncat is a full-stack AI agent you run on your own hardware as a **native desktop application** (powered by Electron). It bundles a backend API engine (`den`) and a React web interface (`neko`) into a single installable app. You connect any model — local or cloud — and it can do real work on your machine.
 
-It is not a chatbot wrapper. It controls your screen, writes and runs code, manages files, schedules recurring jobs, and gets better over time through a self-improving engine called Basal Ganglia.
+It is not a chatbot wrapper. It controls your screen, writes and runs code, manages files, runs agents (Cats) that work on their own when something happens, and gets better over time through a self-improving engine called Basal Ganglia.
 
 ---
 
@@ -22,30 +22,33 @@ It is not a chatbot wrapper. It controls your screen, writes and runs code, mana
 
 | | |
 |---|---|
-| **210+ tools** | Files, shell, git, browser, Docker, screen, keyboard, semantic memory, RAG, notes, system, network, audio, image, design canvases, code analysis, sandboxes, scheduled tasks, model management, integrations |
+| **230+ tools** | Files, shell, git, browser, Docker, screen, keyboard, semantic memory, RAG, notes, system, network, audio, image, design canvases, code analysis, sandboxes, Cats, model management, integrations, and any tools your connectors add |
 | **51 bundled skills** | Reusable instruction modules: code review, debugging, TDD, deployment, security audit, incident response, data engineering, and more |
 | **Basal Ganglia** | Watches which tools succeed for which kinds of goals. After 3 successful runs of the same goal pattern with the same set of tools it writes a new skill automatically. No annotation, no config |
 | **One chat box** | Chat and agent work happen in the same place. The **Tools** setting decides per message: **Auto** runs the agent when the model supports tools or a project, file or mention is involved; **Just chat** talks to the model directly; **Always use tools** always runs the agent. The agent works in `plan` (read-only tools), `action` (full ReAct loop, asks before risky tools) or **Yolo** (`action` with auto-approve). A `design` mode (canvases, artifacts and images; no source edits or shell/git writes) is available through the API |
-| **Claude Code and Codex** | Hand a chat to Claude Code or Codex installed on your computer, signed in with your own account. Pick one, and its model, under the message box; follow-ups continue the same session and its steps show in the chat. Your existing Claude Code and Codex sessions (from the terminal or their apps) are listed in the sidebar: open one and carry on where you left off. In Action mode Claude Code asks through the usual approval card before running commands. **Customize → Agents → Coding agents** shows install and sign-in status, plan usage limits, and every session |
+| **Claude Code, Codex and ACP agents** | Hand a chat to Claude Code or Codex installed on your computer, signed in with your own account. Pick one, and its model, under the message box; follow-ups continue the same session and its steps show in the chat. Your existing Claude Code and Codex sessions (from the terminal or their apps) are listed in the sidebar: open one and carry on where you left off. In Action mode Claude Code asks through the usual approval card before running commands. Any agent that speaks the Agent Client Protocol (Gemini CLI, Qwen Code, Goose, …) can answer chats too: its edits show as diffs on the approval card, and its file access stays inside the chat's project folder. **Customize → Agents → Coding agents** shows install and sign-in status, plan usage limits, ACP agents and every session |
 | **Projects** | A home for related work, like Claude and ChatGPT Projects: custom instructions every chat in it follows, files it knows (text, PDF, Word and images), its chats, and optionally folders the agent can work in. Files that fit in the model's context window go in whole; bigger sets are searched and the relevant passages sent. The project page shows how much of the model's window they take and whether the model can see images. Things the agent remembers in a project stay with that project |
-| **Approvals** | Before a risky tool runs, the agent asks: approve once, trust it for the rest of the run, or always allow. File edits show the diff before you decide. With nobody to ask (a scheduled run, an API call), risky tools are refused |
-| **Security** | The agent's shell commands run in a sandbox (bubblewrap on Linux, sandbox-exec on macOS) that can read your files but only write in the project folder, temporary folders and package caches. Commands only skip approval when a parser proves them read-only. Text from web pages, email and other outside sources is marked as information, not instructions. API keys and sign-in tokens are stored encrypted, with the key in your system keychain |
+| **Approvals** | Before a risky tool runs, the agent asks: approve once, trust it for the rest of the run, or always allow. File edits show the diff before you decide. **Settings → Privacy & safety** lists every always-allowed tool, in chats, agents and Cats, with a way to take it back. With nobody to ask (an API call), risky tools are refused; a Cat asks in your inbox |
+| **Privacy & safety** | The agent's shell commands run in a sandbox (bubblewrap on Linux, sandbox-exec on macOS) that can read your files but only write in the project folder, temporary folders and package caches. Commands only skip approval when a parser proves them read-only. Text from web pages, email and other outside sources is marked as information, not instructions. API keys and sign-in tokens are stored encrypted, with the key in your system keychain. **Settings → Privacy & safety** sets where new chats start (Plan or Action), lists sites no agent may open, shows where your data lives, exports everything to one zip and deletes everything |
 | **Small prompts for local models** | Each agent step sends a core set of tools (about 40, or 24 for models that read tools from the prompt) instead of the full list. The agent finds the rest with `tool_search` when it needs them |
 | **35+ providers** | OpenAI, Anthropic, Gemini, Ollama, llama.cpp, MLX, LM Studio, OpenRouter, DeepSeek, Groq, Together AI, Mistral, Perplexity, Cohere, and more |
-| **Agents** | Make your own agents, like GPTs and Gems: a name and picture, instructions, files it knows, starter prompts, what it may do (web, files, documents, memory, integrations, computer) and its own model. Start from a template, then pick an agent in the message box; scheduled tasks can use one too. Coding agents (Claude Code, Codex) have their own tab |
+| **Agents** | Make your own agents, like GPTs and Gems: a name and picture, instructions, files it knows, starter prompts, what it may do (web, files, documents, memory, integrations, computer), which connectors it may use and its own model. Start from a template, then pick an agent in the message box; a Cat can use one too. Coding agents (Claude Code, Codex, ACP agents) have their own tab |
 | **Desktop automation** | Click, type, read screen content via OCR, focus windows — controls your actual machine (X11 and Wayland) |
 | **Sandboxes** | Isolated workspace copies. Review changes as a unified diff. Apply or discard. Commit to a branch |
-| **Scheduled tasks** | Prompts that run on their own: once, daily, on weekdays, on chosen days of the week, every few hours, or on a cron expression, in any time zone. Each task has its own chat where every run's prompt and answer land, and a desktop notification says when it's done. Runs missed while the computer slept are made up once if they are less than 12 hours late. Ask in any chat ("every weekday at 8am, summarise my email") or use the **Scheduled** page. Unattended runs only use safe tools and the ones the task pre-approves, and can't create other tasks |
+| **Cats** | Agents that work on their own. A Cat has a mission, wakes on a schedule or when something happens (an email arrives, a feed or web page changes, a file lands in a folder), works in its own folder with its own browser profile and memories, and reports in its own chat and in your inbox. You choose how free it is (ask first, ask for risky steps, or work alone), its daily limits, the sites it may visit and the connectors it may use. When it needs your OK or an answer it waits in the inbox, and you can rate a run so it does better next time. Ask in any chat ("every weekday at 8am, summarise my email") or use the **Cats** page |
 | **Command palette** | `Cmd/Ctrl+K` from anywhere — jump to any page, or search projects, notes, chats, and memory |
 | **Semantic memory** | Recall by meaning, not just keywords. Uses your provider's embeddings when available, falls back to an offline keyword (hashed lexical) index |
 | **Built-in browser** | A real tabbed browser the agent shares, running in the desktop app so it works even with the chat or window closed. The agent reads pages as an outline with element references and clicks and types with real input; typing into password or card fields, and buy, send or delete buttons, ask you first. Sign-in pop-ups work, the agent can hand a page to you to sign in, and its web tools share the browser's sign-ins |
-| **MCP support** | Add stdio MCP servers to `data/mcp.json` in the backend data folder (`den/data/mcp.json` from source, `<user data>/data/mcp.json` when installed). It is created on first start and hot-reloaded. Also manageable through `/api/agent/mcp` (no UI yet) |
-| **Persistent memory** | SQLite-backed memory with types: `user`, `feedback`, `project`, `reference`, `fact`, `preference`, `context`, `task_state`. Memories made in a project stay in it; ones about you apply everywhere |
+| **Connectors (MCP)** | Give agents and Cats tools from other apps: pick one from the catalog (GitHub, Notion, Linear, Sentry, Supabase, Stripe, …), add a remote server with OAuth sign-in or a key, or run a program on this computer. Commands that download first (`npx`, `uvx`, `docker`) show the size and wait for your OK. Tools that only read run without asking; others ask first. Each agent and Cat can be limited to the connectors it needs. **Settings → Connections → Connectors**; saved in `data/mcp.json`, the format other MCP apps use |
+| **Persistent memory** | SQLite-backed memory with types: `user`, `feedback`, `project`, `reference`, `fact`, `preference`, `context`, `task_state`. Memories made in a project stay in it; ones about you apply everywhere; a Cat's stay its own. **Tools & Skills → Memory** shows whose each memory is, filters by project, agent or Cat, and lets you edit or add memories |
 | **Notes** | The agent writes notes as documents in the chat; open one to edit it (rich text, tables, line, bar, area, pie, donut and scatter charts, export to DOCX/PDF). `Cmd/Ctrl+K` finds them |
-| **System tray** | Left-click for quick chat; the menu shows Asyncat, opens scheduled tasks, restarts the backend, or quits. Closing the window leaves Asyncat in the tray while a scheduled task is on (**Settings → Background**), and it can start at login, hidden in the tray |
+| **System tray** | Left-click for quick chat; the menu shows Asyncat, opens Cats, restarts the backend, or quits. Closing the window leaves Asyncat in the tray while a Cat is on (**Settings → Background**), and it can start at login, hidden in the tray |
 | **Global shortcuts** | `Cmd/Ctrl+Shift+A` summons Asyncat from any app; `Cmd/Ctrl+Shift+Space` opens quick chat. Change or turn off either one in **Settings → Appearance** |
-| **Fine-tuning (Labs)** | **Customize → Models → Training** trains a LoRA adapter for a local model and saves it to disk. Loading the adapter is still up to you |
-| **Native notifications** | System-level alerts when a background run finishes, asks you a question, or needs tool approval |
+| **Training (Labs)** | **Customize → Models → Training** teaches a small local model your style in four steps: pick data (answers you rated 👍, notes, project files), see which model fits your GPU and roughly how long it takes, train, then load the adapter into llama.cpp and compare answers with it off and on. Works on NVIDIA GPUs with 6 GB or more for models up to about 3B. New, and so far only tested with stand-ins for the GPU parts |
+| **Voice and pictures** | **Models → Voice** and **Models → Images** set up speech to text, reading answers aloud and making pictures, on this computer (with the size shown before anything downloads) or through a provider. The mic is hands-free in voice mode. Everything agents make, pictures, documents, pages and data, is in the **Gallery** |
+| **Interactive answers** | Tables in answers sort, filter and copy as CSV; an answer can end with follow-up buttons; an agent's question can come as a small form. Rate answers 👍 or 👎 |
+| **Bring your chats** | Import ChatGPT and Claude data exports as chats, with their dates, and paste in your ChatGPT memories (**Settings → Privacy & safety**) |
+| **Native notifications** | System-level alerts when something finishes, an agent needs your OK, or asks you something; choose which in **Settings → Notifications**, and set quiet hours |
 | **Fully offline** | Every feature works with local models. No data leaves your machine (installed builds only check GitHub Releases for updates) |
 
 ---
@@ -54,12 +57,20 @@ It is not a chatbot wrapper. It controls your screen, writes and runs code, mana
 
 | | |
 |---|---|
-| ![Home screen with the sidebar, light theme](docs/images/home.png) | ![Coding agents page with Claude Code, Codex and their sessions](docs/images/coding-agents.png) |
-| **One chat box**: pick who answers (Asyncat, Claude Code or Codex) and the model; your Claude Code and Codex sessions sit in the sidebar. | **Coding agents**: install and sign-in status, plan usage, and every Claude Code and Codex session on this computer. |
-| ![Models page, Add provider view](docs/images/models.png) | ![Update screen with release notes](docs/images/update.png) |
-| **Models**: the model in use, a searchable provider directory, local models, voice, images, usage and training. | **Updates** download, get checked against the release checksums, and install from inside the app. |
-| ![A project page with its chats, instructions, files and how much of the model's context they take](docs/images/projects.png) | ![Agents page with two agents and templates to start from](docs/images/agents.png) |
-| **Projects**: instructions every chat follows, files the agent knows (with how much of the model's context they take), chats, and optional folders. | **Agents**: your own agents with instructions, files, starter prompts, abilities and a model; pick one in the message box. |
+| ![Home screen with the sidebar, light theme](docs/images/home.png) | ![Cats page with two Cats and what each did last](docs/images/cats.png) |
+| **One chat box**: pick who answers (Asyncat, Claude Code, Codex or an ACP agent), the model, a project and Plan or Action. | **Cats**: agents that work on their own, each with a mission, what wakes it, and what it did last. |
+| ![Coding agents page with Claude Code, Codex and an ACP agent](docs/images/coding-agents.png) | ![Settings, Connectors, with a connected connector and the catalog](docs/images/connectors.png) |
+| **Coding agents**: Claude Code and Codex with their sign-in status, plus any Agent Client Protocol agent. | **Connectors**: tools from other apps for agents and Cats, from the catalog, a remote server or a program on this computer. |
+| ![Models page with the model in use and providers](docs/images/models.png) | ![Voice setup with listening models and voices](docs/images/voice.png) |
+| **Models**: the model in use, providers, local models, voice, images, usage and training. | **Voice**: listening and reading aloud on this computer, with sizes shown before anything downloads. |
+| ![A project page with its instructions and knowledge](docs/images/projects.png) | ![Agents page with two agents and templates](docs/images/agents.png) |
+| **Projects**: instructions every chat follows, files the agent knows, chats, and optional folders. | **Agents**: your own agents with instructions, files, starter prompts, abilities, connectors and a model. |
+| ![An answer with a sortable table and follow-up buttons](docs/images/interactive-table.png) | ![Gallery of pictures, documents, pages and data agents made](docs/images/gallery.png) |
+| **Interactive answers**: tables sort and filter, and follow-up buttons send the next message. | **Gallery**: everything agents made, from any project, agent or Cat, with a viewer for each. |
+| ![Training, picking a model that fits the GPU](docs/images/training.png) | ![Settings, Privacy and safety](docs/images/privacy.png) |
+| **Training (Labs)**: which model fits your GPU, how long it takes, and what it downloads first. | **Privacy & safety**: where chats start, always-allowed tools, sites agents never open, your data. |
+| ![Memory page with memories marked by project and Cat](docs/images/memory.png) | ![Update screen with release notes](docs/images/update.png) |
+| **Memory**: whose each memory is, filtered by project, agent or Cat; edit or add your own. | **Updates** download, get checked against the release checksums, and install from inside the app. |
 
 ---
 
@@ -68,8 +79,8 @@ It is not a chatbot wrapper. It controls your screen, writes and runs code, mana
 Moving from a web app to a native desktop app unlocks things that aren't possible in a browser:
 
 - **Global keyboard shortcut** — `Cmd/Ctrl+Shift+A` brings Asyncat up from anywhere on your machine, whether you're in a code editor, a terminal, or a browser. No alt-tabbing to find the right tab. If it clashes with a shortcut you use, pick another combination or turn it off in **Settings → Appearance**.
-- **System tray** — Quick chat is one click away in your menu bar. While a scheduled task is on, closing the window leaves Asyncat running in the tray so the task still runs; otherwise closing the window quits it (on macOS it stays in the Dock as usual). **Settings → Background** changes this to always keep running or always quit, and can start Asyncat at login, hidden in the tray.
-- **Native notifications** — When a background run finishes, asks you something, or needs approval, you get a real OS notification, not a browser popup that requires a permission grant.
+- **System tray** — Quick chat is one click away in your menu bar. While a Cat is on, closing the window leaves Asyncat running in the tray so the Cat still works; otherwise closing the window quits it (on macOS it stays in the Dock as usual). **Settings → Background** changes this to always keep running or always quit, and can start Asyncat at login, hidden in the tray.
+- **Native notifications** — When a chat or Cat finishes, asks you something, or needs approval, you get a real OS notification, not a browser popup that requires a permission grant.
 - **No browser security sandbox** — Screen capture, keyboard control, OCR, and desktop automation tools run without the restrictions that a browser tab imposes.
 - **Single instance** — One Asyncat, always. The OS prevents you from accidentally opening duplicates.
 - **Auto-restart backend** — If the backend crashes, Electron detects it and restarts it automatically. No terminal babysitting.
@@ -127,7 +138,7 @@ npm run test:release     # desktop app and release scripts
 npm run test:e2e         # end-to-end smoke test in a headless browser
 ```
 
-The end-to-end test starts a throwaway copy of Asyncat (its own data folder and ports) with a fake model and clicks through chat, projects, agents, scheduled tasks and the main pages. It needs a Chromium-based browser (Chrome, Chromium, Edge or Brave) and never touches your data.
+The end-to-end test starts a throwaway copy of Asyncat (its own data folder and ports) with a fake model, a fake MCP server and a fake ACP agent, and clicks through chat, projects, agents, Cats, connectors, Privacy & safety, training and the main pages. It needs a Chromium-based browser (Chrome, Chromium, Edge or Brave) and never touches your data.
 
 #### 3. Build & Package Distributables
 
@@ -232,7 +243,7 @@ chmod +x Asyncat-*.AppImage
 | `Cmd/Ctrl+R` | Reload window |
 | `Shift+F5` | Force reload window (ignore cache) |
 
-Page navigation shortcuts (`Cmd/Ctrl+1`…, `Cmd/Ctrl+4` for Scheduled) and the two global shortcuts can be changed in **Settings → Appearance**. The global ones can also be turned off.
+Page navigation shortcuts (`Cmd/Ctrl+1`…, `Cmd/Ctrl+4` for Cats) and the two global shortcuts can be changed in **Settings → Appearance**. The global ones can also be turned off.
 
 ---
 
@@ -261,15 +272,19 @@ Open **Projects** in the sidebar and create one. On its page, add **instructions
 
 Open **Customize → Agents** to make an agent: start from a template or a blank one, give it instructions, files, starter prompts, what it may do and, if you like, its own model. Pick it in the message box; its starter prompts show on a new chat.
 
-### 4. Run scheduled tasks
+### 4. Set up Cats
 
-Open **Scheduled** in the sidebar and create a task: what it should do, when (once, daily, weekdays, chosen days, every few hours, or a cron expression under **Advanced**), and optionally a project and an agent. Or just ask in a chat: "every Monday at 9, list what changed in my project last week". Each run's answer lands in the task's chat with a notification; **Run now** tries it straight away.
+Open **Cats** in the sidebar and make one: its mission, what wakes it (a schedule, new email, a feed or web page that changes, a file in a folder), its brain (an agent, a model, a project), and how free it is. Or just ask in a chat: "every Monday at 9, list what changed in my project last week". Each run reports in the Cat's chat; questions and steps that need your OK wait in the inbox at the top of the Cats page. Old scheduled tasks were turned into Cats on the first start of this version.
 
-A run gets its project's and agent's instructions and files, like a chat would. Nobody approves tools during a scheduled run, so tools that normally ask first are refused unless the task lists them under **Advanced → Pre-approved tools**. Old schedules and workflows were turned into scheduled tasks on the first start of this version: one-step workflows keep their schedule, longer ones become one prompt with numbered steps and start paused.
+### 5. Connect your apps
 
-### 5. Manage skills and memory
+**Settings → Connections → Connectors** adds tools from other apps: pick one from the catalog, sign in, and agents and Cats can use it. Limit an agent or a Cat to the connectors it needs in its settings.
 
-Go to **Customize → Tools & Skills** to browse the tool inventory, load skill modules, edit agent soul, and review memory entries.
+### 6. Make it yours
+
+- **Customize → Tools & Skills** browses the tools, loads skills, edits the agent's soul, and shows memories by project, agent or Cat (edit or add your own).
+- **Settings → Privacy & safety** sets where new chats start, revokes always-allowed tools, lists sites agents never open, imports your ChatGPT or Claude chats, and exports or deletes everything.
+- **Settings → Notifications** picks what notifies you, with quiet hours. The search box at the top of Settings finds any setting.
 
 ---
 
@@ -282,7 +297,7 @@ asyncat-oss/
 │   ├── backend.js   #   Spawns den (bundled Node.js when packaged, system Node in dev)
 │   ├── window.js    #   BrowserWindow creation and loading screen
 │   ├── tray.js      #   System tray icon and menu
-│   ├── background.js #  Keep running in the tray for scheduled tasks, start at login
+│   ├── background.js #  Keep running in the tray for Cats, start at login
 │   ├── popup.js     #   Quick-chat popup
 │   ├── pet.js       #   Optional desktop companion that shows agent status
 │   ├── updater.js   #   Update checks, download, checksum and install (update-install.js)
@@ -294,32 +309,42 @@ asyncat-oss/
 │   ├── src/
 │   │   ├── index.js           # Server entry (routes, DB, CORS, SSE streaming)
 │   │   ├── agent/             # AgentRuntime, BasalGanglia, tools, skills, souls,
-│   │   │                      #   sessions, SandboxManager, Scheduler (scheduled tasks), profiles
+│   │   │                      #   sessions, SandboxManager, profiles, ACP client (agent/acp)
 │   │   ├── ai/                # Providers, local engines, chat/agent/training routes
+│   │   ├── boot/              # Runs first at start: a requested "Delete everything"
 │   │   ├── browser/           # Built-in browser history (/api/browser)
+│   │   ├── cats/              # Cats: store, clock and triggers, runs, inbox (/api/cats)
 │   │   ├── config/            # Config + secrets API (/api/config)
+│   │   ├── connectors/        # MCP connectors: config, OAuth, download checks (/api/connectors)
 │   │   ├── db/                # SQLite client + schema
 │   │   ├── files/             # File explorer service (/api/files)
+│   │   ├── importers/         # ChatGPT and Claude exports (/api/import)
 │   │   ├── install/           # Runtime readiness checks (/api/install)
 │   │   ├── integrations/      # RSS, mail, outbound notifications
 │   │   ├── knowledge/         # Project and agent files: text extraction, search, context sizing
 │   │   ├── lib/               # Shared helpers: .env I/O, system deps, engine installs, secret encryption
+│   │   ├── made/              # Everything agents made, for the Gallery (/api/made)
+│   │   ├── media/             # Voice and picture setup, the picture gallery (/api/media)
 │   │   ├── middleware/        # Local profile context, cross-site request guard
 │   │   ├── notes/             # Delta-based notes, export (/api/notes)
+│   │   ├── privacy/           # Blocked sites, export everything, delete everything (/api/privacy)
 │   │   ├── search/            # Universal search (/api/search)
 │   │   ├── storage/           # Uploaded files (/files, /api/storage)
+│   │   ├── training/          # Guided training: data, plans, adapters (/api/training/guide)
 │   │   ├── update/            # Update status and graceful restart (/api/update)
 │   │   └── users/             # Local profile + workspace/project CRUD
-│   ├── data/                  # SQLite DB, uploads, MCP config (created at runtime)
+│   ├── data/                  # SQLite DB, uploads, connectors, adapters (created at runtime)
 │   └── test/                  # node:test suites (npm test -w den)
 ├── neko/            # React + Vite frontend
 │   └── src/
 │       ├── CommandCenter/     # Chat and agent runs
 │       ├── Agent/             # Agents page (your agents and the agent editor, coding agents)
 │       ├── Models/            # LLM providers, local models and runtimes, audio, images
-│       ├── Scheduled/         # Scheduled tasks
-│       ├── Tools/             # Tools & skills browser
-│       ├── Training/          # Fine-tuning jobs (shown as Models → Training)
+│       ├── Cats/              # Cats page, a Cat's page, the inbox
+│       ├── Connectors/        # Settings → Connections → Connectors
+│       ├── Tools/             # Tools & skills browser, the Memory page
+│       ├── Training/          # Guided training (shown as Models → Training)
+│       ├── made/              # Gallery: everything agents made
 │       ├── Settings/          # Settings tabs
 │       ├── projects/          # Projects: instructions, files, chats and folders
 │       ├── sidebar/           # Sidebar, Claude Code & Codex sessions, Cmd/Ctrl+K search
@@ -344,8 +369,8 @@ Electron starts
     offers the diagnostic logs and the app continues)
   → starts the static frontend server (neko/dist/) on port 8717 unless Vite is running
   → BrowserWindow loads http://127.0.0.1:8717 (packaged) or http://localhost:8717 (Vite)
-  → connects the backend ↔ desktop bridge (/api/host): notifications, scheduled-task
-    state and the built-in browser, which runs in the desktop app
+  → connects the backend ↔ desktop bridge (/api/host): notifications, Cat state
+    and the built-in browser, which runs in the desktop app
 ```
 
 ### Agent runtime flow
@@ -419,12 +444,12 @@ Packaged builds check GitHub Releases automatically and update from inside the a
 
 ## Status
 
-**asyncat is a mature beta.** It has been built and tested across real agent sessions covering coding, research, system administration, scheduling, and desktop automation tasks.
+**asyncat is a mature beta.** It has been built and tested across real agent sessions covering coding, research, system administration, agents that work on their own, and desktop automation tasks.
 
 **Active development:**
 - [ ] Multi-platform clients (Telegram, Slack)
 - [ ] API/SDK for programmatic access
-- [ ] Extended MCP ecosystem compatibility
+- [ ] Training tested on more GPUs, and on Macs
 
 ---
 
