@@ -240,17 +240,27 @@ seed().then(async () => {
     }, 5000);
 
     try {
-      // Stop child processes (whisper, llama, mlx, tts)
+      // Stop every child process the backend started: the model servers
+      // (llama, whisper, tts, mlx), image generations, training runs, and
+      // engine or training installs in progress (their downloads, unzip and
+      // pip). An install stopped this way leaves the installed copy as it was.
       const { stopWhisper } = await import('./ai/controllers/ai/whisperServerManager.js');
       const { stopTts } = await import('./ai/controllers/ai/ttsServerManager.js');
-      const { stopServer: stopLlama } = await import('./ai/controllers/ai/llamaServerManager.js');
+      const { stopServer: stopLlama, cancelAllEngineInstalls } = await import('./ai/controllers/ai/llamaServerManager.js');
       const { stopServer: stopMlx } = await import('./ai/controllers/ai/mlxServerManager.js');
+      const { stopSdCpp } = await import('./ai/controllers/ai/sdCppManager.js');
       const { stopAllTraining } = await import('./ai/controllers/ai/trainingJobManager.js');
+      const { stopTrainingInstalls } = await import('./lib/trainingEngine.js');
+      const { cancelAllRuntimeInstallJobs } = await import('./lib/runtimeInstallJobs.js');
+      cancelAllEngineInstalls();
+      cancelAllRuntimeInstallJobs();
+      stopTrainingInstalls();
       await Promise.all([
         stopWhisper().catch(e => logger.warn('Whisper stop error:', e.message)),
         stopTts().catch(e => logger.warn('TTS stop error:', e.message)),
         stopLlama().catch(e => logger.warn('Llama stop error:', e.message)),
         stopMlx().catch(e => logger.warn('MLX stop error:', e.message)),
+        stopSdCpp().catch(e => logger.warn('Image generation stop error:', e.message)),
         stopAllTraining().catch(e => logger.warn('Training stop error:', e.message)),
       ]);
     } catch (err) {

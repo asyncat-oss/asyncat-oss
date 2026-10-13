@@ -12,6 +12,9 @@ import { runtimeGeneratedImagesPath, runtimeHome } from '../../../config/runtime
 
 const execFileAsync = promisify(execFile);
 const IS_WIN = process.platform === 'win32';
+// Image generations in progress (each is an `sd` process that can run for
+// minutes), so the backend can stop them when it shuts down.
+const activeGenerations = new Set();
 const GENERATED_DIR = runtimeGeneratedImagesPath();
 const GENERATION_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -100,6 +103,27 @@ function imageModelChoices() {
     }));
 }
 
+/** Stop every image generation in progress (used when the backend shuts down). */
+export async function stopSdCpp({ graceMs = 3000 } = {}) {
+  const children = [...activeGenerations];
+  await Promise.all(children.map(child => new Promise((resolve) => {
+    if (child.exitCode !== null || child.signalCode) {
+      resolve();
+      return;
+    }
+    const force = setTimeout(() => {
+      try { child.kill('SIGKILL'); } catch { /* gone */ }
+      resolve();
+    }, graceMs);
+    child.once('exit', () => {
+      clearTimeout(force);
+      resolve();
+    });
+    try { child.kill('SIGTERM'); } catch { /* gone */ }
+  })));
+  return children.length;
+}
+
 export async function checkSdCpp() {
   const binary = await findBinary();
   const models = imageModelChoices();
@@ -173,15 +197,19 @@ export async function generateSdCppImage(options = {}) {
   if (sampler) args.push('--sampling-method', sampler);
 
   let stderr = '';
+  const running = execFileAsync(binary.path, args, {
+    timeout: GENERATION_TIMEOUT_MS,
+    maxBuffer: 1024 * 1024 * 8,
+  });
+  activeGenerations.add(running.child);
   try {
-    const result = await execFileAsync(binary.path, args, {
-      timeout: GENERATION_TIMEOUT_MS,
-      maxBuffer: 1024 * 1024 * 8,
-    });
+    const result = await running;
     stderr = result.stderr || '';
   } catch (err) {
     stderr = err.stderr || err.message || '';
     throw new Error(`Simple image generation failed: ${stderr.slice(0, 1200)}`);
+  } finally {
+    activeGenerations.delete(running.child);
   }
 
   if (!fs.existsSync(outputPath)) {

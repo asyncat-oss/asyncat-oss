@@ -31,9 +31,24 @@ const isWin = process.platform === 'win32';
 // bars emit — without this, raw escape sequences leak into the UI as text.
 const ANSI_RE = /\x1b\[[0-9;]*[a-zA-Z]/g;
 
+// pip and venv processes of a training environment install in progress, so
+// the backend can stop them when it shuts down.
+const activeInstallProcesses = new Set();
+
+/** Stop a training environment install in progress (used at shutdown). */
+export function stopTrainingInstalls() {
+  for (const child of activeInstallProcesses) {
+    try { child.kill(); } catch { /* gone */ }
+  }
+  return activeInstallProcesses.size;
+}
+
 function runCommandStreaming(cmd, args, options = {}, timeoutMs = 120000, onLine = null) {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, { ...options, stdio: ['ignore', 'pipe', 'pipe'] });
+    activeInstallProcesses.add(child);
+    child.once('close', () => activeInstallProcesses.delete(child));
+    child.once('error', () => activeInstallProcesses.delete(child));
     const timer = setTimeout(() => { child.kill(); reject(new Error(`Timed out: ${cmd} ${args.join(' ')}`)); }, timeoutMs);
     const onChunk = (chunk) => {
       if (!onLine) return;
