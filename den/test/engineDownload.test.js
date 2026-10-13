@@ -5,7 +5,14 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 
-import { downloadWithResume, sha256File } from '../src/lib/engineDownload.js';
+import {
+  digestSha256,
+  downloadWithResume,
+  findChecksumAssets,
+  parseChecksumFile,
+  sha256File,
+  verifyDownloadedAsset,
+} from '../src/lib/engineDownload.js';
 
 const BODY = Buffer.from(Array.from({ length: 200_000 }, (_, i) => i % 251));
 
@@ -146,6 +153,61 @@ test('cancelling stops the transfer and keeps what arrived for next time', async
     srv.close();
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('downloads are checked against GitHub\'s digest or a published checksum file', async () => {
+  const dir = tempDir();
+  try {
+    const file = path.join(dir, 'llama-b6500-bin-ubuntu-x64.zip');
+    fs.writeFileSync(file, BODY);
+    const good = await sha256File(file);
+    const asset = { name: path.basename(file), digest: `sha256:${good}` };
+
+    assert.deepEqual(await verifyDownloadedAsset({ file, asset, release: { assets: [] } }), { verified: true, source: 'GitHub', sha256: good });
+
+    // No digest: a checksum file in the release is used.
+    const release = {
+      assets: [
+        { name: 'SHA256SUMS', browser_download_url: 'https://example.invalid/sums', size: 300 },
+        { name: asset.name, browser_download_url: 'https://example.invalid/zip' },
+      ],
+    };
+    const fetchText = async () => `${'0'.repeat(64)}  other.zip\n${good} *${asset.name}\n`;
+    assert.equal((await verifyDownloadedAsset({ file, asset: { name: asset.name }, release, fetchText })).source, 'SHA256SUMS');
+
+    // Nothing published: the caller decides; the file is untouched.
+    assert.deepEqual(await verifyDownloadedAsset({ file, asset: { name: asset.name }, release: { assets: [] } }), { verified: false, source: null, sha256: null });
+
+    // A mismatch deletes the file and refuses it.
+    fs.writeFileSync(`${file}.part`, 'x');
+    await assert.rejects(
+      verifyDownloadedAsset({ file, asset: { name: asset.name, digest: `sha256:${'f'.repeat(64)}` }, release: { assets: [] } }),
+      (error) => error.code === 'CHECKSUM_MISMATCH' && /deleted and not installed/.test(error.message),
+    );
+    assert.equal(fs.existsSync(file), false);
+    assert.equal(fs.existsSync(`${file}.part`), false);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('checksum files in the usual formats are read', () => {
+  const hex = 'a'.repeat(64);
+  assert.equal(parseChecksumFile(`${hex}  sd-master-bin-win-avx2-x64.zip`, 'sd-master-bin-win-avx2-x64.zip'), hex);
+  assert.equal(parseChecksumFile(`SHA256 (whisper-bin-x64.zip) = ${hex.toUpperCase()}`, 'whisper-bin-x64.zip'), hex);
+  assert.equal(parseChecksumFile(`${hex}\n`, 'anything.zip'), hex);
+  assert.equal(parseChecksumFile(`${hex}  other.zip`, 'mine.zip'), null);
+  assert.equal(digestSha256('sha256:' + hex), hex);
+  assert.equal(digestSha256(null), null);
+  const release = {
+    assets: [
+      { name: 'llama.zip', browser_download_url: 'u' },
+      { name: 'llama.zip.sha256', browser_download_url: 'u' },
+      { name: 'checksums.txt', browser_download_url: 'u', size: 10 },
+      { name: 'cudart-llama-bin-win-cuda-12.4-x64.zip', browser_download_url: 'u' },
+    ],
+  };
+  assert.deepEqual(findChecksumAssets(release, 'llama.zip').map((a) => a.name), ['llama.zip.sha256', 'checksums.txt']);
 });
 
 test('a missing file is not retried, and a full disk fails cleanly', async () => {

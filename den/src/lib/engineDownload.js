@@ -216,3 +216,89 @@ export async function sha256File(file) {
   for await (const chunk of fs.createReadStream(file)) hash.update(chunk);
   return hash.digest('hex');
 }
+
+// ─── Checksums ────────────────────────────────────────────────────────────────
+
+/** GitHub's asset `digest` ("sha256:<hex>") as lowercase hex, or null. */
+export function digestSha256(digest) {
+  const match = String(digest || '').trim().match(/^sha256:([0-9a-f]{64})$/i);
+  return match ? match[1].toLowerCase() : null;
+}
+
+/**
+ * The SHA-256 for `assetName` in a checksum file: `sha256sum` output
+ * ("<hex>  name" or "<hex> *name"), BSD style ("SHA256 (name) = <hex>"), or a
+ * per-file `.sha256` holding just the hex.
+ */
+export function parseChecksumFile(text, assetName) {
+  const lines = String(text || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  for (const line of lines) {
+    const gnu = /^([0-9a-f]{64})\s+\*?(.+)$/i.exec(line);
+    if (gnu && path.basename(gnu[2].trim()) === assetName) return gnu[1].toLowerCase();
+    const bsd = /^SHA256\s*\((.+)\)\s*=\s*([0-9a-f]{64})$/i.exec(line);
+    if (bsd && path.basename(bsd[1].trim()) === assetName) return bsd[2].toLowerCase();
+  }
+  if (lines.length === 1 && /^[0-9a-f]{64}$/i.test(lines[0])) return lines[0].toLowerCase();
+  return null;
+}
+
+/** Checksum files in a release that may list `assetName`, the most specific first. */
+export function findChecksumAssets(release, assetName) {
+  const assets = (release?.assets || []).filter(asset => asset?.browser_download_url && asset.name !== assetName);
+  const lower = String(assetName || '').toLowerCase();
+  const own = assets.filter(asset => {
+    const name = String(asset.name).toLowerCase();
+    return name === `${lower}.sha256` || name === `${lower}.sha256sum` || name === `${lower}.sha256.txt`;
+  });
+  const shared = assets.filter(asset => !own.includes(asset)
+    && /(sha256sums?|checksums?)(\.txt)?$|sha256.*\.txt$/i.test(String(asset.name))
+    && (Number(asset.size) || 0) < 1024 * 1024);
+  return [...own, ...shared];
+}
+
+async function fetchSmallText(url, signal) {
+  const response = await fetch(url, {
+    headers: { 'User-Agent': 'asyncat-installer' },
+    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const text = await response.text();
+  return text.slice(0, 1024 * 1024);
+}
+
+/**
+ * Check a downloaded release asset against GitHub's SHA-256 `digest` for it
+ * or, when GitHub has none, a checksum file published in the same release.
+ * On a mismatch the file is deleted and the install refused. Without any
+ * published checksum, resolves { verified: false } and the caller decides.
+ */
+export async function verifyDownloadedAsset({ file, asset, release, signal = null, fetchText = fetchSmallText }) {
+  let expected = digestSha256(asset?.digest);
+  let source = expected ? 'GitHub' : null;
+  if (!expected) {
+    for (const checksumAsset of findChecksumAssets(release, asset?.name)) {
+      try {
+        expected = parseChecksumFile(await fetchText(checksumAsset.browser_download_url, signal), asset.name);
+      } catch (error) {
+        if (signal?.aborted) throw cancelledError();
+        console.warn(`[runtime] Could not read ${checksumAsset.name}: ${error.message}`);
+      }
+      if (expected) {
+        source = checksumAsset.name;
+        break;
+      }
+    }
+  }
+  if (!expected) return { verified: false, source: null, sha256: null };
+
+  const actual = await sha256File(file);
+  if (actual !== expected) {
+    await fs.promises.rm(file, { force: true });
+    await fs.promises.rm(`${file}.part`, { force: true });
+    throw Object.assign(
+      new Error(`The download of ${asset.name} doesn't match its published checksum, so it was deleted and not installed. Try again; if it keeps happening, tell the Asyncat developers.`),
+      { code: 'CHECKSUM_MISMATCH', expected, actual },
+    );
+  }
+  return { verified: true, source, sha256: actual };
+}

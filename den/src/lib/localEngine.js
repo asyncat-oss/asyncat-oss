@@ -7,7 +7,7 @@ import { ENV_FILE, readEnv, setKey } from './env.js';
 import { setConfigValue } from '../config/appConfig.js';
 import { AUTO_DETECT, runtimeHome } from '../config/runtimeConfig.js';
 import { cudaVersionFromReleaseAsset, isCudaRuntimeCompanionAsset } from './releaseAssetUtils.js';
-import { downloadWithResume } from './engineDownload.js';
+import { downloadWithResume, verifyDownloadedAsset } from './engineDownload.js';
 
 // Persist a runtime path. These used to be written to a source-tree .env; they now
 // live in the DB-backed app_config (hydrated into process.env at boot). We set
@@ -78,6 +78,11 @@ function managedDownloadPath(repo, tag, assetName) {
   return path.join(managedDownloadsDir(), safe(repo), safe(tag), path.basename(String(assetName)));
 }
 
+/**
+ * Download a release asset and check it against its published SHA-256
+ * (GitHub's digest, or a checksum file in the release). A mismatch deletes
+ * the file and throws. Resolves { file, checksum }.
+ */
 async function downloadReleaseAsset({ repo, release, asset, onProgress = null, signal = null }) {
   const destination = managedDownloadPath(repo, release.tag_name || release.name, asset.name);
   await downloadWithResume(asset.browser_download_url, destination, {
@@ -85,7 +90,11 @@ async function downloadReleaseAsset({ repo, release, asset, onProgress = null, s
     signal,
     expectedSize: Number(asset.size) || 0,
   });
-  return destination;
+  const checksum = await verifyDownloadedAsset({ file: destination, asset, release, signal });
+  if (!checksum.verified) {
+    console.warn(`[runtime] ${asset.name} has no published checksum; installing it unchecked.`);
+  }
+  return { file: destination, checksum };
 }
 
 /** Delete a finished archive (a `.part` file for a later resume stays). */
@@ -1032,7 +1041,7 @@ async function installCudartCompanion(release, mainAssetName, targetDir, onProgr
   let archivePath = null;
   try {
     onProgress?.({ phase: 'installing', message: `Downloading CUDA runtime (${companion.name})`, percent: 90 });
-    archivePath = await downloadReleaseAsset({ repo, release, asset: companion });
+    ({ file: archivePath } = await downloadReleaseAsset({ repo, release, asset: companion }));
     extractArchive(archivePath, extractDir);
     // Upstream usually puts these DLLs at the archive root, but flatten them
     // deliberately so a future wrapper directory cannot leave Windows showing
@@ -1069,7 +1078,8 @@ async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgr
       assetName: asset.name,
       releaseTag: release.tag_name || release.name || 'latest',
     });
-    archivePath = await downloadReleaseAsset({ repo: 'ggml-org/llama.cpp', release, asset, onProgress: progress => {
+    let checksum;
+    ({ file: archivePath, checksum } = await downloadReleaseAsset({ repo: 'ggml-org/llama.cpp', release, asset, onProgress: progress => {
       onProgress?.({
         phase: 'downloading',
         message: `Downloading ${asset.name}`,
@@ -1079,7 +1089,7 @@ async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgr
         assetName: asset.name,
         releaseTag: release.tag_name || release.name || 'latest',
       });
-    } });
+    } }));
     onProgress?.({
       phase: 'extracting',
       message: `Extracting ${asset.name}`,
@@ -1186,6 +1196,7 @@ async function installManagedAsset(asset, release, profile = 'cpu_safe', onProgr
       capabilityHint: profileCapabilityHint(profile),
       asset: asset.name,
       version: release.tag_name || release.name || 'latest',
+      checksum: checksum.verified ? { sha256: checksum.sha256, source: checksum.source } : null,
       installedAt: new Date().toISOString(),
     }, stagingDir);
     swapManagedDirectory(stagingDir, targetDir);
@@ -2070,11 +2081,12 @@ export async function installManagedRuntime(runtimeId, { onProgress = null, capa
 
   try {
     report('downloading', `Downloading ${asset.name}`, 5, { assetName: asset.name });
-    archivePath = await downloadReleaseAsset({ repo: spec.repo, release, asset, onProgress: p => {
+    let checksum;
+    ({ file: archivePath, checksum } = await downloadReleaseAsset({ repo: spec.repo, release, asset, onProgress: p => {
       report('downloading', `Downloading ${asset.name}`, Math.max(5, Math.min(72, p.percent ?? 0)), {
         assetName: asset.name, downloadedBytes: p.downloadedBytes, totalBytes: p.totalBytes,
       });
-    } });
+    } }));
 
     report('extracting', `Extracting ${asset.name}`, 80, { assetName: asset.name });
     extractArchive(archivePath, extractDir);
@@ -2106,13 +2118,19 @@ export async function installManagedRuntime(runtimeId, { onProgress = null, capa
       fs.chmodSync(stagedInstalled, 0o755);
     }
 
-    // Best-effort verification (these binaries don't all support --version cleanly).
-    let verified = false;
-    try {
-      verified = (await verifyBinaryDetailedAsync(stagedInstalled, {
-        timeoutMs: verificationTimeoutForAsset(asset.name),
-      })).ok;
-    } catch { /* non-fatal */ }
+    // The new build must run here (--version, or --help for builds without
+    // it) before it replaces anything: a build that doesn't start is never
+    // swapped in.
+    report('verifying', `Checking that ${spec.label} runs on this computer`, 93);
+    const verification = await verifyBinaryDetailedAsync(stagedInstalled, {
+      timeoutMs: verificationTimeoutForAsset(asset.name),
+    });
+    if (!verification.ok) {
+      const err = new Error(`${spec.label} (${asset.name}) was downloaded, but it doesn't run on this computer, so the previous copy was kept:\n${verification.detail}`);
+      err.diagnostics = { type: 'runtime-verification', runtime: spec.id, asset: asset.name, verification };
+      throw err;
+    }
+    const verified = true;
 
     const version = release.tag_name || release.name || 'latest';
     writeManagedRuntimeMetadata(spec, {
@@ -2122,6 +2140,7 @@ export async function installManagedRuntime(runtimeId, { onProgress = null, capa
       capability: targetCapability,
       installer: 'managed-binary',
       verified,
+      checksum: checksum.verified ? { sha256: checksum.sha256, source: checksum.source } : null,
       installedAt: new Date().toISOString(),
     }, stagingDir);
     const relativeBinary = path.relative(stagingDir, stagedInstalled);
