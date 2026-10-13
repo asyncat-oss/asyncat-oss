@@ -49,59 +49,77 @@ const shortModelName = (model, providerName = "") => {
   return name || String(model).replace(/\.(gguf|bin)$/i, "");
 };
 
-export function useActiveBrainStatus({ pollMs = 30000 } = {}) {
-  const [config, setConfig] = useState(null);
-  const [localStatus, setLocalStatus] = useState(null);
-  const [mlxStatus, setMlxStatus] = useState(null);
-  const [loading, setLoading] = useState(true);
+// One shared poll loop and status stream for every component that shows the
+// active model. Each hook used to run its own (the chat page and the
+// composer both did), so every check went out twice.
+const POLL_MS = 30000;
+// MLX only runs on Apple Silicon Macs; elsewhere there is nothing to ask.
+const CAN_RUN_MLX = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform || navigator.userAgent || "");
+let shared = { config: null, localStatus: null, mlxStatus: null, loading: true };
+const listeners = new Set();
+let started = false;
+let pollTimer = null;
+let stopStream = null;
+
+function publish(patch) {
+  shared = { ...shared, ...patch };
+  for (const listener of listeners) listener(shared);
+}
+
+async function loadStatus() {
+  try {
+    const [configRes, localRes, mlxRes] = await Promise.all([
+      aiProviderApi.getConfig().catch(() => null),
+      llamaServerApi.getStatus().catch(() => null),
+      CAN_RUN_MLX ? mlxApi.getStatus().catch(() => null) : Promise.resolve(null),
+    ]);
+    publish({ config: configRes, localStatus: localRes, mlxStatus: mlxRes });
+  } finally {
+    publish({ loading: false });
+    if (started) {
+      clearTimeout(pollTimer);
+      pollTimer = setTimeout(loadStatus, POLL_MS);
+    }
+  }
+}
+
+function refreshNow() {
+  clearTimeout(pollTimer);
+  loadStatus();
+}
+
+function startSharedStatus() {
+  if (started) return;
+  started = true;
+  loadStatus();
+  window.addEventListener("asyncat-model-runtime-updated", refreshNow);
+  stopStream = aiProviderApi.streamStatus?.((payload) => {
+    publish({ config: payload.config || null, localStatus: payload.localStatus || null, loading: false });
+  }, () => {
+    // Keep the polling fallback alive if EventSource drops.
+  });
+}
+
+function stopSharedStatus() {
+  started = false;
+  clearTimeout(pollTimer);
+  window.removeEventListener("asyncat-model-runtime-updated", refreshNow);
+  stopStream?.();
+  stopStream = null;
+}
+
+export function useActiveBrainStatus() {
+  const [{ config, localStatus, mlxStatus, loading }, setState] = useState(shared);
 
   useEffect(() => {
-    let cancelled = false;
-    let timer = null;
-    let cleanupStream = null;
-
-    const load = async () => {
-      try {
-        const [configRes, localRes, mlxRes] = await Promise.all([
-          aiProviderApi.getConfig().catch(() => null),
-          llamaServerApi.getStatus().catch(() => null),
-          mlxApi.getStatus().catch(() => null),
-        ]);
-        if (cancelled) return;
-        setConfig(configRes);
-        setLocalStatus(localRes);
-        setMlxStatus(mlxRes);
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-          timer = setTimeout(load, pollMs);
-        }
-      }
-    };
-
-    const refreshNow = () => {
-      clearTimeout(timer);
-      load();
-    };
-
-    load();
-    window.addEventListener("asyncat-model-runtime-updated", refreshNow);
-    cleanupStream = aiProviderApi.streamStatus?.((payload) => {
-      if (cancelled) return;
-      setConfig(payload.config || null);
-      setLocalStatus(payload.localStatus || null);
-      setLoading(false);
-    }, () => {
-      // Keep the polling fallback alive if EventSource drops.
-    });
-
+    listeners.add(setState);
+    setState(shared);
+    startSharedStatus();
     return () => {
-      cancelled = true;
-      clearTimeout(timer);
-      window.removeEventListener("asyncat-model-runtime-updated", refreshNow);
-      cleanupStream?.();
+      listeners.delete(setState);
+      if (listeners.size === 0) stopSharedStatus();
     };
-  }, [pollMs]);
+  }, []);
 
   return useMemo(() => {
     const providerId = config?.provider_id || "llamacpp-builtin";
