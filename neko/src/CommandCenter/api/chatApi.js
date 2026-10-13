@@ -147,35 +147,9 @@ export const chatApi = {
 
 };
 
+// Folders made before folder editing was removed still show on the Chats page.
 export const chatFoldersApi = {
   getFolders: async () => {
     return await apiRequest(`${API_BASE_URL}/ai/chat-folders`);
   },
-
-  createFolder: async (name, color = null) => {
-    return await apiRequest(`${API_BASE_URL}/ai/chat-folders`, {
-      method: 'POST',
-      body: JSON.stringify({ name, color })
-    });
-  },
-
-  updateFolder: async (folderId, updates) => {
-    return await apiRequest(`${API_BASE_URL}/ai/chat-folders/${folderId}`, {
-      method: 'PATCH',
-      body: JSON.stringify(updates)
-    });
-  },
-
-  deleteFolder: async (folderId) => {
-    return await apiRequest(`${API_BASE_URL}/ai/chat-folders/${folderId}`, {
-      method: 'DELETE'
-    });
-  },
-
-  assignConversation: async (conversationId, folderId) => {
-    return await apiRequest(`${API_BASE_URL}/ai/chats/${conversationId}/folder`, {
-      method: 'PATCH',
-      body: JSON.stringify({ folder_id: folderId })
-    });
-  }
 };
