@@ -651,6 +651,7 @@ class ChatService {
       const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, databaseClient);
 
       let finalConversationId = conversationId;
+      let savedTitle = title;
 
       // If creating a new conversation, generate ID first
       if (!conversationId) {
@@ -705,6 +706,7 @@ class ChatService {
       } else {
         // CREATE new conversation
         const conversationTitle = title || this.generateTitle(messages[0]?.content || 'New Chat');
+        savedTitle = conversationTitle;
 
         const { error } = await dbClient
           .schema('aichats')
@@ -736,7 +738,7 @@ class ChatService {
       return {
         success: true,
         conversationId: finalConversationId,
-        title: title,
+        title: savedTitle,
         workspaceId: effectiveWorkspaceId,
         isNew: !conversationId,
         messageCount: messages.length
