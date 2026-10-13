@@ -503,6 +503,7 @@ export function describeToolStep(tool, args = {}) {
   if (tool === 'run_command' && args?.command) return { kind: 'tool', title: `Ran \`${String(args.command).slice(0, 100)}\`` };
   if (tool === 'save_memory') return { kind: 'memory', title: `Remembered ${String(args.key || args.content || '').slice(0, 80)}` };
   if (tool === 'mail_send_message') return { kind: 'tool', title: `Sent an email${args?.to ? ` to ${String(args.to).slice(0, 80)}` : ''}` };
+  if (spec?.category === 'mcp' && spec.displayName) return { kind: 'tool', title: `Used ${spec.displayName}` };
   return { kind: 'tool', title: `Used ${tool}` };
 }
 

@@ -248,6 +248,8 @@ test('a local connector starts, offers its tools and answers', async () => {
   assert.equal(echo.displayName, 'Fake notes · echo');
   const { PermissionManager } = await import('../src/agent/PermissionManager.js');
   assert.equal(PermissionManager.describeAction('mcp__notes__add_note', { note: 'buy seeds' }), 'Fake notes · add_note: {"note":"buy seeds"}');
+  const { describeToolStep } = await import('../src/cats/catEngine.js');
+  assert.equal(describeToolStep('mcp__notes__echo', { text: 'x' }).title, 'Used Fake notes · echo', 'a Cat\'s timeline names it too');
   assert.equal(toolRegistry.get('mcp__notes__add_note').permission, 'moderate');
   assert.equal(toolRegistry.get('mcp__notes__wipe_notes').permission, 'dangerous');
 
