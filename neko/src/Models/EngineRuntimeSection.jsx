@@ -120,6 +120,7 @@ const EngineRuntimeSection = ({
   switchSuccess = '',
   installError = '',
   installSuccess = '',
+  installNotice = '',
   removeError = '',
   removeSuccess = '',
   revertSelection = null,
@@ -130,6 +131,7 @@ const EngineRuntimeSection = ({
   onRescan,
   onSwitch,
   onInstall,
+  onCancelInstall,
   onBuildGpuRuntime,
   onRemoveManagedEngine,
   onRefreshCatalog,
@@ -370,6 +372,7 @@ const EngineRuntimeSection = ({
         </StatusNote>
       )}
       {actionSuccess && <StatusNote tone="green">{actionSuccess}</StatusNote>}
+      {!actionError && !actionSuccess && installNotice && <StatusNote tone="gray">{installNotice}</StatusNote>}
 
       {jobStatus && (
         <SettingGroup>
@@ -381,7 +384,18 @@ const EngineRuntimeSection = ({
                 </p>
                 <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">{jobMessage}</p>
               </div>
-              <Badge color={installStatusTone(jobStatus)}>{jobStatus}</Badge>
+              <div className="flex shrink-0 items-center gap-2">
+                <Badge color={installStatusTone(jobStatus)}>{jobStatus}</Badge>
+                {!activeBuildJob && (jobStatus === 'running' || jobStatus === 'queued') && onCancelInstall && (
+                  <button
+                    type="button"
+                    onClick={() => onCancelInstall()}
+                    className="rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-fg hover:bg-hover"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
             </div>
             <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800">
               <div

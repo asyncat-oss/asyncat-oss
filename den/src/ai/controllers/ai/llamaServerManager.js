@@ -811,7 +811,7 @@ export async function selectEngine({ runtime, path: selectedPath, retryModel, ct
   return result;
 }
 
-export async function installEngine({ profile, releaseTag, assetName, retryModel, ctxSize, modelsDir, onProgress = null }) {
+export async function installEngine({ profile, releaseTag, assetName, retryModel, ctxSize, modelsDir, onProgress = null, signal = null }) {
   const previousAdvisor = await getEngineAdvisor();
   const previousSelection = currentSelectionSnapshot(previousAdvisor.current);
   const effectiveProfile = sanitizeInstallProfile(profile, previousAdvisor.hardware);
@@ -825,6 +825,7 @@ export async function installEngine({ profile, releaseTag, assetName, retryModel
       releaseTag,
       assetName,
       onProgress,
+      signal,
     });
   } catch (err) {
     // The download or unpacking failed, so the previous engine is still in
@@ -889,6 +890,7 @@ export async function startEngineInstallJob({ profile, releaseTag, assetName, re
 
   const job = {
     id: randomUUID(),
+    abort: new AbortController(),
     status: 'queued',
     phase: 'queued',
     message: 'Preparing managed engine install…',
@@ -940,7 +942,9 @@ export async function startEngineInstallJob({ profile, releaseTag, assetName, re
         retryModel,
         ctxSize,
         modelsDir,
+        signal: job.abort.signal,
         onProgress: progress => {
+          if (job.abort.signal.aborted) return;
           const phase = progress.phase || 'running';
           updateInstallJob(job, {
             status: 'running',
@@ -980,6 +984,19 @@ export async function startEngineInstallJob({ profile, releaseTag, assetName, re
       }));
       releaseCatalogCache.expiresAt = 0;
     } catch (err) {
+      if (err?.cancelled) {
+        console.info('[llamaServer] Managed engine install cancelled:', job.id);
+        updateInstallJob(job, {
+          status: 'cancelled',
+          phase: 'cancelled',
+          message: 'Install cancelled. The engine you had is unchanged.',
+          error: null,
+          downloadedBytes: null,
+          totalBytes: null,
+          finishedAt: nowIso(),
+        });
+        return;
+      }
       const diagnostics = err.diagnostics || null;
       console.error('[llamaServer] Managed engine install failed:', err.message || err);
       if (diagnostics) {
@@ -1001,6 +1018,22 @@ export async function startEngineInstallJob({ profile, releaseTag, assetName, re
 
 export function getEngineInstallJob(jobId) {
   return snapshotInstallJob(installJobs.get(jobId));
+}
+
+/**
+ * Stop a running managed engine install. Up to the moment the new engine is
+ * swapped in, nothing installed changes; a download in progress keeps its
+ * partial file so installing again continues it.
+ */
+export function cancelEngineInstallJob(jobId) {
+  const job = installJobs.get(jobId);
+  if (!job) return null;
+  if (job.status !== 'queued' && job.status !== 'running') {
+    throw Object.assign(new Error('This install has already finished.'), { code: 'NOT_RUNNING' });
+  }
+  updateInstallJob(job, { message: 'Cancelling…' });
+  job.abort.abort();
+  return snapshotInstallJob(job);
 }
 
 // ── Python GPU engine build (async compile via pip) ───────────────────────────

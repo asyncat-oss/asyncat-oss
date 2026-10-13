@@ -98,6 +98,36 @@ test('a download that fails its checksum changes nothing', { skip }, async () =>
   }
 });
 
+test('cancelling an install keeps the engine you had and the bytes downloaded so far', { skip }, async () => {
+  const zip = await fakeLlamaZip('version: 6800 (aaa1111)');
+  // Sends part of the file, then waits.
+  const server = http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Length': String(zip.length) });
+    res.write(zip.subarray(0, Math.floor(zip.length / 2)));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const asset = {
+      name: 'llama-b6800-bin-ubuntu-x64.zip',
+      browser_download_url: `http://127.0.0.1:${server.address().port}/llama.zip`,
+      size: zip.length,
+      digest: `sha256:${createHash('sha256').update(zip).digest('hex')}`,
+    };
+    const controller = new AbortController();
+    const pending = installManagedAsset(asset, { tag_name: 'b6800', assets: [asset] }, 'cpu_safe', (p) => {
+      if (p.phase === 'downloading' && p.downloadedBytes > 0) setTimeout(() => controller.abort(), 50);
+    }, { signal: controller.signal });
+    await assert.rejects(pending, (error) => error.cancelled === true);
+    assert.equal(readManagedEngineMetadata(managedEngineDir('cpu_safe')).version, 'b6500');
+    const part = path.join(managedDownloadsDir(), 'ggml-org_llama.cpp', 'b6800', `${asset.name}.part`);
+    assert.ok(fs.statSync(part).size > 0, 'the partial download is kept for next time');
+    assert.deepEqual(fs.readdirSync(path.dirname(managedEngineDir('cpu_safe'))).filter((name) => name.startsWith('.')), []);
+  } finally {
+    server.closeAllConnections?.();
+    server.close();
+  }
+});
+
 test('a build that does not run is never swapped in', { skip }, async () => {
   const zip = new JSZip();
   zip.file('llama-server', '#!/bin/sh\necho "illegal instruction" >&2\nexit 132\n', { unixPermissions: 0o755 });

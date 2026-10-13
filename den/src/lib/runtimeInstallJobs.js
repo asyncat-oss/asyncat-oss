@@ -39,11 +39,13 @@ export function startRuntimeInstallJob(runtimeId) {
     error: null,
     result: null,
     createdAt: Date.now(),
+    abort: new AbortController(),
   };
   jobs.set(id, job);
   activeByRuntime.set(runtimeId, id);
 
   installManagedRuntime(runtimeId, {
+    signal: job.abort.signal,
     onProgress: (p) => {
       const phase = p.phase || job.progress.phase;
       job.progress = {
@@ -62,6 +64,12 @@ export function startRuntimeInstallJob(runtimeId) {
       job.progress = { percent: 100, message: `${MANAGED_RUNTIME_SPECS[runtimeId].label} installed`, phase: 'complete' };
     })
     .catch((err) => {
+      if (err?.cancelled) {
+        job.status = 'cancelled';
+        job.error = null;
+        job.progress = { ...job.progress, message: 'Install cancelled', phase: 'cancelled', downloadedBytes: null, totalBytes: null };
+        return;
+      }
       job.status = 'error';
       job.error = err.message || 'Install failed';
     });
@@ -71,6 +79,28 @@ export function startRuntimeInstallJob(runtimeId) {
 
 export function getRuntimeInstallJob(id) {
   return publicJob(jobs.get(id));
+}
+
+/**
+ * Stop a running install. A download in progress keeps its partial file, so
+ * installing again continues it; the installed copy is never touched.
+ */
+export function cancelRuntimeInstallJob(id) {
+  const job = jobs.get(id);
+  if (!job) return null;
+  if (job.status !== 'queued' && job.status !== 'running') {
+    throw Object.assign(new Error('This install has already finished.'), { code: 'NOT_RUNNING' });
+  }
+  job.progress = { ...job.progress, message: 'Cancelling…' };
+  job.abort.abort();
+  return publicJob(job);
+}
+
+/** Stop every running install (used when the backend shuts down). */
+export function cancelAllRuntimeInstallJobs() {
+  for (const job of jobs.values()) {
+    if (job.status === 'queued' || job.status === 'running') job.abort.abort();
+  }
 }
 
 export function isRuntimeInstallActive(runtimeId) {

@@ -8,8 +8,10 @@ import { setConfigValue } from '../config/appConfig.js';
 import { AUTO_DETECT, runtimeHome } from '../config/runtimeConfig.js';
 import { cudaVersionFromReleaseAsset, isCudaRuntimeCompanionAsset } from './releaseAssetUtils.js';
 import {
+  cancelledError,
   downloadWithResume,
   ensureFreeSpace,
+  throwIfAborted,
   installSpaceNeeded,
   verifyDownloadedAsset,
 } from './engineDownload.js';
@@ -1211,6 +1213,7 @@ export async function installManagedAsset(asset, release, profile = 'cpu_safe', 
     });
     const verification = await verifyBinaryDetailedAsync(stagedInstalled, {
       timeoutMs: verificationTimeoutMs,
+      signal,
     });
     if (!verification.ok) {
       const detail = verification.detail || verifyBinaryError(stagedInstalled);
@@ -1236,6 +1239,7 @@ export async function installManagedAsset(asset, release, profile = 'cpu_safe', 
       checksum: checksum.verified ? { sha256: checksum.sha256, source: checksum.source } : null,
       installedAt: new Date().toISOString(),
     }, stagingDir);
+    throwIfAborted(signal);
     swapManagedDirectory(stagingDir, targetDir);
     const installed = managedLlamaBinaryPath(profile);
     await pointCurrentManagedEngine(targetDir);
@@ -1254,7 +1258,7 @@ export async function installManagedAsset(asset, release, profile = 'cpu_safe', 
   }
 }
 
-function runVerifyProbeAsync(binary, arg, timeoutMs) {
+function runVerifyProbeAsync(binary, arg, timeoutMs, signal = null) {
   const command = `${binary} ${arg}`;
   const startedAt = Date.now();
   return new Promise(resolve => {
@@ -1317,12 +1321,20 @@ function runVerifyProbeAsync(binary, arg, timeoutMs) {
       killFallback.unref?.();
     }, timeoutMs);
     timeout.unref?.();
+    // Cancelling the install stops the check at once.
+    signal?.addEventListener('abort', () => {
+      spawnError = cancelledError();
+      try { child.kill('SIGTERM'); } catch {}
+      finish(null, 'SIGTERM');
+    }, { once: true });
   });
 }
 
 export async function verifyBinaryDetailedAsync(binary, options = {}) {
   const timeoutMs = Math.max(5000, Number(options.timeoutMs) || VERIFY_BINARY_TIMEOUT_MS);
-  const versionProbe = await runVerifyProbeAsync(binary, '--version', timeoutMs);
+  const signal = options.signal || null;
+  const versionProbe = await runVerifyProbeAsync(binary, '--version', timeoutMs, signal);
+  throwIfAborted(signal);
   if (versionProbe.ok) {
     return {
       ok: true,
@@ -1340,7 +1352,8 @@ export async function verifyBinaryDetailedAsync(binary, options = {}) {
     };
   }
 
-  const helpProbe = await runVerifyProbeAsync(binary, '--help', timeoutMs);
+  const helpProbe = await runVerifyProbeAsync(binary, '--help', timeoutMs, signal);
+  throwIfAborted(signal);
   const probes = [versionProbe, helpProbe];
   return {
     ok: helpProbe.ok,
@@ -1874,14 +1887,25 @@ function pythonConsoleScript(venvDir, name) {
     : path.join(venvDir, 'bin', name);
 }
 
-function runManagedCommand(command, args, { timeoutMs = 20 * 60 * 1000, onLine = null } = {}) {
+function runManagedCommand(command, args, { timeoutMs = 20 * 60 * 1000, onLine = null, signal = null } = {}) {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(cancelledError());
+      return;
+    }
     const child = spawn(command, args, {
       env: process.env,
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
     });
     let settled = false;
+    signal?.addEventListener('abort', () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { child.kill(); } catch {}
+      reject(cancelledError());
+    }, { once: true });
     let errorTail = '';
     const timer = setTimeout(() => {
       if (settled) return;
@@ -1932,7 +1956,7 @@ function installedPythonPackageVersion(python, packageName) {
   }
 }
 
-async function installManagedPythonRuntime(spec, report) {
+async function installManagedPythonRuntime(spec, report, signal = null) {
   const support = runtimePlatformSupport(spec);
   if (!support.supported) throw new Error(support.reason);
 
@@ -1955,18 +1979,20 @@ async function installManagedPythonRuntime(spec, report) {
     // pip downloads and unpacks the packages; MLX with CUDA is the largest.
     await ensureFreeSpace(root, (spec.id === 'mlx' ? 3 : 1) * 1024 * 1024 * 1024, spec.label);
     report('preparing', `Creating an isolated Python environment for ${spec.label}`, 10);
-    await runManagedCommand(systemPython, ['-m', 'venv', venvDir], { timeoutMs: 180000 });
+    await runManagedCommand(systemPython, ['-m', 'venv', venvDir], { timeoutMs: 180000, signal });
     const python = pythonInVenv(venvDir);
 
     report('installing', `Installing the latest ${spec.label} environment`, 30);
     await runManagedCommand(python, ['-m', 'pip', 'install', '--upgrade', 'pip'], {
       timeoutMs: 300000,
+      signal,
     });
     await runManagedCommand(
       python,
       ['-m', 'pip', 'install', '--upgrade', ...managedPythonPackages(spec)],
       {
         timeoutMs: 30 * 60 * 1000,
+        signal,
         onLine: line => {
           if (/collecting|downloading|installing collected|successfully installed/i.test(line)) {
             report('installing', line.slice(0, 160), 65);
@@ -1976,7 +2002,7 @@ async function installManagedPythonRuntime(spec, report) {
     );
 
     report('verifying', `Verifying ${spec.label}`, 92);
-    await runManagedCommand(python, ['-c', `import ${spec.importName}`], { timeoutMs: 30000 });
+    await runManagedCommand(python, ['-c', `import ${spec.importName}`], { timeoutMs: 30000, signal });
     const installed = spec.id === 'piper' ? pythonConsoleScript(venvDir, 'piper') : python;
     if (!fs.existsSync(installed)) {
       throw new Error(`${spec.label} installed, but its executable was not found at ${installed}.`);
@@ -2041,7 +2067,7 @@ export async function installManagedRuntime(runtimeId, { onProgress = null, capa
     onProgress?.({ phase, message, percent, runtime: spec.id, ...extra });
 
   if (spec.installer === 'python') {
-    return installManagedPythonRuntime(spec, report);
+    return installManagedPythonRuntime(spec, report, signal);
   }
 
   report('resolving', `Finding a ${spec.label} build for your system`, 2);
@@ -2129,6 +2155,7 @@ export async function installManagedRuntime(runtimeId, { onProgress = null, capa
     report('verifying', `Checking that ${spec.label} runs on this computer`, 93);
     const verification = await verifyBinaryDetailedAsync(stagedInstalled, {
       timeoutMs: verificationTimeoutForAsset(asset.name),
+      signal,
     });
     if (!verification.ok) {
       const err = new Error(`${spec.label} (${asset.name}) was downloaded, but it doesn't run on this computer, so the previous copy was kept:\n${verification.detail}`);
@@ -2149,6 +2176,7 @@ export async function installManagedRuntime(runtimeId, { onProgress = null, capa
       installedAt: new Date().toISOString(),
     }, stagingDir);
     const relativeBinary = path.relative(stagingDir, stagedInstalled);
+    throwIfAborted(signal);
     swapManagedDirectory(stagingDir, targetDir);
     const installed = path.join(targetDir, relativeBinary);
     persistRuntimeConfigValue(spec.envKey, installed);

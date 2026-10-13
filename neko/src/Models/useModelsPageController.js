@@ -34,6 +34,7 @@ export const useModelsPageController = ({ runtimeOnly = false } = {}) => {
   const [switchSuccess, setSwitchSuccess] = useState('');
   const [installError, setInstallError] = useState('');
   const [installSuccess, setInstallSuccess] = useState('');
+  const [installNotice, setInstallNotice] = useState('');
   const [removingEngine, setRemovingEngine] = useState(null);
   const [removeEngineError, setRemoveEngineError] = useState('');
   const [removeEngineSuccess, setRemoveEngineSuccess] = useState('');
@@ -79,6 +80,7 @@ export const useModelsPageController = ({ runtimeOnly = false } = {}) => {
     setSwitchSuccess('');
     setInstallError('');
     setInstallSuccess('');
+    setInstallNotice('');
     setRemoveEngineError('');
     setRemoveEngineSuccess('');
     setRevertSelection(null);
@@ -208,13 +210,29 @@ export const useModelsPageController = ({ runtimeOnly = false } = {}) => {
         }
       },
       async (job) => {
-        setInstallJob(job);
+        setInstallJob(job?.status === 'cancelled' ? null : job);
         setInstallingEngine(null);
         installPollCleanup.current = null;
-        setInstallError(job?.error || 'Failed to install engine.');
+        if (job?.status === 'cancelled') {
+          setInstallError('');
+          setInstallNotice(job.message || 'Install cancelled. The engine you had is unchanged.');
+        } else {
+          setInstallError(job?.error || 'Failed to install engine.');
+        }
         await loadEngineCatalog(true);
       },
     );
+  };
+
+  const handleCancelInstall = async () => {
+    const jobId = installJob?.id;
+    if (!jobId) return;
+    try {
+      const res = await llamaServerApi.cancelInstallJob(jobId);
+      if (res?.job) setInstallJob(res.job);
+    } catch (err) {
+      setInstallError(err.message || 'Could not cancel the install.');
+    }
   };
 
   const beginPythonInstallJobPolling = (jobId) => {
@@ -597,6 +615,7 @@ export const useModelsPageController = ({ runtimeOnly = false } = {}) => {
     setInstallingEngine(key);
     setInstallError('');
     setInstallSuccess('');
+    setInstallNotice('');
     setSwitchError('');
     setSwitchSuccess('');
     setRemoveEngineError('');
@@ -675,6 +694,7 @@ export const useModelsPageController = ({ runtimeOnly = false } = {}) => {
     setSwitchSuccess,
     installError,
     installSuccess,
+    installNotice,
     removeEngineError,
     removeEngineSuccess,
     revertSelection,
@@ -717,6 +737,7 @@ export const useModelsPageController = ({ runtimeOnly = false } = {}) => {
     handleAddPath,
     handleEngineSwitch,
     handleManagedInstall,
+    handleCancelInstall,
     handleBuildGpuRuntime,
     handleRemoveManagedEngine
   };

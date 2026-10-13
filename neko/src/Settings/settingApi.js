@@ -465,6 +465,13 @@ export const llamaServerApi = {
     return apiCall(`${AI_API_BASE}/server/engines/install-jobs/${encodeURIComponent(jobId)}`);
   },
 
+  // Stop a running managed install (the installed engine is unchanged).
+  cancelInstallJob: async (jobId) => {
+    return apiCall(`${AI_API_BASE}/server/engines/install-jobs/${encodeURIComponent(jobId)}`, {
+      method: 'DELETE',
+    });
+  },
+
   // Poll server status until it reaches 'ready' or 'error'.
   // onUpdate(snap) is called every poll cycle.
   // onReady(snap) is called once when status === 'ready'.
@@ -556,7 +563,8 @@ export const llamaServerApi = {
           onDone?.(job);
           return;
         }
-        if (job?.status === 'error') {
+        // A cancelled install ends here too; callers check job.status.
+        if (job?.status === 'error' || job?.status === 'cancelled') {
           stopped = true;
           onError?.(job);
           return;
@@ -598,6 +606,13 @@ export const runtimeApi = {
     });
   },
 
+  // Stop a running install (the installed copy is unchanged).
+  cancelJob: async (jobId) => {
+    return apiCall(`${AI_API_BASE}/runtimes/install-jobs/${encodeURIComponent(jobId)}`, {
+      method: 'DELETE',
+    });
+  },
+
   // Remove only Asyncat's managed copy. External PATH/configured tools are untouched.
   remove: async (id) => {
     return apiCall(`${AI_API_BASE}/runtimes/${encodeURIComponent(id)}`, {
@@ -617,7 +632,8 @@ export const runtimeApi = {
         const job = data.job;
         onUpdate?.(job);
         if (job?.status === 'complete') { stopped = true; onDone?.(job); return; }
-        if (job?.status === 'error')    { stopped = true; onError?.(job); return; }
+        // A cancelled install ends here too; callers check job.status.
+        if (job?.status === 'error' || job?.status === 'cancelled') { stopped = true; onError?.(job); return; }
       } catch (err) {
         if (!stopped) { stopped = true; onError?.({ status: 'error', error: err.message }); return; }
       }

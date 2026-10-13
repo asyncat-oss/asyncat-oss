@@ -22,6 +22,7 @@ const RuntimeSection = () => {
     switchSuccess,
     installError,
     installSuccess,
+    installNotice,
     removeEngineError,
     removeEngineSuccess,
     revertSelection,
@@ -34,6 +35,7 @@ const RuntimeSection = () => {
     loadEngineCatalog,
     handleEngineSwitch,
     handleManagedInstall,
+    handleCancelInstall,
     handleBuildGpuRuntime,
     handleRemoveManagedEngine,
     mlxStatus,
@@ -118,6 +120,7 @@ const RuntimeSection = () => {
         switchSuccess={switchSuccess}
         installError={installError}
         installSuccess={installSuccess}
+        installNotice={installNotice}
         removeError={removeEngineError}
         removeSuccess={removeEngineSuccess}
         revertSelection={revertSelection}
@@ -128,6 +131,7 @@ const RuntimeSection = () => {
         onRescan={loadEngineData}
         onSwitch={handleEngineSwitch}
         onInstall={handleManagedInstall}
+        onCancelInstall={handleCancelInstall}
         onBuildGpuRuntime={handleBuildGpuRuntime}
         onRemoveManagedEngine={handleRemoveManagedEngine}
         onRefreshCatalog={refreshRuntimeCatalog}

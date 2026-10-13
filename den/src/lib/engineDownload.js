@@ -140,10 +140,14 @@ async function downloadOnce(url, destination, { signal, onProgress, inactivityMs
 
     let received = start;
     let lastReport = 0;
+    let reportedBytes = -1;
     const report = (force = false) => {
       const now = Date.now();
-      if (!onProgress || (!force && now - lastReport < PROGRESS_INTERVAL_MS)) return;
+      // Always report the first bytes of a response, then at most every 250 ms.
+      const firstData = reportedBytes <= start && received > start;
+      if (!onProgress || (!force && !firstData && now - lastReport < PROGRESS_INTERVAL_MS)) return;
       lastReport = now;
+      reportedBytes = received;
       onProgress({ downloadedBytes: received, totalBytes: total, percent: total ? Math.min(100, (received / total) * 100) : null });
     };
     report(true);

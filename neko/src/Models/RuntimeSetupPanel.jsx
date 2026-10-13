@@ -74,6 +74,7 @@ const EngineRow = ({ engine, ready, managedRuntime, ffmpegMissing, onChanged }) 
   const [job, setJob] = useState(null);
   const [error, setError] = useState('');
   const [done, setDone] = useState(false);
+  const [notice, setNotice] = useState('');
   const [confirmRemove, setConfirmRemove] = useState(false);
   const cleanup = useRef(null);
   const mounted = useRef(true);
@@ -90,6 +91,7 @@ const EngineRow = ({ engine, ready, managedRuntime, ffmpegMissing, onChanged }) 
   const handleInstall = async () => {
     setInstalling(true);
     setError('');
+    setNotice('');
     setJob(null);
     try {
       const res = await runtimeApi.install(engine.runtime);
@@ -105,12 +107,23 @@ const EngineRow = ({ engine, ready, managedRuntime, ffmpegMissing, onChanged }) 
         },
         (j) => {
           if (!mounted.current) return;
-          setInstalling(false); setError(j?.error || 'Install failed.'); cleanup.current = null;
+          setInstalling(false); cleanup.current = null;
+          if (j?.status === 'cancelled') setNotice('Install cancelled. What you had installed is unchanged.');
+          else setError(j?.error || 'Install failed.');
         },
       );
     } catch (err) {
       setInstalling(false);
       setError(err.message || 'Could not start the install.');
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!job?.id) return;
+    try {
+      await runtimeApi.cancelJob(job.id);
+    } catch (err) {
+      setError(err.message || 'Could not cancel the install.');
     }
   };
 
@@ -157,6 +170,15 @@ const EngineRow = ({ engine, ready, managedRuntime, ffmpegMissing, onChanged }) 
             {installing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
             {installing ? 'Installing…' : (isManaged ? 'Update' : (isReady ? 'Install managed' : 'Install'))}
           </button>
+          {installing && job?.id && (
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="inline-flex flex-shrink-0 items-center rounded-lg border border-line bg-surface px-2.5 py-1 text-[11px] font-semibold text-fg hover:bg-hover"
+            >
+              Cancel
+            </button>
+          )}
           {isManaged && (
             <button
               type="button"
@@ -185,6 +207,9 @@ const EngineRow = ({ engine, ready, managedRuntime, ffmpegMissing, onChanged }) 
         <p className="mt-1.5 text-[10px] leading-4 text-amber-600 dark:text-amber-400">
           {error} Review the system-tool requirements below or configure a custom runtime path.
         </p>
+      )}
+      {notice && !error && (
+        <p className="mt-1.5 text-[10px] leading-4 text-fg-muted">{notice}</p>
       )}
     </div>
   );
@@ -265,7 +290,9 @@ const RuntimeSetupPanel = ({ compact = false, showChatEngine = true, onReadyChan
         },
         (j) => {
           if (!mounted.current) return;
-          setInstalling(false); setInstallError(j?.error || 'Failed to install the local engine.'); installCleanup.current = null;
+          setInstalling(false); installCleanup.current = null;
+          if (j?.status === 'cancelled') setInstallJob(null);
+          else setInstallError(j?.error || 'Failed to install the local engine.');
         },
       );
     } catch (err) {
@@ -338,7 +365,18 @@ const RuntimeSetupPanel = ({ compact = false, showChatEngine = true, onReadyChan
         </div>
 
         {(installing || installJob) && !engineInstalled && (
-          <ProgressBar percent={llamaPct} message={llamaMessage} detail={downloadProgressText(installJob)} />
+          <>
+            <ProgressBar percent={llamaPct} message={llamaMessage} detail={downloadProgressText(installJob)} />
+            {installing && installJob?.id && (
+              <button
+                type="button"
+                onClick={() => llamaServerApi.cancelInstallJob(installJob.id).catch((err) => setInstallError(err.message || 'Could not cancel the install.'))}
+                className="mt-2 inline-flex items-center rounded-lg border border-line bg-surface px-2.5 py-1 text-[11px] font-semibold text-fg hover:bg-hover"
+              >
+                Cancel
+              </button>
+            )}
+          </>
         )}
 
         {installError && (

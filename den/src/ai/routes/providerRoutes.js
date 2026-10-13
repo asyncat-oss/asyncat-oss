@@ -30,6 +30,7 @@ import {
   selectEngine,
   startEngineInstallJob,
   getEngineInstallJob,
+  cancelEngineInstallJob,
   startPythonEngineInstallJob,
   getPythonEngineInstallJob,
   removeManagedEngine,
@@ -103,7 +104,7 @@ import {
 import db from '../../db/client.js';
 import { sealSecret } from '../../lib/secretBox.js';
 import { asyncatHome, listManagedRuntimes, removeManagedRuntime } from '../../lib/localEngine.js';
-import { startRuntimeInstallJob, getRuntimeInstallJob, isRuntimeInstallActive } from '../../lib/runtimeInstallJobs.js';
+import { startRuntimeInstallJob, getRuntimeInstallJob, isRuntimeInstallActive, cancelRuntimeInstallJob } from '../../lib/runtimeInstallJobs.js';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import os from 'os';
@@ -2088,6 +2089,17 @@ router.get('/server/engines/install-jobs/:id', async (req, res) => {
   res.json({ success: true, job });
 });
 
+// ── DELETE /server/engines/install-jobs/:id — cancel a managed install ───────
+router.delete('/server/engines/install-jobs/:id', (req, res) => {
+  try {
+    const job = cancelEngineInstallJob(req.params.id);
+    if (!job) return res.status(404).json({ success: false, error: 'Install job not found' });
+    res.json({ success: true, job });
+  } catch (err) {
+    res.status(err.code === 'NOT_RUNNING' ? 409 : 500).json({ success: false, error: err.message });
+  }
+});
+
 // ── POST /server/engines/python-install-jobs — start Python GPU runtime build ─
 router.post('/server/engines/python-install-jobs', async (req, res) => {
   try {
@@ -2154,6 +2166,17 @@ router.delete('/runtimes/:id', async (req, res) => {
   } catch (err) {
     const status = /Unknown runtime/i.test(err.message) ? 404 : 500;
     res.status(status).json({ success: false, error: err.message });
+  }
+});
+
+// DELETE /runtimes/install-jobs/:jobId — cancel a runtime install job.
+router.delete('/runtimes/install-jobs/:jobId', (req, res) => {
+  try {
+    const job = cancelRuntimeInstallJob(req.params.jobId);
+    if (!job) return res.status(404).json({ success: false, error: 'Runtime install job not found' });
+    res.json({ success: true, job });
+  } catch (err) {
+    res.status(err.code === 'NOT_RUNNING' ? 409 : 500).json({ success: false, error: err.message });
   }
 });
 
