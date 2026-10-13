@@ -3,7 +3,7 @@
 // ports and settings, so your real data is never touched) with a fake
 // OpenAI-compatible model, then drives the app in a headless browser through
 // the main flows: chat, a project with instructions, agents, Cats, a note made
-// by the agent, and the main pages.
+// by the agent, connectors (with a fake MCP server), and the main pages.
 //
 // Needs a Chromium-based browser (Chrome, Chromium, Edge or Brave), found the
 // same way PDF export finds one; PUPPETEER_EXECUTABLE_PATH picks another.
@@ -21,6 +21,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const HEADED = process.argv.includes('--headed');
 const KEEP = process.argv.includes('--keep');
 const ANSWER = 'Smoke test answer.';
+const FAKE_MCP_SERVER = path.join(ROOT, 'den/test/fixtures/fakeMcpServer.mjs');
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'asyncat-e2e-'));
 const children = [];
@@ -122,9 +123,13 @@ function startFakeModel(port) {
       const system = String(messages.find((m) => m.role === 'system')?.content || '');
       const lastUser = String([...messages].reverse().find((m) => m.role === 'user')?.content || '');
       const calledNote = messages.some((m) => m.role === 'assistant' && String(m.content || '').includes('"create_note"'));
+      const calledConnector = messages.some((m) => m.role === 'assistant' && String(m.content || '').includes('mcp__smoke_notes__echo'));
       let content = ANSWER;
       if (/make a chart note/i.test(lastUser) && system.includes('<tool_call>') && !calledNote) {
         content = `<tool_call>\n${JSON.stringify({ name: 'create_note', arguments: NOTE })}\n</tool_call>`;
+      }
+      if (/use the smoke connector/i.test(lastUser) && system.includes('<tool_call>') && !calledConnector) {
+        content = `<tool_call>\n${JSON.stringify({ name: 'mcp__smoke_notes__echo', arguments: { text: 'from the smoke test' } })}\n</tool_call>`;
       }
       const usage = { prompt_tokens: 20, completion_tokens: 5, total_tokens: 25 };
       if (json.stream) {
@@ -323,6 +328,45 @@ async function main() {
     await page.goto(`${app}/cats/${catId}`, { waitUntil: 'domcontentloaded' });
     await textAppears('Say good morning.');
     await noCrash();
+  });
+
+  const clickText = async (selector, text) => {
+    await waitFor(() => page.evaluate((sel, label) => {
+      const el = [...document.querySelectorAll(sel)].find((node) => node.textContent.trim().includes(label));
+      if (el) el.click();
+      return Boolean(el);
+    }, selector, text), { timeout: 10000, what: `${selector} "${text}"` });
+  };
+
+  await check('a connector added in Settings connects and lists its tools', async () => {
+    await page.goto(`${app}/settings/connectors`, { waitUntil: 'domcontentloaded' });
+    await textAppears('No connectors yet');
+    await clickText('button', 'Add connector');
+    await clickText('[role="tab"]', 'Program on this computer');
+    const command = await page.waitForSelector('#connector-command');
+    await command.type(`"${process.execPath}" "${FAKE_MCP_SERVER}"`);
+    await page.type('#connector-local-title', 'Smoke notes');
+    await clickText('form button[type="submit"]', 'Add');
+    await waitFor(() => page.evaluate(() => document.querySelector('[data-connector="smoke-notes"]')?.innerText.includes('Connected · 7 tools')), { timeout: 20000, what: 'the connector to connect' });
+    await clickText('[data-connector="smoke-notes"] button', 'Tools');
+    await textAppears('Can change or delete');
+    await noCrash();
+  });
+
+  await check("the agent uses a connector's tool; an agent without that connector can't", async () => {
+    const runStream = async (body) => {
+      const res = await fetch(`${den}/api/agent/run`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: app },
+        body: JSON.stringify({ goal: 'Use the smoke connector', agentMode: 'action', ...body }),
+      });
+      return res.text();
+    };
+    const stream = await runStream({});
+    assert(stream.includes('echo: from the smoke test'), 'the connector tool did not answer');
+    const limited = await api('POST', '/api/agent/profiles', { name: 'No connectors', connectors: [] });
+    const refused = await runStream({ profileId: limited.profile.id });
+    assert(!refused.includes('echo: from the smoke test') && refused.includes('Unknown tool'), 'an agent without connectors still reached the tool');
   });
 
   for (const [label, route] of [['Models', '/models'], ['Models → Voice', '/models?tab=audio'], ['Settings → Profile', '/settings/profile'], ['Settings → Connections', '/settings/connections'], ['Settings → Background', '/settings/background'], ['Settings → Engines', '/settings/runtime'], ['Tools & Skills', '/tools']]) {
