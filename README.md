@@ -22,7 +22,7 @@ It is not a chatbot wrapper. It controls your screen, writes and runs code, mana
 
 | | |
 |---|---|
-| **210+ tools** | Files, shell, git, browser, Docker, screen, keyboard, semantic memory, RAG, notes, system, network, audio, image, design canvases, code analysis, sandboxes, scheduler, workflows, model management, integrations |
+| **210+ tools** | Files, shell, git, browser, Docker, screen, keyboard, semantic memory, RAG, notes, system, network, audio, image, design canvases, code analysis, sandboxes, scheduled tasks, model management, integrations |
 | **51 bundled skills** | Reusable instruction modules: code review, debugging, TDD, deployment, security audit, incident response, data engineering, and more |
 | **Basal Ganglia** | Watches which tools succeed for which kinds of goals. After 3 successful runs of the same goal pattern with the same set of tools it writes a new skill automatically. No annotation, no config |
 | **One chat box** | Chat and agent work happen in the same place. The **Tools** setting decides per message: **Auto** runs the agent when the model supports tools or a project, file or mention is involved; **Just chat** talks to the model directly; **Always use tools** always runs the agent. The agent works in `plan` (read-only tools), `action` (full ReAct loop, asks before risky tools) or **Yolo** (`action` with auto-approve). A `design` mode (canvases, artifacts and images; no source edits or shell/git writes) is available through the API |
@@ -33,14 +33,14 @@ It is not a chatbot wrapper. It controls your screen, writes and runs code, mana
 | **Agent profiles** | Bundle a soul, working directory, tool permissions, and max rounds into named configurations. Switch profiles per task |
 | **Desktop automation** | Click, type, read screen content via OCR, focus windows — controls your actual machine |
 | **Sandboxes** | Isolated workspace copies. Review changes as a unified diff. Apply or discard. Commit to a branch |
-| **Automations** | Workflows, Schedules and Activity under one sidebar entry. Chain agent steps into a saved workflow and run it on demand or on a schedule, under any agent profile; each step can pass its output to the next. Schedule single agent jobs too, and follow every run in one feed. The agent can trigger workflows itself |
+| **Scheduled tasks** | Prompts that run on their own: once, daily, on weekdays, on chosen days of the week, every few hours, or on a cron expression, in any time zone. Each task has its own chat where every run's prompt and answer land, and a desktop notification says when it's done. Runs missed while the computer slept are made up once if they are less than 12 hours late. Ask in any chat ("every weekday at 8am, summarise my email") or use the **Scheduled** page. Unattended runs only use safe tools and the ones the task pre-approves, and can't create other tasks |
 | **Command palette** | `Cmd/Ctrl+K` from anywhere — jump to any page, or search projects, notes, chats, and memory |
 | **Semantic memory** | Recall by meaning, not just keywords. Uses your provider's embeddings when available, falls back to an offline keyword (hashed lexical) index |
 | **Built-in browser** | A real tabbed browser the agent shares. Hand it the page you're on with one click, or let it browse on its own |
 | **MCP support** | Add stdio MCP servers to `data/mcp.json` in the backend data folder (`den/data/mcp.json` from source, `<user data>/data/mcp.json` when installed). It is created on first start and hot-reloaded. Also manageable through `/api/agent/mcp` (no UI yet) |
 | **Persistent memory** | SQLite-backed key-value memory with types: `user`, `feedback`, `project`, `reference`, `fact`, `preference`, `context`, `task_state` |
 | **Notes** | The agent writes notes as documents in the chat; open one to edit it (rich text, tables, export to DOCX/PDF). `Cmd/Ctrl+K` finds them |
-| **System tray** | Left-click for quick chat, right-click to show Asyncat, restart the backend, or quit. On macOS, closing the window keeps the backend, schedules, and workflows running |
+| **System tray** | Left-click for quick chat; the menu shows Asyncat, opens scheduled tasks, restarts the backend, or quits. Closing the window leaves Asyncat in the tray while a scheduled task is on (**Settings → Background**), and it can start at login, hidden in the tray |
 | **Global shortcuts** | `Cmd/Ctrl+Shift+A` summons Asyncat from any app; `Cmd/Ctrl+Shift+Space` opens quick chat. Change or turn off either one in **Settings → Appearance** |
 | **Fine-tuning (Labs)** | **Customize → Models → Training** trains a LoRA adapter for a local model and saves it to disk. Loading the adapter is still up to you |
 | **Native notifications** | System-level alerts when a background run finishes, asks you a question, or needs tool approval |
@@ -64,7 +64,7 @@ It is not a chatbot wrapper. It controls your screen, writes and runs code, mana
 Moving from a web app to a native desktop app unlocks things that aren't possible in a browser:
 
 - **Global keyboard shortcut** — `Cmd/Ctrl+Shift+A` brings Asyncat up from anywhere on your machine, whether you're in a code editor, a terminal, or a browser. No alt-tabbing to find the right tab. If it clashes with a shortcut you use, pick another combination or turn it off in **Settings → Appearance**.
-- **System tray** — Quick chat is one click away in your menu bar. On macOS, closing the window keeps the agent, schedules, and workflows running in the background; on Windows and Linux, closing the window quits Asyncat.
+- **System tray** — Quick chat is one click away in your menu bar. While a scheduled task is on, closing the window leaves Asyncat running in the tray so the task still runs; otherwise closing the window quits it (on macOS it stays in the Dock as usual). **Settings → Background** changes this to always keep running or always quit, and can start Asyncat at login, hidden in the tray.
 - **Native notifications** — When a background run finishes, asks you something, or needs approval, you get a real OS notification, not a browser popup that requires a permission grant.
 - **No browser security sandbox** — Screen capture, keyboard control, OCR, and desktop automation tools run without the restrictions that a browser tab imposes.
 - **Single instance** — One Asyncat, always. The OS prevents you from accidentally opening duplicates.
@@ -217,7 +217,7 @@ chmod +x Asyncat-*.AppImage
 | `Cmd/Ctrl+R` | Reload window |
 | `Shift+F5` | Force reload window (ignore cache) |
 
-Page navigation shortcuts (`Cmd/Ctrl+1`…) and the two global shortcuts can be changed in **Settings → Appearance**. The global ones can also be turned off.
+Page navigation shortcuts (`Cmd/Ctrl+1`…, `Cmd/Ctrl+4` for Scheduled) and the two global shortcuts can be changed in **Settings → Appearance**. The global ones can also be turned off.
 
 ---
 
@@ -241,7 +241,9 @@ Start a **New chat** and type. Under the message box you can choose:
 
 ### 3. Run scheduled tasks
 
-Go to **Automations → Schedules** and create repeating agent jobs — hourly checks, a daily report at a set time — or put a workflow on a schedule.
+Open **Scheduled** in the sidebar and create a task: what it should do, when (once, daily, weekdays, chosen days, every few hours, or a cron expression under **Advanced**), and optionally a project and an agent. Or just ask in a chat: "every Monday at 9, list what changed in my project last week". Each run's answer lands in the task's chat with a notification; **Run now** tries it straight away.
+
+Nobody approves tools during a scheduled run, so tools that normally ask first are refused unless the task lists them under **Advanced → Pre-approved tools**. Old schedules and workflows were turned into scheduled tasks on the first start of this version: one-step workflows keep their schedule, longer ones become one prompt with numbered steps and start paused.
 
 ### 4. Manage skills and memory
 
@@ -258,6 +260,7 @@ asyncat-oss/
 │   ├── backend.js   #   Spawns den (bundled Node.js when packaged, system Node in dev)
 │   ├── window.js    #   BrowserWindow creation and loading screen
 │   ├── tray.js      #   System tray icon and menu
+│   ├── background.js #  Keep running in the tray for scheduled tasks, start at login
 │   ├── popup.js     #   Quick-chat popup
 │   ├── pet.js       #   Optional desktop companion that shows agent status
 │   ├── updater.js   #   Update checks, download, checksum and install (update-install.js)
@@ -269,7 +272,7 @@ asyncat-oss/
 │   ├── src/
 │   │   ├── index.js           # Server entry (routes, DB, CORS, SSE streaming)
 │   │   ├── agent/             # AgentRuntime, BasalGanglia, tools, skills, souls,
-│   │   │                      #   sessions, SandboxManager, Scheduler, profiles
+│   │   │                      #   sessions, SandboxManager, Scheduler (scheduled tasks), profiles
 │   │   ├── ai/                # Providers, local engines, chat/agent/training routes
 │   │   ├── browser/           # Built-in browser history (/api/browser)
 │   │   ├── config/            # Config + secrets API (/api/config)
@@ -292,10 +295,7 @@ asyncat-oss/
 │       ├── Agent/             # Agents page (profiles, coding agents)
 │       ├── Models/            # LLM providers, local models and runtimes, audio, images
 │       ├── Profiles/          # Agent profiles
-│       ├── Automations/       # Tab bar grouping the next three pages
-│       ├── Scheduler/         # Schedules
-│       ├── Workflows/         # Workflow builder
-│       ├── Activity/          # Background activity feed
+│       ├── Scheduled/         # Scheduled tasks
 │       ├── Tools/             # Tools & skills browser
 │       ├── Training/          # Fine-tuning jobs (shown as Models → Training)
 │       ├── Settings/          # Settings tabs
