@@ -25,11 +25,8 @@ import { loadSoul, readSoulRaw, writeSoul, listSouls } from '../../agent/prompts
 import { getAiClientForScheduledProvider, getAiClientForUser } from '../controllers/ai/clientFactory.js';
 import { startScheduler } from '../../agent/Scheduler.js';
 import { runScheduledTask } from '../../agent/scheduledRunner.js';
-import { resolveScheduledProvider } from '../../agent/scheduledProvider.js';
 import { noProjectToolNames } from '../../agent/toolScopes.js';
 import { createScheduledTaskRouter } from './scheduledTaskRoutes.js';
-import { initWorkflows } from '../../agent/WorkflowEngine.js';
-import { createWorkflowRouter } from './workflowRoutes.js';
 import { getWorkspaceRoot, loadEntry, resolveWorkingDirectoryContext } from '../../files/fileExplorerService.js';
 import { codeSearchTool, listDefinitionsTool, findDefinitionTool, findReferencesTool } from '../../agent/tools/codeSearchTools.js';
 import { publicProvider } from '../controllers/ai/providerCatalog.js';
@@ -126,44 +123,6 @@ function parseProviderJson(value, fallback = null) {
 
 function getWorkspaceIdForRequest(req) {
   return req.workspaceId || db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id || null;
-}
-
-function listRecentActivity(userId, workspaceId, limit = 50) {
-  const perTypeLimit = Math.max(10, limit);
-  const workflowRows = db.prepare(`
-    SELECT r.*, w.name AS target_name, w.profile_id, ap.name AS profile_name
-    FROM workflow_runs r
-    JOIN workflows w ON w.id = r.workflow_id
-    LEFT JOIN agent_profiles ap ON ap.id = w.profile_id
-    WHERE r.user_id = ? AND (? IS NULL OR w.workspace_id = ? OR w.workspace_id IS NULL)
-    ORDER BY r.started_at DESC
-    LIMIT ?
-  `).all(userId, workspaceId, workspaceId, perTypeLimit);
-
-  const items = [
-    ...workflowRows.map(row => {
-      const results = parseJson(row.results, []);
-      const sessionResult = [...results].reverse().find(result => result?.sessionId);
-      return {
-        id: row.id,
-        type: 'workflow',
-        name: row.target_name || 'Workflow',
-        context: `${row.steps_completed || 0}/${row.steps_total || 0} steps · ${row.trigger || 'manual'}`,
-        status: row.status,
-        detail: row.error || results.find(result => result?.output)?.output || null,
-        error: row.error || null,
-        startedAt: row.started_at,
-        finishedAt: row.finished_at || null,
-        sessionId: sessionResult?.sessionId || null,
-        targetId: row.workflow_id,
-        profileName: row.profile_name || null,
-      };
-    }),
-  ];
-
-  return items
-    .sort((a, b) => new Date(b.startedAt || 0).getTime() - new Date(a.startedAt || 0).getTime())
-    .slice(0, limit);
 }
 
 function resolveAgentMentions(rawMentions = [], userId) {
@@ -354,40 +313,8 @@ function clientForAgent(userId, profile) {
   return getAiClientForUser(userId);
 }
 
-const runScheduledAgent = async ({ goal, userId, workspaceId, workingDir, profileId, providerProfileId, providerSnapshot }) => {
-  const { client: aiClient, model, isLocal, supportsNativeTools, providerInfo } = getAiClientForScheduledProvider(userId, providerProfileId, providerSnapshot);
-  const profile = profileId ? getProfile(profileId, userId) : getDefaultProfile(userId);
-  let resolvedSoul = null;
-  if (profile?.soul_override) {
-    const withoutFrontmatter = profile.soul_override.replace(/^---[\s\S]*?---\n?/, '').trim();
-    resolvedSoul = withoutFrontmatter || null;
-  } else if (profile?.soul_name && profile.soul_name !== 'default') {
-    resolvedSoul = loadSoul(profile.soul_name);
-  }
-  const agent = new AgentRuntime({
-    aiClient, model, isLocal, supportsNativeTools,
-    userId, workspaceId,
-    workingDir: workingDir || profile?.working_dir || defaultAgentWorkingDir(),
-    maxRounds: profile?.max_rounds || 20,
-    autoApprove: profile?.auto_approve || false,
-    requestPermission: async ({ tool, permission }) => ({
-      decision: 'deny',
-      reason: `Scheduled runs cannot request live approval for ${permission} tool "${tool}". Pre-approve this tool in the selected agent profile or enable auto-approve for that profile.`,
-    }),
-    soul: resolvedSoul,
-    providerInfo,
-    usageContext: { operation: 'scheduled' },
-  });
-  if (Array.isArray(profile?.always_allowed_tools)) {
-    profile.always_allowed_tools.forEach(tool => {
-      if (typeof tool === 'string' && tool.trim()) agent.sessionApprovedTools.add(tool.trim());
-    });
-  }
-  return await agent.run(goal);
-};
 // Scheduled tasks: one clock for every task (agent/Scheduler.js).
 startScheduler({ runTask: runScheduledTask });
-initWorkflows(runScheduledAgent);
 
 // ══════════════════════════════════════════════════════════════════════════════
 // CONVERSATION ROUTES — /api/ai/*
@@ -1057,7 +984,6 @@ function createAskUserRequest(req, res) {
 
 // ── Agent tools / skills / souls ─────────────────────────────────────────────
 
-router.use('/workflows', createWorkflowRouter({ withWorkspaceContext, resolveProvider: resolveScheduledProvider }));
 router.use('/scheduled-tasks', createScheduledTaskRouter({ withWorkspaceContext }));
 
 router.get('/tools', withWorkspaceContext, async (req, res) => {
@@ -2068,18 +1994,6 @@ router.delete('/sandboxes/:id', withWorkspaceContext, (req, res) => {
     }));
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });
-  }
-});
-
-// ── Agent task runs (Kanban cards assigned to agents) ─────────────────────────
-
-router.get('/activity', withWorkspaceContext, (req, res) => {
-  try {
-    const workspaceId = getWorkspaceIdForRequest(req);
-    const limit = Math.max(1, Math.min(100, Number(req.query.limit || 50)));
-    res.json({ success: true, items: listRecentActivity(req.user.id, workspaceId, limit) });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message || 'Failed to load activity' });
   }
 });
 
@@ -3150,11 +3064,6 @@ function checkpointAvailability(checkpoint) {
 
 function execGitStashList(cwd) {
   return execSync('git stash list', { cwd: cwd || process.cwd(), encoding: 'utf8', timeout: 3000 });
-}
-
-function parseJson(value, fallback) {
-  if (value && typeof value === 'object') return value;
-  try { return JSON.parse(value || ''); } catch { return fallback; }
 }
 
 export default router;

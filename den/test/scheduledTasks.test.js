@@ -28,13 +28,21 @@ db.prepare(`
   VALUES (?, 'custom', 'test', 'http://127.0.0.1:9/v1', 'test-model', 1)
 `).run(userId);
 
-// Old schedules, as the previous version left them.
+// Old schedules and workflows, as the previous version left them.
 db.exec(`
   CREATE TABLE scheduled_jobs (
     id TEXT PRIMARY KEY, name TEXT NOT NULL, goal TEXT NOT NULL, schedule TEXT NOT NULL, timezone TEXT,
     user_id TEXT NOT NULL, workspace_id TEXT NOT NULL, profile_id TEXT, provider_profile_id TEXT,
     provider_snapshot TEXT NOT NULL DEFAULT '{}', working_dir TEXT NOT NULL DEFAULT '.',
     enabled INTEGER NOT NULL DEFAULT 1, last_run_at TEXT, next_run_at TEXT NOT NULL,
+    run_count INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE workflows (
+    id TEXT PRIMARY KEY, user_id TEXT NOT NULL, workspace_id TEXT, name TEXT NOT NULL, description TEXT,
+    trigger_type TEXT NOT NULL DEFAULT 'manual', schedule TEXT, timezone TEXT, steps TEXT NOT NULL DEFAULT '[]',
+    enabled INTEGER NOT NULL DEFAULT 1, profile_id TEXT, provider_profile_id TEXT,
+    provider_snapshot TEXT NOT NULL DEFAULT '{}', working_dir TEXT, last_run_at TEXT,
     run_count INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
@@ -45,6 +53,16 @@ const insertJob = db.prepare(`
 `);
 insertJob.run('job-daily', 'Morning news', 'Read the news', 'daily:07:30', userId, workspaceId, projectRoot, 1, '2026-01-01T07:30:00.000Z', 3);
 insertJob.run('job-once-done', 'Old reminder', 'Remind me', 'once:60000', userId, workspaceId, '.', 0, '2026-01-01T07:30:00.000Z', 1);
+const insertWorkflow = db.prepare(`
+  INSERT INTO workflows (id, user_id, workspace_id, name, trigger_type, schedule, timezone, steps, enabled)
+  VALUES (?, ?, ?, ?, ?, ?, 'UTC', ?, ?)
+`);
+insertWorkflow.run('wf-one', userId, workspaceId, 'Standup notes', 'schedule', '0 8 * * 1-5',
+  JSON.stringify([{ prompt: 'Summarise yesterday' }]), 1);
+insertWorkflow.run('wf-many', userId, workspaceId, 'Report', 'schedule', '0 9 * * 1',
+  JSON.stringify([{ prompt: 'Collect numbers' }, { prompt: 'Write the report', useContext: true }]), 1);
+insertWorkflow.run('wf-manual', userId, workspaceId, 'Clean up', 'manual', null, JSON.stringify([{ prompt: 'Tidy the inbox' }]), 1);
+insertWorkflow.run('wf-empty', userId, workspaceId, 'Nothing', 'manual', null, '[]', 1);
 
 const scheduler = await import('../src/agent/Scheduler.js');
 const bridge = await import('../src/lib/hostBridge.js');
@@ -108,7 +126,7 @@ function isolate(...tasks) {
 const byName = (name) => scheduler.listTasks(userId).find((task) => task.name === name);
 const runsOf = (task) => scheduler.listTaskRuns(userId, task.id, 50);
 
-test('old schedules become scheduled tasks, once', () => {
+test('old schedules and workflows become scheduled tasks, once', () => {
   const daily = byName('Morning news');
   assert.deepEqual(daily.schedule, { kind: 'daily', time: '07:30' });
   assert.equal(daily.enabled, true);
@@ -119,10 +137,25 @@ test('old schedules become scheduled tasks, once', () => {
   assert.equal(done.enabled, false);
   assert.equal(done.schedule.kind, 'once');
 
+  const standup = byName('Standup notes');
+  assert.deepEqual(standup.schedule, { kind: 'weekdays', time: '08:00' });
+  assert.equal(standup.enabled, true);
+  assert.equal(standup.timezone, 'UTC');
+  assert.equal(standup.prompt, 'Summarise yesterday');
+
+  const report = byName('Report');
+  assert.equal(report.enabled, false, 'several steps are created paused');
+  assert.deepEqual(report.schedule, { kind: 'weekly', time: '09:00', days: [1] });
+  assert.match(report.prompt, /1\. Collect numbers\n\n2\. Write the report/);
+
+  const manual = byName('Clean up');
+  assert.equal(manual.enabled, false, 'manual workflows become paused tasks');
+  assert.equal(byName('Nothing'), undefined, 'a workflow with no steps is left out');
+
   const before = scheduler.listTasks(userId).length;
   assert.deepEqual(scheduler.migrateLegacyData(), { jobs: 0, workflows: 0 });
   assert.equal(scheduler.listTasks(userId).length, before);
-  assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE name = 'scheduled_jobs'").get(), 'the old table stays');
+  assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE name = 'workflows'").get(), 'old tables stay');
 });
 
 test('a task runs when due, answers in its own chat and notifies', async () => {
@@ -304,7 +337,7 @@ test('editing keeps the every-N-hours rhythm and checks input', () => {
 });
 
 test('runs left running by a crash are marked failed at the next start', () => {
-  const task = byName('Old reminder');
+  const task = byName('Clean up');
   db.prepare("INSERT INTO scheduled_task_runs (id, task_id, status, started_at) VALUES (?, ?, 'running', ?)")
     .run('crashed-run', task.id, new Date().toISOString());
   assert.equal(scheduler.recoverInterruptedRuns(), 1);

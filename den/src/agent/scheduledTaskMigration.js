@@ -1,13 +1,14 @@
 // den/src/agent/scheduledTaskMigration.js
-// ─── Old schedules → scheduled tasks ─────────────────────────────────────────
-// Before scheduled tasks there were schedules (scheduled_jobs, one agent goal
-// on a timer). Each old row becomes one scheduled task the first time the
-// backend starts with this code; `migrated_from` records where it came from,
-// so running the migration again changes nothing. The old table is left as
-// it was.
+// ─── Old schedules and workflows → scheduled tasks ───────────────────────────
+// Before scheduled tasks there were two features: schedules (scheduled_jobs,
+// one agent goal on a timer) and workflows (a list of prompt steps on a cron
+// schedule or run by hand). Each old row becomes one scheduled task the first
+// time the backend starts with this code; `migrated_from` records where it
+// came from, so running the migration again changes nothing. The old tables
+// are left as they were.
 
 import {
-  computeNextRun, normalizeSchedule, resolveTimeZone, zonedParts,
+  computeNextRun, normalizeSchedule, resolveTimeZone, simplifyCron, zonedParts,
 } from './scheduleMath.js';
 
 const HOUR_MS = 3_600_000;
@@ -109,13 +110,69 @@ export function taskFromLegacyJob(job, { now = new Date(), projectForFolder = ()
   };
 }
 
+/**
+ * A scheduled task for an old workflow, or null for one with no steps.
+ * One step on a schedule keeps its schedule and on/off state. Several steps
+ * become one prompt listing the numbered steps, created paused so the user can
+ * check it first. Workflows that only ran by hand become paused tasks.
+ */
+export function taskFromWorkflow(workflow, { now = new Date(), projectForFolder = () => null, profileTools = () => [] } = {}) {
+  const steps = parseJson(workflow.steps, [])
+    .map((step) => String(step?.prompt || '').trim())
+    .filter(Boolean);
+  if (!steps.length) return null;
+
+  const timezone = resolveTimeZone(workflow.timezone);
+  let schedule = null;
+  if (workflow.trigger_type === 'schedule' && workflow.schedule) {
+    try {
+      const simple = simplifyCron(workflow.schedule);
+      schedule = simple ? normalizeSchedule(simple, { now, timezone }) : null;
+    } catch {
+      schedule = null;
+    }
+  }
+  const scheduled = Boolean(schedule);
+  if (!schedule) schedule = { kind: 'daily', time: '09:00' };
+
+  const enabled = scheduled && steps.length === 1 && Boolean(workflow.enabled);
+  const prompt = steps.length === 1
+    ? steps[0]
+    : [
+      'Do these steps in order. Use what you find in each step for the steps after it.',
+      ...steps.map((step, index) => `${index + 1}. ${step}`),
+    ].join('\n\n');
+
+  const workingDir = workflow.working_dir && workflow.working_dir !== '.' ? workflow.working_dir : null;
+  return {
+    userId: workflow.user_id,
+    workspaceId: workflow.workspace_id || null,
+    name: String(workflow.name || 'Workflow').slice(0, 120),
+    prompt,
+    schedule,
+    timezone,
+    enabled,
+    nextRunAt: enabled ? computeNextRun(schedule, now, timezone)?.toISOString() || null : null,
+    lastRunAt: workflow.last_run_at || null,
+    runCount: Number(workflow.run_count || 0),
+    projectId: workingDir ? projectForFolder(workingDir, workflow.user_id) : null,
+    profileId: workflow.profile_id || null,
+    providerProfileId: workflow.provider_profile_id || null,
+    providerSnapshot: parseJson(workflow.provider_snapshot, {}),
+    allowedTools: workflow.profile_id ? profileTools(workflow.profile_id) : [],
+    migratedFrom: `workflow:${workflow.id}`,
+    createdBy: 'migration',
+    createdAt: workflow.created_at || null,
+  };
+}
+
 function tableExists(db, name) {
   return Boolean(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(name));
 }
 
 /**
- * Copy old schedules into scheduled tasks. Safe to run on every start: rows
- * that were already copied are skipped. `insertTask(task)` writes
+ * Copy old schedules and workflows into scheduled tasks. Safe to run on every
+ * start: rows that were already copied are skipped. `insertTask(task)` writes
  * one task (Scheduler.js owns the table).
  */
 export function migrateLegacyAutomations(db, { now = new Date(), insertTask, projectForFolder, profileTools } = {}) {
@@ -131,6 +188,15 @@ export function migrateLegacyAutomations(db, { now = new Date(), insertTask, pro
         if (migrated.has(`job:${job.id}`) || !job.user_id) continue;
         insertTask(taskFromLegacyJob(job, helpers));
         counts.jobs += 1;
+      }
+    }
+    if (tableExists(db, 'workflows')) {
+      for (const workflow of db.prepare('SELECT * FROM workflows ORDER BY created_at ASC').all()) {
+        if (migrated.has(`workflow:${workflow.id}`) || !workflow.user_id) continue;
+        const task = taskFromWorkflow(workflow, helpers);
+        if (!task) continue;
+        insertTask(task);
+        counts.workflows += 1;
       }
     }
   });
