@@ -52,7 +52,7 @@ class MemoryConsolidator {
 
     // Fetch candidates: low-importance, rarely accessed, non-protected types
     const candidates = db.prepare(`
-      SELECT id, key, content, memory_type, importance, access_count, profile_id, project_id
+      SELECT id, key, content, memory_type, importance, access_count, profile_id, project_id, cat_id
       FROM agent_memory
       WHERE user_id = ? AND workspace_id = ?
         AND importance < 0.7
@@ -66,11 +66,11 @@ class MemoryConsolidator {
       return { merged, deleted, skipped: false };
     }
 
-    // Group by type, agent and project (never merge one project's memories
-    // into another's), then process each group in clusters
+    // Group by type, agent, project and Cat (never merge one project's or
+    // Cat's memories into another's), then process each group in clusters
     const groups = new Map();
     for (const row of candidates) {
-      const groupKey = JSON.stringify([row.memory_type, row.profile_id || null, row.project_id || null]);
+      const groupKey = JSON.stringify([row.memory_type, row.profile_id || null, row.project_id || null, row.cat_id || null]);
       if (!groups.has(groupKey)) groups.set(groupKey, []);
       groups.get(groupKey).push(row);
     }
@@ -95,12 +95,12 @@ class MemoryConsolidator {
         const maxImportance = Math.max(...cluster.map(r => Number(r.importance || 0.5)));
 
         db.prepare(`
-          INSERT INTO agent_memory (id, user_id, workspace_id, memory_type, key, content, tags, importance, profile_id, project_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO agent_memory (id, user_id, workspace_id, memory_type, key, content, tags, importance, profile_id, project_id, cat_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           randomUUID(), userId, workspaceId, memType, mergedKey,
           summary, JSON.stringify(['consolidated']), maxImportance,
-          rows[0].profile_id || null, rows[0].project_id || null
+          rows[0].profile_id || null, rows[0].project_id || null, rows[0].cat_id || null
         );
 
         const ids = cluster.map(r => r.id);

@@ -14,6 +14,8 @@
 
 import dns from 'dns/promises';
 import net from 'net';
+import { currentScheduledRun } from '../scheduledRunContext.js';
+import { describeSites, siteAllowed } from '../../cats/catSites.js';
 
 /** Ports used by Asyncat itself and the local model servers it starts. */
 export function asyncatPorts(env = process.env) {
@@ -95,6 +97,11 @@ export async function checkAgentUrl(rawUrl, { env = process.env } = {}) {
   }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     return { ok: false, reason: `Only http and https addresses can be opened, not ${url.protocol}` };
+  }
+  // A Cat keeps to the sites on its list (Cats page → Freedom).
+  const sites = currentScheduledRun()?.allowedSites;
+  if (Array.isArray(sites) && sites.length && !siteAllowed(url.href, sites)) {
+    return { ok: false, reason: `${url.hostname} isn't on this Cat's list of sites (${describeSites(sites)}). Ask the user to add it if it's needed.` };
   }
   const addresses = await resolveAll(url.hostname);
   const kinds = addresses.map(classifyAddress);

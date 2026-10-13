@@ -6,6 +6,7 @@ import { PermissionLevel } from './toolRegistry.js';
 import db from '../../db/client.js';
 import { randomUUID } from 'crypto';
 import { memoryConsolidator } from '../MemoryConsolidator.js';
+import { currentCatRun } from '../scheduledRunContext.js';
 
 export const MEMORY_KINDS = ['user', 'feedback', 'project', 'reference', 'fact', 'preference', 'context', 'task_state'];
 
@@ -29,6 +30,18 @@ const PERSONAL_KINDS = new Set(['user', 'feedback', 'preference']);
 /** Pass as `projectId` to see memories from every project (the Memory page). */
 export const ALL_PROJECTS = 'all';
 
+/** Pass as `catId` to see every Cat's memories too (the Memory page). */
+export const ALL_CATS = 'all';
+
+/**
+ * The Cat a new memory belongs to: the Cat whose run saves it, unless `scope`
+ * says 'everywhere'. Null means it isn't any Cat's own.
+ */
+export function memoryCatFor({ scope, catId = currentCatRun()?.catId || null } = {}) {
+  if (!catId || scope === 'everywhere') return null;
+  return catId;
+}
+
 /**
  * The project a new memory belongs to: the chat's project, unless it is about
  * the person or `scope` says 'everywhere'. Null means every chat can see it.
@@ -44,10 +57,19 @@ export function memoryProjectFor({ kind, scope, projectId }) {
  * memories plus shared ones; a project chat sees that project's memories plus
  * ones saved outside any project; a chat outside projects sees only the latter.
  */
-export function memoryScope({ profileId = null, projectId = null } = {}, alias = '') {
+export function memoryScope({ profileId = null, projectId = null, catId = currentCatRun()?.catId || null } = {}, alias = '') {
   const col = (name) => (alias ? `${alias}.${name}` : name);
   const clauses = [];
   const params = [];
+  // A Cat sees its own memories plus everyone's; nothing else sees a Cat's.
+  if (catId === ALL_CATS) {
+    // no Cat filter
+  } else if (catId) {
+    clauses.push(`AND (${col('cat_id')} = ? OR ${col('cat_id')} IS NULL)`);
+    params.push(catId);
+  } else {
+    clauses.push(`AND ${col('cat_id')} IS NULL`);
+  }
   if (profileId) {
     clauses.push(`AND (${col('profile_id')} = ? OR ${col('profile_id')} IS NULL)`);
     params.push(profileId);
@@ -116,7 +138,7 @@ export function enforceMemoryCap(userId, workspaceId) {
 
 const memoryColumnNames = [
   'id', 'key', 'content', 'memory_type', 'tags', 'importance',
-  'last_accessed_at', 'access_count', 'created_at', 'updated_at', 'source', 'project_id',
+  'last_accessed_at', 'access_count', 'created_at', 'updated_at', 'source', 'project_id', 'cat_id',
 ];
 const memoryColumns = memoryColumnNames.join(', ');
 const prefixedMemoryColumns = memoryColumnNames.map(name => `m.${name}`).join(', ');
@@ -234,8 +256,8 @@ function cosineSim(a, b) {
  * In-process vector search over all memories that have embeddings.
  * Safe for up to ~50,000 memories (O(n) cosine pass, well under 10ms at that scale).
  */
-function _vectorSearch({ userId, workspaceId, profileId, projectId, queryVec, queryModel, kind, limit = 10 }) {
-  const scope = memoryScope({ profileId, projectId });
+function _vectorSearch({ userId, workspaceId, profileId, projectId, catId, queryVec, queryModel, kind, limit = 10 }) {
+  const scope = memoryScope({ profileId, projectId, catId });
   const params = [userId, workspaceId, ...scope.params];
   let kindClause = '';
   if (kind && kind !== 'all') {
@@ -287,9 +309,9 @@ export function bumpMemoryAccess(rows) {
   tx();
 }
 
-export function searchMemories({ userId, workspaceId, profileId, projectId, query, kind = 'all', limit = 10, bumpAccess = false }) {
+export function searchMemories({ userId, workspaceId, profileId, projectId, catId, query, kind = 'all', limit = 10, bumpAccess = false }) {
   const ftsQuery = buildFtsQuery(query);
-  const scope = memoryScope({ profileId, projectId }, 'm');
+  const scope = memoryScope({ profileId, projectId, catId }, 'm');
   const ftsParams = ftsQuery ? [ftsQuery, userId, workspaceId, ...scope.params] : [];
   let kindClause = '';
   if (kind && kind !== 'all') {
@@ -316,7 +338,7 @@ export function searchMemories({ userId, workspaceId, profileId, projectId, quer
 
   if (rows.length === 0) {
     const like = `%${query || ''}%`;
-    const fallbackScope = memoryScope({ profileId, projectId });
+    const fallbackScope = memoryScope({ profileId, projectId, catId });
     const fallbackParams = [userId, workspaceId, ...fallbackScope.params];
     let fallbackKind = '';
     if (kind && kind !== 'all') {
@@ -346,8 +368,8 @@ export function searchMemories({ userId, workspaceId, profileId, projectId, quer
   return scored.map(normalizeMemoryRow);
 }
 
-export function listMemories({ userId, workspaceId, profileId, projectId, limit = 50, kind = 'all' }) {
-  const scope = memoryScope({ profileId, projectId });
+export function listMemories({ userId, workspaceId, profileId, projectId, catId, limit = 50, kind = 'all' }) {
+  const scope = memoryScope({ profileId, projectId, catId });
   const params = [userId, workspaceId, ...scope.params];
   let kindClause = '';
   if (kind && kind !== 'all') {
@@ -377,7 +399,7 @@ export const saveMemoryTool = {
       content: { type: 'string', description: 'The durable content to remember.' },
       tags: { type: 'array', items: { type: 'string' }, description: 'Optional short tags for filtering and review.' },
       importance: { type: 'number', description: '0.0 to 1.0 importance. Default 0.5.' },
-      scope: { type: 'string', enum: ['project', 'everywhere'], description: 'Only matters in a project chat. Default: memories about the user (user, feedback, preference) apply everywhere; the rest stay with the project.' },
+      scope: { type: 'string', enum: ['project', 'everywhere'], description: 'Only matters in a project chat or a Cat\'s run. Default: in a project, memories about the user (user, feedback, preference) apply everywhere and the rest stay with the project; a Cat keeps everything it saves to itself. "everywhere" makes it visible to every chat.' },
     },
     required: ['kind', 'content'],
   },
@@ -390,10 +412,11 @@ export const saveMemoryTool = {
 
       const profileId = context.profileId || null;
       const projectId = memoryProjectFor({ kind, scope: args.scope, projectId: context.projectId });
+      const catId = memoryCatFor({ scope: args.scope });
 
       const existing = db.prepare(
-        'SELECT id FROM agent_memory WHERE user_id = ? AND workspace_id = ? AND key = ? AND profile_id IS ? AND project_id IS ?'
-      ).get(context.userId, context.workspaceId, key, profileId, projectId);
+        'SELECT id FROM agent_memory WHERE user_id = ? AND workspace_id = ? AND key = ? AND profile_id IS ? AND project_id IS ? AND cat_id IS ?'
+      ).get(context.userId, context.workspaceId, key, profileId, projectId, catId);
 
       let memoryId;
       let action;
@@ -411,9 +434,9 @@ export const saveMemoryTool = {
         const expiresAt = computeExpiresAt(kind);
         db.prepare(`
           INSERT INTO agent_memory
-            (id, user_id, workspace_id, memory_type, key, content, tags, importance, profile_id, project_id, expires_at, source)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'agent')
-        `).run(memoryId, context.userId, context.workspaceId, kind, key, args.content, tags, importance, profileId, projectId, expiresAt);
+            (id, user_id, workspace_id, memory_type, key, content, tags, importance, profile_id, project_id, cat_id, expires_at, source)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'agent')
+        `).run(memoryId, context.userId, context.workspaceId, kind, key, args.content, tags, importance, profileId, projectId, catId, expiresAt);
         action = 'stored';
         // Enforce cap asynchronously so the tool call doesn't block
         setImmediate(() => enforceMemoryCap(context.userId, context.workspaceId));
@@ -437,7 +460,7 @@ export const saveMemoryTool = {
         context.emitEvent({ type: 'memory_saved', data: { action, key, kind, importance } });
       }
 
-      return { success: true, action, key, kind, importance, scope: projectId ? 'project' : 'everywhere' };
+      return { success: true, action, key, kind, importance, scope: catId ? 'cat' : projectId ? 'project' : 'everywhere' };
     } catch (err) {
       return { success: false, error: err.message };
     }
@@ -452,11 +475,13 @@ export const saveMemoryTool = {
 export async function hybridRecall(context, { query, kind = 'all', limit = 10 } = {}) {
   const profileId = context.profileId || null;
   const projectId = context.projectId || null;
+  const catId = context.catId || undefined;
   const bm25Results = searchMemories({
     userId: context.userId,
     workspaceId: context.workspaceId,
     profileId,
     projectId,
+    catId,
     query,
     kind,
     limit,
@@ -474,6 +499,7 @@ export async function hybridRecall(context, { query, kind = 'all', limit = 10 } 
           workspaceId: context.workspaceId,
           profileId,
           projectId,
+          catId,
           queryVec,
           queryModel,
           kind,
@@ -559,10 +585,13 @@ export const forgetMemoryTool = {
   execute: async (args, context) => {
     try {
       const profileId = context.profileId || null;
-      const scope = memoryScope({ projectId: context.projectId || null });
+      // A Cat may only forget what it saved itself.
+      const catId = currentCatRun()?.catId || null;
+      const scope = memoryScope({ projectId: context.projectId || null, catId });
+      const own = catId ? 'AND cat_id = ?' : '';
       const result = db.prepare(
-        `DELETE FROM agent_memory WHERE user_id = ? AND workspace_id = ? AND key = ? AND profile_id IS ? ${scope.sql}`
-      ).run(context.userId, context.workspaceId, args.key, profileId, ...scope.params);
+        `DELETE FROM agent_memory WHERE user_id = ? AND workspace_id = ? AND key = ? AND profile_id IS ? ${scope.sql} ${own}`
+      ).run(context.userId, context.workspaceId, args.key, profileId, ...scope.params, ...(catId ? [catId] : []));
       return result.changes > 0
         ? { success: true, key: args.key, action: 'deleted' }
         : { success: false, error: `No memory found with key: ${args.key}` };

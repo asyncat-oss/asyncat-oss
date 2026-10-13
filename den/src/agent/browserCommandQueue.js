@@ -16,11 +16,14 @@
 
 import { isHostConnected, requestFromHost } from '../lib/hostBridge.js';
 import { approvalAllows, approvalCoversRun } from './approvalDecisions.js';
+import { currentCatRun } from './scheduledRunContext.js';
 
 export const NO_DESKTOP_APP = 'The built-in browser needs the Asyncat desktop app, and the backend is running without it. Use fetch_url or web_search instead, or open Asyncat.';
 
 /** Which agent this is, so its tabs and command queue stay its own. */
 export function browserOwner(context) {
+  const cat = currentCatRun();
+  if (cat) return `cat:${cat.catId}`;
   return String(context?.conversationId || context?.session?.id || 'default');
 }
 
@@ -31,11 +34,15 @@ export function isBrowserAvailable() {
 /** Send one command to the desktop app's browser. Throws on failure. */
 export async function sendBrowserCommand(action, params = {}, context = {}, { timeoutMs = 30_000 } = {}) {
   if (!isHostConnected('browser')) throw new Error(NO_DESKTOP_APP);
+  // A Cat browses in its own profile (its logins stay its own) and only on
+  // its sites; the desktop app enforces both for the tabs it opens.
+  const cat = currentCatRun();
   return requestFromHost('browser.command', {
     ...params,
     action,
     owner: browserOwner(context),
     conversationId: context?.conversationId || null,
+    ...(cat ? { partition: cat.browserPartition, allowedSites: cat.allowedSites || [] } : {}),
   }, { timeoutMs, capability: 'browser' });
 }
 

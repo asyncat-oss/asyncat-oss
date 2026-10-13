@@ -1,5 +1,6 @@
 // den/src/agent/tools/agentTools.js
 import { PermissionLevel } from './toolRegistry.js';
+import { currentScheduledRun } from '../scheduledRunContext.js';
 import { createSandbox } from '../SandboxManager.js';
 import { randomUUID } from 'crypto';
 
@@ -252,7 +253,9 @@ export const agentTools = [
         knowledgeSources: agentContext.sources,
         initialImageUrls: agentContext.images,
         ...(capabilityTools ? { allowedTools: capabilityTools } : {}),
-        autoApprove: profile.auto_approve || false,
+        // Inside a Cat's run the Cat's freedom decides, never the helper's
+        // own auto-approve.
+        autoApprove: currentScheduledRun() ? false : (profile.auto_approve || false),
         requestPermission: context.requestPermission,
         askUser: context.askUser,
         soul: resolvedSoul,

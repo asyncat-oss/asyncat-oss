@@ -1,10 +1,10 @@
 // electron/browserTabsStore.js
 // ─── The built-in browser's tabs, kept across restarts ───────────────────────
 // Only the user's own Standard-profile tabs are saved: never Incognito tabs,
-// tabs the agent opened, hidden tabs or pop-up windows. Each is saved as its
-// address and title, in tab-strip order, with which one was active. On the
-// next start they come back as sleeping tabs (browserHost.js): only a tab
-// that is shown loads its page.
+// tabs the agent opened, hidden tabs, pop-up windows or a Cat's tabs. Each
+// is saved as its address and title, in tab-strip order, with which one was
+// active. On the next start they come back as sleeping tabs (browserHost.js):
+// only a tab that is shown loads its page.
 
 import fs from 'fs';
 import path from 'path';
@@ -22,6 +22,7 @@ export function savableTabs(tabs) {
     && !tab.agent
     && !tab.hidden
     && !tab.popup
+    && !tab.catProfile
     && typeof tab.url === 'string'
     && /^https?:\/\//i.test(tab.url)
   ));

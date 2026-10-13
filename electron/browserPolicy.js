@@ -7,6 +7,9 @@
 export const STANDARD_PARTITION = 'persist:asyncat-web';
 export const INCOGNITO_PREFIX = 'asyncat-web-incognito-';
 const PRIVATE_PARTITION = 'asyncat-web-private';
+// Each Cat browses in a profile of its own, kept across restarts, so the
+// sites it signs in to aren't shared with other Cats or the user's tabs.
+export const CAT_PARTITION_PREFIX = 'persist:asyncat-cat-';
 
 // Paths on the backend's port that web pages may load: project site
 // previews and raw project files. Everything else there is the API.
@@ -16,7 +19,26 @@ export function isAllowedBrowserPartition(partition) {
   const value = String(partition || '');
   return value === STANDARD_PARTITION
     || value === PRIVATE_PARTITION
-    || new RegExp(`^${INCOGNITO_PREFIX}[a-zA-Z0-9-]{8,120}$`).test(value);
+    || new RegExp(`^${INCOGNITO_PREFIX}[a-zA-Z0-9-]{8,120}$`).test(value)
+    || isCatPartition(value);
+}
+
+export function isCatPartition(partition) {
+  return /^persist:asyncat-cat-[A-Za-z0-9-]{8,80}$/.test(String(partition || ''));
+}
+
+/**
+ * Is `rawUrl` on a Cat's list of sites? "example.com" covers its subdomains;
+ * an empty list allows every site. Mirrors den/src/cats/catSites.js.
+ */
+export function siteOnList(rawUrl, sites = []) {
+  if (!Array.isArray(sites) || sites.length === 0) return true;
+  let host;
+  try { host = new URL(rawUrl).hostname.toLowerCase(); } catch { return false; }
+  return sites.some((site) => {
+    const bare = String(site || '').toLowerCase().replace(/^\*\./, '');
+    return Boolean(bare) && (host === bare || host.endsWith(`.${bare}`));
+  });
 }
 
 function stripBrackets(host) {

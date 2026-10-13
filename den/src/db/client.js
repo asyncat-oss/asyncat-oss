@@ -188,6 +188,7 @@ function ensureAgentMemorySchema() {
   addColumn('embedding_dim', 'INTEGER'); // vector dimensionality, for fast same-space filtering
   addColumn('profile_id', 'TEXT'); // agent profile namespace — NULL means shared across all profiles
   addColumn('project_id', 'TEXT'); // project the memory belongs to — NULL means every chat can see it
+  addColumn('cat_id', 'TEXT'); // the Cat whose memory it is — NULL means not a Cat's own
   addColumn('expires_at', 'TEXT'); // ISO datetime; NULL = permanent; set for transient types (task_state, context)
   addColumn("source", "TEXT NOT NULL DEFAULT 'agent'"); // 'agent'=explicit tool call, 'auto'=post-run extraction, 'correction'=correction detection
 
@@ -197,6 +198,7 @@ function ensureAgentMemorySchema() {
     CREATE INDEX IF NOT EXISTS idx_agent_memory_key        ON agent_memory(user_id, workspace_id, key);
     CREATE INDEX IF NOT EXISTS idx_agent_memory_profile    ON agent_memory(user_id, workspace_id, profile_id);
     CREATE INDEX IF NOT EXISTS idx_agent_memory_project    ON agent_memory(user_id, workspace_id, project_id);
+    CREATE INDEX IF NOT EXISTS idx_agent_memory_cat        ON agent_memory(user_id, workspace_id, cat_id);
 
     CREATE VIRTUAL TABLE IF NOT EXISTS agent_memory_fts USING fts5(
       memory_id UNINDEXED,

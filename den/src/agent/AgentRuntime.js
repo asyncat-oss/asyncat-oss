@@ -18,7 +18,8 @@ import { buildAgentSystemPrompt, loadSoul } from './prompts/agentSystemPrompt.js
 import { basalGanglia } from './BasalGanglia.js';
 import { Compactor } from './Compactor.js';
 import { normalizeTags, selectRelevantSkillsWithLlm, synthesizeSkillFromRun } from './skills.js';
-import { listMemories, searchMemories, enforceMemoryCap, decayMemoryImportance, memoryProjectFor } from './tools/memoryTools.js';
+import { listMemories, searchMemories, enforceMemoryCap, decayMemoryImportance, memoryProjectFor, memoryCatFor } from './tools/memoryTools.js';
+import { currentCatRun } from './scheduledRunContext.js';
 import { memoryConsolidator } from './MemoryConsolidator.js';
 import { isGitDangerousAction, isGitReadOnlyAction } from './gitService.js';
 import { isReadOnlyPackageCommand, isReadOnlyShellCommand } from './shellSafety.js';
@@ -342,6 +343,8 @@ export class AgentRuntime {
     this.clientTimezone = opts.clientTimezone || process.env.TZ || null;
     this.usageContext = opts.usageContext || {};
     this.agentProfileId = opts.agentProfileId || null;
+    // A Cat's run keeps its memories to itself (see memoryTools.memoryScope).
+    this.catId = opts.catId || currentCatRun()?.catId || null;
     this.sessionIdOverride = opts.sessionIdOverride || null;
     this.usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
@@ -598,6 +601,7 @@ export class AgentRuntime {
       workspaceId: this.workspaceId,
       projectId: this.projectId,
       profileId: this.agentProfileId,
+      catId: this.catId,
       knowledgeSources: this.knowledgeSources,
       workingDir: this.workingDir,
       workspaceRoot: this.workspaceRoot,
@@ -2656,6 +2660,7 @@ export class AgentRuntime {
           workspaceId: this.workspaceId,
           profileId: this.agentProfileId,
           projectId: this.projectId,
+          catId: this.catId,
           query: goal,
           kind,
           limit: 6,
@@ -2678,6 +2683,7 @@ export class AgentRuntime {
           workspaceId: this.workspaceId,
           profileId: this.agentProfileId,
           projectId: this.projectId,
+          catId: this.catId,
           query: goal,
           kind: 'all',
           limit: 15,
@@ -2703,6 +2709,7 @@ export class AgentRuntime {
           workspaceId: this.workspaceId,
           profileId: this.agentProfileId,
           projectId: this.projectId,
+          catId: this.catId,
           kind: 'all',
           limit: 5,
         });
@@ -2810,11 +2817,12 @@ export class AgentRuntime {
         const importance = Math.max(0, Math.min(1, Number(mem.importance || 0.45)));
 
         const projectId = memoryProjectFor({ kind, projectId: this.projectId });
+        const catId = memoryCatFor({ catId: this.catId });
 
         // ── E: Key-based dedup ──────────────────────────────────────────────
         const existingByKey = db.prepare(
-          'SELECT id, importance FROM agent_memory WHERE user_id = ? AND workspace_id = ? AND key = ? AND project_id IS ?'
-        ).get(this.userId, this.workspaceId, key, projectId);
+          'SELECT id, importance FROM agent_memory WHERE user_id = ? AND workspace_id = ? AND key = ? AND project_id IS ? AND cat_id IS ?'
+        ).get(this.userId, this.workspaceId, key, projectId, catId);
 
         if (existingByKey) {
           db.prepare(
@@ -2842,9 +2850,9 @@ export class AgentRuntime {
               FROM agent_memory_fts fts
               JOIN agent_memory m ON m.id = fts.memory_id
               WHERE fts.agent_memory_fts MATCH ?
-                AND m.user_id = ? AND m.workspace_id = ? AND m.memory_type = ? AND m.project_id IS ?
+                AND m.user_id = ? AND m.workspace_id = ? AND m.memory_type = ? AND m.project_id IS ? AND m.cat_id IS ?
               LIMIT 1
-            `).get(ftsTerms, this.userId, this.workspaceId, kind, projectId);
+            `).get(ftsTerms, this.userId, this.workspaceId, kind, projectId, catId);
 
             if (dupRow) {
               db.prepare(
@@ -2865,8 +2873,8 @@ export class AgentRuntime {
         }
 
         db.prepare(
-          'INSERT OR IGNORE INTO agent_memory (id, user_id, workspace_id, memory_type, key, content, tags, importance, project_id, expires_at, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        ).run(randomUUID(), this.userId, this.workspaceId, kind, key, mem.content, '[]', importance, projectId, expiresAt, 'auto');
+          'INSERT OR IGNORE INTO agent_memory (id, user_id, workspace_id, memory_type, key, content, tags, importance, project_id, cat_id, expires_at, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        ).run(randomUUID(), this.userId, this.workspaceId, kind, key, mem.content, '[]', importance, projectId, catId, expiresAt, 'auto');
         saved++;
       }
 

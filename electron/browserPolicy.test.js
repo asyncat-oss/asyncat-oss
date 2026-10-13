@@ -71,3 +71,16 @@ test('key names and combos map to keyboard events', () => {
   assert.equal(parseKeyCombo('NotAKey', { platform: 'linux' }), null);
   assert.equal(parseKeyCombo('', { platform: 'linux' }), null);
 });
+
+test('a Cat browses in a profile of its own, on its own sites', async () => {
+  const { isAllowedBrowserPartition, isCatPartition, siteOnList } = await import('./browserPolicy.js');
+  assert.equal(isCatPartition('persist:asyncat-cat-3f2a9c1e-77aa-4b5c-9d00-12ab34cd56ef'), true);
+  assert.equal(isAllowedBrowserPartition('persist:asyncat-cat-3f2a9c1e-77aa-4b5c-9d00-12ab34cd56ef'), true);
+  assert.equal(isAllowedBrowserPartition('persist:asyncat-cat-'), false);
+  assert.equal(isAllowedBrowserPartition('persist:someone-else'), false);
+  assert.equal(siteOnList('https://news.example.com/today', ['example.com']), true);
+  assert.equal(siteOnList('https://example.com/', ['*.example.com']), true);
+  assert.equal(siteOnList('https://evil-example.com/', ['example.com']), false);
+  assert.equal(siteOnList('https://other.org/', ['example.com']), false);
+  assert.equal(siteOnList('https://anything.org/', []), true);
+});

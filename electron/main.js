@@ -16,7 +16,7 @@ import { initShortcuts, registerShortcutIPC } from './shortcuts.js';
 import { startBackend, stopBackend, isBackendRunning } from './backend.js';
 import { postHostEvent, registerHostHandler, startHostBridge, stopHostBridge } from './hostBridge.js';
 import { keepRunningAfterClose, noteKeptRunning, registerBackgroundIPC, setEnabledTaskCount, startsHidden } from './background.js';
-import { setupBrowserHost, handleAgentCommand, shutdownBrowserHost } from './browserHost.js';
+import { setupBrowserHost, handleAgentCommand, shutdownBrowserHost, clearCatBrowserData } from './browserHost.js';
 import { isAllowedBrowserUrl as isAllowedBrowserUrlFor } from './browserPolicy.js';
 import http from 'http';
 import net from 'net';
@@ -567,6 +567,8 @@ function setupHostBridge() {
   registerHostHandler('scheduled.state', ({ enabled } = {}) => setEnabledTaskCount(enabled));
   // The agent's browser commands (browserHost.js; den's browserCommandQueue.js).
   registerHostHandler('browser.command', (payload) => handleAgentCommand(payload));
+  // A deleted Cat's browser profile (its tabs and sign-ins).
+  registerHostHandler('browser.clearCat', (payload) => clearCatBrowserData(payload));
 
   powerMonitor.on('resume', () => postHostEvent('power.resume'));
   powerMonitor.on('unlock-screen', () => postHostEvent('power.resume'));

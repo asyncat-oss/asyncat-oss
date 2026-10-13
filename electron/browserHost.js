@@ -19,6 +19,7 @@ import { BACKEND_PORT, FRONTEND_PORT } from './constants.js';
 import {
   STANDARD_PARTITION, INCOGNITO_PREFIX, isAllowedBrowserPartition, isAllowedBrowserUrl,
   isAsyncatInternalUrl, agentRequestBlockReason, windowOpenDecision, viewBoundsFromRect,
+  isCatPartition, siteOnList,
 } from './browserPolicy.js';
 import { PageDriver, withTimeout } from './browserCdp.js';
 import { pageText, describeSensitiveAction, approvalKey } from './browserSnapshot.js';
@@ -55,6 +56,8 @@ let openLinks = 'internal';
 let agentPaused = false;
 let handover = null; // { id, tabId, message, conversationId, startedAt, expiresAt, resolve, timer }
 const agentCurrent = new Map(); // agent owner → tab id it works in
+// A Cat's tabs use its own profile and keep to its sites (from its commands).
+const ownerSettings = new Map(); // agent owner → { partition, allowedSites }
 const headlessTabs = new Map(); // agent owner → hidden tab id for browse/browser_* tools
 const agentQueues = new Map();
 let agentBusy = 0; // agent commands running; page dialogs are answered meanwhile
@@ -347,7 +350,7 @@ function wireMainWindow(win) {
 }
 
 function stripTabs() {
-  return [...tabs.values()].filter((tab) => !tab.hidden && (tab.profile === mode || tab.agent || tab.popup));
+  return [...tabs.values()].filter((tab) => !tab.hidden && (tab.profile === mode || tab.agent || tab.popup || tab.catProfile));
 }
 
 function syncShownView() {
@@ -393,6 +396,8 @@ function publicTab(tab) {
     muted: Boolean(tab.muted),
     audible: Boolean(tab.audible),
     sleeping: Boolean(tab.sleeping),
+    catProfile: Boolean(tab.catProfile),
+    label: tab.label || null,
     lastAgentAt: tab.lastAgentAt || 0,
   };
 }
@@ -493,7 +498,13 @@ function sendEvent(event) {
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 
-function createTab({ profile = 'standard', agent = false, ownerKey = null, hidden = false, webContents = null, popup = null, openerTabId = null } = {}) {
+/** The profile and site list for a tab an agent opens. */
+function ownerTabOptions(owner) {
+  const settings = owner ? ownerSettings.get(owner) : null;
+  return settings ? { partition: settings.partition, allowedSites: settings.allowedSites, label: settings.label } : {};
+}
+
+function createTab({ profile = 'standard', agent = false, ownerKey = null, hidden = false, webContents = null, popup = null, openerTabId = null, partition = null, allowedSites = null, label = null } = {}) {
   tabSeq += 1;
   const tab = {
     id: `tab-${tabSeq}`,
@@ -521,7 +532,12 @@ function createTab({ profile = 'standard', agent = false, ownerKey = null, hidde
     lastAgentAt: 0,
     createdAt: Date.now(),
   };
-  tab.partition = partitionFor(tab.profile);
+  // A Cat's tabs (its agent's, and the one the user signs in with) live in
+  // the Cat's own profile.
+  tab.partition = partition && isCatPartition(partition) ? partition : partitionFor(tab.profile);
+  tab.catProfile = isCatPartition(tab.partition);
+  tab.allowedSites = Array.isArray(allowedSites) && allowedSites.length ? allowedSites.map(String) : null;
+  tab.label = label ? String(label).slice(0, 80) : null;
   tabs.set(tab.id, tab);
   if (popup) {
     tab.wc = popup.webContents;
@@ -559,6 +575,8 @@ function refreshNavState(tab) {
 function isAgentAllowedNavigation(tab, url) {
   if (!isAllowedBrowserUrl(url, { ports: PORTS, allowHtmlData: tab.allowHtmlData })) return false;
   if (tab.agent && agentRequestBlockReason(url, { ports: PORTS, extraPorts: AGENT_EXTRA_PORTS })) return false;
+  // A Cat's own tabs keep to its sites; the user's sign-in tab is free.
+  if (tab.agent && tab.allowedSites && /^https?:/i.test(url) && !siteOnList(url, tab.allowedSites)) return false;
   return true;
 }
 
@@ -691,6 +709,9 @@ function wireWebContents(tab) {
           hidden: tab.hidden,
           webContents: createOptions.webContents,
           openerTabId: tab.id,
+          partition: tab.partition,
+          allowedSites: tab.allowedSites,
+          label: tab.label,
         });
         child.url = details.url === 'about:blank' ? '' : details.url;
         child.title = 'Loading…';
@@ -708,7 +729,7 @@ function wireWebContents(tab) {
   // window.open with features: a real window in the same session, kept in
   // the tab list so the agent can see it and the panel can focus it.
   wc.on('did-create-window', (win) => {
-    const popupTab = createTab({ profile: tab.profile, agent: tab.agent, ownerKey: tab.ownerKey, hidden: tab.hidden, popup: win, openerTabId: tab.id });
+    const popupTab = createTab({ profile: tab.profile, agent: tab.agent, ownerKey: tab.ownerKey, hidden: tab.hidden, popup: win, openerTabId: tab.id, partition: tab.partition, allowedSites: tab.allowedSites, label: tab.label });
     popupTab.title = 'Pop-up';
     try { win.removeMenu(); } catch { /* no menu */ }
     win.on('page-title-updated', (_event, title) => { popupTab.title = title; scheduleBroadcast(); });
@@ -1032,7 +1053,7 @@ function agentTab(owner, { create = false } = {}) {
     if (visible?.url) return visible;
   }
   if (!create) return null;
-  const tab = createTab({ profile: 'standard', agent: true, ownerKey: owner });
+  const tab = createTab({ profile: 'standard', agent: true, ownerKey: owner, ...ownerTabOptions(owner) });
   agentCurrent.set(owner, tab.id);
   return tab;
 }
@@ -1047,7 +1068,7 @@ function headlessTab(owner, { create = true } = {}) {
   const id = headlessTabs.get(owner);
   if (id && tabs.has(id)) return tabs.get(id);
   if (!create) return null;
-  const tab = createTab({ profile: 'standard', agent: true, ownerKey: owner, hidden: true });
+  const tab = createTab({ profile: 'standard', agent: true, ownerKey: owner, hidden: true, ...ownerTabOptions(owner) });
   headlessTabs.set(owner, tab.id);
   return tab;
 }
@@ -1184,7 +1205,7 @@ async function runAgentCommand(owner, payload) {
       return { success: true, tabs: listTabs(owner) };
 
     case 'open_tab': {
-      const tab = createTab({ profile: 'standard', agent: true, ownerKey: owner });
+      const tab = createTab({ profile: 'standard', agent: true, ownerKey: owner, ...ownerTabOptions(owner) });
       agentCurrent.set(owner, tab.id);
       activeTabId = tab.id;
       syncShownView();
@@ -1224,7 +1245,7 @@ async function runAgentCommand(owner, payload) {
       // happens to be reading.
       let tab = agentCurrent.has(owner) ? tabs.get(agentCurrent.get(owner)) : null;
       if (!tab) {
-        tab = createTab({ profile: 'standard', agent: true, ownerKey: owner });
+        tab = createTab({ profile: 'standard', agent: true, ownerKey: owner, ...ownerTabOptions(owner) });
         agentCurrent.set(owner, tab.id);
       }
       if (!tab.hidden) {
@@ -1413,7 +1434,7 @@ async function runAgentCommand(owner, payload) {
     // with the visible browser, but never show up in the tab strip.
 
     case 'read_page': {
-      const tab = createTab({ profile: 'standard', agent: true, ownerKey: owner, hidden: true });
+      const tab = createTab({ profile: 'standard', agent: true, ownerKey: owner, hidden: true, ...ownerTabOptions(owner) });
       try {
         await navigateAndWait(tab, payload.url, Math.min(Number(payload.timeoutMs) || 15000, 45000));
         if (payload.waitFor) await waitForSelector(tab, payload.waitFor, 5000);
@@ -1428,7 +1449,7 @@ async function runAgentCommand(owner, payload) {
     }
 
     case 'screenshot_url': {
-      const tab = createTab({ profile: 'standard', agent: true, ownerKey: owner, hidden: true });
+      const tab = createTab({ profile: 'standard', agent: true, ownerKey: owner, hidden: true, ...ownerTabOptions(owner) });
       try {
         await navigateAndWait(tab, payload.url, 20000);
         await sleep(1500);
@@ -1504,6 +1525,13 @@ async function runAgentCommand(owner, payload) {
 /** Run agent commands one at a time per agent, in the order they arrive. */
 export function handleAgentCommand(payload = {}) {
   const owner = ownerOf(payload);
+  if (payload.partition && isCatPartition(payload.partition)) {
+    ownerSettings.set(owner, {
+      partition: payload.partition,
+      allowedSites: Array.isArray(payload.allowedSites) ? payload.allowedSites.map(String).slice(0, 50) : [],
+      label: typeof payload.catName === 'string' ? payload.catName : null,
+    });
+  }
   const previous = agentQueues.get(owner) || Promise.resolve();
   const next = previous.catch(() => {}).then(async () => {
     agentBusy += 1;
@@ -1625,6 +1653,18 @@ async function handleUi(action, payload = {}) {
     case 'set-open-links':
       if (payload.openLinks === 'system' || payload.openLinks === 'internal') openLinks = payload.openLinks;
       return true;
+    case 'open-cat-profile': {
+      // The user's own tab in a Cat's profile, to sign in to sites for it.
+      if (!isCatPartition(payload.partition)) return false;
+      const url = String(payload.url || '');
+      const tab = createTab({ profile: 'standard', partition: payload.partition, label: payload.label || 'Cat' });
+      if (url && isAllowedBrowserUrl(url, { ports: PORTS, allowBlank: false })) loadUrl(tab, url).catch(() => {});
+      else ensureView(tab);
+      activeTabId = tab.id;
+      syncShownView();
+      scheduleBroadcast();
+      return tab.id;
+    }
     case 'set-restore-tabs':
       if (payload.restoreTabs === false) {
         restoreTabs = false;
@@ -1807,6 +1847,16 @@ export function setupBrowserHost(setupOptions = {}) {
       if (others.length === 0 && parking) app.emit('window-all-closed');
     }));
   });
+}
+
+/** Close a Cat's tabs and forget its sign-ins (the Cat was deleted). */
+export async function clearCatBrowserData(payload = {}) {
+  const partition = String(payload.partition || '');
+  if (!isCatPartition(partition)) return { success: false, error: 'Not a Cat profile.' };
+  for (const tab of [...tabs.values()]) if (tab.partition === partition) closeTab(tab.id);
+  for (const [owner, settings] of ownerSettings) if (settings.partition === partition) ownerSettings.delete(owner);
+  await clearPartition(partition);
+  return { success: true };
 }
 
 export function shutdownBrowserHost() {
