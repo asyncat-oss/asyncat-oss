@@ -368,7 +368,6 @@ function NotePanel({ html, noteId, title, fullHeight }) {
           <ModernNoteEditor
             note={{ id: noteId, title: title || 'Untitled Note', content: html || '' }}
             onBack={() => {}}
-            embedded
           />
         </Suspense>
       </NoteProvider>

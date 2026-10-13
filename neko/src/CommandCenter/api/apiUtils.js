@@ -1,7 +1,7 @@
 import { getCurrentWorkspaceId } from './client.js';
 import { projectsApi } from './projectsApi.js';
 import eventBus from '../../utils/eventBus.js';
-import { workspaceUtils } from './bulkApi.js';
+import { workspaceUtils } from './workspaceUtils.js';
 
 export const apiUtils = {
   isNetworkError: (error) => {

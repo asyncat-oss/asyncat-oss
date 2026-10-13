@@ -8,7 +8,6 @@ import {
 import ReactDOM from "react-dom";
 import {
   Trash2,
-  ArrowLeft,
   CheckCircle,
   AlertCircle,
   Clock,
@@ -28,7 +27,8 @@ import KeyboardShortcutsDropdown from "./components/KeyboardShortcutsDropdown";
 import { htmlToBlocks } from "../utils/blockConverter";
 import { useAutoSave, hasContentChanged } from "../utils/autoSaveUtils";
 
-const ModernNoteEditor = ({ note, onBack, embedded = false }) => {
+// Always shown inside a chat's side panel; onBack closes it (after a delete).
+const ModernNoteEditor = ({ note, onBack }) => {
   const {
     applyDeltaChanges,
     deleteNote,
@@ -61,7 +61,6 @@ const ModernNoteEditor = ({ note, onBack, embedded = false }) => {
   const [shouldRenderDownloadDropdown, setShouldRenderDownloadDropdown] =
     useState(false);
   const [isVisibilitySaving, setIsVisibilitySaving] = useState(false);
-  const [isNavigatingBack, setIsNavigatingBack] = useState(false);
 
   // References
   const editorRef = useRef(null);
@@ -568,71 +567,6 @@ const ModernNoteEditor = ({ note, onBack, embedded = false }) => {
     };
   }, []); // Empty dependencies - handlers use refs and closures
 
-  // Handle back navigation with auto-save
-  const handleBack = useCallback(async () => {
-    // Prevent multiple clicks
-    if (isNavigatingBack) return;
-
-    setIsNavigatingBack(true);
-
-    // Always trigger save before navigating, regardless of changes
-    try {
-      setSaveStatus("saving");
-
-      // Get current state
-      const currentState = {
-        title: titleRef.current,
-        blocks: blocksRef.current,
-      };
-
-      // Trigger auto-save with current content
-      await saveNow(currentState);
-
-      // Small delay to ensure database has fully committed the save
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      // Force create version if there are any changes before navigating
-      // This bypasses the 2-minute timer to ensure changes are captured
-      if (editorRef.current?.createVersionIfHasChanges) {
-        try {
-          const versionCreated =
-            await editorRef.current.createVersionIfHasChanges(true); // Pass true to force creation
-          if (versionCreated) {
-            console.log(
-              "[Navigation] Created version history before leaving note"
-            );
-          }
-        } catch (error) {
-          console.error(
-            "[Navigation] Failed to create version before leaving:",
-            error
-          );
-        }
-      }
-
-      setSaveStatus("saved");
-
-      // Brief delay to show save status
-      await new Promise((resolve) => setTimeout(resolve, 200));
-    } catch (error) {
-      console.error("Save before navigation failed:", error);
-      setSaveStatus("error");
-
-      // Brief delay to show error status
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      // Reset navigation state on error so user can try again
-      setIsNavigatingBack(false);
-      return;
-    }
-
-    setSaveStatus(null);
-
-    // Navigate back
-    onBack();
-    // Note: We don't reset isNavigatingBack here because we're leaving the component
-  }, [onBack, saveNow, isNavigatingBack]);
-
   // Delete note
   const handleDeleteClick = useCallback(() => {
     if (!deleteConfirming) {
@@ -1120,28 +1054,7 @@ const ModernNoteEditor = ({ note, onBack, embedded = false }) => {
         className="flex-shrink-0 z-50 flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800 midnight:border-gray-900 bg-white dark:bg-gray-900 midnight:bg-gray-950"
         style={{ userSelect: "none" }}
       >
-        <div className="flex items-center gap-3">
-          {!embedded && (
-            <button
-              onClick={handleBack}
-              disabled={isNavigatingBack}
-              className={`p-2 rounded-lg transition-colors flex items-center gap-2 ${
-                isNavigatingBack
-                  ? "cursor-not-allowed"
-                  : "hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-900"
-              } text-gray-600 dark:text-gray-500 midnight:text-slate-400`}
-            >
-              <ArrowLeft className="w-5 h-5" />
-              {isNavigatingBack &&
-                (saveStatus === "saved" || saveStatus === null) && (
-                  <>
-                    <Loader className="w-4 h-4 animate-spin" />
-                    <span className="text-sm font-medium">Exiting Note...</span>
-                  </>
-                )}
-            </button>
-          )}
-        </div>
+        <div className="flex items-center gap-3" />
 
         <div className="flex items-center gap-4">
 

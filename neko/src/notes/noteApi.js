@@ -51,22 +51,6 @@ export const apiRequest = async (url, options = {}) => {
 };
 
 export const notesApi = {
-  loadNotes: async () => {
-    const queryParams = "?excludeContent=true";
-
-    const response = await apiRequest(`${API_URL}/api/notes${queryParams}`);
-    let data = response.data || response;
-
-    if (data && typeof data === "object" && !Array.isArray(data)) {
-      const keys = Object.keys(data);
-      if (keys.every((key) => /^\d+$/.test(key))) data = Object.values(data);
-    }
-
-    return (data || []).sort(
-      (a, b) => new Date(b.updatedAt || b.updatedat) - new Date(a.updatedAt || a.updatedat)
-    );
-  },
-
   fetchNoteWithContent: async (noteId, forceFresh = true) => {
     const url = forceFresh
       ? `${API_URL}/api/notes/${noteId}?_t=${Date.now()}`
@@ -91,17 +75,6 @@ export const notesApi = {
     }
 
     return sanitizeResponseData({ ...data, version });
-  },
-
-  createNote: async (title, content) => {
-    const { data } = await apiRequest(`${API_URL}/api/notes`, {
-      method: "POST",
-      body: JSON.stringify({
-        title: sanitizeToText(title || "Untitled Note"),
-        content: sanitizeNoteContent(content || ""),
-      }),
-    });
-    return data;
   },
 
   applyDeltaChanges: async (noteId, changeset, context = {}) => {

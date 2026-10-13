@@ -7,7 +7,6 @@ export const NoteProvider = ({ children }) => {
   // Core state
   const [notes, setNotes] = useState([]);
   const [selectedNote, setSelectedNote] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [notesWithUnsavedChanges, setNotesWithUnsavedChanges] = useState({});
 
@@ -94,12 +93,6 @@ export const NoteProvider = ({ children }) => {
               operation.changeset
             );
             break;
-          case "create":
-            await notesApi.createNote(
-              operation.noteData.title,
-              operation.noteData.content
-            );
-            break;
           case "delete":
             await notesApi.deleteNote(operation.noteId);
             break;
@@ -119,27 +112,6 @@ export const NoteProvider = ({ children }) => {
       }
     }
   }, [isOnline, operationQueue, markNoteHasUnsavedChanges]);
-
-  // Load notes
-  const loadNotes = useCallback(
-    async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
-
-        const fetchedNotes = await notesApi.loadNotes();
-        setNotes(fetchedNotes);
-
-        return fetchedNotes;
-      } catch (err) {
-        handleApiError(err, "Loading notes");
-        return [];
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [handleApiError]
-  );
 
   // Fetch note with content - always fetch fresh from server
   const fetchNoteWithContent = useCallback(
@@ -185,51 +157,6 @@ export const NoteProvider = ({ children }) => {
       }
     },
     [handleApiError, isOnline, notes]
-  );
-
-  // Create note
-  const createNote = useCallback(
-    async (noteData) => {
-      try {
-        setIsLoading(true);
-        setError(null);
-
-        if (!isOnline) {
-          const operation = {
-            type: "create",
-            noteData,
-            timestamp: Date.now(),
-          };
-          setOperationQueue((prev) => [...prev, operation]);
-
-          // Create temporary local note
-          const tempNote = {
-            id: `temp-${Date.now()}`,
-            ...noteData,
-            createdat: new Date().toISOString(),
-            updatedat: new Date().toISOString(),
-            isTemp: true,
-          };
-
-          setNotes((prev) => [tempNote, ...prev]);
-          return tempNote;
-        }
-
-        const newNote = await notesApi.createNote(
-          noteData.title,
-          noteData.content
-        );
-        setNotes((prev) => [newNote, ...prev]);
-
-        return newNote;
-      } catch (err) {
-        handleApiError(err, "Creating note");
-        return null;
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [handleApiError, isOnline]
   );
 
   // Apply delta changes (simplified - no versioning)
@@ -358,15 +285,12 @@ export const NoteProvider = ({ children }) => {
     // State
     notes,
     selectedNote,
-    isLoading,
     error,
     isOnline,
     deltaSupport,
 
     // Actions
-    loadNotes,
     fetchNoteWithContent,
-    createNote,
     applyDeltaChanges,
     deleteNote,
 
