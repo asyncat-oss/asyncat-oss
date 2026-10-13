@@ -11,7 +11,7 @@ import {
   Trash2,
   Wrench,
   FolderKanban,
-  Zap,
+  CalendarClock,
 } from "lucide-react";
 import KeyboardShortcutsSection from "./KeyboardShortcutsSection.jsx";
 import GlobalShortcutsSection from "./GlobalShortcutsSection.jsx";
@@ -167,11 +167,11 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
           onChange={() => toggleNavItem("projects")}
         />
         <CheckboxRow
-          icon={Zap}
-          label="Automations"
-          description="Workflows, Schedules and Activity"
-          checked={navItemsVisibility.automations}
-          onChange={() => toggleNavItem("automations")}
+          icon={CalendarClock}
+          label="Scheduled"
+          description="Tasks that run on a schedule"
+          checked={navItemsVisibility.scheduled}
+          onChange={() => toggleNavItem("scheduled")}
         />
         <CheckboxRow
           icon={Cpu}

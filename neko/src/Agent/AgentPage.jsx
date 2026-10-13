@@ -2,6 +2,7 @@
 // ─── Agents ───────────────────────────────────────────────────────────────────
 // Custom agents (like GPTs and Gems) and the coding agents (Claude Code,
 // Codex) a chat can hand work to. ?edit=<id> or ?edit=new opens the editor.
+// Scheduled tasks live on their own page (/scheduled).
 
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';

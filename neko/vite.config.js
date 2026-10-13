@@ -20,7 +20,7 @@ export default defineConfig({
       manifest: {
         name: 'Asyncat',
         short_name: 'Asyncat',
-        description: 'A local-first AI agent: chat, coding agents, projects and automations in one place.',
+        description: 'A local-first AI agent: chat, coding agents, projects and scheduled tasks in one place.',
         theme_color: '#ffffff',
         background_color: '#ffffff',
         display: 'standalone',

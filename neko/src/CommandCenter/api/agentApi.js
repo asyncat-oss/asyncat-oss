@@ -136,32 +136,6 @@ export const agentApi = {
     return await apiRequest(`${API_BASE_URL}/agent/sessions/${sessionId}/changes/state`);
   },
 
-  // ── Workflows / automations ──────────────────────────────────────────────
-  listWorkflows: async () => {
-    return await apiRequest(`${API_BASE_URL}/agent/workflows`);
-  },
-  createWorkflow: async (body) => {
-    return await apiRequest(`${API_BASE_URL}/agent/workflows`, { method: 'POST', body: JSON.stringify(body) });
-  },
-  updateWorkflow: async (id, body) => {
-    return await apiRequest(`${API_BASE_URL}/agent/workflows/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(body) });
-  },
-  deleteWorkflow: async (id) => {
-    return await apiRequest(`${API_BASE_URL}/agent/workflows/${encodeURIComponent(id)}`, { method: 'DELETE' });
-  },
-  runWorkflow: async (id) => {
-    return await apiRequest(`${API_BASE_URL}/agent/workflows/${encodeURIComponent(id)}/run`, { method: 'POST', body: JSON.stringify({}) });
-  },
-  getWorkflowRuns: async (id) => {
-    return await apiRequest(`${API_BASE_URL}/agent/workflows/${encodeURIComponent(id)}/runs`);
-  },
-  getRecentWorkflowRuns: async (limit = 30) => {
-    return await apiRequest(`${API_BASE_URL}/agent/workflows/runs/recent?limit=${limit}`);
-  },
-  getRecentActivity: async (limit = 50) => {
-    return await apiRequest(`${API_BASE_URL}/agent/activity?limit=${encodeURIComponent(String(limit))}`);
-  },
-
   // ── Semantic search + embeddings status ──────────────────────────────────
   semanticSearch: async (q, limit = 8) => {
     const params = new URLSearchParams({ q, limit: String(limit) });
@@ -169,11 +143,6 @@ export const agentApi = {
   },
   getEmbeddingStatus: async () => {
     return await apiRequest(`${API_BASE_URL}/agent/embeddings/status`);
-  },
-
-  // ── Notification / activity log ──────────────────────────────────────────
-  getNotificationLog: async (limit = 40) => {
-    return await apiRequest(`${API_BASE_URL}/integrations/notifications/log?limit=${limit}`);
   },
 
   revertSession: async (sessionId) => {

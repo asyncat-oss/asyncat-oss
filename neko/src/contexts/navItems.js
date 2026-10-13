@@ -2,15 +2,16 @@
 
 export const DEFAULT_NAV_ITEMS = Object.freeze({
   projects: true,
-  automations: true,
+  scheduled: true,
   models: true,
   tools: true,
   agent: true,
   trash: true,
 });
 
-// Workflows, Schedules and Activity used to be separate sidebar entries and
-// are now one, Automations. Keep it hidden for people who had hidden all three.
+// Workflows, Schedules and Activity were once separate sidebar entries, then
+// one entry, Automations; now they are the Scheduled page. Whoever hid
+// Automations, or all three old entries, keeps Scheduled hidden.
 const LEGACY_AUTOMATION_KEYS = ['workflows', 'schedules', 'activity'];
 
 /** Saved visibility settings merged over the defaults; unknown keys are dropped. */
@@ -20,9 +21,9 @@ export function migrateNavItems(stored) {
   for (const key of Object.keys(DEFAULT_NAV_ITEMS)) {
     if (typeof saved[key] === 'boolean') next[key] = saved[key];
   }
-  if (typeof saved.automations !== 'boolean'
-    && LEGACY_AUTOMATION_KEYS.every((key) => saved[key] === false)) {
-    next.automations = false;
+  if (typeof saved.scheduled !== 'boolean') {
+    if (typeof saved.automations === 'boolean') next.scheduled = saved.automations;
+    else if (LEGACY_AUTOMATION_KEYS.every((key) => saved[key] === false)) next.scheduled = false;
   }
   return next;
 }

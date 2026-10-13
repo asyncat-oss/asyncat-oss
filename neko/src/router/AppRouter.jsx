@@ -10,7 +10,6 @@ import ToastProvider from '../components/ToastProvider';
 import { CommandCenterProvider } from '../CommandCenter/context/CommandCenterContextEnhanced';
 import ErrorBoundary from '../error/ErrorBoundary';
 import { RouteErrorElement } from '../error/ErrorBoundary';
-import { lastAutomationPath } from '../Automations/automationsNav.js';
 
 // Page components. The chat (the landing page) and the layout load up front;
 // every other page is split into its own chunk and loaded on first visit.
@@ -26,10 +25,7 @@ const SettingsPage = lazy(() => import('../Settings/SettingsPage'));
 const ModelsPage = lazy(() => import('../Models/ModelsPage'));
 const ToolsSkillsPage = lazy(() => import('../Tools/ToolsSkillsPage'));
 const AgentPage = lazy(() => import('../Agent/AgentPage'));
-const AutomationsLayout = lazy(() => import('../Automations/AutomationsLayout'));
-const SchedulerPage = lazy(() => import('../Scheduler/SchedulerPage'));
-const WorkflowsPage = lazy(() => import('../Workflows/WorkflowsPage'));
-const ActivityPage = lazy(() => import('../Activity/ActivityPage'));
+const ScheduledPage = lazy(() => import('../Scheduled/ScheduledPage'));
 
 // Old /workspace and task-board (/tasks) links open the project instead.
 const LegacyProjectRedirect = () => {
@@ -37,8 +33,8 @@ const LegacyProjectRedirect = () => {
   return <Navigate to={projectId ? `/projects/${projectId}` : '/projects'} replace />;
 };
 
-// /automations opens whichever of Workflows, Schedules or Activity was used last.
-const AutomationsRedirect = () => <Navigate to={lastAutomationPath()} replace />;
+// Automations (Workflows, Schedules, Activity) became one Scheduled page.
+const OLD_SCHEDULED_PATHS = ['automations', 'workflows', 'schedules', 'activity', 'scheduler', 'agent/scheduler'];
 
 const LocalApp = ({ children }) => {
   return (
@@ -179,41 +175,19 @@ const createRouter = () => createBrowserRouter([
         errorElement: <RouteErrorElement />
       },
       {
-        // Workflows, Schedules and Activity share one sidebar entry and a tab bar.
-        element: <AutomationsLayout />,
-        errorElement: <RouteErrorElement />,
-        children: [
-          {
-            path: "workflows",
-            element: <WorkflowsPage />,
-            errorElement: <RouteErrorElement />
-          },
-          {
-            path: "schedules",
-            element: <SchedulerPage />,
-            errorElement: <RouteErrorElement />
-          },
-          {
-            path: "activity",
-            element: <ActivityPage />,
-            errorElement: <RouteErrorElement />
-          },
-        ],
-      },
-      {
-        path: "automations",
-        element: <AutomationsRedirect />,
+        path: "scheduled",
+        element: <ScheduledPage />,
         errorElement: <RouteErrorElement />
       },
+      ...OLD_SCHEDULED_PATHS.map((path) => ({
+        path,
+        element: <Navigate to="/scheduled" replace />,
+        errorElement: <RouteErrorElement />
+      })),
       {
         // Training is a tab of the Models page.
         path: "training",
         element: <Navigate to="/models?tab=training" replace />,
-        errorElement: <RouteErrorElement />
-      },
-      {
-        path: "scheduler",
-        element: <Navigate to="/schedules" replace />,
         errorElement: <RouteErrorElement />
       },
       {
@@ -229,11 +203,6 @@ const createRouter = () => createBrowserRouter([
       {
         path: "agent/profiles",
         element: <AgentPage />,
-        errorElement: <RouteErrorElement />
-      },
-      {
-        path: "agent/scheduler",
-        element: <Navigate to="/schedules" replace />,
         errorElement: <RouteErrorElement />
       },
       {

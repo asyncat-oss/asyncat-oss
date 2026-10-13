@@ -27,7 +27,7 @@ import {
   Sun,
   Trash2,
   Wrench,
-  Zap,
+  CalendarClock,
 } from "lucide-react";
 
 import { useCommandCenter } from "../CommandCenter/context/CommandCenterContextEnhanced";
@@ -47,7 +47,6 @@ import { avatarSrc } from "../assets/dp/avatars.js";
 import eventBus from "../utils/eventBus.js";
 import { loadKeyboardShortcuts } from "../utils/keyboardShortcutsUtils.js";
 import UniversalSearch from "./UniversalSearch";
-import { isAutomationPath, lastAutomationPath } from "../Automations/automationsNav.js";
 
 // Below the sm breakpoint the rail always shows icons only.
 const labelVisibility = (collapsed) => (collapsed ? "hidden" : "hidden sm:block");
@@ -580,7 +579,8 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
         case "navWorkspace": navigate("/projects"); break;
         case "navModels": navigate("/models"); break;
         case "navTools": navigate("/tools"); break;
-        case "navScheduler": navigate("/schedules"); break;
+        case "navScheduled":
+        case "navScheduler": navigate("/scheduled"); break;
         case "navProfiles": navigate("/agent/profiles"); break;
         case "navAgent": navigate("/agent"); break;
         default: break;
@@ -601,7 +601,7 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
   const isOnAgent = location.pathname === "/agent"
     || location.pathname.startsWith("/agent/profiles")
     || location.pathname.startsWith("/profiles");
-  const isOnAutomations = isAutomationPath(location.pathname);
+  const isOnScheduled = location.pathname.startsWith("/scheduled");
   const isOnTools = location.pathname.startsWith("/tools");
   const routeConversationId = location.pathname.match(/^\/conversations\/([^/]+)/)?.[1] || null;
   const activeRecentConversationId = routeConversationId;
@@ -673,8 +673,7 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
   const showProjectsTree = !collapsed && navItemsVisibility.projects !== false;
 
   const workspaceItems = [
-    // Workflows, Schedules and Activity; reopens the one used last.
-    { key: "automations", label: "Automations", path: lastAutomationPath, active: isOnAutomations, icon: Zap },
+    { key: "scheduled", label: "Scheduled", path: "/scheduled", active: isOnScheduled, icon: CalendarClock, hint: shortcutHint("navScheduled") },
     // The full sidebar lists projects below; the rail needs a way in.
     { key: "projects", label: "Projects", path: "/projects", active: isOnProjects, icon: FolderKanban, hint: shortcutHint("navWorkspace") },
   ].filter((item) => navItemsVisibility[item.key] !== false && (collapsed || item.key !== "projects"));

@@ -8,7 +8,7 @@ import {
   forwardRef,
 } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, X, FolderOpen, MessageSquare, FileText, SquareCheck, Command, Sparkles, Workflow, Cpu, Wrench, Bell, Settings, BrainCircuit, CalendarClock, GraduationCap } from 'lucide-react';
+import { Search, X, FolderOpen, MessageSquare, FileText, SquareCheck, Command, Sparkles, Cpu, Wrench, Settings, BrainCircuit, CalendarClock, CalendarPlus, GraduationCap } from 'lucide-react';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import { chatApi, agentApi } from '../CommandCenter/api';
 import { searchApi } from '../CommandCenter/api/searchApi.js';
@@ -53,9 +53,8 @@ const SECTION_ORDER = ['command', 'project', 'note', 'conversation', 'memory'];
 // Navigation commands surfaced in the palette (always available, filtered by query).
 const COMMANDS = [
   { id: 'cmd-home',      label: 'Go to Chat',           to: '/home',         icon: MessageSquare },
-  { id: 'cmd-workflows', label: 'Go to Workflows',      to: '/workflows',    icon: Workflow },
-  { id: 'cmd-schedules', label: 'Go to Schedules',      to: '/schedules',    icon: CalendarClock },
-  { id: 'cmd-activity',  label: 'Go to Activity',       to: '/activity',     icon: Bell },
+  { id: 'cmd-scheduled', label: 'Go to Scheduled',      to: '/scheduled',    icon: CalendarClock },
+  { id: 'cmd-scheduled-new', label: 'New scheduled task', to: '/scheduled?new=1', icon: CalendarPlus },
   { id: 'cmd-agents',    label: 'Go to Agents',         to: '/agent/profiles', icon: BrainCircuit },
   { id: 'cmd-models',    label: 'Go to Models',         to: '/models',       icon: Cpu },
   { id: 'cmd-training',  label: 'Go to Training',       to: '/models?tab=training', icon: GraduationCap },
