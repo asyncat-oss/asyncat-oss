@@ -45,12 +45,7 @@ import EmbedBlock from "./EmbedBlock";
 import MathBlock from "./MathBlock";
 import LinkPreviewBlock from "./LinkPreviewBlock";
 // Chart components
-import LineChartBlock from "./charts/LineChartBlock";
-import BarChartBlock from "./charts/BarChartBlock";
-import PieChartBlock from "./charts/PieChartBlock";
-import AreaChartBlock from "./charts/AreaChartBlock";
-import ScatterChartBlock from "./charts/ScatterChartBlock";
-import DonutChartBlock from "./charts/DonutChartBlock";
+import NoteChartBlock from "./charts/NoteChartBlock";
 // Advanced components
 import ProgressBarBlock from "./advanced/ProgressBarBlock";
 import BreadcrumbBlock from "./advanced/BreadcrumbBlock";
@@ -88,6 +83,16 @@ const BlockType = {
   PROGRESS_BAR: "progressBar",
   BREADCRUMB: "breadcrumb",
   BUTTON: "button",
+};
+
+// Chart block types and the chart each one draws.
+const CHART_TYPES = {
+  [BlockType.LINE_CHART]: "line",
+  [BlockType.BAR_CHART]: "bar",
+  [BlockType.PIE_CHART]: "pie",
+  [BlockType.AREA_CHART]: "area",
+  [BlockType.SCATTER_CHART]: "scatter",
+  [BlockType.DONUT_CHART]: "donut",
 };
 
 // Memoized Todo component with read-only support
@@ -1611,67 +1616,16 @@ const Block = forwardRef(
 
         // Chart blocks
         case BlockType.LINE_CHART:
-          return (
-            <LineChartBlock
-              block={block}
-              onChange={readOnly ? undefined : onChange}
-              contentRef={contentRef}
-              commonProps={commonProps}
-              readOnly={readOnly}
-            />
-          );
-
         case BlockType.BAR_CHART:
-          return (
-            <BarChartBlock
-              block={block}
-              onChange={readOnly ? undefined : onChange}
-              contentRef={contentRef}
-              commonProps={commonProps}
-              readOnly={readOnly}
-            />
-          );
-
         case BlockType.PIE_CHART:
-          return (
-            <PieChartBlock
-              block={block}
-              onChange={readOnly ? undefined : onChange}
-              contentRef={contentRef}
-              commonProps={commonProps}
-              readOnly={readOnly}
-            />
-          );
-
         case BlockType.AREA_CHART:
-          return (
-            <AreaChartBlock
-              block={block}
-              onChange={readOnly ? undefined : onChange}
-              contentRef={contentRef}
-              commonProps={commonProps}
-              readOnly={readOnly}
-            />
-          );
-
         case BlockType.SCATTER_CHART:
-          return (
-            <ScatterChartBlock
-              block={block}
-              onChange={readOnly ? undefined : onChange}
-              contentRef={contentRef}
-              commonProps={commonProps}
-              readOnly={readOnly}
-            />
-          );
-
         case BlockType.DONUT_CHART:
           return (
-            <DonutChartBlock
+            <NoteChartBlock
+              type={CHART_TYPES[block.type]}
               block={block}
               onChange={readOnly ? undefined : onChange}
-              contentRef={contentRef}
-              commonProps={commonProps}
               readOnly={readOnly}
             />
           );
