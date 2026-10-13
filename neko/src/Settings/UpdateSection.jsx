@@ -115,7 +115,9 @@ const UpdateSection = () => {
             </div>
             <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/60 midnight:bg-slate-900/60 border border-gray-200/60 dark:border-gray-700/40 midnight:border-slate-700/40">
               <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">Update channel</p>
-              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Public beta</p>
+              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                {String(localInfo.version || '').includes('-') ? 'Beta (gets betas and stable releases)' : 'Stable (gets stable releases only)'}
+              </p>
             </div>
           </div>
         ) : (
