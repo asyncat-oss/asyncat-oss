@@ -1,15 +1,28 @@
 // den/src/agent/tools/browserTools.js
 // ─── Browser Automation Tools ────────────────────────────────────────────────
-// Puppeteer-based web automation for the agent.
-// Uses the already-installed puppeteer dependency.
-// Provides: browse_url, screenshot_page, browser_navigate, browser_click,
-//   browser_type, browser_fill, browser_extract
+// browse_url, screenshot_page, browser_navigate, browser_click, browser_type,
+// browser_fill, browser_extract.
+//
+// With the desktop app running they use hidden tabs of its built-in browser
+// in the Standard profile, so they share sign-ins with the browser panel,
+// and sensitive steps (passwords, card numbers, buy/delete buttons) ask the
+// user. Without it (backend on its own) they fall back to a headless
+// Puppeteer browser with a throwaway profile.
 
 import { PermissionLevel } from './toolRegistry.js';
 import { truncate, missingDepError } from './shared.js';
 import { getTmpDir } from '../workspacePaths.js';
 import { launchBrowser } from '../../lib/browserLauncher.js';
 import { checkAgentUrl, guardPuppeteerPage } from './urlPolicy.js';
+import { isBrowserAvailable, runBrowserAction, sendBrowserCommand } from '../browserCommandQueue.js';
+
+async function hostCommand(action, params, context, timeoutMs = 45_000) {
+  try {
+    return await sendBrowserCommand(action, params, context, { timeoutMs });
+  } catch (err) {
+    return { success: false, error: err?.message || String(err) };
+  }
+}
 
 let browserInstance = null;
 let activePage = null;
@@ -62,10 +75,14 @@ export const browseUrlTool = {
     },
     required: ['url'],
   },
-  execute: async (args) => {
+  execute: async (args, context) => {
     try {
       const check = await checkAgentUrl(args.url);
       if (!check.ok) return { success: false, error: check.reason };
+      if (isBrowserAvailable()) {
+        const result = await hostCommand('read_page', { url: check.url, waitFor: args.wait_for || null, timeoutMs: (args.timeout || 15) * 1000 }, context);
+        return result?.success === false ? result : { success: true, url: result.url, title: result.title, content: result.content, ...(result.truncated ? { truncated: true } : {}) };
+      }
       const browser = await getBrowser();
       const page = await newGuardedPage(browser);
 
@@ -114,6 +131,21 @@ export const screenshotTool = {
     try {
       const check = await checkAgentUrl(args.url);
       if (!check.ok) return { success: false, error: check.reason };
+      if (isBrowserAvailable()) {
+        const shot = await hostCommand('screenshot_url', { url: check.url, fullPage: Boolean(args.full_page) }, context);
+        // A page can only be photographed while Asyncat's window is open;
+        // otherwise the headless browser below still can.
+        if (shot?.success && shot.dataUrl) {
+          const fs = await import('fs');
+          const path = await import('path');
+          const dir = getTmpDir(context.workingDir);
+          fs.default.mkdirSync(dir, { recursive: true });
+          const filePath = path.default.join(dir, `screenshot_${Date.now()}.jpg`);
+          fs.default.writeFileSync(filePath, Buffer.from(shot.dataUrl.split(',')[1], 'base64'));
+          return { success: true, url: shot.url || check.url, title: shot.title, screenshot_path: filePath, dataUrl: shot.dataUrl };
+        }
+        if (!/not on screen/i.test(shot?.error || '')) return shot;
+      }
       const browser = await getBrowser();
       const page = await newGuardedPage(browser);
       await page.setViewport({ width: 1280, height: 720 });
@@ -129,9 +161,10 @@ export const screenshotTool = {
       await page.close();
 
       const imageData = fs.default.readFileSync(filePath);
-      const imageBase64 = `data:image/png;base64,${imageData.toString('base64')}`;
+      // dataUrl: the model sees the image (see AgentRuntime._toolResultMessage).
+      const dataUrl = `data:image/png;base64,${imageData.toString('base64')}`;
 
-      return { success: true, url: args.url, screenshot_path: filePath, image: imageBase64 };
+      return { success: true, url: args.url, screenshot_path: filePath, dataUrl };
     } catch (err) {
       return { success: false, error: err.message };
     }
@@ -153,10 +186,14 @@ export const browserNavigateTool = {
     },
     required: ['url'],
   },
-  execute: async (args) => {
+  execute: async (args, context) => {
     try {
       const check = await checkAgentUrl(args.url);
       if (!check.ok) return { success: false, error: check.reason };
+      if (isBrowserAvailable()) {
+        const result = await hostCommand('headless_navigate', { url: check.url, waitFor: args.wait_for || null, timeoutMs: (args.timeout || 15) * 1000 }, context);
+        return result?.success === false ? result : { success: true, url: result.url, title: result.title };
+      }
       const page = await getActivePage();
       const timeout = (args.timeout || 15) * 1000;
       await page.goto(check.url, { waitUntil: 'domcontentloaded', timeout });
@@ -187,8 +224,13 @@ export const browserClickTool = {
     },
     required: ['selector'],
   },
-  execute: async (args) => {
+  execute: async (args, context) => {
     try {
+      if (isBrowserAvailable()) {
+        const result = await runBrowserAction('headless_click', { selector: args.selector }, context, { toolName: 'browser_click', args, timeoutMs: 40_000 });
+        if (result?.success && args.wait) await new Promise(r => setTimeout(r, Math.min(Number(args.wait) || 0, 10_000)));
+        return result?.success ? { success: true, selector: args.selector, url: result.url, title: result.title, ...(result.navigated ? { navigated: true } : {}) } : result;
+      }
       const page = await getActivePage();
       await page.waitForSelector(args.selector, { timeout: 5000 });
       await page.click(args.selector);
@@ -216,8 +258,14 @@ export const browserTypeTool = {
     },
     required: ['selector', 'text'],
   },
-  execute: async (args) => {
+  execute: async (args, context) => {
     try {
+      if (isBrowserAvailable()) {
+        const result = await runBrowserAction('headless_type', {
+          selector: args.selector, text: String(args.text ?? ''), clear: args.clear !== false, submit: Boolean(args.press_enter),
+        }, context, { toolName: 'browser_type', args, timeoutMs: 40_000 });
+        return result?.success ? { success: true, selector: args.selector, url: result.url } : result;
+      }
       const page = await getActivePage();
       await page.waitForSelector(args.selector, { timeout: 5000 });
       if (args.clear !== false) await (await page.$(args.selector)).click({ clickCount: 3 });
@@ -244,8 +292,26 @@ export const browserFillTool = {
     },
     required: ['fields'],
   },
-  execute: async (args) => {
+  execute: async (args, context) => {
     try {
+      if (isBrowserAvailable()) {
+        const results = {};
+        for (const [selector, value] of Object.entries(args.fields || {})) {
+          const filled = await runBrowserAction('headless_type', { selector, text: String(value ?? ''), clear: true }, context, {
+            toolName: 'browser_fill', args: { selector, value }, timeoutMs: 40_000,
+          });
+          results[selector] = filled?.success ? 'filled' : `error: ${filled?.error || 'failed'}`;
+        }
+        let url;
+        if (args.submit_selector) {
+          const submitted = await runBrowserAction('headless_click', { selector: args.submit_selector }, context, {
+            toolName: 'browser_fill', args: { submit_selector: args.submit_selector }, timeoutMs: 40_000,
+          });
+          if (!submitted?.success) return { success: false, results, error: submitted?.error || 'Could not submit the form.' };
+          url = submitted.url;
+        }
+        return { success: true, results, ...(url ? { url } : {}) };
+      }
       const page = await getActivePage();
       const results = {};
       for (const [selector, value] of Object.entries(args.fields)) {
@@ -285,8 +351,15 @@ export const browserExtractTool = {
       structure: { type: 'object', description: 'Extract structured data: { "key": "css-selector" } pairs. Overrides selector.' },
     },
   },
-  execute: async (args) => {
+  execute: async (args, context) => {
     try {
+      if (isBrowserAvailable()) {
+        if (!args.structure && !args.selector) return { success: false, error: 'Pass a selector or a structure.' };
+        const result = await hostCommand('headless_extract', {
+          selector: args.selector, attribute: args.attribute, multiple: Boolean(args.multiple), structure: args.structure,
+        }, context);
+        return result?.success === false ? result : { success: true, ...(args.selector && !args.structure && !args.multiple ? { selector: args.selector } : {}), ...result };
+      }
       const page = await getActivePage();
       if (args.structure) {
         const result = {};
