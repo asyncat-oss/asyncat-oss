@@ -5,10 +5,13 @@ brain_region: cerebellum
 weight: 1.0
 tags: [cron, scheduled, automation, devops]
 when_to_use: |
-  When setting up scheduled tasks,
-  cron jobs, or automation.
+  When setting up or fixing system cron jobs (crontab) on a server or
+  computer, outside Asyncat.
 ---
 # Cron Jobs
+
+For something Asyncat itself should do on a schedule ("every weekday at 8am,
+summarise my email"), use a scheduled task (`create_scheduled_task`) instead.
 
 ## Cron Format
 ```

@@ -268,6 +268,14 @@ seed().then(async () => {
     }
 
     try {
+      // Record scheduled tasks still running as interrupted.
+      const { stopScheduler } = await import('./agent/Scheduler.js');
+      stopScheduler();
+    } catch (err) {
+      logger.warn('Scheduler stop error:', err.message);
+    }
+
+    try {
       // Close SQLite database
       db.close();
     } catch {

@@ -23,7 +23,11 @@ import {
 import { loadSkills, reloadSkills, listSkills, normalizeTags, createSkill, updateSkill, deleteSkill } from '../../agent/skills.js';
 import { loadSoul, readSoulRaw, writeSoul, listSouls } from '../../agent/prompts/agentSystemPrompt.js';
 import { getAiClientForScheduledProvider, getAiClientForUser } from '../controllers/ai/clientFactory.js';
-import { scheduleJob, listJobs, listJobRuns, runJobNow, updateJob, deleteJob, enableJob, disableJob, initScheduler } from '../../agent/Scheduler.js';
+import { startScheduler } from '../../agent/Scheduler.js';
+import { runScheduledTask } from '../../agent/scheduledRunner.js';
+import { resolveScheduledProvider } from '../../agent/scheduledProvider.js';
+import { noProjectToolNames } from '../../agent/toolScopes.js';
+import { createScheduledTaskRouter } from './scheduledTaskRoutes.js';
 import { initWorkflows } from '../../agent/WorkflowEngine.js';
 import { createWorkflowRouter } from './workflowRoutes.js';
 import { getWorkspaceRoot, loadEntry, resolveWorkingDirectoryContext } from '../../files/fileExplorerService.js';
@@ -59,26 +63,6 @@ const router = express.Router();
 const pendingPermissions = new Map();
 const pendingUserQuestions = new Map();
 const MCP_CONFIG_PATH = path.resolve(process.cwd(), 'data', 'mcp.json');
-const NO_PROJECT_TOOL_CATEGORIES = new Set([
-  'interaction',
-  'planning',
-  'search',
-  'browser',
-  'integrations',
-  'memory',
-  'notes',
-]);
-
-function noProjectToolNames() {
-  const names = toolRegistry
-    .all()
-    .filter(tool => NO_PROJECT_TOOL_CATEGORIES.has(tool.category))
-    .map(tool => tool.name);
-  // AgentRuntime treats an empty list as "no restriction", so retain a hard
-  // minimal allow-list even during an unusual partial-initialization state.
-  return names.length ? names : ['todo_write', 'list_plan', 'ask_user'];
-}
-
 function normalizeConversationHistory(history = []) {
   return (Array.isArray(history) ? history : [])
     .filter(m => m?.role === 'user' || m?.role === 'assistant')
@@ -140,77 +124,12 @@ function parseProviderJson(value, fallback = null) {
   try { return JSON.parse(value); } catch { return fallback; }
 }
 
-function providerSnapshotFromRow(row) {
-  if (!row) return null;
-  const pub = publicProvider({
-    id: row.profile_id || row.id || null,
-    name: row.name || null,
-    provider_type: row.provider_type,
-    provider_id: row.provider_id,
-    base_url: row.base_url,
-    model: row.model,
-    settings: row.settings,
-    supports_tools: row.supports_tools,
-    api_key: row.api_key,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-  });
-  return {
-    id: pub?.id || row.profile_id || row.id || null,
-    name: pub?.name || row.name || row.provider_id,
-    provider_type: pub?.provider_type || row.provider_type,
-    provider_id: pub?.provider_id || row.provider_id,
-    base_url: pub?.base_url || row.base_url,
-    model: pub?.model || row.model,
-    settings: pub?.settings || parseProviderJson(row.settings, {}),
-    supports_tools: Boolean(pub?.supports_tools ?? row.supports_tools),
-    local: Boolean(pub?.local),
-    managed: Boolean(pub?.managed),
-  };
-}
-
-function resolveScheduledProvider(userId, providerProfileId = null) {
-  if (providerProfileId) {
-    const row = db.prepare('SELECT * FROM ai_provider_profiles WHERE user_id = ? AND id = ?').get(userId, providerProfileId);
-    if (!row) throw new Error('Selected AI provider profile was not found.');
-    return { providerProfileId: row.id, providerSnapshot: providerSnapshotFromRow(row) };
-  }
-
-  const active = db.prepare('SELECT * FROM ai_provider_config WHERE user_id = ?').get(userId);
-  if (!active) throw new Error('No active AI provider is configured. Choose a model on the Models page first.');
-  return {
-    providerProfileId: active.profile_id || null,
-    providerSnapshot: providerSnapshotFromRow(active),
-  };
-}
-
-function enrichScheduledJob(job) {
-  if (!job) return job;
-  return {
-    ...job,
-    provider_snapshot: job.provider_snapshot || {},
-    provider: job.provider_snapshot && Object.keys(job.provider_snapshot).length
-      ? job.provider_snapshot
-      : null,
-  };
-}
-
 function getWorkspaceIdForRequest(req) {
   return req.workspaceId || db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id || null;
 }
 
 function listRecentActivity(userId, workspaceId, limit = 50) {
   const perTypeLimit = Math.max(10, limit);
-  const scheduledRows = workspaceId ? db.prepare(`
-    SELECT r.*, j.name AS target_name, j.goal, j.profile_id, ap.name AS profile_name
-    FROM scheduled_job_runs r
-    JOIN scheduled_jobs j ON j.id = r.job_id
-    LEFT JOIN agent_profiles ap ON ap.id = j.profile_id
-    WHERE j.user_id = ? AND j.workspace_id = ?
-    ORDER BY r.started_at DESC
-    LIMIT ?
-  `).all(userId, workspaceId, perTypeLimit) : [];
-
   const workflowRows = db.prepare(`
     SELECT r.*, w.name AS target_name, w.profile_id, ap.name AS profile_name
     FROM workflow_runs r
@@ -222,20 +141,6 @@ function listRecentActivity(userId, workspaceId, limit = 50) {
   `).all(userId, workspaceId, workspaceId, perTypeLimit);
 
   const items = [
-    ...scheduledRows.map(row => ({
-      id: row.id,
-      type: 'schedule',
-      name: row.target_name || 'Scheduled agent job',
-      context: 'Scheduled agent job',
-      status: row.status,
-      detail: row.answer || row.goal || null,
-      error: row.error || null,
-      startedAt: row.started_at,
-      finishedAt: row.finished_at || null,
-      sessionId: row.agent_session_id || null,
-      targetId: row.job_id,
-      profileName: row.profile_name || null,
-    })),
     ...workflowRows.map(row => {
       const results = parseJson(row.results, []);
       const sessionResult = [...results].reverse().find(result => result?.sessionId);
@@ -480,7 +385,8 @@ const runScheduledAgent = async ({ goal, userId, workspaceId, workingDir, profil
   }
   return await agent.run(goal);
 };
-initScheduler(runScheduledAgent);
+// Scheduled tasks: one clock for every task (agent/Scheduler.js).
+startScheduler({ runTask: runScheduledTask });
 initWorkflows(runScheduledAgent);
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1152,6 +1058,7 @@ function createAskUserRequest(req, res) {
 // ── Agent tools / skills / souls ─────────────────────────────────────────────
 
 router.use('/workflows', createWorkflowRouter({ withWorkspaceContext, resolveProvider: resolveScheduledProvider }));
+router.use('/scheduled-tasks', createScheduledTaskRouter({ withWorkspaceContext }));
 
 router.get('/tools', withWorkspaceContext, async (req, res) => {
   const { toolRegistry } = await import('../../agent/index.js');
@@ -1942,7 +1849,7 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
         ? `Project scope: this chat is in the project "${chatProject.name}", which has no folder selected for this chat, so local files, code, shell, Git and workspace tools are unavailable. The user can attach a folder on the project page.`
         : '',
       !hasProjectContext && !chatProject
-        ? 'Project scope: No Project is selected for this conversation. Local files, code, shell, Git, artifacts, scheduled work, and workspace tools are unavailable. Ask the user to select a Project before attempting local-file work.'
+        ? 'Project scope: No Project is selected for this conversation. Local files, code, shell, Git, artifacts, and workspace tools are unavailable. Ask the user to select a Project before attempting local-file work.'
         : '',
     ].filter(Boolean).join('\n\n');
     const chatContext = buildChatContext({
@@ -2873,134 +2780,6 @@ router.delete('/profiles/:id', withWorkspaceContext, (req, res) => {
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
-});
-
-// ── Scheduler ────────────────────────────────────────────────────────────────
-
-router.post('/schedule', withWorkspaceContext, async (req, res) => {
-  try {
-    const { name, goal, schedule, timezone, profileId, providerProfileId } = req.body;
-    if (!name || !goal || !schedule) {
-      return res.status(400).json({ success: false, error: 'name, goal, and schedule are required' });
-    }
-    const workspaceId = req.workspaceId ||
-      db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
-    const provider = resolveScheduledProvider(req.user.id, providerProfileId || null);
-
-    const job = scheduleJob({
-      name, goal, schedule, timezone: timezone || null,
-      userId: req.user.id,
-      workspaceId: workspaceId || 'default',
-      profileId: profileId || null,
-      providerProfileId: provider.providerProfileId,
-      providerSnapshot: provider.providerSnapshot,
-      workingDir: req.body.workingDir || req.body.working_dir || '.',
-    });
-    res.json({ success: true, job: enrichScheduledJob(job) });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-router.get('/schedule', withWorkspaceContext, async (req, res) => {
-  try {
-    const workspaceId = req.workspaceId ||
-      db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
-    const jobs = listJobs(req.user.id, workspaceId || 'default');
-    res.json({ success: true, count: jobs.length, jobs: jobs.map(enrichScheduledJob) });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-router.get('/schedule/:id/runs', withWorkspaceContext, async (req, res) => {
-  try {
-    const workspaceId = req.workspaceId ||
-      db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
-    const limit = Math.max(1, Math.min(100, Number(req.query.limit || 20)));
-    const runs = listJobRuns(req.params.id, req.user.id, workspaceId || 'default', limit);
-    if (!runs) return res.status(404).json({ success: false, error: 'Job not found' });
-    res.json({ success: true, count: runs.length, runs });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-router.patch('/schedule/:id', withWorkspaceContext, async (req, res) => {
-  try {
-    const workspaceId = req.workspaceId ||
-      db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
-    const body = req.body || {};
-    const patch = {};
-    if (body.name !== undefined) patch.name = String(body.name || '').trim();
-    if (body.goal !== undefined) patch.goal = String(body.goal || '').trim();
-    if (body.schedule !== undefined) patch.schedule = String(body.schedule || '').trim();
-    if (body.timezone !== undefined) patch.timezone = body.timezone ? String(body.timezone).trim() : null;
-    if (body.enabled !== undefined) patch.enabled = Boolean(body.enabled);
-    if (body.profileId !== undefined || body.profile_id !== undefined) patch.profileId = body.profileId ?? body.profile_id ?? null;
-    if (body.workingDir !== undefined || body.working_dir !== undefined) patch.workingDir = body.workingDir ?? body.working_dir ?? '.';
-    if (body.providerProfileId !== undefined || body.provider_profile_id !== undefined) {
-      const provider = resolveScheduledProvider(req.user.id, body.providerProfileId ?? body.provider_profile_id ?? null);
-      patch.providerProfileId = provider.providerProfileId;
-      patch.providerSnapshot = provider.providerSnapshot;
-    }
-
-    const job = updateJob({
-      id: req.params.id,
-      userId: req.user.id,
-      workspaceId: workspaceId || 'default',
-      ...patch,
-    });
-    if (!job) return res.status(404).json({ success: false, error: 'Job not found' });
-    res.json({ success: true, job: enrichScheduledJob(job) });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-router.post('/schedule/:id/run-now', withWorkspaceContext, async (req, res) => {
-  try {
-    const workspaceId = req.workspaceId ||
-      db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
-    const job = db.prepare('SELECT id FROM scheduled_jobs WHERE id = ? AND user_id = ? AND workspace_id = ?')
-      .get(req.params.id, req.user.id, workspaceId || 'default');
-    if (!job) return res.status(404).json({ success: false, error: 'Job not found' });
-    const run = await runJobNow(req.params.id);
-    res.json({ success: true, run });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-router.delete('/schedule/:id', withWorkspaceContext, (req, res) => {
-  try {
-    const workspaceId = getWorkspaceIdForRequest(req) || 'default';
-    const deleted = deleteJob(req.params.id, { userId: req.user.id, workspaceId });
-    if (!deleted) return res.status(404).json({ success: false, error: 'Job not found' });
-    res.json({ success: true, message: `Job ${req.params.id} deleted` });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-router.patch('/schedule/:id/enable', withWorkspaceContext, (req, res) => {
-  try {
-    const workspaceId = getWorkspaceIdForRequest(req) || 'default';
-    const enabled = enableJob(req.params.id, { userId: req.user.id, workspaceId });
-    if (!enabled) return res.status(404).json({ success: false, error: 'Job not found' });
-    res.json({ success: true });
-  }
-  catch (err) { res.status(500).json({ success: false, error: err.message }); }
-});
-
-router.patch('/schedule/:id/disable', withWorkspaceContext, (req, res) => {
-  try {
-    const workspaceId = getWorkspaceIdForRequest(req) || 'default';
-    const disabled = disableJob(req.params.id, { userId: req.user.id, workspaceId });
-    if (!disabled) return res.status(404).json({ success: false, error: 'Job not found' });
-    res.json({ success: true });
-  }
-  catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
 // ── Checkpoints ──────────────────────────────────────────────────────────────
