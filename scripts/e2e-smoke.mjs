@@ -388,7 +388,37 @@ async function main() {
     await noCrash();
   });
 
-  for (const [label, route] of [['Models', '/models'], ['Models → Voice', '/models?tab=audio'], ['Settings → Profile', '/settings/profile'], ['Settings → Connections', '/settings/connections'], ['Settings → Background', '/settings/background'], ['Settings → Engines', '/settings/runtime'], ['Tools & Skills', '/tools']]) {
+  await check('Settings → Privacy & safety saves blocked sites, and search finds it', async () => {
+    await page.goto(`${app}/settings/privacy`, { waitUntil: 'domcontentloaded' });
+    await waitFor(() => page.evaluate(() => Boolean(document.querySelector('[data-privacy] [data-export]'))), { timeout: 15000, what: 'the Privacy & safety page' });
+    const input = await page.$('input[aria-label="Add a site agents never open"]');
+    await input.type('bank.example');
+    await page.keyboard.press('Enter');
+    await waitFor(async () => (await api('GET', '/api/privacy')).blockedSites?.includes('bank.example'), { timeout: 10000, what: 'the blocked site to be saved' });
+    await api('PUT', '/api/privacy/blocked-sites', { sites: [] });
+    const box = await page.$('[data-settings-search]');
+    await box.type('quiet hours');
+    await page.keyboard.press('Enter');
+    await waitFor(() => page.evaluate(() => Boolean(document.querySelector('[data-notifications]'))), { timeout: 10000, what: 'search to open Notifications' });
+    await noCrash();
+  });
+
+  await check('Models → Training shows the guided steps and finds a rated answer', async () => {
+    const saved = await api('POST', '/api/ai/chats/save', {
+      messages: [
+        { id: 'msg_1_user_e2e', type: 'user', content: 'How deep should a balcony pot be?' },
+        { id: 'msg_2_assistant_e2e', type: 'assistant', content: 'At least 30 cm for tomatoes, 15 cm for herbs.', rating: 1, ratedVariant: 0 },
+      ],
+      title: 'Pot depth',
+      mode: 'chat',
+    });
+    assert(saved.conversationId, 'the rated chat was not saved');
+    await page.goto(`${app}/models?tab=training`, { waitUntil: 'domcontentloaded' });
+    await waitFor(() => page.evaluate(() => document.querySelector('[data-guide-step="data"]')?.innerText.includes('rated 👍 (1)')), { timeout: 20000, what: 'the rated answer in the training steps' });
+    await noCrash();
+  });
+
+  for (const [label, route] of [['Models', '/models'], ['Models → Voice', '/models?tab=audio'], ['Settings → Profile', '/settings/profile'], ['Settings → Connections', '/settings/connections'], ['Settings → Notifications', '/settings/notifications'], ['Settings → Background', '/settings/background'], ['Settings → Engines', '/settings/runtime'], ['Tools & Skills', '/tools']]) {
     await check(`${label} opens`, async () => {
       await page.goto(`${app}${route}`, { waitUntil: 'domcontentloaded' });
       // Pages keep live connections open (/api/events), so the network never
