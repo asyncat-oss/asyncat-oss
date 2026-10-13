@@ -82,7 +82,9 @@ export const chatApi = {
       projectIds,
       conversationId,
       metadata,
-      fileAttachments
+      fileAttachments,
+      knownMessageIds,
+      clientId,
     } = conversationData;
 
     return await apiRequest(`${ENDPOINTS.CHATS}/save`, {
@@ -94,7 +96,9 @@ export const chatApi = {
         projectIds,
         conversationId,
         metadata,
-        fileAttachments
+        fileAttachments,
+        knownMessageIds,
+        clientId,
       })
     });
   },

@@ -482,7 +482,7 @@ router.post('/generate-title', withWorkspaceContext, async (req, res) => {
 
 router.post('/chats/save', withWorkspaceContext, async (req, res) => {
   try {
-    const { messages, title, mode = 'chat', projectIds = [], metadata = {}, conversationId = null, fileAttachments = null } = req.body;
+    const { messages, title, mode = 'chat', projectIds = [], metadata = {}, conversationId = null, fileAttachments = null, knownMessageIds = null, clientId = null } = req.body;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({ success: false, error: 'Messages array is required and cannot be empty' });
@@ -492,7 +492,11 @@ router.post('/chats/save', withWorkspaceContext, async (req, res) => {
       title, mode, projectIds, metadata, conversationId,
       workspaceId: req.workspaceId,
       fileAttachments,
-      databaseClient: req.db
+      databaseClient: req.db,
+      // Never lose messages added on the server since this window loaded the
+      // chat: a sender that lists none is treated as having seen none.
+      knownMessageIds: Array.isArray(knownMessageIds) ? knownMessageIds.map(String).slice(0, 20_000) : [],
+      origin: typeof clientId === 'string' ? clientId.slice(0, 80) : null,
     });
 
     res.json({ success: true, ...result });

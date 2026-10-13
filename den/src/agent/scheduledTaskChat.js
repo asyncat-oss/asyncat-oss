@@ -146,12 +146,15 @@ export async function appendRunToTaskChat(task, run) {
     }
     if (conversation) {
       const projectIds = Array.isArray(conversation.project_ids) ? conversation.project_ids : [];
-      await chatService.saveConversation(task.userId, [...(conversation.messages || []), ...messages], {
+      const existing = conversation.messages || [];
+      await chatService.saveConversation(task.userId, [...existing, ...messages], {
         conversationId: conversation.id,
         workspaceId: conversation.workspace_id,
         mode: conversation.mode || 'work',
         projectIds,
         metadata: { ...(conversation.metadata || {}), scheduledTaskId: task.id },
+        // Messages the user sent while the run was going are kept.
+        knownMessageIds: existing.map((message) => message.id).filter(Boolean),
       });
       return conversation.id;
     }

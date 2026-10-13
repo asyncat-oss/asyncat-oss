@@ -49,6 +49,9 @@ import { hostToken } from './lib/hostBridge.js';
 // ─── Integrations ─────────────────────────────────────────────────────────────
 import integrationsRouter from './integrations/integrationsRouter.js';
 
+// Live updates for open windows (Server-Sent Events)
+import eventsRouter from './events/eventsRouter.js';
+
 // ─── Database ─────────────────────────────────────────────────────────────────
 import db from './db/client.js';         // opens SQLite, applies schema
 import { seed } from './db/seed.js';     // creates the local profile on first boot
@@ -109,8 +112,9 @@ app.use(cors({
 app.use(compression());
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'tiny', {
   stream: morganStream,
-  // The desktop app long-polls /api/host/next all day; don't log every poll.
-  skip: (req) => req.path === '/api/host/next',
+  // The desktop app long-polls /api/host/next all day and every window keeps
+  // /api/events open; don't log those.
+  skip: (req) => req.path === '/api/host/next' || req.path === '/api/events',
 }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -159,6 +163,9 @@ app.use('/api/browser', browserRouter);
 
 // Routes: desktop app bridge (notifications, desktop-only commands)
 app.use('/api/host', hostBridgeRouter);
+
+// Routes: live updates for open windows
+app.use('/api/events', eventsRouter);
 
 // ─── Routes: Training / Fine-Tuning ──────────────────────────────────────────
 app.use('/api/training', trainingRouter);

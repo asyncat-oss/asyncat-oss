@@ -6,6 +6,9 @@ import { createContext, useState, useContext, useReducer, useEffect, useCallback
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import commandCenterApi from '../api';
+import { CLIENT_ID, subscribeAppEvent } from '../../services/appEvents.js';
+import { mergeStaleMessages } from '../utils/messageMerge.js';
+import { buildEventsFromMessages } from '../utils/agentEventUtils.js';
 
 const ActionTypes = {
   SET_MESSAGES: 'SET_MESSAGES',
@@ -182,6 +185,14 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
   const runStartedAtRef = useRef(null);
   const chatRunsRef = useRef(chatRuns);
   const currentConversationIdRef = useRef(state.currentConversationId);
+  // Per chat, the ids of every message this window has seen. Saves send them
+  // so the server keeps messages added since (a scheduled run's result) and
+  // drops only the ones this window removed (see utils/messageMerge.js).
+  const knownMessageIdsRef = useRef(new Map());
+  // Chats the server changed while this window was running an answer in them.
+  const pendingRefreshRef = useRef(new Set());
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   useEffect(() => {
     chatRunsRef.current = chatRuns;
@@ -266,6 +277,23 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     if (conversationListRefresh) conversationListRefresh();
   }, [conversationListRefresh]);
 
+  const rememberMessageIds = useCallback((conversationId, messages = [], metadata = null) => {
+    if (!conversationId) return;
+    let known = knownMessageIdsRef.current.get(conversationId);
+    if (!known) {
+      known = new Set();
+      knownMessageIdsRef.current.set(conversationId, known);
+    }
+    for (const message of Array.isArray(messages) ? messages : []) {
+      if (message?.id) known.add(message.id);
+    }
+    for (const branch of Array.isArray(metadata?.branches) ? metadata.branches : []) {
+      for (const message of Array.isArray(branch?.messages) ? branch.messages : []) {
+        if (message?.id) known.add(message.id);
+      }
+    }
+  }, []);
+
   const shouldSaveConversations = useCallback(() => !state.isGhostMode, [state.isGhostMode]);
 
   // Low-level dispatchers exposed to V2Enhanced for streaming updates
@@ -313,22 +341,33 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
       const savedProjectIds = savedWorkingContext?.projectId
         ? [savedWorkingContext.projectId]
         : [];
+      const savedMetadata = {
+        ...(state.conversationMetadata || {}),
+        workspaceId: currentWorkspace?.id,
+        projectScope: savedWorkingContext ? 'project' : 'none',
+        workingContext: savedWorkingContext,
+        ...(options.metadata || {}),
+      };
       const result = await commandCenterApi.chat.saveConversation({
         messages: messagesToSave,
         title: options.title || (savingCurrentConversation ? state.conversationTitle : undefined),
         mode: options.mode || 'chat',
         projectIds: savedProjectIds,
         conversationId: targetConversationId,
-        metadata: {
-          ...(state.conversationMetadata || {}),
-          workspaceId: currentWorkspace?.id,
-          projectScope: savedWorkingContext ? 'project' : 'none',
-          workingContext: savedWorkingContext,
-          ...(options.metadata || {}),
-        },
+        metadata: savedMetadata,
+        knownMessageIds: targetConversationId
+          ? [...(knownMessageIdsRef.current.get(targetConversationId) || [])]
+          : [],
+        clientId: CLIENT_ID,
       });
 
       if (result.success) {
+        const savedConversationId = result.conversationId || targetConversationId;
+        rememberMessageIds(savedConversationId, messagesToSave, savedMetadata);
+        // The server kept messages this window hadn't seen: show them.
+        if (result.keptMessages > 0) {
+          window.dispatchEvent(new CustomEvent('asyncat:conversation-stale', { detail: { conversationId: savedConversationId } }));
+        }
         if (savingCurrentConversation && !currentConversationIdNow && result.conversationId) {
           dispatch({ type: ActionTypes.SET_CURRENT_CONVERSATION_ID, payload: result.conversationId });
           if (result.title && result.title !== state.conversationTitle) {
@@ -350,7 +389,7 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     } finally {
       savingConversationIdsRef.current.delete(savingKey);
     }
-  }, [state.messages, state.currentConversationId, state.conversationTitle, state.isGhostMode, state.workingContext, state.conversationMetadata, currentWorkspace?.id, triggerConversationRefresh, location.pathname, navigate, shouldSaveConversations]);
+  }, [state.messages, state.currentConversationId, state.conversationTitle, state.isGhostMode, state.workingContext, state.conversationMetadata, currentWorkspace?.id, triggerConversationRefresh, location.pathname, navigate, shouldSaveConversations, rememberMessageIds]);
 
   // Helper for V2Enhanced to set conversation id and title after a new save
   const setCurrentConversationId = useCallback((id) => {
@@ -436,6 +475,7 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
         experienceMode: conversation.mode === 'build' ? 'work' : 'chat',
       };
 
+      rememberMessageIds(conversationId, conversation.messages || [], loadedMetadata);
       dispatch({ type: ActionTypes.SET_MESSAGES, payload: conversation.messages || [] });
       const loadedWorkingContext = normalizeWorkingContext(loadedMetadata.workingContext || null);
       dispatch({
@@ -479,7 +519,105 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
         dispatch({ type: ActionTypes.SET_CONVERSATION_LOADING, payload: false });
       }
     }
-  }, [currentWorkspace?.id]);
+  }, [currentWorkspace?.id, rememberMessageIds]);
+
+  // Show what the server added to the open chat (a scheduled run's result, a
+  // Cat's report) without reloading the screen or losing anything unsaved.
+  const refreshConversationFromServer = useCallback(async (conversationId) => {
+    if (!conversationId || conversationId !== currentConversationIdRef.current) return;
+    if (stateRef.current.isGhostMode) return;
+    if (chatRunsRef.current?.[conversationId]?.running) {
+      pendingRefreshRef.current.add(conversationId);
+      return;
+    }
+    pendingRefreshRef.current.delete(conversationId);
+    let conversation;
+    try {
+      ({ conversation } = await commandCenterApi.chat.loadConversation(conversationId));
+    } catch {
+      return; // deleted or unreachable: keep showing what we have
+    }
+    if (!conversation || conversationId !== currentConversationIdRef.current) return;
+    if (chatRunsRef.current?.[conversationId]?.running) {
+      pendingRefreshRef.current.add(conversationId);
+      return;
+    }
+
+    const known = knownMessageIdsRef.current.get(conversationId) || new Set();
+    const local = stateRef.current.messages || [];
+    const { messages: merged, kept } = mergeStaleMessages({
+      stored: conversation.messages || [],
+      posted: local,
+      knownIds: [...known],
+    });
+    rememberMessageIds(conversationId, conversation.messages || [], conversation.metadata || null);
+    if (conversation.title && conversation.title !== stateRef.current.conversationTitle) {
+      dispatch({ type: ActionTypes.SET_CONVERSATION_TITLE, payload: conversation.title });
+    }
+    if (!kept) return;
+
+    // Keys the server set meanwhile; this window's own values win.
+    dispatch({
+      type: ActionTypes.SET_CONVERSATION_METADATA,
+      payload: { ...(conversation.metadata || {}), ...(stateRef.current.conversationMetadata || {}) },
+    });
+    dispatch({ type: ActionTypes.SET_MESSAGES, payload: merged });
+    const history = merged
+      .filter(msg => msg.type === 'user' || msg.type === 'assistant')
+      .map(msg => ({
+        role: msg.type,
+        content: msg.content,
+        timestamp: msg.timestamp,
+        toolsEnabled: msg.toolsEnabled,
+        agentSessionId: msg.agentSessionId,
+      }));
+    dispatch({ type: ActionTypes.SET_CONVERSATION_HISTORY, payload: history.slice(-8) });
+    // The feed draws a chat that ran in this window from its run's events.
+    setChatRuns(prev => {
+      const run = prev[conversationId];
+      if (!run || run.running || !Array.isArray(run.events) || run.events.length === 0) return prev;
+      return {
+        ...prev,
+        [conversationId]: { ...run, events: buildEventsFromMessages(merged), conversationHistory: history },
+      };
+    });
+  }, [rememberMessageIds]);
+
+  useEffect(() => {
+    let listTimer = null;
+    const refreshList = () => {
+      clearTimeout(listTimer);
+      listTimer = setTimeout(() => triggerConversationRefresh(), 300);
+    };
+    const offUpdated = subscribeAppEvent('conversation.updated', (event) => {
+      const data = event?.data || {};
+      if (data.origin && data.origin === CLIENT_ID) return;
+      refreshList();
+      if (data.conversationId && data.conversationId === currentConversationIdRef.current) {
+        refreshConversationFromServer(data.conversationId);
+      }
+    });
+    const offReconnected = subscribeAppEvent('events.reconnected', () => {
+      refreshList();
+      refreshConversationFromServer(currentConversationIdRef.current);
+    });
+    const onStale = (event) => refreshConversationFromServer(event.detail?.conversationId);
+    window.addEventListener('asyncat:conversation-stale', onStale);
+    return () => {
+      clearTimeout(listTimer);
+      offUpdated();
+      offReconnected();
+      window.removeEventListener('asyncat:conversation-stale', onStale);
+    };
+  }, [refreshConversationFromServer, triggerConversationRefresh]);
+
+  // A chat the server changed while an answer was running refreshes once the
+  // answer is done.
+  useEffect(() => {
+    for (const conversationId of [...pendingRefreshRef.current]) {
+      if (!chatRuns[conversationId]?.running) refreshConversationFromServer(conversationId);
+    }
+  }, [chatRuns, refreshConversationFromServer]);
 
   const handleClearConversation = useCallback(() => {
     loadConversationRequestRef.current += 1;
@@ -562,6 +700,7 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     setWorkingContext,
     clearError: () => dispatch({ type: ActionTypes.CLEAR_ERROR }),
     loadConversation,
+    refreshConversationFromServer,
     saveCurrentConversation,
     setConversationListRefresh,
     triggerConversationRefresh,

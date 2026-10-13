@@ -4,6 +4,8 @@ import rawDb from '../../../db/client.js';
 import { deleteCheckpoint } from '../../../agent/AgentRuntime.js';
 import { v4 as uuidv4 } from 'uuid';
 import { normalizeConversationMode } from './conversationModes.js';
+import { mergeStaleMessages } from './messageMerge.js';
+import { publishAppEvent } from '../../../lib/appEvents.js';
 
 /**
  * Parse a conversation's messages JSON and extract all note IDs created by
@@ -620,6 +622,24 @@ class ChatService {
     }
   }
 
+  /** The stored messages (JSONB format) and metadata of a chat, read now. */
+  readStoredConversation(conversationId, userId) {
+    const row = rawDb.prepare(`
+      SELECT messages, metadata FROM conversations WHERE id = ? AND user_id = ? AND deleted_at IS NULL
+    `).get(conversationId, userId);
+    if (!row) return null;
+    const parse = (value, fallback) => {
+      if (!value) return fallback;
+      try { return JSON.parse(value) ?? fallback; } catch { return fallback; }
+    };
+    const messages = parse(row.messages, []);
+    const metadata = parse(row.metadata, {});
+    return {
+      messages: Array.isArray(messages) ? messages : [],
+      metadata: metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? metadata : {},
+    };
+  }
+
   // Simplified save conversation using SQLite
   async saveConversation(userId, messages, options = {}) {
     const {
@@ -630,7 +650,12 @@ class ChatService {
       conversationId = null,
       workspaceId = null,
       fileAttachments = null,
-      databaseClient = null
+      databaseClient = null,
+      // Ids of the messages the sender has seen. When given, stored messages
+      // the sender hasn't seen are kept (see messageMerge.js).
+      knownMessageIds = null,
+      // Which window saved, so it can ignore its own "chat changed" event.
+      origin = null,
     } = options;
 
     // UI experience names are normalized to the schema's persisted values.
@@ -658,18 +683,38 @@ class ChatService {
       }
 
       // Convert messages to simple JSONB format
-      const jsonbMessages = this.convertToJsonbFormat(messages);
+      let jsonbMessages = this.convertToJsonbFormat(messages);
       const nowIso = new Date().toISOString();
-      const lastMessageAt = this.getLastMessageTimestamp(jsonbMessages, nowIso);
 
       // Prepare metadata with file attachments
-      const enhancedMetadata = { ...metadata };
+      let enhancedMetadata = { ...metadata };
       if (fileAttachments && Array.isArray(fileAttachments) && fileAttachments.length > 0) {
         enhancedMetadata.fileAttachments = fileAttachments;
       }
 
+      // A save from a view that is out of date keeps what was added since.
+      // Read and merged right before the write, with nothing awaited between.
+      let keptMessages = 0;
+      if (conversationId && Array.isArray(knownMessageIds)) {
+        const stored = this.readStoredConversation(conversationId, userId);
+        if (stored) {
+          const merged = mergeStaleMessages({
+            stored: stored.messages,
+            posted: jsonbMessages,
+            knownIds: knownMessageIds,
+            metadata: enhancedMetadata,
+          });
+          jsonbMessages = merged.messages;
+          keptMessages = merged.kept;
+          // Keys set on the server meanwhile (a Cat's id, say) stay too.
+          enhancedMetadata = { ...stored.metadata, ...enhancedMetadata };
+        }
+      }
+      const lastMessageAt = this.getLastMessageTimestamp(jsonbMessages, nowIso);
+
       // Detect if conversation has attachments
-      const hasAttachments = this.hasAttachments(messages, fileAttachments);
+      const hasAttachments = this.hasAttachments(messages, fileAttachments)
+        || (keptMessages > 0 && this.hasAttachments(this.convertFromJsonbFormat(jsonbMessages)));
 
       if (conversationId) {
         // UPDATE existing conversation
@@ -734,13 +779,23 @@ class ChatService {
       this.cache.delete(`conversation_${finalConversationId}_${userId}`);
       this.syncConversationBranchRecords(finalConversationId, userId, effectiveWorkspaceId, jsonbMessages, enhancedMetadata);
 
+      publishAppEvent('conversation.updated', {
+        conversationId: finalConversationId,
+        messageCount: jsonbMessages.length,
+        updatedAt: nowIso,
+        isNew: !conversationId,
+        origin: origin || null,
+      }, { userId });
+
       return {
         success: true,
         conversationId: finalConversationId,
         title: savedTitle,
         workspaceId: effectiveWorkspaceId,
         isNew: !conversationId,
-        messageCount: messages.length
+        messageCount: jsonbMessages.length,
+        keptMessages,
+        updatedAt: nowIso,
       };
 
     } catch (error) {
