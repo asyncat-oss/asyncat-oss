@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import PropTypes from 'prop-types';
+import Cat from '../components/ui/Cat.jsx';
 import {
   Layers, Plus, Trash2, Edit2, Loader2, AlertCircle,
   Check, X, Star, StarOff, ChevronDown, ChevronRight,
@@ -658,11 +659,9 @@ StarterTemplates.propTypes = {
 function EmptyState({ onAdd }) {
   return (
     <div className="flex flex-col items-center justify-center py-16 px-8 text-center">
-      <div className="w-12 h-12 rounded-lg bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 flex items-center justify-center mb-4">
-        <Layers className="w-6 h-6 text-gray-400" />
-      </div>
-      <h3 className="text-sm font-semibold text-gray-800 dark:text-white midnight:text-slate-200 mb-2">No agent profiles yet</h3>
-      <p className="text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400 max-w-xs leading-relaxed mb-6">
+      <Cat pose="peek" className="mb-4 w-16" outline={6} />
+      <h3 className="mb-1.5 text-[15px] font-semibold text-fg">No agent profiles yet</h3>
+      <p className="mb-6 max-w-xs text-[13px] leading-5 text-fg-muted">
         Profiles are named configurations — each one bundles a soul, working directory, permission rules, and pre-approved tools.
       </p>
       <button onClick={onAdd} className="flex items-center gap-2 px-4 py-2 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-white text-white dark:text-gray-900 midnight:text-slate-950 midnight:bg-slate-100 midnight:hover:bg-white rounded-lg text-sm font-medium transition-colors">

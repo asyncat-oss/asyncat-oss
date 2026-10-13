@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import PropTypes from 'prop-types';
+import PageHeader from '../components/ui/PageHeader.jsx';
+import { Tabs } from '../components/ui/Tabs.jsx';
 import {
   Search, Wrench, File,
   Brain, Loader2, AlertCircle, ChevronRight,
@@ -1100,14 +1102,8 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
   const soulTabActive    = activeTab === 'soul';
   const memoryTabActive  = activeTab === 'memory';
 
-  function tabClass(isActive) {
-    return isActive
-      ? 'flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium bg-gray-200 dark:bg-gray-800 midnight:bg-slate-800 text-gray-900 dark:text-white midnight:text-slate-100'
-      : 'flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300';
-  }
-
   return (
-    <div className="flex flex-col h-full bg-transparent">
+    <div className="flex flex-col h-full bg-canvas">
       <NewSkillModal
         open={newSkillOpen}
         onClose={() => setNewSkillOpen(false)}
@@ -1124,42 +1120,24 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
         isDestructive
         isProcessing={deletingSkill}
       />
-      {/* Header */}
-      <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Bot className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-            <h1 className="text-base font-semibold text-gray-900 dark:text-white midnight:text-slate-100">Agent Tools & Skills</h1>
-          </div>
-          <div className="flex items-center gap-4 text-xs text-gray-500">
-            <span>{tools.length} tools</span>
-            <span>{skills.length} skills</span>
-            {saveSuccess && <span className="text-emerald-500 flex items-center gap-1"><Check className="w-3 h-3" />Soul saved</span>}
-          </div>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="px-6 py-3 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800">
-        <div className="flex gap-1 p-1 bg-gray-100/50 dark:bg-gray-800/50 midnight:bg-slate-800/50 rounded-lg w-fit">
-          <button onClick={() => setActiveTab('tools')} className={tabClass(toolsTabActive)}>
-            <Wrench className="w-3.5 h-3.5" />
-            Tools
-          </button>
-          <button onClick={() => setActiveTab('skills')} className={tabClass(skillsTabActive)}>
-            <Bot className="w-3.5 h-3.5" />
-            Skills
-          </button>
-          <button onClick={() => setActiveTab('soul')} className={tabClass(soulTabActive)}>
-            <File className="w-3.5 h-3.5" />
-            Soul
-          </button>
-          <button onClick={() => setActiveTab('memory')} className={tabClass(memoryTabActive)}>
-            <BookMarked className="w-3.5 h-3.5" />
-            Memory
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Tools & Skills"
+        description="What the agent can do: actions it can take, skills it can follow, its personality and what it remembers."
+        actions={saveSuccess ? <span className="flex items-center gap-1 text-[12px] text-emerald-600 dark:text-emerald-400"><Check className="h-3.5 w-3.5" />Soul saved</span> : null}
+      >
+        <Tabs
+          className="mt-4"
+          label="Tools and skills sections"
+          value={toolsTabActive ? 'tools' : skillsTabActive ? 'skills' : soulTabActive ? 'soul' : 'memory'}
+          onChange={setActiveTab}
+          items={[
+            { value: 'tools', label: 'Tools', icon: Wrench, meta: tools.length ? String(tools.length) : null },
+            { value: 'skills', label: 'Skills', icon: Bot, meta: skills.length ? String(skills.length) : null },
+            { value: 'soul', label: 'Soul', icon: File },
+            { value: 'memory', label: 'Memory', icon: BookMarked },
+          ]}
+        />
+      </PageHeader>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
