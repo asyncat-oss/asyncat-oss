@@ -6,8 +6,8 @@
 // 3. Sets up system tray, native menu, and global shortcuts
 // 4. Manages the full app lifecycle
 //
-import { app, ipcMain, globalShortcut, Notification, dialog, shell, clipboard, desktopCapturer, nativeImage, powerMonitor } from 'electron';
-import { IS_MAC, IS_WIN, IS_DEV, APP_NAME, WINDOWS_APP_ID, ICONS, BACKEND_URL, BACKEND_PORT, NEKO_DIST, FRONTEND_PORT, USER_DATA } from './constants.js';
+import { app, ipcMain, globalShortcut, Notification, dialog, shell, nativeImage, powerMonitor } from 'electron';
+import { IS_MAC, IS_WIN, APP_NAME, WINDOWS_APP_ID, ICONS, BACKEND_PORT, NEKO_DIST, FRONTEND_PORT, USER_DATA } from './constants.js';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 import { togglePopup, closePopup } from './popup.js';
@@ -38,7 +38,6 @@ function isPortListening(port, host = '127.0.0.1') {
 import { createWindow, getMainWindow, showLoadingScreen } from './window.js';
 import { createTray, updateTrayMenu, destroyTray, setAgentRunCount } from './tray.js';
 import { buildAppMenu } from './menu.js';
-import { applyAppIcon, getAppIcon, setAppIcon, resetAppIcon } from './icon.js';
 import { initPet, destroyPetWindow, getPet, setPet, resetPet, setPetStatus } from './pet.js';
 
 // ─── Single Instance Lock ─────────────────────────────────────────────────────
@@ -112,7 +111,6 @@ function setupPopupIPC() {
 function setupIPC() {
   registerShortcutIPC(ipcMain);
   registerBackgroundIPC(ipcMain);
-  ipcMain.handle('app:version', () => app.getVersion());
   ipcMain.handle('app:platform', () => process.platform);
   ipcMain.on('app:is-packaged', (event) => { event.returnValue = app.isPackaged; });
 
@@ -160,27 +158,11 @@ function setupIPC() {
     });
   });
 
-  ipcMain.handle('backend:status', () => ({
-    running: isBackendRunning(),
-    url: BACKEND_URL,
-  }));
-
   ipcMain.handle('backend:restart', async () => {
     await stopBackend();
     await startBackend();
     refreshTray();
     return { running: isBackendRunning() };
-  });
-
-  ipcMain.on('window:minimize', () => getMainWindow()?.minimize());
-  ipcMain.on('window:maximize', () => {
-    const win = getMainWindow();
-    if (win) win.isMaximized() ? win.unmaximize() : win.maximize();
-  });
-  ipcMain.on('window:close', () => getMainWindow()?.close());
-  ipcMain.on('window:toggle-fullscreen', () => {
-    const win = getMainWindow();
-    if (win) win.setFullScreen(!win.isFullScreen());
   });
 
   ipcMain.on('notify', (_e, { title, body }) => {
@@ -190,10 +172,6 @@ function setupIPC() {
     }
   });
 
-  // App icon customization (dock / window / tray)
-  ipcMain.handle('app:get-icon', () => getAppIcon());
-  ipcMain.handle('app:set-icon', (_e, payload) => setAppIcon(payload));
-  ipcMain.handle('app:reset-icon', () => resetAppIcon());
 }
 
 // ─── Terminal IPC ─────────────────────────────────────────────────────────────
@@ -318,7 +296,7 @@ const isAllowedBrowserUrl = (value, opts = {}) => isAllowedBrowserUrlFor(value, 
   ports: { frontendPort: FRONTEND_PORT, backendPort: BACKEND_PORT },
 });
 
-// ─── Desktop IPC (shell, clipboard, dialogs, screen capture, badge) ───────────
+// ─── Desktop IPC (shell, dialogs, badge) ─────────────────────────────────────
 
 function setupDesktopIPC() {
   // Open a file/folder with the default OS app
@@ -337,26 +315,6 @@ function setupDesktopIPC() {
     return true;
   });
 
-  // Read current clipboard text
-  ipcMain.handle('clipboard:read', () => clipboard.readText());
-
-  // Write to clipboard
-  ipcMain.handle('clipboard:write', (_event, text) => {
-    clipboard.writeText(text);
-    return true;
-  });
-
-  // Native save-file dialog
-  ipcMain.handle('dialog:saveFile', async (_event, opts = {}) => {
-    const win = getMainWindow();
-    return dialog.showSaveDialog(win, {
-      title: opts.title || 'Save file',
-      defaultPath: opts.defaultPath,
-      filters: opts.filters,
-      buttonLabel: opts.buttonLabel || 'Save',
-    });
-  });
-
   // Native open-files dialog (supports multi-select)
   ipcMain.handle('dialog:openFiles', async (_event, opts = {}) => {
     const win = getMainWindow();
@@ -369,14 +327,6 @@ function setupDesktopIPC() {
       properties: props,
       buttonLabel: opts.buttonLabel || 'Open',
     });
-  });
-
-  // Capture the main window contents as a PNG data-URL
-  ipcMain.handle('screen:captureWindow', async () => {
-    const win = getMainWindow();
-    if (!win) return null;
-    const image = await win.webContents.capturePage();
-    return image.toDataURL();
   });
 
   // Set the macOS dock badge count + tray tooltip, and drive the pet status.
@@ -584,15 +534,6 @@ async function bootApp(initialRoute = '') {
   const frontendHost = viteRunning ? 'localhost' : '127.0.0.1';
   win.loadURL(`http://${frontendHost}:${FRONTEND_PORT}${route}`);
 
-  // 5. Notify the renderer of the actual backend result
-  win.webContents.once('did-finish-load', () => {
-    if (backendError) {
-      win.webContents.send('backend:error', backendError.message);
-    } else {
-      win.webContents.send('backend:ready');
-    }
-  });
-
   refreshTray();
   setupHostBridge();
   return !backendError;
@@ -671,9 +612,6 @@ app.on('before-quit', (event) => {
 // ─── App Ready ────────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
-  // Apply the user's saved app icon to the dock (window/tray are applied after boot).
-  applyAppIcon();
-
   // Setup IPC handlers
   setupIPC();
   setupTerminalIPC();
@@ -745,9 +683,6 @@ app.whenReady().then(async () => {
   // Boot the app; a login item starts it in the tray without a window.
   // A new version that came up properly keeps itself; see update-rollback.js.
   reportBootResult(startsHidden() ? await startInBackground() : await bootApp());
-
-  // Re-apply the saved icon now that the window and tray exist.
-  applyAppIcon();
 
   // Spawn the pet overlay if the user enabled it.
   initPet();

@@ -8,7 +8,6 @@ const subscribe = (channel, listener) => {
 
 contextBridge.exposeInMainWorld('electronAPI', {
   // ─── App Info ─────────────────────────────────────────────────────────
-  getAppVersion:  () => ipcRenderer.invoke('app:version'),
   getPlatform:    () => ipcRenderer.invoke('app:platform'),
   openUserDataFolder: () => ipcRenderer.invoke('app:open-user-data'),
   uninstallApp:   () => ipcRenderer.invoke('app:uninstall'),
@@ -24,35 +23,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getBackgroundSettings: () => ipcRenderer.invoke('background:get'),
   setBackgroundSettings: (patch) => ipcRenderer.invoke('background:set', patch),
 
-  // ─── Window Controls ──────────────────────────────────────────────────
-  minimizeWindow: () => ipcRenderer.send('window:minimize'),
-  maximizeWindow: () => ipcRenderer.send('window:maximize'),
-  closeWindow:    () => ipcRenderer.send('window:close'),
-  toggleFullscreen: () => ipcRenderer.send('window:toggle-fullscreen'),
-
   // ─── Navigation from the desktop (e.g. clicking a notification) ───────
   onNavigate: (callback) => subscribe('app:navigate', (_event, route) => callback(route)),
 
   // ─── Backend Status ───────────────────────────────────────────────────
-  getBackendStatus: () => ipcRenderer.invoke('backend:status'),
   restartBackend:   () => ipcRenderer.invoke('backend:restart'),
 
   // ─── Native Dialogs ───────────────────────────────────────────────────
   openDirectory:    (opts) => ipcRenderer.invoke('dialog:openDirectory', opts),
-  saveFileDialog:   (opts) => ipcRenderer.invoke('dialog:saveFile', opts),
   openFilesDialog:  (opts) => ipcRenderer.invoke('dialog:openFiles', opts),
 
   // ─── Shell ────────────────────────────────────────────────────────────
   shellOpen:        (filePath) => ipcRenderer.invoke('shell:open', filePath),
   shellShowInFolder:(filePath) => ipcRenderer.invoke('shell:showInFolder', filePath),
   openExternalUrl:  (url) => ipcRenderer.invoke('shell:openExternal', url),
-
-  // ─── Clipboard ────────────────────────────────────────────────────────
-  clipboardRead:    () => ipcRenderer.invoke('clipboard:read'),
-  clipboardWrite:   (text) => ipcRenderer.invoke('clipboard:write', text),
-
-  // ─── Screen Capture ───────────────────────────────────────────────────
-  captureScreen:    () => ipcRenderer.invoke('screen:captureWindow'),
 
   // ─── Built-in browser (tabs live in the main process: browserHost.js) ─
   clearBrowserData: (payload) => ipcRenderer.invoke('browser:clear-data', payload),
@@ -71,11 +55,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ─── Native Notifications ─────────────────────────────────────────────
   showNotification: (title, body) => ipcRenderer.send('notify', { title, body }),
 
-  // ─── App Icon ─────────────────────────────────────────────────────────
-  getAppIcon:   () => ipcRenderer.invoke('app:get-icon'),
-  setAppIcon:   (payload) => ipcRenderer.invoke('app:set-icon', payload),
-  resetAppIcon: () => ipcRenderer.invoke('app:reset-icon'),
-
   // ─── Pet (on-screen companion) ────────────────────────────────────────
   getPet:   () => ipcRenderer.invoke('pet:get'),
   setPet:   (payload) => ipcRenderer.invoke('pet:set', payload),
@@ -90,12 +69,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showUpdateFile:    () => ipcRenderer.invoke('update:show-file'),
   quitForUpdate:     () => ipcRenderer.invoke('update:quit'),
   downloadUpdate:    () => ipcRenderer.invoke('update:download'),
-  installUpdate:     () => ipcRenderer.invoke('update:install'),
   openReleasesPage:  (url) => ipcRenderer.invoke('update:open-releases', url),
 
   // ─── Event Listeners ──────────────────────────────────────────────────
-  onBackendReady:       (cb) => subscribe('backend:ready', () => cb()),
-  onBackendError:       (cb) => subscribe('backend:error', (_e, msg) => cb(msg)),
   onUpdateChecking:     (cb) => subscribe('update:checking', () => cb()),
   onUpdateAvailable:    (cb) => subscribe('update:available', (_e, info) => cb(info)),
   onUpdateNotAvailable: (cb) => subscribe('update:not-available', (_e, info) => cb(info)),
