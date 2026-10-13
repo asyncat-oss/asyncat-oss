@@ -1438,24 +1438,23 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
             refreshGitState();
           }
           runEvents.push(event);
+          const incomingToolCallId = event.data?.toolCallId || null;
+          const isSameToolCall = (candidate) => (incomingToolCallId
+            ? candidate.data?.toolCallId === incomingToolCallId
+            : candidate.data?.tool === event.data?.tool);
+          // Attach the result to the saved events now, not inside the state
+          // updater: React runs that later, and a quick run can be saved first.
+          for (let j = runEvents.length - 1; j >= 0; j--) {
+            if (runEvents[j].type === 'tool_start' && isSameToolCall(runEvents[j]) && runEvents[j].result === undefined) {
+              runEvents[j] = { ...runEvents[j], result: event.data?.result, completedAt };
+              break;
+            }
+          }
           updateChatRun(runKey, prev => {
             const updated = [...(prev.events || [])];
-            const incomingToolCallId = event.data?.toolCallId || null;
             for (let i = updated.length - 1; i >= 0; i--) {
-              const sameToolCall = incomingToolCallId
-                ? updated[i].data?.toolCallId === incomingToolCallId
-                : updated[i].data?.tool === event.data?.tool;
-              if (updated[i].type === 'tool_start' && sameToolCall && updated[i].result === undefined) {
+              if (updated[i].type === 'tool_start' && isSameToolCall(updated[i]) && updated[i].result === undefined) {
                 updated[i] = { ...updated[i], result: event.data?.result, completedAt };
-                for (let j = runEvents.length - 1; j >= 0; j--) {
-                  const sameRunEventToolCall = incomingToolCallId
-                    ? runEvents[j].data?.toolCallId === incomingToolCallId
-                    : runEvents[j].data?.tool === event.data?.tool;
-                  if (runEvents[j].type === 'tool_start' && sameRunEventToolCall && runEvents[j].result === undefined) {
-                    runEvents[j] = { ...runEvents[j], result: event.data?.result, completedAt };
-                    break;
-                  }
-                }
                 return { ...prev, events: updated };
               }
             }
