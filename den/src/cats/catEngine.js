@@ -581,6 +581,8 @@ async function executeRun(cat, entry) {
     collector.collect(event);
     const data = event.data || {};
     if (event.type === 'session_start' && (data.sessionId || data.id)) entry.sessionId = data.sessionId || data.id;
+    // Files were about to change: the run can be undone from its checkpoint.
+    if (event.type === 'checkpoint' && data?.id) entry.undoable = true;
     if (event.type === 'usage_update') {
       entry.usage = { inputTokens: Number(data.inputTokens || 0), outputTokens: Number(data.outputTokens || 0) };
       isLocal = Boolean(data.isLocal);
@@ -706,7 +708,7 @@ async function executeRun(cat, entry) {
 
     addTimelineEvent(cat.id, entry.runId, status === 'succeeded' ? 'finished' : status,
       status === 'succeeded' ? (firstLine(answer) || 'Finished') : (error || 'Stopped'),
-      { status, tokens: entry.usage.inputTokens + entry.usage.outputTokens, activeMs, sessionId: entry.sessionId, conversationId },
+      { status, tokens: entry.usage.inputTokens + entry.usage.outputTokens, activeMs, sessionId: entry.sessionId, conversationId, undoable: Boolean(entry.undoable) },
       { userId: cat.userId });
 
     if (status !== 'cancelled') {

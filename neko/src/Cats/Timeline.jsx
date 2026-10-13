@@ -69,9 +69,12 @@ export default function Timeline({ events }) {
   return (
     <ol className="space-y-3">
       {groupTimeline(events).map((group) => {
-        const sessionId = group.events.find((event) => event.kind === 'file' && event.detail?.sessionId)?.detail.sessionId
+        // A run that changed files kept a checkpoint to undo them with.
+        const undoable = group.events.find((event) => event.detail?.undoable && event.detail?.sessionId);
+        const sessionId = undoable?.detail.sessionId
+          || group.events.find((event) => event.kind === 'file' && event.detail?.sessionId)?.detail.sessionId
           || null;
-        const changedFiles = group.events.some((event) => event.kind === 'file');
+        const changedFiles = Boolean(undoable) || group.events.some((event) => event.kind === 'file');
         return (
           <li key={group.key} className={group.runId ? 'rounded-xl border border-line bg-surface px-3.5 py-2.5' : 'px-3.5'}>
             <ol className="space-y-1.5">
