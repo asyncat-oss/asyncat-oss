@@ -137,7 +137,7 @@ const ActiveBrainPanel = ({
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="flex shrink-0 flex-wrap items-center gap-1.5">
           {providerIsExternal ? (
             <Button variant="ghost" size="sm" icon={Power} onClick={onDeactivateProvider} disabled={busy}>{isMlx ? 'Unload' : 'Disconnect'}</Button>
           ) : null}
