@@ -21,6 +21,13 @@ export const HANDOVER_NEEDS_DESKTOP = 'Handing a page to the user needs the Asyn
 export const NO_HEADLESS_BROWSER = 'The agent\'s browser needs the Asyncat desktop app, or Chrome, Chromium, Edge or Brave installed for a headless one, and neither was found. Use fetch_url or web_search instead.';
 
 const VIEWPORT = { width: 1280, height: 800 };
+const BROWSER_ARGS = ['--disable-dev-shm-usage'];
+// Chromium's own sandbox keeps a page that breaks into the renderer inside
+// it. It needs user namespaces (or Chrome's setuid helper); where it can't
+// start (in a container, as root, or with AppArmor blocking namespaces),
+// the browser starts without it rather than not at all.
+const NO_CHROMIUM_SANDBOX = ['--no-sandbox', '--disable-setuid-sandbox'];
+const CHROMIUM_SANDBOX_FAILED = /sandbox|namespace|zygote|as root/i;
 const USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 const IDLE_MS = 10 * 60 * 1000;
 const MAX_SCREENSHOT_HEIGHT = 12000;
@@ -100,7 +107,13 @@ export class HeadlessBrowser {
         let browser;
         try {
           // Like every program the agent starts, it gets den's environment without saved keys.
-          browser = await this.launch({ headless: true, env: childEnv(), args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] });
+          const options = { headless: true, env: childEnv() };
+          try {
+            browser = await this.launch({ ...options, args: BROWSER_ARGS });
+          } catch (err) {
+            if (!CHROMIUM_SANDBOX_FAILED.test(String(err?.message || err))) throw err;
+            browser = await this.launch({ ...options, args: [...NO_CHROMIUM_SANDBOX, ...BROWSER_ARGS] });
+          }
         } catch (err) {
           throw new Error(`${NO_HEADLESS_BROWSER} (${err?.message || err})`);
         }

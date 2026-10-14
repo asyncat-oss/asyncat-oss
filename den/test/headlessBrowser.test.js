@@ -16,6 +16,28 @@ const { HeadlessBrowser, NO_HEADLESS_BROWSER } = await import('../src/agent/head
 
 const tool = (name) => previewBrowserTools.find((t) => t.name === name);
 
+test("the headless browser keeps Chromium's own sandbox, and starts without it only where it can't", async () => {
+  const launches = [];
+  const failing = (first) => async (options) => {
+    launches.push(options.args);
+    throw new Error(launches.length === 1 ? first : 'stop here');
+  };
+  const run = async (first) => {
+    launches.length = 0;
+    const browser = new HeadlessBrowser({ launch: failing(first) });
+    await assert.rejects(browser.command('list_tabs', { owner: 'sandbox-check' }), (err) => err.message.startsWith(NO_HEADLESS_BROWSER));
+    return launches.map((args) => [...args]);
+  };
+
+  const blocked = await run('Failed to launch the browser process!\nNo usable sandbox! Update your kernel or see …');
+  assert.equal(blocked.length, 2);
+  assert.ok(!blocked[0].includes('--no-sandbox'), 'the first try keeps the sandbox');
+  assert.ok(blocked[1].includes('--no-sandbox'), 'without it only after it failed to start');
+
+  const missing = await run('Could not find Chrome (ver. 124)');
+  assert.deepEqual(missing.map((args) => args.includes('--no-sandbox')), [false], 'other failures are not retried without it');
+});
+
 test('the outline shows roles, names, values and states with refs', () => {
   const tree = {
     role: 'RootWebArea', name: 'Accounts', url: 'https://accounts.example.com/login', children: [
