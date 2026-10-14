@@ -230,3 +230,29 @@ test('a file outline is list_definitions; the definition tools say when to use w
   assert.match(description('lsp_find_references'), /find_references/);
   assert.match(description('code_search'), /find_definition/);
 });
+
+test('tools that only wrapped another one map onto it', async () => {
+  const check = (name, args, expected) => {
+    const resolved = toolRegistry.resolve(name, args);
+    assert.deepEqual({ name: resolved.name, args: resolved.args }, expected, name);
+    assert.equal(toolRegistry.validateArgs(resolved.name, resolved.args).valid, true, `${name} → ${resolved.name} args are valid`);
+  };
+  check('glob_find', { pattern: 'src/**/*.ts', max_results: 20 }, { name: 'find_files', args: { pattern: 'src/**/*.ts', max_results: 20 } });
+  check('http_get', { url: 'https://example.com', selector: '#main' }, { name: 'fetch_url', args: { url: 'https://example.com', selector: '#main' } });
+  check('key_sequence', { seq: 'ctrl+shift+t' }, { name: 'screen_key', args: { key: 'ctrl+shift+t' } });
+  check('screen_find_window', { pattern: 'firefox' }, { name: 'window_list', args: { filter: 'firefox' } });
+  check('models_loaded', {}, { name: 'ai_status', args: {} });
+  check('code_fix', { path: 'src', linter: 'eslint' }, { name: 'linter_run', args: { path: 'src', fix: true } });
+  check('image_describe', { path: 'shot.png', prompt: 'What does it say?' }, { name: 'inspect_attachment', args: { path: 'shot.png', prompt: 'What does it say?' } });
+
+  // find_files now takes globs with folders, as glob_find did.
+  const dir = workspace();
+  fs.mkdirSync(path.join(dir, 'src', 'beds'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'src', 'beds', 'roses.ts'), '');
+  fs.writeFileSync(path.join(dir, 'src', 'shed.ts'), '');
+  fs.writeFileSync(path.join(dir, 'notes.ts'), '');
+  const nested = await toolRegistry.execute('glob_find', { pattern: 'src/**/*.ts' }, { workingDir: dir });
+  assert.deepEqual(nested.files.split('\n'), ['src/beds/roses.ts', 'src/shed.ts']);
+  const byName = await toolRegistry.execute('find_files', { pattern: '*.ts' }, { workingDir: dir });
+  assert.deepEqual(byName.files.split('\n'), ['notes.ts', 'src/beds/roses.ts', 'src/shed.ts']);
+});

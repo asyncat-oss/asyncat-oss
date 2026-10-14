@@ -360,41 +360,24 @@ function listWindows() {
   return null;
 }
 
-export const screenFindWindowTool = {
-  name: 'screen_find_window',
-  description: 'Find open windows matching a name pattern. Returns window IDs and titles. Use to focus a specific application before interacting with it.',
+export const windowListTool = {
+  name: 'window_list',
+  description: 'List open desktop windows with their ids, titles and geometry when available. Pass filter to find the windows of one app or with a title, e.g. before window_focus.',
   category: 'screen',
   permission: PermissionLevel.SAFE,
   parameters: {
     type: 'object',
     properties: {
-      pattern: { type: 'string', description: 'Window title pattern to search for (case-insensitive substring)' },
+      filter: { type: 'string', description: 'Only windows whose title or app contains this (case-insensitive).' },
     },
-    required: ['pattern'],
+    required: [],
   },
-  execute: async (args) => {
+  execute: async (args = {}) => {
     try {
-      const windows = listWindows();
-      if (!windows) return missingDepError('window search', 'Linux: hyprctl or xdotool | macOS: osascript | Windows: PowerShell');
-      const needle = String(args.pattern || '').toLowerCase();
-      const matches = windows.filter((w) => `${w.title || ''} ${w.app || ''}`.toLowerCase().includes(needle));
-      return { success: true, count: matches.length, windows: matches };
-    } catch (err) {
-      return { success: false, error: err.message };
-    }
-  },
-};
-
-export const windowListTool = {
-  name: 'window_list',
-  description: 'List open desktop windows with titles and geometry when available.',
-  category: 'screen',
-  permission: PermissionLevel.SAFE,
-  parameters: { type: 'object', properties: {}, required: [] },
-  execute: async () => {
-    try {
-      const windows = listWindows();
-      if (!windows) return missingDepError('window list', 'Linux: hyprctl or xdotool | macOS: osascript | Windows: PowerShell');
+      const all = listWindows();
+      if (!all) return missingDepError('window list', 'Linux: hyprctl or xdotool | macOS: osascript | Windows: PowerShell');
+      const needle = String(args.filter || '').trim().toLowerCase();
+      const windows = needle ? all.filter((w) => `${w.title || ''} ${w.app || ''}`.toLowerCase().includes(needle)) : all;
       return { success: true, count: windows.length, windows };
     } catch (err) {
       return { success: false, error: err.message };
@@ -452,30 +435,13 @@ export const windowFocusTool = {
   },
 };
 
-export const keySequenceTool = {
-  name: 'key_sequence',
-  description: 'Press a keyboard shortcut sequence such as ctrl+shift+t, alt+tab, Return, or Escape.',
-  category: 'screen',
-  permission: PermissionLevel.DANGEROUS,
-  parameters: {
-    type: 'object',
-    properties: {
-      seq: { type: 'string', description: 'Shortcut sequence to press.' },
-    },
-    required: ['seq'],
-  },
-  execute: async (args) => screenKeyTool.execute({ key: args.seq }),
-};
-
 export const screenTools = [
   takeScreenshotTool,
   screenReadTool,
   screenClickTool,
   screenTypeTool,
   screenKeyTool,
-  screenFindWindowTool,
   windowListTool,
   windowFocusTool,
-  keySequenceTool,
 ];
 export default screenTools;

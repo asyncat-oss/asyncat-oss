@@ -1,7 +1,7 @@
 // den/src/agent/tools/dataTools.js
 // ─── Data & File Format Tools ────────────────────────────────────────────────
 // read_pdf, read_csv, write_csv, zip_files, unzip_files, json_query,
-// inspect_attachment, image_describe
+// inspect_attachment (images, audio, PDFs and text in one tool)
 
 import { execFileSync, spawn } from 'child_process';
 import fs from 'fs';
@@ -373,7 +373,7 @@ export const jsonQueryTool = {
   },
 };
 
-// ── image_describe ────────────────────────────────────────────────────────────
+// ── Describing an image (inspect_attachment's route for pictures) ─────────────
 export const imageDescribeTool = {
   name: 'image_describe',
   description: 'Read and describe an image file by sending it to the vision-capable AI model. Returns a text description. Supports PNG, JPG, WEBP, GIF.',
@@ -429,14 +429,14 @@ export const imageDescribeTool = {
 // ── inspect_attachment ───────────────────────────────────────────────────────
 export const inspectAttachmentTool = {
   name: 'inspect_attachment',
-  description: 'Inspect an attached file by routing to the right capability: images use vision, audio uses Whisper transcription, PDFs use text extraction, text files are read directly, and unknown binaries return metadata.',
+  description: 'Look at a file the user attached or one in the working folder: images are described by the vision model (pass prompt to ask about them), audio is transcribed, PDFs and text files are read, and other files return their details.',
   category: 'data',
   permission: PermissionLevel.SAFE,
   parameters: {
     type: 'object',
     properties: {
       path: { type: 'string', description: 'Attachment/file path relative to working directory' },
-      prompt: { type: 'string', description: 'Optional question or focus for image inspection' },
+      prompt: { type: 'string', description: 'Optional question about an image, e.g. "What does the error say?"' },
       language: { type: 'string', description: 'Optional audio language code for transcription' },
     },
     required: ['path'],
@@ -501,6 +501,5 @@ export const dataTools = [
   zipFilesTool,
   unzipFilesTool,
   jsonQueryTool,
-  imageDescribeTool,
 ];
 export default dataTools;

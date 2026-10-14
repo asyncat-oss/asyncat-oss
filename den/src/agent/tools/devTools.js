@@ -1,6 +1,6 @@
 // den/src/agent/tools/devTools.js
 // ─── Development Workflow Tools ───────────────────────────────────────────────
-// Linters, build runners, package managers, code fixers, log readers.
+// Linters (and their fixers), build runners, package managers, log readers.
 
 import path from 'path';
 import fs from 'fs';
@@ -93,7 +93,7 @@ function describeSteps(steps) {
 
 export const linterRunTool = {
   name: 'linter_run',
-  description: 'Run a linter on files or the whole project. Auto-detects the linter (ESLint, Prettier, Ruff, Black, etc.) from the project.',
+  description: 'Run the project\'s linter (ESLint, Prettier, Ruff, Black or flake8, detected from the project); set fix to fix what it can.',
   category: 'dev',
   permission: PermissionLevel.MODERATE,
   parameters: {
@@ -139,45 +139,6 @@ export const linterRunTool = {
 
     const result = await runProcess(cmd, [], { cwd, timeout });
     return { ...result, linter, auto_fix: args.fix || false };
-  },
-};
-
-export const codeFixTool = {
-  name: 'code_fix',
-  description: 'Auto-fix lint issues and common code problems. Detects the project linter and runs with --fix flag.',
-  category: 'dev',
-  permission: PermissionLevel.MODERATE,
-  parameters: {
-    type: 'object',
-    properties: {
-      path: { type: 'string', description: 'Path to fix (default: working directory)' },
-      linter: { type: 'string', description: 'Force a specific linter: eslint, prettier, ruff, black' },
-    },
-    required: [],
-  },
-  execute: async (args, context) => {
-    const cwd = args.path || context.workingDir;
-    const timeout = 120000;
-    let cmd;
-
-    if (args.linter === 'eslint') cmd = 'npx eslint --fix . 2>&1';
-    else if (args.linter === 'prettier') cmd = 'npx prettier --write . 2>&1';
-    else if (args.linter === 'ruff') cmd = 'npx ruff check --fix . 2>&1';
-    else if (args.linter === 'black') cmd = 'npx black . 2>&1';
-    else {
-      try {
-        const pkg = JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8'));
-        const devDeps = { ...(pkg.devDependencies || {}), ...(pkg.dependencies || {}) };
-        if (devDeps['eslint']) { cmd = 'npx eslint --fix . 2>&1'; }
-        else if (devDeps['ruff']) { cmd = 'npx ruff check --fix . 2>&1'; }
-        else if (devDeps['prettier']) { cmd = 'npx prettier --write . 2>&1'; }
-        else if (devDeps['black']) { cmd = 'npx black . 2>&1'; }
-        else { return { success: false, error: 'No auto-fixable linter found.' }; }
-      } catch { return { success: false, error: 'Could not detect project linter.' }; }
-    }
-
-    const result = await runProcess(cmd, [], { cwd, timeout });
-    return { ...result, action: 'code_fix', auto_fixed: result.success };
   },
 };
 
@@ -467,6 +428,6 @@ export const dependencyAuditTool = {
 };
 
 export const devTools = [
-  linterRunTool, codeFixTool, packageManagerTool, buildRunnerTool, consoleReadTool, dependencyAuditTool,
+  linterRunTool, packageManagerTool, buildRunnerTool, consoleReadTool, dependencyAuditTool,
 ];
 export default devTools;

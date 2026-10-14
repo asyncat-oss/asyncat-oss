@@ -51,6 +51,15 @@ export const TOOL_ALIASES = {
     args: (old) => defined({ patch: text(old.patch_content), patch_path: text(old.patch_file), strip: old.strip, dry_run: old.dry_run }),
   },
 
+  // ── Tools that only wrapped another one ──
+  glob_find: { to: 'find_files', args: (old) => defined({ pattern: text(old.pattern), path: text(old.path), max_results: old.max_results }) },
+  http_get: { to: 'fetch_url', args: (old) => defined({ url: text(old.url), selector: text(old.selector), max_chars: old.max_chars }) },
+  key_sequence: { to: 'screen_key', args: (old) => defined({ key: text(old.seq ?? old.key) }) },
+  screen_find_window: { to: 'window_list', args: (old) => defined({ filter: text(old.pattern) }) },
+  models_loaded: { to: 'ai_status', args: () => ({}) },
+  code_fix: { to: 'linter_run', args: (old) => defined({ path: text(old.path), fix: true }) },
+  image_describe: { to: 'inspect_attachment', args: (old) => defined({ path: text(old.path), prompt: text(old.prompt) }) },
+
   // ── A file's outline: list_definitions answers what ast_view_outline did ──
   ast_view_outline: { to: 'list_definitions', args: (old) => defined({ path: text(old.path) }) },
 

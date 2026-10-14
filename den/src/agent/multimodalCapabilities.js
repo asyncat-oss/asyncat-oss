@@ -98,7 +98,7 @@ export function formatMultimodalCapabilityPrompt(capabilities = {}) {
   const tts = capabilities.tts || {};
   return [
     '## Multimodal Capability Status',
-    `- Vision/image inspection: ${vision.ready ? 'ready' : 'not ready'}${vision.model ? ` (${vision.providerId || 'provider'} / ${vision.model})` : ''}. Use image_describe only when ready; otherwise explain what is missing.`,
+    `- Vision/image inspection: ${vision.ready ? 'ready' : 'not ready'}${vision.model ? ` (${vision.providerId || 'provider'} / ${vision.model})` : ''}. Use inspect_attachment on images only when ready; otherwise explain what is missing.`,
     `- Speech-to-text/audio transcription: ${stt.ready ? 'ready' : `not ready (${stt.status || 'unknown'})`}. Use transcribe_audio only when ready.`,
     `- Text-to-speech/audio generation: ${tts.ready ? 'ready' : `not ready (${tts.status || 'unknown'})`}. Use speak_text only when useful and ready.`,
     `- Image generation: ${image.ready ? `ready via ${image.runtime}` : 'not ready (set up in Models → Images)'}. Use generate_image for text-to-image when ready.`,

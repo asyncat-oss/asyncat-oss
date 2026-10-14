@@ -132,47 +132,13 @@ export const webSearchTool = {
 
 export const fetchUrlTool = {
   name: 'fetch_url',
-  description: 'Fetch and read the content of a specific URL. Extracts readable text from web pages (like reader mode). Use when you have a specific URL to read.',
+  description: 'Fetch a URL and return its readable text (like reader mode), without a browser. Pass selector (#id, .class or a tag) to read only part of a page. For apps and pages that need JavaScript, use preview_get_text with the url instead.',
   category: 'search',
   permission: PermissionLevel.SAFE,
   parameters: {
     type: 'object',
     properties: {
       url: { type: 'string', description: 'The URL to fetch' },
-    },
-    required: ['url'],
-  },
-  execute: async (args) => {
-    try {
-      const fetched = await fetchTextUrl(args.url, 10000);
-      if (!fetched.success) return { success: false, error: fetched.error || `HTTP ${fetched.status}` };
-
-      if (fetched.contentType.includes('application/json')) {
-        return { success: true, url: fetched.finalUrl || args.url, content_type: 'json', content: fetched.body.slice(0, 8000) };
-      }
-
-      let text = fetched.contentType.includes('text/html')
-        ? extractReadableText(fetched.body)
-        : fetched.body.trim();
-
-      if (text.length > 8000) text = text.slice(0, 8000) + '\n... [truncated]';
-
-      return { success: true, url: fetched.finalUrl || args.url, content_type: fetched.contentType.includes('text/html') ? 'html' : 'text', content: text };
-    } catch (err) {
-      return { success: false, error: err.message };
-    }
-  },
-};
-
-export const httpGetTool = {
-  name: 'http_get',
-  description: 'Fetch a URL and return cleaned readable text without launching a browser. Optionally extract a simple selector (#id, .class, or tag). Use browser tools for JS-heavy pages.',
-  category: 'search',
-  permission: PermissionLevel.SAFE,
-  parameters: {
-    type: 'object',
-    properties: {
-      url: { type: 'string', description: 'The URL to fetch.' },
       selector: { type: 'string', description: 'Optional simple selector: #id, .class, or tag name.' },
       max_chars: { type: 'number', description: 'Maximum characters to return. Default 12000.' },
     },
@@ -203,7 +169,7 @@ export const httpGetTool = {
         url: fetched.finalUrl || args.url,
         status: fetched.status,
         content_type: contentType,
-        selector: args.selector || null,
+        ...(args.selector ? { selector: args.selector } : {}),
         content,
       };
     } catch (err) {
@@ -322,5 +288,5 @@ export const searchImagesTool = {
   },
 };
 
-export const searchTools = [webSearchTool, fetchUrlTool, httpGetTool, httpRequestTool, searchImagesTool];
+export const searchTools = [webSearchTool, fetchUrlTool, httpRequestTool, searchImagesTool];
 export default searchTools;

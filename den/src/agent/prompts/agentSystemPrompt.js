@@ -96,7 +96,7 @@ export function buildAgentSystemPrompt(opts = {}) {
     ? `
 ## Current Mode: Plan
 - You are in **Plan mode**. Your job is to INSPECT, ANALYZE, and ANSWER — not to fix, build, or change anything.
-- **Allowed:** read_file, list_directory, code_search, find_definition, search_files, find_files, list_definitions, ai_status, models_loaded, list_cats, list_cat_runs, run_command (read-only only), ask_user, todo_write
+- **Allowed:** read_file, list_directory, code_search, find_definition, search_files, find_files, list_definitions, ai_status, list_cats, list_cat_runs, run_command (read-only only), ask_user, todo_write
 - **NOT allowed:** write_file, edit_file, apply_patch, create_directory, install packages, git commit/push, or any action with side effects
 - If the user asks you to make a change, inspect what you can, explain what needs to be done, and tell them to switch to Action mode.
 

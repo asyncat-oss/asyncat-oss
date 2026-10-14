@@ -174,7 +174,7 @@ const CLAUDE_TOOL_NAMES = {
   Edit: 'edit_file',
   MultiEdit: 'edit_file',
   NotebookEdit: 'edit_file',
-  Glob: 'glob_find',
+  Glob: 'find_files',
   Grep: 'search_files',
   LS: 'list_directory',
   WebSearch: 'web_search',

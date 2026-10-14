@@ -65,7 +65,7 @@ function compactStatus(status) {
 export const aiStatusTool = {
   name: 'ai_status',
   description:
-    'Inspect the active AI/model runtime dashboard: active chat provider, loaded LLM runtimes, Whisper STT, Piper TTS, image generation runtimes, model sizes, quantization when detectable, process memory, and VRAM details when exposed by the runtime. Use this before claiming what models are loaded.',
+    'What AI models are loaded and running right now, and the runtime dashboard: active chat provider, loaded LLM runtimes, Whisper STT, Piper TTS, image generation runtimes, model sizes, quantization when detectable, process memory, and VRAM details when exposed by the runtime. Use this before claiming what models are loaded.',
   category: 'system',
   permission: PermissionLevel.SAFE,
   parameters: {
@@ -81,24 +81,5 @@ export const aiStatusTool = {
   },
 };
 
-export const modelsLoadedTool = {
-  name: 'models_loaded',
-  description:
-    'List only the models/runtimes currently loaded in memory. This is a compact alias for ai_status when the user asks what is running right now.',
-  category: 'system',
-  permission: PermissionLevel.SAFE,
-  parameters: { type: 'object', properties: {}, required: [] },
-  execute: async (_args, context = {}) => {
-    const status = await getModelRuntimeStatus(context.userId || null);
-    return {
-      success: true,
-      generatedAt: status.generatedAt,
-      activeProvider: status.activeProvider,
-      counts: status.counts,
-      loadedModels: status.loadedModels || [],
-    };
-  },
-};
-
-export const modelStatusTools = [aiStatusTool, modelsLoadedTool];
+export const modelStatusTools = [aiStatusTool];
 export default modelStatusTools;

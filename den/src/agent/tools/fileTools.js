@@ -656,38 +656,220 @@ export const listDirectoryTool = {
   },
 };
 
+const FIND_SKIP_DIRS = new Set(['.git', 'node_modules', '__pycache__', '.venv', 'venv', '.asyncat', '.agent_tmp']);
+const FIND_MAX_ENTRIES = 50000;
+const FIND_TIME_LIMIT_MS = 10000;
+const FIND_SLICE_MS = 50;
+const GLOB_MAX_LENGTH = 300;
+const GLOB_MAX_CHOICES = 32;
+
+// Globs are matched in one pass over the text, never through a RegExp: the
+// pattern comes from the model, and a RegExp engine can backtrack for
+// seconds on a pattern like "*a*a*a*a*a*a*a*b", holding up all of den.
+
+/**
+ * "*.{js,jsx}" → ["*.js", "*.jsx"]. Groups can nest, and a { that is never
+ * closed is a plain character. Null when that makes more than `limit` globs.
+ */
+function expandBraces(glob, limit) {
+  const open = glob.indexOf('{');
+  if (open < 0) return [glob];
+  const head = glob.slice(0, open);
+  const bounds = [open];
+  let depth = 0;
+  let close = -1;
+  for (let i = open; i < glob.length && close < 0; i++) {
+    if (glob[i] === '{') depth++;
+    else if (glob[i] === '}' && --depth === 0) close = i;
+    else if (glob[i] === ',' && depth === 1) bounds.push(i);
+  }
+  if (close < 0) {
+    const rest = expandBraces(glob.slice(open + 1), limit);
+    return rest && rest.map((tail) => `${head}{${tail}`);
+  }
+  bounds.push(close);
+  const choices = [];
+  for (let k = 0; k < bounds.length - 1; k++) {
+    const part = expandBraces(glob.slice(bounds[k] + 1, bounds[k + 1]), limit);
+    if (!part || choices.push(...part) > limit) return null;
+  }
+  const tails = expandBraces(glob.slice(close + 1), limit);
+  if (!tails || choices.length * tails.length > limit) return null;
+  return choices.flatMap((choice) => tails.map((tail) => head + choice + tail));
+}
+
+// A glob without braces as tokens: char, one (?), set ([abc], [!a-z]),
+// star (*, within a folder), any (** crossing folders) and dirs ("**/": any
+// number of folders, or none). "**/**/" says no more than "**/", so repeats
+// are one token.
+function globTokens(glob) {
+  const tokens = [];
+  for (let i = 0; i < glob.length; i++) {
+    const ch = glob[i];
+    if (ch === '*' && glob[i + 1] === '*') {
+      const dirs = glob[i + 2] === '/';
+      i += dirs ? 2 : 1;
+      if (!(dirs && tokens.at(-1)?.kind === 'dirs')) tokens.push({ kind: dirs ? 'dirs' : 'any' });
+    } else if (ch === '*') {
+      tokens.push({ kind: 'star' });
+    } else if (ch === '?') {
+      tokens.push({ kind: 'one' });
+    } else if (ch === '[') {
+      const negate = glob[i + 1] === '!' || glob[i + 1] === '^';
+      const start = i + (negate ? 2 : 1);
+      // A ] straight after [ or [! is one of the characters.
+      const end = glob.indexOf(']', start + 1);
+      if (end < 0) { tokens.push({ kind: 'char', ch }); continue; }
+      const body = glob.slice(start, end);
+      const ranges = [];
+      for (let k = 0; k < body.length; k++) {
+        const ranged = body[k + 1] === '-' && k + 2 < body.length;
+        ranges.push([body[k], ranged ? body[k + 2] : body[k]]);
+        if (ranged) k += 2;
+      }
+      tokens.push({ kind: 'set', negate, ranges });
+      i = end;
+    } else {
+      tokens.push({ kind: 'char', ch });
+    }
+  }
+  return tokens;
+}
+
+const MAY_BE_EMPTY = new Set(['star', 'any', 'dirs']);
+
+/**
+ * Whether the tokens match all of `text`. The text is read one character
+ * at a time, keeping for each token whether the tokens up to it match what
+ * has been read, so it takes at most tokens × characters steps.
+ */
+function tokensMatch(tokens, text) {
+  const n = tokens.length;
+  // matched[j]: the first j tokens match the text read so far.
+  let matched = new Uint8Array(n + 1);
+  let next = new Uint8Array(n + 1);
+  // opened[j], for a dirs token: the tokens before it matched the text up to
+  // some point already read, so a run of folders may have begun there.
+  const opened = new Uint8Array(n + 1);
+  matched[0] = 1;
+  for (let j = 1; j <= n; j++) {
+    matched[j] = matched[j - 1] && MAY_BE_EMPTY.has(tokens[j - 1].kind) ? 1 : 0;
+    opened[j] = matched[j - 1];
+  }
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    let alive = 0;
+    next[0] = 0;
+    for (let j = 1; j <= n; j++) {
+      const token = tokens[j - 1];
+      let ok;
+      switch (token.kind) {
+        case 'char': ok = matched[j - 1] && c === token.ch; break;
+        case 'one': ok = matched[j - 1] && c !== '/'; break;
+        case 'set': ok = matched[j - 1] && c !== '/'
+          && token.negate !== token.ranges.some(([low, high]) => c >= low && c <= high); break;
+        case 'star': ok = next[j - 1] || (matched[j] && c !== '/'); break;
+        case 'any': ok = next[j - 1] || matched[j]; break;
+        case 'dirs': ok = next[j - 1] || (c === '/' && opened[j]); break;
+        default: ok = false;
+      }
+      next[j] = ok ? 1 : 0;
+      alive |= next[j];
+    }
+    for (let j = 1; j <= n; j++) {
+      if (tokens[j - 1].kind !== 'dirs') continue;
+      opened[j] |= next[j - 1];
+      alive |= opened[j];
+    }
+    // Nothing read from here on can make it match.
+    if (!alive) return false;
+    [matched, next] = [next, matched];
+  }
+  return matched[n] === 1;
+}
+
+/**
+ * A glob as a matcher with test(text), like a RegExp: * and ? stay within
+ * a folder, ** crosses folders, {a,b} picks one, [abc] and [!abc] are sets
+ * of characters. A pattern that is too long or makes too many choices
+ * throws.
+ */
+export function globMatcher(glob) {
+  const text = String(glob || '');
+  if (text.length > GLOB_MAX_LENGTH) throw new Error(`patterns can be up to ${GLOB_MAX_LENGTH} characters`);
+  const globs = expandBraces(text, GLOB_MAX_CHOICES);
+  if (!globs) throw new Error(`{…} groups can make up to ${GLOB_MAX_CHOICES} patterns`);
+  const compiled = globs.map(globTokens);
+  return { test: (value) => compiled.some((tokens) => tokensMatch(tokens, String(value))) };
+}
+
 export const findFilesTool = {
   name: 'find_files',
-  description: 'Find files by name or extension pattern. Searches recursively through the working directory.',
+  description: 'Find files (and folders) by name or glob, recursively: "*.py", "README*", "*.{js,jsx}", or with folders, "src/**/*.test.ts". Skips .git, node_modules and Python caches.',
   category: 'file',
   permission: PermissionLevel.SAFE,
   parameters: {
     type: 'object',
     properties: {
-      pattern: { type: 'string', description: 'File name pattern, e.g. "*.py", "index.*", "README*"' },
+      pattern: { type: 'string', description: 'A name pattern ("*.py", "index.*") or a path glob ("src/**/*.ts")' },
       path: { type: 'string', description: 'Directory to search in (default: working directory)' },
+      max_results: { type: 'number', description: 'Maximum results (default: 100)' },
     },
     required: ['pattern'],
   },
   execute: async (args, context) => {
     const searchPath = safePath(args.path || '.', context.workingDir);
-
+    if (!fs.existsSync(searchPath)) return { success: false, error: `Path not found: ${args.path || '.'}` };
+    const max = clampInt(args.max_results, 100, 1, 500);
+    const pattern = String(args.pattern ?? '').trim().replace(/^\.\//, '');
+    if (!pattern) return { success: false, error: 'pattern is required' };
+    // "*.py" matches names anywhere; "src/**/*.ts" matches paths from the search folder.
+    const byPath = pattern.includes('/');
+    let matcher;
     try {
-      const run = runFile('find', [
-        searchPath, '-name', String(args.pattern ?? ''),
-        '-not', '-path', '*/node_modules/*', '-not', '-path', '*/.git/*', '-not', '-path', '*/__pycache__/*',
-      ], { timeout: 10000 });
-      const output = firstLines(run.stdout, 50);
-      const files = output.trim().split('\n').filter(Boolean).map(f => path.relative(context.workingDir, f));
-      return {
-        success: true,
-        pattern: args.pattern,
-        count: files.length,
-        files: files.join('\n') || 'No files found.',
-      };
+      matcher = globMatcher(byPath ? pattern : pattern.replace(/^\*\*\//, ''));
     } catch (err) {
-      return { success: false, error: err.message };
+      return { success: false, error: `Not a usable pattern: ${err.message}` };
     }
+
+    // The walk reads folders asynchronously and gives way to other work at
+    // least every FIND_SLICE_MS, so a big folder never holds up the rest of den.
+    const found = [];
+    const deadline = Date.now() + FIND_TIME_LIMIT_MS;
+    let sliceStart = Date.now();
+    let seen = 0;
+    let stopped = false;
+    let timedOut = false;
+    const walk = async (dir) => {
+      let entries;
+      try { entries = await fs.promises.readdir(dir, { withFileTypes: true }); } catch { return; }
+      entries.sort((a, b) => a.name.localeCompare(b.name));
+      for (const entry of entries) {
+        if (stopped) return;
+        if (found.length >= max || ++seen > FIND_MAX_ENTRIES) { stopped = true; return; }
+        const now = Date.now();
+        if (now > deadline) { stopped = true; timedOut = true; return; }
+        if (now - sliceStart > FIND_SLICE_MS) {
+          await new Promise((resolve) => setImmediate(resolve));
+          sliceStart = Date.now();
+        }
+        const full = path.join(dir, entry.name);
+        const relative = path.relative(searchPath, full).split(path.sep).join('/');
+        const isDir = entry.isDirectory();
+        if (matcher.test(byPath ? relative : entry.name)) found.push(path.relative(context.workingDir, full) + (isDir ? '/' : ''));
+        if (isDir && !FIND_SKIP_DIRS.has(entry.name) && !entry.isSymbolicLink()) await walk(full);
+      }
+    };
+    await walk(searchPath);
+
+    return {
+      success: true,
+      pattern: args.pattern,
+      count: found.length,
+      files: found.join('\n') || 'No files found.',
+      ...(stopped ? { truncated: true } : {}),
+      ...(timedOut ? { note: `Stopped after ${FIND_TIME_LIMIT_MS / 1000} s. Search a smaller folder or use a narrower pattern.` } : {}),
+    };
   },
 };
 
@@ -740,52 +922,6 @@ export const fileDiffTool = {
         additions: added,
         deletions: removed,
         changes: added + removed,
-      };
-    } catch (err) {
-      return { success: false, error: err.message };
-    }
-  },
-};
-
-export const globFindTool = {
-  name: 'glob_find',
-  description: 'Find files using glob patterns (like find_files but with full glob support: **/*.js, src/**/*.ts, etc.). Searches recursively.',
-  category: 'file',
-  permission: PermissionLevel.SAFE,
-  parameters: {
-    type: 'object',
-    properties: {
-      pattern: { type: 'string', description: 'Glob pattern, e.g. "**/*.js", "src/**/*.ts", "test/**/*.py"' },
-      path: { type: 'string', description: 'Directory to search in (default: working directory)' },
-      max_results: { type: 'number', description: 'Maximum files to return (default: 100)' },
-    },
-    required: ['pattern'],
-  },
-  execute: async (args, context) => {
-    const searchPath = safePath(args.path || '.', context.workingDir);
-    const max = clampInt(args.max_results, 100, 1, 500);
-    const pattern = String(args.pattern ?? '');
-
-    try {
-      // Use fd if available (fast, respects gitignore), otherwise find.
-      // Both run with argument lists, not a shell.
-      let run;
-      if (hasBin('fd')) {
-        run = runFile('fd', ['--type', 'f', '--glob', pattern, searchPath], { timeout: 15000 });
-      } else {
-        // **/*.js → -name '*.js'
-        run = runFile('find', [
-          searchPath, '-path', '*/node_modules', '-prune', '-o', '-path', '*/.git', '-prune', '-o',
-          '-name', path.basename(pattern), '-print',
-        ], { timeout: 15000 });
-      }
-      const output = firstLines(run.stdout, max);
-      const files = output.trim().split('\n').filter(Boolean).map(f => path.relative(context.workingDir, f));
-      return {
-        success: true,
-        pattern: args.pattern,
-        count: files.length,
-        files: files.join('\n') || 'No files found.',
       };
     } catch (err) {
       return { success: false, error: err.message };
@@ -931,7 +1067,7 @@ export const fileWatchTool = {
 /** All file tools for batch registration. */
 export const fileTools = [
   readFileTool, writeFileTool, createDirectoryTool, editFileTool, applyPatchTool, searchFilesTool,
-  listDirectoryTool, findFilesTool, fileDiffTool, globFindTool,
+  listDirectoryTool, findFilesTool, fileDiffTool,
   fileCopyTool, fileMoveTool, fileDeleteTool, fileWatchTool,
 ];
 export default fileTools;

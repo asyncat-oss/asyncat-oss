@@ -243,7 +243,7 @@ function injectFileAttachments(goal, fileAttachments = []) {
       ].filter(Boolean).join('\n');
     }
     const hint = mime.startsWith('image/')
-      ? `Use inspect_attachment with path "${toolPath}" first; it will route to image_describe when vision is available.`
+      ? `Use inspect_attachment with path "${toolPath}" first; it describes the image when vision is available.`
       : mime.startsWith('audio/')
         ? `Use inspect_attachment with path "${toolPath}" first; it will route to transcribe_audio when Whisper is available.`
         : `Use inspect_attachment with path "${toolPath}" first; it will route by file type or return metadata.`;
