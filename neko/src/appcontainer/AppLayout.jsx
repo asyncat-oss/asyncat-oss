@@ -109,7 +109,7 @@ const AppLayout = () => {
     invalidateProjectsCache,
   } = useWorkspace();
   
-  // Clicking a desktop notification (e.g. a finished scheduled task) opens
+  // Clicking a desktop notification (e.g. a Cat's report) opens
   // the page it is about.
   useEffect(() => {
     const unsubscribe = window.electronAPI?.onNavigate?.((route) => {

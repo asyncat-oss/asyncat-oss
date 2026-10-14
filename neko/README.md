@@ -16,7 +16,7 @@ The UI for the full Asyncat experience:
 - **Claude Code & Codex** — sessions from this computer in the sidebar, and Agents → Coding agents
 - **Models** — LLM providers, local models and runtimes, audio and image models, and **Training** (LoRA fine-tuning, marked Labs)
 - **Customize** — Models, Agents (your agents and coding agents) and Tools & Skills, grouped in the sidebar
-- **Scheduled** — scheduled tasks: prompts that run on their own and answer in their own chat
+- **Cats** — agents that work on their own, on a schedule or when something happens, and report in their own chat and the Cats inbox
 - **Terminal** — integrated xterm.js terminal (desktop app) plus live agent process output
 - **Built-in browser** shared with the agent (it runs in the desktop app)
 - **Settings** — profile, appearance, integrations, and server config
