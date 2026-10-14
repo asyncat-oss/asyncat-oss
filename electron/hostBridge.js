@@ -9,17 +9,43 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { BACKEND_URL, DEN_CWD } from './constants.js';
+import { BACKEND_PORT, BACKEND_URL, DEN_CWD } from './constants.js';
 
 const handlers = new Map();
 let running = false;
 let launchToken = null;
 let readToken = null;
+let sendingToken = false;
 
 /** A token for a backend this app starts; passed to it in ASYNCAT_HOST_TOKEN. */
 export function createLaunchToken() {
   launchToken = crypto.randomBytes(32).toString('hex');
   return launchToken;
+}
+
+function isBackendRequest(url) {
+  try {
+    const target = new URL(url);
+    return target.protocol === 'http:' && target.port === String(BACKEND_PORT)
+      && ['127.0.0.1', 'localhost', '[::1]'].includes(target.hostname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Send the launch token with every request the app's windows make to the
+ * backend this app started, which takes changes only with it (den's
+ * desktopTokenGuard.js). Other programs on this computer, the agent's
+ * sandboxed commands among them, don't have it. The page never sees it.
+ */
+export function sendTokenFromWindows(appSession) {
+  if (sendingToken) return;
+  sendingToken = true;
+  appSession.webRequest.onBeforeSendHeaders((details, callback) => {
+    if (!launchToken || !isBackendRequest(details.url)) return callback({});
+    return callback({ requestHeaders: { ...details.requestHeaders, 'x-asyncat-host-token': launchToken } });
+  });
 }
 
 function currentToken() {

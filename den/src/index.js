@@ -10,6 +10,7 @@ import morgan from 'morgan';
 import logger, { flushLogs, logError, morganStream } from './logger.js';
 import { attachLocalContext } from './middleware/localContext.js';
 import { createLocalRequestGuard, hostnameOf } from './middleware/localRequestGuard.js';
+import { createDesktopTokenGuard } from './middleware/desktopTokenGuard.js';
 
 // ─── AI / MCP routes (from asy_b_main) ───────────────────────────────────────
 import aiAgentRoutes from './ai/routes/aiAgentRoutes.js';
@@ -133,10 +134,13 @@ app.use(cors({
   allowedHeaders: [
     'Content-Type', 'X-Requested-With',
     'x-client-timestamp', 'x-update-type', 'x-auto-save', 'x-client-timezone',
-    'Cache-Control',
+    'Cache-Control', 'x-asyncat-host-token',
   ],
   exposedHeaders: ['Content-Type', 'Content-Length', 'Content-Disposition', 'Cache-Control'],
 }));
+
+// Started by the desktop app, only its window may change things here.
+app.use(createDesktopTokenGuard());
 
 // ─── Core middleware ──────────────────────────────────────────────────────────
 app.use(compression());

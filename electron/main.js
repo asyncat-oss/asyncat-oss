@@ -6,7 +6,7 @@
 // 3. Sets up system tray, native menu, and global shortcuts
 // 4. Manages the full app lifecycle
 //
-import { app, ipcMain, globalShortcut, Notification, dialog, shell, nativeImage, powerMonitor } from 'electron';
+import { app, ipcMain, globalShortcut, Notification, dialog, shell, nativeImage, powerMonitor, session } from 'electron';
 import { IS_MAC, IS_WIN, APP_NAME, WINDOWS_APP_ID, ICONS, BACKEND_PORT, NEKO_DIST, FRONTEND_PORT, USER_DATA } from './constants.js';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
@@ -18,7 +18,7 @@ import { reportBootResult, setupAutoUpdater, setupUpdaterIPC } from './updater.j
 import { initShortcuts, registerShortcutIPC } from './shortcuts.js';
 import { quickAskCommand } from './shortcut-config.js';
 import { startBackend, stopBackend, isBackendRunning } from './backend.js';
-import { postHostEvent, registerHostHandler, startHostBridge, stopHostBridge } from './hostBridge.js';
+import { postHostEvent, registerHostHandler, sendTokenFromWindows, startHostBridge, stopHostBridge } from './hostBridge.js';
 import { keepRunningAfterClose, noteKeptRunning, registerBackgroundIPC, setEnabledTaskCount, startsHidden } from './background.js';
 import { setupBrowserHost, handleAgentCommand, shutdownBrowserHost, clearCatBrowserData, forgetAllBrowsing } from './browserHost.js';
 import { isAllowedBrowserUrl as isAllowedBrowserUrlFor } from './browserPolicy.js';
@@ -497,8 +497,10 @@ function stopFrontendServer() {
 
 // The app's origin: the Vite dev server when one is running, otherwise the
 // static server (started on first use). Quick ask loads from the same origin
-// as the main window, so both share the theme and other saved settings.
+// as the main window, so both share the theme and other saved settings, and
+// the requests both make to the backend carry the launch token.
 function ensureFrontend() {
+  sendTokenFromWindows(session.defaultSession);
   if (!frontendOrigin) {
     frontendOrigin = (async () => {
       // Vite binds to whatever "localhost" resolves to, which is ::1 on many Linux systems.

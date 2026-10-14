@@ -55,6 +55,12 @@ export function hostToken() {
   return token;
 }
 
+/** The token the desktop app started this backend with, or null when it was started on its own. */
+export function desktopLaunchToken() {
+  hostToken();
+  return launchToken;
+}
+
 export function tokenMatches(candidate) {
   const expected = Buffer.from(hostToken());
   const given = Buffer.from(String(candidate || ''));
