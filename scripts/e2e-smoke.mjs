@@ -4,7 +4,8 @@
 // OpenAI-compatible model, then drives the app in a headless browser through
 // the main flows: chat, a project with instructions, agents, Cats, a note made
 // by the agent, connectors (with a fake MCP server), an ACP agent (a fake
-// one), searching inside chats, pinning a chat, and the main pages.
+// one), searching inside chats, pinning a chat, Models → Voice and Images
+// (and a Models search that finds a voice file), and the main pages.
 //
 // Needs a Chromium-based browser (Chrome, Chromium, Edge or Brave), found the
 // same way PDF export finds one; PUPPETEER_EXECUTABLE_PATH picks another.
@@ -502,6 +503,41 @@ async function main() {
   await check('Models → Images shows how images are made', async () => {
     await page.goto(`${app}/models?tab=image`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('[data-images-page] [data-images-group] [data-runs-on="image"]', { timeout: 20000 });
+    await noCrash();
+  });
+
+  await check('a Models search for a voice file opens Voice and shows its row', async () => {
+    // A listening model of a few bytes, added where it is: nothing downloads.
+    const file = path.join(scratch, 'ggml-smoke-tiny.bin');
+    fs.writeFileSync(file, Buffer.alloc(2048));
+    await api('POST', '/api/ai/providers/audio/models/custom-paths', { name: 'ggml-smoke-tiny', path: file, type: 'whisper' });
+    // The search asks Hugging Face too; answer for it so the test stays offline.
+    const offlineSearch = (req) => {
+      if (req.isInterceptResolutionHandled()) return;
+      if (req.method() === 'GET' && new URL(req.url()).pathname.endsWith('/hf-search')) {
+        req.respond({
+          status: 200,
+          contentType: 'application/json',
+          headers: { 'access-control-allow-origin': app, 'access-control-allow-credentials': 'true' },
+          body: JSON.stringify({ success: true, models: [] }),
+        });
+      } else {
+        req.continue();
+      }
+    };
+    await page.setRequestInterception(true);
+    page.on('request', offlineSearch);
+    try {
+      await page.goto(`${app}/models?view=local`, { waitUntil: 'domcontentloaded' });
+      const box = await page.waitForSelector('input[placeholder^="Search your models"]', { timeout: 20000 });
+      await box.type('smoke-tiny');
+      await clickText('button', 'ggml-smoke-tiny');
+      await page.waitForSelector('[data-voice-page] [data-file-row="whisper"].bg-selected', { timeout: 15000 });
+      assert(new URL(page.url()).searchParams.get('tab') === 'audio', 'the search did not open Voice');
+    } finally {
+      page.off('request', offlineSearch);
+      await page.setRequestInterception(false);
+    }
     await noCrash();
   });
 
