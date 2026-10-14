@@ -176,7 +176,7 @@ test('a temporary chat reads memories without marking them as used', async () =>
   const before = uses();
 
   const { aiClient } = fakeClient([
-    `**Thought:** Check what I know.\n${call('recall_memory', { query: 'pears ripen' })}`,
+    `**Thought:** Check what I know.\n${call('recall_memory', { query: 'pears ripen' })}\n${call('local_rag_search', { query: 'pears ripen', include_memory: true })}`,
     '**Thought:** Done.\n**Answer:** Pick pears before they ripen.',
   ]);
   const runtime = new AgentRuntime({
@@ -185,7 +185,7 @@ test('a temporary chat reads memories without marking them as used', async () =>
   });
   const result = await runtime.run('When should I pick pears?');
   const found = result.session.toolHistory.map((entry) => entry.result?.memories?.map((memory) => memory.key));
-  assert.deepEqual(found, [['pear_picking']], 'recall_memory found the memory');
+  assert.deepEqual(found, [['pear_picking'], ['pear_picking']], 'both tools found the memory');
   assert.deepEqual(uses(), before, 'but it is not marked as used');
 
   // The same recall in a saved chat is a use, so the check above means something.

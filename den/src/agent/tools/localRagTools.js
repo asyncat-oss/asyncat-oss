@@ -10,7 +10,8 @@ import path from 'path';
 import { randomUUID } from 'crypto';
 import { PermissionLevel } from './toolRegistry.js';
 import { safePath, isPathInside } from './shared.js';
-import { embedBatch, embedText } from '../../ai/embeddings/embeddingService.js';
+import { embedBatch, embedText, embeddingStatus } from '../../ai/embeddings/embeddingService.js';
+import { hybridRecall } from './memoryTools.js';
 import { lexicalVector, cosineSim, tokenize, LEXICAL_MODEL, LEXICAL_DIMS } from '../../ai/embeddings/lexicalVector.js';
 
 const SKIP_DIRS = new Set([
@@ -229,9 +230,22 @@ export const localRagIndexTool = {
   },
 };
 
+/** The agent's saved memories that match a query, for include_memory. */
+async function memoryMatches(context, query, limit) {
+  try {
+    const { memories, method } = await hybridRecall(context, { query, kind: 'all', limit });
+    return {
+      memoryMethod: method,
+      memories: memories.map(m => ({ key: m.key, kind: m.kind, content: m.content, importance: m.importance, score: m.score })),
+    };
+  } catch (err) {
+    return { memories: [], memoryError: err.message };
+  }
+}
+
 export const localRagSearchTool = {
   name: 'local_rag_search',
-  description: 'Search a local RAG index and return relevant file chunks with excerpts. Uses semantic embeddings when the index has them and the query embeds into the same space, otherwise lexical matching. Run local_rag_index first.',
+  description: 'Search a local RAG index (built with local_rag_index over code or docs) by meaning and return the most relevant file chunks with excerpts. Set include_memory to search the agent\'s saved memories in the same call. For files the user added to a project or agent, use knowledge_search instead.',
   category: 'rag',
   permission: PermissionLevel.SAFE,
   parameters: {
@@ -239,57 +253,76 @@ export const localRagSearchTool = {
     properties: {
       query: { type: 'string', description: 'Question or search query.' },
       index_name: { type: 'string', description: 'Optional index name. Defaults to newest index.' },
-      limit: { type: 'number', description: 'Maximum chunks to return. Default 8.' },
+      limit: { type: 'number', description: 'Maximum chunks (and memories) to return. Default 8.' },
       include_content: { type: 'boolean', description: 'Include full chunk content instead of short excerpts.' },
+      include_memory: { type: 'boolean', description: 'Also search the agent\'s saved memories (default false).' },
     },
     required: ['query'],
   },
   execute: async (args, context) => {
-    try {
-      const query = String(args.query || '').trim();
-      if (!query) return { success: false, error: 'query is required.' };
-      const index = loadIndex(context.workingDir, args.index_name);
-      const queryTokens = tokenize(query);
-      const limit = Math.max(1, Math.min(30, Number(args.limit) || 8));
-
-      // Embed the query, then decide whether we can use the index's semantic
-      // vectors (same model) or must fall back to the always-present lexical ones.
-      const emb = await embedText(query, { userId: context.userId });
-      const indexModel = index.embedding?.model || LEXICAL_MODEL;
-      const useSemantic = Boolean(emb && emb.model !== LEXICAL_MODEL && emb.model === indexModel && index.embedding?.semantic);
-      const queryVec = useSemantic ? emb.vector : lexicalVector(query);
-
-      const results = (index.chunks || [])
-        .map(chunk => {
-          const chunkVec = useSemantic ? chunk.vec : (chunk.lex || chunk.vector);
-          const semantic = chunkVec ? cosineSim(queryVec, chunkVec) : 0;
-          const keyword = keywordBonus(chunk.content, queryTokens);
-          return {
-            id: chunk.id,
-            path: chunk.path,
-            start: chunk.start,
-            end: chunk.end,
-            score: Number((semantic + keyword * 0.25).toFixed(4)),
-            excerpt: args.include_content ? chunk.content : excerptFor(chunk.content, queryTokens),
-            content: args.include_content ? chunk.content : undefined,
-          };
-        })
-        .sort((a, b) => b.score - a.score)
-        .slice(0, limit);
-
-      return {
-        success: true,
-        indexName: index.indexName,
-        query,
-        method: useSemantic ? `semantic (${indexModel})` : 'lexical',
-        count: results.length,
-        results,
-      };
-    } catch (err) {
-      return { success: false, error: err.message };
-    }
+    const query = String(args.query || '').trim();
+    if (!query) return { success: false, error: 'query is required.' };
+    const limit = Math.max(1, Math.min(30, Number(args.limit) || 8));
+    if (!args.include_memory) return searchIndex(args, context, query, limit);
+    const [rag, memory] = await Promise.all([
+      searchIndex(args, context, query, limit),
+      memoryMatches(context, query, Math.min(limit, 15)),
+    ]);
+    // Memories still come back when there is no index yet.
+    const { success: ragFound, error: ragError, ...ragResult } = rag;
+    return {
+      success: true,
+      query,
+      embedding: embeddingStatus(context.userId),
+      ...(ragFound ? ragResult : { results: [], count: 0, ragError }),
+      ...memory,
+    };
   },
 };
+
+/** Search one index: { success, indexName, method, count, results } or an error. */
+async function searchIndex(args, context, query, limit) {
+  try {
+    const index = loadIndex(context.workingDir, args.index_name);
+    const queryTokens = tokenize(query);
+
+    // Embed the query, then decide whether we can use the index's semantic
+    // vectors (same model) or must fall back to the always-present lexical ones.
+    const emb = await embedText(query, { userId: context.userId });
+    const indexModel = index.embedding?.model || LEXICAL_MODEL;
+    const useSemantic = Boolean(emb && emb.model !== LEXICAL_MODEL && emb.model === indexModel && index.embedding?.semantic);
+    const queryVec = useSemantic ? emb.vector : lexicalVector(query);
+
+    const results = (index.chunks || [])
+      .map(chunk => {
+        const chunkVec = useSemantic ? chunk.vec : (chunk.lex || chunk.vector);
+        const semantic = chunkVec ? cosineSim(queryVec, chunkVec) : 0;
+        const keyword = keywordBonus(chunk.content, queryTokens);
+        return {
+          id: chunk.id,
+          path: chunk.path,
+          start: chunk.start,
+          end: chunk.end,
+          score: Number((semantic + keyword * 0.25).toFixed(4)),
+          excerpt: args.include_content ? chunk.content : excerptFor(chunk.content, queryTokens),
+          content: args.include_content ? chunk.content : undefined,
+        };
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
+
+    return {
+      success: true,
+      indexName: index.indexName,
+      query,
+      method: useSemantic ? `semantic (${indexModel})` : 'lexical',
+      count: results.length,
+      results,
+    };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
 
 export const localRagListTool = {
   name: 'local_rag_list',

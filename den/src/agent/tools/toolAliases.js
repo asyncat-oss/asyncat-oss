@@ -36,4 +36,15 @@ export const TOOL_ALIASES = {
       attribute: text(old.attribute) || undefined,
     }),
   },
+
+  // ── semantic_search was local_rag_search plus recall_memory ──
+  semantic_search: {
+    to: 'local_rag_search',
+    args: (old) => defined({
+      query: text(old.query),
+      limit: old.limit,
+      index_name: text(old.index_name),
+      include_memory: !Array.isArray(old.sources) || !old.sources.length || old.sources.includes('memory'),
+    }),
+  },
 };

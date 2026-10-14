@@ -472,7 +472,7 @@ export const saveMemoryTool = {
 /**
  * Hybrid memory recall: BM25 keyword search, augmented with vector similarity
  * when keyword search is thin (< 3 hits). Shared by recall_memory and
- * semantic_search. `context.computeEmbedding` returns { vector, model, dim }.
+ * local_rag_search. `context.computeEmbedding` returns { vector, model, dim }.
  */
 export async function hybridRecall(context, { query, kind = 'all', limit = 10 } = {}) {
   const profileId = context.profileId || null;

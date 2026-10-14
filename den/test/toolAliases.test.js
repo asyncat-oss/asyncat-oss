@@ -136,3 +136,22 @@ test('the old browser tools map onto the one browser set', () => {
   check('browser_extract', { structure: { title: 'h1', price: '.price' } }, { name: 'preview_get_text', args: { selector: 'h1, .price' } });
   check('browser_extract', { selector: 'a.download', attribute: 'href', multiple: true }, { name: 'preview_get_text', args: { selector: 'a.download', attribute: 'href' } });
 });
+
+test('semantic_search is local_rag_search with memories', async () => {
+  const resolved = toolRegistry.resolve('semantic_search', { query: 'pears', sources: ['memory', 'rag'], limit: 4 });
+  assert.deepEqual(resolved, { name: 'local_rag_search', args: { query: 'pears', limit: 4, include_memory: true }, aliasOf: 'semantic_search' });
+  assert.equal(toolRegistry.resolve('semantic_search', { query: 'pears', sources: ['rag'] }).args.include_memory, false);
+
+  // Memories still come back in a folder that has no index yet.
+  const userId = randomUUID();
+  const workspaceId = randomUUID();
+  db.prepare("INSERT INTO users (id, email, name) VALUES (?, 'demo@example.test', 'Demo')").run(userId);
+  db.prepare("INSERT INTO workspaces (id, name, owner_id) VALUES (?, 'Home', ?)").run(workspaceId, userId);
+  const context = { workingDir: workspace(), userId, workspaceId };
+  const saved = await toolRegistry.execute('save_memory', { key: 'pear_tree', content: 'The pear tree is by the north wall.', kind: 'fact' }, context);
+  assert.equal(saved.success, true, saved.error);
+  const found = await toolRegistry.execute('semantic_search', { query: 'pear tree' }, context);
+  assert.equal(found.success, true, found.error);
+  assert.match(found.ragError, /index/i);
+  assert.ok(found.memories.some((memory) => memory.key === 'pear_tree'), JSON.stringify(found.memories));
+});
