@@ -2,7 +2,10 @@
 // Exposes training capabilities to the AI agent so it can start, monitor,
 // and manage fine-tuning jobs programmatically.
 
+import fs from 'fs';
+import path from 'path';
 import { PermissionLevel } from './toolRegistry.js';
+import { isPathInside } from './shared.js';
 import {
   startTrainingJob,
   getTrainingJob,
@@ -71,6 +74,20 @@ export const installTrainingEnvTool = {
 
 // ── start_finetune_job ────────────────────────────────────────────────────────
 
+/**
+ * The folder in the project a base model names, or null. Training runs
+ * outside the command sandbox, and a model folder that a command could have
+ * written is refused: its files could be made to run code there. The
+ * training script resolves a local model against den's own folder.
+ */
+export function projectModelFolder(baseModel, workspaceRoot) {
+  if (!workspaceRoot) return null;
+  const real = (target) => { try { return fs.realpathSync(target); } catch { return null; } };
+  const folder = real(path.resolve(process.cwd(), String(baseModel ?? '').trim()));
+  const root = real(workspaceRoot) || path.resolve(workspaceRoot);
+  return folder && isPathInside(folder, root) ? folder : null;
+}
+
 export const startFinetuneJobTool = {
   name: 'start_finetune_job',
   description:
@@ -81,7 +98,7 @@ export const startFinetuneJobTool = {
     type: 'object',
     properties: {
       name: { type: 'string', description: 'A human-readable name for this training run, e.g. "alpaca-qwen-lora".' },
-      base_model: { type: 'string', description: 'HuggingFace model ID (e.g. "unsloth/Qwen3-1.7B") or local path to model weights.' },
+      base_model: { type: 'string', description: 'HuggingFace model ID (e.g. "unsloth/Qwen3-1.7B") or local path to model weights outside the project.' },
       dataset_path: { type: 'string', description: 'Absolute path to a JSONL dataset file. Use list_local_datasets to find downloaded datasets.' },
       backend: { type: 'string', enum: ['cuda', 'mlx', 'cpu'], description: 'Training backend. Default: auto-detected from GPU.' },
       epochs: { type: 'number', description: 'Number of training epochs. Default 3.' },
@@ -95,6 +112,9 @@ export const startFinetuneJobTool = {
   },
   execute: async (args, context = {}) => {
     try {
+      if (projectModelFolder(args.base_model, context.workspaceRoot || context.workingDir)) {
+        return { success: false, error: "base_model can't be a folder in the project: training runs outside the sandbox. Use a Hugging Face model id, or ask the user to train from the Training page." };
+      }
       const job = startTrainingJob({
         userId: context.userId,
         name: String(args.name),

@@ -283,8 +283,10 @@ def train_transformers(args, dataset_rows):
                 except Exception:
                     emit({"type": "status", "message": "bitsandbytes 4-bit not available, loading in full precision."})
 
+            # Never a model's own Python code: a model folder can hold
+            # anything, and this process runs outside the command sandbox.
             tokenizer = AutoTokenizer.from_pretrained(
-                args.model, trust_remote_code=True
+                args.model, trust_remote_code=False
             )
             if not tokenizer.pad_token:
                 tokenizer.pad_token = tokenizer.eos_token
@@ -294,7 +296,7 @@ def train_transformers(args, dataset_rows):
                 quantization_config=quantization_config,
                 device_map=device_map,
                 torch_dtype=torch.bfloat16 if use_cuda else torch.float32,
-                trust_remote_code=True,
+                trust_remote_code=False,
             )
 
             lora_config = LoraConfig(

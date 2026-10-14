@@ -9,6 +9,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import db from '../../../db/client.js';
+import { childEnv } from '../../../agent/childEnv.js';
 import {
   managedTrainingPythonPath,
   trainingOutputDir,
@@ -21,6 +22,7 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const TRAIN_SCRIPT = path.join(__dirname, 'scripts', 'train_lora.py');
+const HF_TOKEN_NAMES = ['HF_TOKEN', 'HUGGINGFACE_TOKEN', 'HUGGING_FACE_HUB_TOKEN'];
 
 // ── In-memory state ─────────────────────────────────────────────────────────
 
@@ -246,7 +248,8 @@ export function startTrainingJob({
   ], {
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: false,
-    env: { ...process.env },
+    // Without saved keys, except the Hugging Face token for gated models.
+    env: childEnv({ keep: HF_TOKEN_NAMES }),
   });
 
   activeJobs.set(id, { proc, outputDir });
