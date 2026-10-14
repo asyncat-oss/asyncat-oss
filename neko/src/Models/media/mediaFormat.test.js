@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   FIT, buildImageFiles, buildVoiceFiles, downloadsFor, engineState, engineSummary, enginePlanText, filesCountText, folderOf,
-  gpuLine, installText, jobPercent, sizeText, stepProgressText, stepSizeText, totalText, versionText, voicesByLanguage,
+  gpuLine, installText, jobPercent, sizeText, stepErrorText, stepProgressText, stepSizeText, totalText, versionText, voicesByLanguage,
 } from './mediaFormat.js';
 
 test('sizes and step states read plainly', () => {
@@ -14,9 +14,16 @@ test('sizes and step states read plainly', () => {
   assert.equal(stepSizeText({ bytes: 1_760_000_000 }), '1.8 GB');
   assert.equal(stepSizeText({ bytes: null }), 'Size unknown');
   assert.equal(stepSizeText({ bytes: null, small: true }), 'tiny');
+  // An engine with no download for this computer.
+  assert.equal(stepSizeText({ bytes: null, error: 'No prebuilt download', unavailable: true }), 'Not available');
   assert.equal(stepProgressText({ status: 'running', downloaded: 24_000_000, total: 60_000_000 }), '24 of 60 MB');
   assert.equal(stepProgressText({ status: 'skipped' }), 'Already here');
   assert.equal(stepProgressText({ status: 'waiting' }), 'Waiting');
+  // An engine that won't start says so in one sentence, not its whole output.
+  assert.equal(stepErrorText("whisper.cpp was downloaded, but it doesn't run on this computer:\n/x/whisper-server --version: failed\nstderr: …"),
+    "whisper.cpp was downloaded, but it doesn't run on this computer.");
+  assert.equal(stepErrorText('x'.repeat(300)).length, 198);
+  assert.equal(stepErrorText(null), '');
 });
 
 test('overall progress weighs big downloads more', () => {

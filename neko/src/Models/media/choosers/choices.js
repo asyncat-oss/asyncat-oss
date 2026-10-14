@@ -5,7 +5,7 @@
 
 import { formatBytes } from '../../../components/ui/progressFormat.js';
 import {
-  baseName, imageCatalogEntry, totalText, voiceCatalogEntry, voicesByLanguage, whisperCatalogEntry, whisperTitle,
+  baseName, imageCatalogEntry, stepErrorText, totalText, voiceCatalogEntry, voicesByLanguage, whisperCatalogEntry, whisperTitle,
 } from '../mediaFormat.js';
 
 const usable = (file) => file && !file.isMissing;
@@ -164,6 +164,6 @@ export function planBlocked(plan) {
   if (!step) return null;
   return {
     button: step.unavailable ? "Its engine can't be downloaded here." : "Couldn't check its engine.",
-    detail: String(step.error),
+    detail: stepErrorText(step.error),
   };
 }

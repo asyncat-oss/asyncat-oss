@@ -15,7 +15,7 @@ import Skeleton from '../../components/ui/Skeleton.jsx';
 import { useConfirm } from '../../components/confirmContext.js';
 import { errorDetail, useToast } from '../../components/toastContext.js';
 import ActionButton from './ActionButton.jsx';
-import { ENGINE_NAMES, enginePlanText, engineSummary, stepProgressText, stepSizeText } from './mediaFormat.js';
+import { ENGINE_NAMES, buildWords, enginePlanText, engineSummary, stepErrorText, stepProgressText, stepSizeText } from './mediaFormat.js';
 import { useEngine } from './useEngine.js';
 
 const REMOVE_TEXT = {
@@ -95,7 +95,8 @@ export default function EngineRow({ runtimeId, loaded = false, enginePath = null
     }
   };
 
-  // A setup in progress, or one about to start, speaks for this row.
+  // A setup in progress, or one about to start, speaks for this row. A
+  // planned step still `loading` its size shows a bar where the size goes.
   if (step && (step.status || !step.done)) {
     const running = step.status === 'running';
     const percent = step.total ? (Number(step.downloaded) / Number(step.total)) * 100 : Number(step.progress) || 0;
@@ -103,13 +104,14 @@ export default function EngineRow({ runtimeId, loaded = false, enginePath = null
       <PropertyRow
         label="Engine"
         data-engine-row={runtimeId}
-        value={name}
-        status={step.status ? stepProgressText(step) : stepSizeText(step)}
+        data-engine-state={step.status ? 'setup' : 'planned'}
+        value={<span className="block truncate">{name}<MetaLine parts={[buildWords(step.capability)].filter(Boolean)} /></span>}
+        status={step.status ? stepProgressText(step) : step.loading ? <Skeleton className="h-3 w-12" /> : stepSizeText(step)}
         open={running || Boolean(step.error)}
       >
         <div className="sm:pl-36">
           {running ? <Progress value={percent} label={`Installing ${name}`} /> : null}
-          {step.error ? <p role="alert" className="text-[12px] leading-5 text-red-600 dark:text-red-400">{step.error}</p> : null}
+          {step.error ? <p role="alert" className="text-[12px] leading-5 text-red-600 dark:text-red-400">{stepErrorText(step.error)}</p> : null}
         </div>
       </PropertyRow>
     );
@@ -210,7 +212,7 @@ export default function EngineRow({ runtimeId, loaded = false, enginePath = null
             </div>
           </div>
         ) : null}
-        {engine.error && state !== 'installing' ? <p role="alert" className="text-[12px] leading-5 text-red-600 dark:text-red-400">{engine.error}</p> : null}
+        {engine.error && state !== 'installing' ? <p role="alert" className="text-[12px] leading-5 text-red-600 dark:text-red-400">{stepErrorText(engine.error)}</p> : null}
       </div>
     </PropertyRow>
   );

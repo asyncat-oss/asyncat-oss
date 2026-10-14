@@ -14,14 +14,17 @@ import { startWavRecording } from '../../utils/wavRecorder.js';
  *   <PropertyRow label="Try it" value={<MicTest stt={status.stt} />} />
  *
  * `stt` is the listening status; on this computer a model that isn't loaded
- * yet says "Starting the model…" while the first words load it.
+ * yet says "Starting the model…" while the first words load it. `onDone`
+ * runs after each try, so the page can show the model is loaded now.
  */
-export default function MicTest({ stt = null }) {
+export default function MicTest({ stt = null, onDone }) {
   const [state, setState] = useState('idle'); // idle | listening | working | done | error
   const [text, setText] = useState('');
   const [level, setLevel] = useState(0);
   const recorderRef = useRef(null);
   const aliveRef = useRef(true);
+  const onDoneRef = useRef(onDone);
+  useEffect(() => { onDoneRef.current = onDone; }, [onDone]);
 
   useEffect(() => {
     aliveRef.current = true;
@@ -52,6 +55,7 @@ export default function MicTest({ stt = null }) {
       setText(err.message || "Couldn't make out the words.");
       setState('error');
     }
+    onDoneRef.current?.();
   }, []);
 
   const start = async () => {
@@ -112,4 +116,5 @@ export default function MicTest({ stt = null }) {
 
 MicTest.propTypes = {
   stt: PropTypes.shape({ provider: PropTypes.string, running: PropTypes.string }),
+  onDone: PropTypes.func,
 };

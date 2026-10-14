@@ -18,6 +18,7 @@ export function sizeText(bytes) {
 /** The size column of a plan step. */
 export function stepSizeText(step) {
   if (step.done) return 'Already on this computer';
+  if (step.unavailable) return 'Not available';
   if (step.error) return 'Size unknown';
   if (!step.bytes) return step.small ? 'tiny' : 'Size unknown';
   return `${step.estimated ? 'about ' : ''}${formatBytes(step.bytes)}`;
@@ -38,6 +39,16 @@ export function stepProgressText(step) {
   if (step.downloaded && step.total) return transferDetail({ done: step.downloaded, total: step.total });
   if (step.downloaded) return `${formatBytes(step.downloaded)} downloaded`;
   return step.detail || 'Working…';
+}
+
+/**
+ * A failed step's error for its row: the first line only, kept short. An
+ * engine that won't start reports every probe and its output; the row
+ * shows the sentence that says what happened.
+ */
+export function stepErrorText(error) {
+  const first = String(error || '').trim().split(/\r?\n/)[0].trim().replace(/:$/, '.');
+  return first.length > 200 ? `${first.slice(0, 197)}…` : first;
 }
 
 /** Overall percent of a setup job, weighting downloads by size. */

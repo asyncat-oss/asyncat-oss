@@ -112,6 +112,15 @@ export function useEngine(runtimeId, { onChanged = null } = {}) {
     };
   }, [readDisk, refresh]);
 
+  // An engine that has just become usable (installed, or found where its
+  // setting points) has nothing left to say about an install that failed.
+  const detected = Boolean(runtime?.detected);
+  const detectedRef = useRef(detected);
+  useEffect(() => {
+    if (detected && !detectedRef.current) setError('');
+    detectedRef.current = detected;
+  }, [detected]);
+
   const listedJob = runtime?.installJob && RUNNING.has(runtime.installJob.status) ? runtime.installJob : null;
   useEffect(() => {
     if (listedJob) follow(listedJob);
