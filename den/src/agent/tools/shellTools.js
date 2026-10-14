@@ -2,13 +2,14 @@
 // ─── Shell Execution Tools ───────────────────────────────────────────────────
 // Execute commands, Python scripts, and Node.js code. On Linux and macOS they
 // run in a sandbox that only lets them write inside the project folder (see
-// commandSandbox.js). All dangerous — the user approves each one.
+// commandSandbox.js). Also persistent shell sessions, and commands on another
+// machine over SSH. All dangerous — the user approves each one.
 // Supports streaming output via tool_progress events.
 
 import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { IS_WIN, isPathInside } from './shared.js';
+import { IS_WIN, clampInt, hasBin, isPathInside, missingDepError } from './shared.js';
 import { PermissionLevel } from './toolRegistry.js';
 import { getTmpDir } from '../workspacePaths.js';
 import { shellSessionManager } from '../ShellSessionManager.js';
@@ -53,8 +54,9 @@ function runProcess(cmd, args, options = {}) {
       // Callers already pass `sh -c <command>` (or an interpreter and a file).
       // A second shell would re-split it and run only the first word, so
       // `npm test` ran plain `npm`. cmd.exe tolerates the extra layer and
-      // relies on Node's quoting for it, so Windows keeps it.
-      shell: IS_WIN,
+      // relies on Node's quoting for it, so Windows keeps it, unless the
+      // caller runs a program directly (ssh).
+      shell: options.shell ?? IS_WIN,
       env: { ...process.env, ...(options.env || {}) },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -322,8 +324,66 @@ export const shellSessionCloseTool = {
   },
 };
 
+// ── ssh_exec ─────────────────────────────────────────────────────────────────
+export const sshExecTool = {
+  name: 'ssh_exec',
+  description: 'Execute a command on a remote host over SSH. Requires ssh to be installed and the host to be accessible. Use key_path for key-based auth or ensure the key is already loaded in ssh-agent.',
+  category: 'shell',
+  permission: PermissionLevel.DANGEROUS,
+  parameters: {
+    type: 'object',
+    properties: {
+      host:       { type: 'string', description: 'Remote host (hostname or IP)' },
+      user:       { type: 'string', description: 'SSH username (default: current user)' },
+      port:       { type: 'number', description: 'SSH port (default: 22)' },
+      command:    { type: 'string', description: 'Command to run on the remote host' },
+      key_path:   { type: 'string', description: 'Path to SSH private key file (optional)' },
+      timeout:    { type: 'number', description: 'Timeout in seconds (default: 30)' },
+    },
+    required: ['host', 'command'],
+  },
+  execute: async (args, context) => {
+    if (!hasBin('ssh')) {
+      return missingDepError('ssh', IS_WIN ? 'Enable OpenSSH Client in Windows Features or install Git for Windows' : 'sudo apt install openssh-client (Linux) / brew install openssh (macOS)');
+    }
+
+    const host    = String(args.host ?? '').trim();
+    const user    = args.user ? String(args.user).trim() : '';
+    // A host or user starting with - would be read as an ssh option (-oProxyCommand=...).
+    if (!host || /^-|\s/.test(host) || /^-|[\s@]/.test(user)) {
+      return { success: false, error: 'host and user must be plain names.' };
+    }
+    const port    = clampInt(args.port, 22, 1, 65535);
+    const timeout = clampInt(args.timeout, 30, 1, 600);
+    const argv = [
+      '-o', 'StrictHostKeyChecking=accept-new', '-o', `ConnectTimeout=${timeout}`, '-p', port,
+      ...(args.key_path ? ['-i', path.resolve(context.workingDir, args.key_path)] : []),
+      '--', `${user ? `${user}@` : ''}${host}`, String(args.command ?? ''),
+    ];
+
+    const result = await runProcess('ssh', argv.map(String), {
+      cwd: context.workingDir,
+      timeout: (timeout + 5) * 1000,
+      shell: false,
+      toolName: 'ssh_exec',
+      toolCallId: context.toolCallId || null,
+      emitEvent: context.emitEvent || null,
+    });
+    return {
+      success: result.success,
+      host: args.host,
+      command: args.command,
+      stdout: result.stdout?.slice(0, 8000),
+      stderr: result.stderr?.slice(0, 2000),
+      exit_code: result.exit_code,
+      ...(result.error ? { error: result.error } : {}),
+    };
+  },
+};
+
 export const shellTools = [
   runCommandTool, runPythonTool, runNodeTool,
   shellSessionStartTool, shellSessionRunTool, shellSessionCloseTool,
+  sshExecTool,
 ];
 export default shellTools;

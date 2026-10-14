@@ -6,7 +6,9 @@ import path from 'node:path';
 
 import { fileTools, editFileTool } from '../src/agent/tools/fileTools.js';
 import { safePath, isPathInside } from '../src/agent/tools/shared.js';
-import { runCommandTool } from '../src/agent/tools/shellTools.js';
+import { runCommandTool, shellTools } from '../src/agent/tools/shellTools.js';
+import { dataTools } from '../src/agent/tools/dataTools.js';
+import { hasBin } from '../src/agent/tools/shared.js';
 
 function makeTempWorkspace() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'asyncat-agent-harness-'));
@@ -106,4 +108,14 @@ test('edit_file and apply_patch are the only editing tools', () => {
   const names = fileTools.map(tool => tool.name);
   assert.ok(names.includes('edit_file') && names.includes('apply_patch'));
   assert.ok(!names.includes('patch_file'));
+});
+
+test('ssh_exec lives with the shell tools and refuses option-like hosts', async () => {
+  const ssh = shellTools.find(tool => tool.name === 'ssh_exec');
+  assert.ok(ssh, 'ssh_exec is a shell tool');
+  assert.equal(ssh.category, 'shell');
+  assert.ok(!dataTools.some(tool => tool.name === 'ssh_exec'));
+  const result = await ssh.execute({ host: '-oProxyCommand=touch /tmp/x', command: 'true' }, { workingDir: makeTempWorkspace() });
+  assert.equal(result.success, false);
+  if (hasBin('ssh')) assert.match(result.error, /plain names/);
 });

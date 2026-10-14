@@ -1,7 +1,7 @@
 // den/src/agent/tools/dataTools.js
 // ─── Data & File Format Tools ────────────────────────────────────────────────
 // read_pdf, read_csv, write_csv, zip_files, unzip_files, json_query,
-// ssh_exec
+// inspect_attachment, image_describe
 
 import { execFileSync, spawn } from 'child_process';
 import fs from 'fs';
@@ -373,59 +373,6 @@ export const jsonQueryTool = {
   },
 };
 
-// ── ssh_exec ─────────────────────────────────────────────────────────────────
-export const sshExecTool = {
-  name: 'ssh_exec',
-  description: 'Execute a command on a remote host over SSH. Requires ssh to be installed and the host to be accessible. Use key_path for key-based auth or ensure the key is already loaded in ssh-agent.',
-  category: 'shell',
-  permission: PermissionLevel.DANGEROUS,
-  parameters: {
-    type: 'object',
-    properties: {
-      host:       { type: 'string', description: 'Remote host (hostname or IP)' },
-      user:       { type: 'string', description: 'SSH username (default: current user)' },
-      port:       { type: 'number', description: 'SSH port (default: 22)' },
-      command:    { type: 'string', description: 'Command to run on the remote host' },
-      key_path:   { type: 'string', description: 'Path to SSH private key file (optional)' },
-      timeout:    { type: 'number', description: 'Timeout in seconds (default: 30)' },
-    },
-    required: ['host', 'command'],
-  },
-  execute: async (args, context) => {
-    if (!hasBin('ssh')) {
-      return missingDepError('ssh', IS_WIN ? 'Enable OpenSSH Client in Windows Features or install Git for Windows' : 'sudo apt install openssh-client (Linux) / brew install openssh (macOS)');
-    }
-
-    const host    = String(args.host ?? '').trim();
-    const user    = args.user ? String(args.user).trim() : '';
-    // A host or user starting with - would be read as an ssh option (-oProxyCommand=...).
-    if (!host || /^-|\s/.test(host) || /^-|[\s@]/.test(user)) {
-      return { success: false, error: 'host and user must be plain names.' };
-    }
-    const port    = clampInt(args.port, 22, 1, 65535);
-    const timeout = clampInt(args.timeout, 30, 1, 600);
-    const argv = [
-      '-o', 'StrictHostKeyChecking=accept-new', '-o', `ConnectTimeout=${timeout}`, '-p', port,
-      ...(args.key_path ? ['-i', path.resolve(context.workingDir, args.key_path)] : []),
-      '--', `${user ? `${user}@` : ''}${host}`, String(args.command ?? ''),
-    ];
-
-    try {
-      const result = await runProc('ssh', argv, { cwd: context.workingDir, timeout: (timeout + 5) * 1000 });
-      return {
-        success: result.success,
-        host: args.host,
-        command: args.command,
-        stdout: result.stdout?.slice(0, 8000),
-        stderr: result.stderr?.slice(0, 2000),
-        exit_code: result.exit_code,
-      };
-    } catch (err) {
-      return { success: false, error: err.message };
-    }
-  },
-};
-
 // ── image_describe ────────────────────────────────────────────────────────────
 export const imageDescribeTool = {
   name: 'image_describe',
@@ -554,7 +501,6 @@ export const dataTools = [
   zipFilesTool,
   unzipFilesTool,
   jsonQueryTool,
-  sshExecTool,
   imageDescribeTool,
 ];
 export default dataTools;
