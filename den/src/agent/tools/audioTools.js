@@ -18,7 +18,7 @@ import {
   synthesize,
 } from '../../ai/controllers/ai/ttsServerManager.js';
 import { synthesizeWithCloudProvider, transcribeWithCloudProvider } from '../../ai/controllers/ai/cloudSpeech.js';
-import { ensureLocalListening, ensureLocalSpeaking, speechProvider } from '../../media/voiceService.js';
+import { ensureLocalListening, ensureLocalSpeaking, speechProvider, voiceOffMessage } from '../../media/voiceService.js';
 
 // ── transcribe_audio ─────────────────────────────────────────────────────────
 
@@ -46,6 +46,7 @@ export const transcribeAudioTool = {
   },
   execute: async (args, context) => {
     const provider = speechProvider('stt');
+    if (provider === 'off') return { success: false, error: voiceOffMessage('stt') };
     if (provider === 'local') {
       try {
         await ensureLocalListening();
@@ -115,6 +116,7 @@ export const speakTextTool = {
   },
   execute: async (args, context) => {
     const provider = speechProvider('tts');
+    if (provider === 'off') return { success: false, error: voiceOffMessage('tts') };
     if (provider === 'local') {
       try {
         await ensureLocalSpeaking();

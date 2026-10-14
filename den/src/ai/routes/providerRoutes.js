@@ -117,7 +117,7 @@ import {
   isHuggingFaceUrl,
 } from '../controllers/ai/huggingFaceAuth.js';
 import { synthesizeWithCloudProvider, transcribeWithCloudProvider } from '../controllers/ai/cloudSpeech.js';
-import { ensureLocalListening, ensureLocalSpeaking } from '../../media/voiceService.js';
+import { ensureLocalListening, ensureLocalSpeaking, speechProvider, voiceOffMessage } from '../../media/voiceService.js';
 
 
 function activeProviderSnapshot(userId) {
@@ -1345,7 +1345,8 @@ router.post('/audio/transcribe', express.raw({ type: '*/*', limit: '50mb' }), as
     const options = {
       language: req.query.language || undefined,
     };
-    const providerId = String(process.env.ASYNCAT_STT_PROVIDER || 'local').trim();
+    const providerId = speechProvider('stt');
+    if (providerId === 'off') return res.status(409).json({ success: false, error: voiceOffMessage('stt') });
     // The chosen local model starts on the first recording.
     if (!providerId || providerId === 'local') await ensureLocalListening();
     const result = providerId && providerId !== 'local'
@@ -1408,7 +1409,8 @@ router.post('/audio/speak', async (req, res) => {
     return res.status(400).json({ success: false, error: 'text is required' });
   }
   try {
-    const providerId = String(process.env.ASYNCAT_TTS_PROVIDER || 'local').trim();
+    const providerId = speechProvider('tts');
+    if (providerId === 'off') return res.status(409).json({ success: false, error: voiceOffMessage('tts') });
     if (!providerId || providerId === 'local') await ensureLocalSpeaking();
     const result = providerId && providerId !== 'local'
       ? await synthesizeWithCloudProvider(providerId, text, req.body || {})

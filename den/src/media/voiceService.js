@@ -34,9 +34,15 @@ function voiceError(message, status = 400) {
   return Object.assign(new Error(message), { status });
 }
 
+/** 'local', a cloud service id, or 'off' (listening or speaking turned off). */
 export function speechProvider(kind) {
   const value = String(process.env[kind === 'stt' ? 'ASYNCAT_STT_PROVIDER' : 'ASYNCAT_TTS_PROVIDER'] || '').trim();
   return value || 'local';
+}
+
+/** Why a route or tool can't listen or speak when it is turned off. */
+export function voiceOffMessage(kind) {
+  return `${kind === 'stt' ? 'Listening' : 'Speaking'} is off. Turn it on in Models → Voice.`;
 }
 
 function hasKey(name) {
@@ -86,7 +92,9 @@ export async function voiceStatus() {
   ]);
 
   let stt;
-  if (sttProvider === 'local') {
+  if (sttProvider === 'off') {
+    stt = { provider: 'off', ready: false, reason: 'off' };
+  } else if (sttProvider === 'local') {
     const model = chosenWhisperModel();
     const running = whisper.getStatus();
     stt = {
@@ -111,7 +119,9 @@ export async function voiceStatus() {
   }
 
   let speak;
-  if (ttsProvider === 'local') {
+  if (ttsProvider === 'off') {
+    speak = { provider: 'off', ready: false, reason: 'off' };
+  } else if (ttsProvider === 'local') {
     const voice = chosenVoice();
     speak = {
       provider: 'local',
@@ -134,7 +144,10 @@ export async function voiceStatus() {
     };
   }
 
-  return { stt, tts: speak, ffmpeg: Boolean(ffmpeg?.found), setUp: Boolean(stt.ready && speak.ready) };
+  // Set up: each part ready or turned off, and not both off.
+  const usable = (part) => part.ready || part.provider === 'off';
+  const setUp = usable(stt) && usable(speak) && !(stt.provider === 'off' && speak.provider === 'off');
+  return { stt, tts: speak, ffmpeg: Boolean(ffmpeg?.found), setUp };
 }
 
 /** The catalog with what is already on this computer marked. */
@@ -161,12 +174,16 @@ export function voiceCatalog() {
 /**
  * Save what listening and speaking use. `stt`: { provider, model } where
  * model is a local file path or a cloud model; `tts`: { provider, voice }
- * where voice is a local .onnx path or a cloud voice.
+ * where voice is a local .onnx path or a cloud voice. Provider 'off' turns
+ * that part off (and frees the memory its local engine held).
  */
 export async function chooseVoice({ stt = null, tts: speak = null } = {}) {
   if (stt) {
     const provider = String(stt.provider || 'local');
-    if (provider === 'local') {
+    if (provider === 'off') {
+      setConfigValue('ASYNCAT_STT_PROVIDER', 'off');
+      if (whisper.getStatus().status !== 'idle') await whisper.stopWhisper().catch(() => {});
+    } else if (provider === 'local') {
       const model = String(stt.model || '').trim();
       if (model) {
         if (!fs.existsSync(model)) throw voiceError("That listening model isn't on this computer.");
@@ -185,7 +202,10 @@ export async function chooseVoice({ stt = null, tts: speak = null } = {}) {
   }
   if (speak) {
     const provider = String(speak.provider || 'local');
-    if (provider === 'local') {
+    if (provider === 'off') {
+      setConfigValue('ASYNCAT_TTS_PROVIDER', 'off');
+      if (tts.getStatus().status !== 'idle') await tts.stopTts().catch(() => {});
+    } else if (provider === 'local') {
       const voice = String(speak.voice || '').trim();
       if (voice) {
         if (!fs.existsSync(voice) || !fs.existsSync(`${voice}.json`)) throw voiceError("That voice isn't complete on this computer.");

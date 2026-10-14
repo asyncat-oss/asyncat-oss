@@ -145,6 +145,9 @@ const images = await import('../src/media/imageService.js');
 const setupJobs = await import('../src/media/setupJobs.js');
 const visualModels = await import('../src/ai/controllers/ai/visualModelManager.js');
 const { default: mediaRouter } = await import('../src/media/mediaRoutes.js');
+const { default: providerRouter } = await import('../src/ai/routes/providerRoutes.js');
+const audioTools = await import('../src/agent/tools/audioTools.js');
+const tts = await import('../src/ai/controllers/ai/ttsServerManager.js');
 
 test.after(async () => {
   await whisper.stopWhisper().catch(() => {});
@@ -184,6 +187,7 @@ async function serve(mount, router) {
   await once(server, 'listening');
   const base = `http://127.0.0.1:${server.address().port}${mount}`;
   return {
+    base,
     get: (route) => fetch(`${base}${route}`).then(async (res) => ({ status: res.status, body: await res.json() })),
     post: (route, body = {}) => fetch(`${base}${route}`, {
       method: 'POST',
@@ -360,6 +364,38 @@ test('fal can listen and speak, and choosing it saves only the settings it has (
   assert.equal(status.stt.ready && status.tts.ready, true);
   delete process.env.FAL_KEY;
   await voice.chooseVoice({ stt: { provider: 'local' }, tts: { provider: 'local' } });
+});
+
+test('listening or speaking can be turned off, and nothing tries to use it (B3)', async () => {
+  await voice.ensureLocalListening();
+  await voice.ensureLocalSpeaking();
+  let status = await voice.chooseVoice({ stt: { provider: 'off' } });
+  assert.deepEqual(status.stt, { provider: 'off', ready: false, reason: 'off' });
+  assert.equal(status.setUp, true, 'speaking ready and listening off still counts as set up');
+  assert.equal(whisper.getStatus().status, 'idle', 'turning listening off frees its memory');
+
+  const api = await serve('/api/ai/providers', providerRouter);
+  try {
+    const heard = await fetch(`${api.base}/audio/transcribe`, { method: 'POST', headers: { 'content-type': 'audio/wav' }, body: wav() });
+    assert.equal(heard.status, 409);
+    assert.match((await heard.json()).error, /Listening is off/);
+    const tool = await audioTools.transcribeAudioTool.execute({ path: 'clip.wav' }, { workingDir: scratch });
+    assert.match(tool.error, /Listening is off/);
+
+    status = await voice.chooseVoice({ tts: { provider: 'off' } });
+    assert.equal(status.tts.reason, 'off');
+    assert.equal(status.setUp, false, 'both off is not set up');
+    assert.equal(tts.getStatus().status, 'idle');
+    const spoken = await api.post('/audio/speak', { text: 'Hello' });
+    assert.equal(spoken.status, 409);
+    assert.match(spoken.body.error, /Speaking is off/);
+    assert.match((await audioTools.speakTextTool.execute({ text: 'Hello' }, { workingDir: scratch })).error, /Speaking is off/);
+  } finally {
+    await api.close();
+  }
+
+  status = await voice.chooseVoice({ stt: { provider: 'local' }, tts: { provider: 'local' } });
+  assert.equal(status.setUp, true, 'turning them back on uses the same models');
 });
 
 // ── Images ───────────────────────────────────────────────────────────────────
