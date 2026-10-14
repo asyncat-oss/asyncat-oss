@@ -210,6 +210,7 @@ export const copyTools = [
     execute: async (args, context) => forModel(commitSandboxBranch(context.userId, args.id, {
       message: args.message || 'Asyncat copy changes',
       filePaths: args.filePaths || [],
+      agent: true,
     })),
   },
   {

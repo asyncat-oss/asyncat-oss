@@ -20,9 +20,9 @@ import { IS_WIN, hasBin, isPathInside, runFile, runProcess } from './tools/share
 import { getConfigValue } from '../config/appConfig.js';
 import { runtimeDataRoot } from '../config/runtimeConfig.js';
 import { DEFAULT_REGISTRIES, extraRegistries, networkMode, networkPlan, networkSummary } from './sandboxNetwork.js';
-import { homeReadOnly, writableRoots } from './sandboxFolders.js';
+import { gitDirsOf, homeReadOnly, writableRoots } from './sandboxFolders.js';
 
-export { sandboxCanChange, writableRoots } from './sandboxFolders.js';
+export { gitDirsOf, sandboxCanChange, writableRoots } from './sandboxFolders.js';
 
 // Folders and files that hold sign-ins, keys and private data. The package
 // registry files hold publish tokens, which "Package registries only" would
@@ -307,47 +307,6 @@ export function sandboxStatus({ platform = process.platform, recheck = false, ho
 }
 
 // ── git's own settings and hooks ─────────────────────────────────────────────
-
-function readText(file) {
-  try { return fs.readFileSync(file, 'utf8'); } catch { return ''; }
-}
-
-function isDir(target) {
-  try { return fs.statSync(target).isDirectory(); } catch { return false; }
-}
-
-/** The git folders of the repository at `root` and of its submodules (real paths). */
-export function gitDirsOf(root) {
-  const dotGit = path.join(root, '.git');
-  const dirs = [];
-  if (isDir(dotGit)) {
-    dirs.push(dotGit);
-  } else {
-    // A worktree: its .git file names its git folder, which names the shared one.
-    const named = /^gitdir:\s*(.+)$/m.exec(readText(dotGit))?.[1]?.trim();
-    if (!named) return [];
-    const gitDir = path.resolve(root, named);
-    dirs.push(gitDir);
-    const common = readText(path.join(gitDir, 'commondir')).trim();
-    if (common) dirs.push(path.resolve(gitDir, common));
-  }
-  // Submodules keep theirs in modules/ (their names can hold slashes, and nest).
-  const walk = (dir, depth) => {
-    if (depth > 4 || !isDir(dir)) return;
-    for (const name of fs.readdirSync(dir)) {
-      const child = path.join(dir, name);
-      if (!isDir(child)) continue;
-      if (fs.existsSync(path.join(child, 'HEAD'))) {
-        dirs.push(child);
-        walk(path.join(child, 'modules'), depth + 1);
-      } else {
-        walk(child, depth + 1);
-      }
-    }
-  };
-  for (const dir of [...dirs]) walk(path.join(dir, 'modules'), 0);
-  return [...new Set(dirs.filter(isDir).map((dir) => fs.realpathSync(dir)))];
-}
 
 /**
  * Make the folders that are to be read-only in the sandbox, where missing.

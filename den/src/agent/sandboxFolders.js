@@ -1,8 +1,8 @@
 // den/src/agent/sandboxFolders.js
-// Where the command sandbox (commandSandbox.js) lets commands write, kept
-// apart so that code starting programs outside the sandbox (a browser, an
-// app) can check them without loading the sandbox itself, and the settings
-// database with it.
+// Where the command sandbox (commandSandbox.js) lets commands write, and the
+// git folders it keeps read-only, kept apart so that code starting programs
+// outside the sandbox (a browser, git) can check them without loading the
+// sandbox itself, and the settings database with it.
 
 import fs from 'fs';
 import os from 'os';
@@ -63,4 +63,47 @@ export function sandboxCanChange(file, { home = os.homedir(), tmp = os.tmpdir() 
     const realCover = realPathOf(cover);
     return realCover === path.join(realPathOf(root), path.relative(root, cover)) && isPathInside(real, realCover);
   });
+}
+
+// ── git folders ──────────────────────────────────────────────────────────────
+
+function readText(file) {
+  try { return fs.readFileSync(file, 'utf8'); } catch { return ''; }
+}
+
+function isDir(target) {
+  try { return fs.statSync(target).isDirectory(); } catch { return false; }
+}
+
+/** The git folders of the repository at `root` and of its submodules (real paths). */
+export function gitDirsOf(root) {
+  const dotGit = path.join(root, '.git');
+  const dirs = [];
+  if (isDir(dotGit)) {
+    dirs.push(dotGit);
+  } else {
+    // A worktree: its .git file names its git folder, which names the shared one.
+    const named = /^gitdir:\s*(.+)$/m.exec(readText(dotGit))?.[1]?.trim();
+    if (!named) return [];
+    const gitDir = path.resolve(root, named);
+    dirs.push(gitDir);
+    const common = readText(path.join(gitDir, 'commondir')).trim();
+    if (common) dirs.push(path.resolve(gitDir, common));
+  }
+  // Submodules keep theirs in modules/ (their names can hold slashes, and nest).
+  const walk = (dir, depth) => {
+    if (depth > 4 || !isDir(dir)) return;
+    for (const name of fs.readdirSync(dir)) {
+      const child = path.join(dir, name);
+      if (!isDir(child)) continue;
+      if (fs.existsSync(path.join(child, 'HEAD'))) {
+        dirs.push(child);
+        walk(path.join(child, 'modules'), depth + 1);
+      } else {
+        walk(child, depth + 1);
+      }
+    }
+  };
+  for (const dir of [...dirs]) walk(path.join(dir, 'modules'), 0);
+  return [...new Set(dirs.filter(isDir).map((dir) => fs.realpathSync(dir)))];
 }

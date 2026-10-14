@@ -8,11 +8,15 @@
 // nobody asking (the Code panel's status and diffs, checkpoints, copies, the
 // agent's read-only git tools, codebase_metrics), runs none of those
 // programs, in that repository or in its submodules. A commit, push or pull
-// that you or the agent ask for keeps hooks and filters, as in a terminal.
-// fsmonitor is off for both: it only makes git faster.
+// that you ask for keeps hooks and filters, as in a terminal; one the agent
+// asks for keeps only those a sandboxed command can't have written
+// (agentGitPolicy). fsmonitor is off for all: it only makes git faster.
 
 import { spawnSync } from 'child_process';
+import path from 'path';
 import { childEnv } from './childEnv.js';
+import { gitDirsOf, writableRoots } from './sandboxFolders.js';
+import { isPathInside, realPathOf } from './tools/shared.js';
 
 // For diffs: no external diff program and no textconv, both named in
 // settings, and no look inside submodules (git status there would run their
@@ -94,13 +98,17 @@ function readProgramKeys(cwd, env) {
 /**
  * The environment for git in `cwd`: den's (without secrets, childEnv.js)
  * plus settings that win over the repository's. `asked`: a change you or the
- * agent asked for, which runs hooks and filters.
+ * agent asked for, which runs hooks and filters; `policy` (agentGitPolicy)
+ * can still leave out the repository's programs or its hooks.
  */
-export function gitEnv(cwd, { asked = false, source = process.env } = {}) {
+export function gitEnv(cwd, { asked = false, source = process.env, policy = null } = {}) {
   const env = childEnv({ source });
   const settings = [['core.fsmonitor', 'false']];
-  if (!asked) {
-    settings.push(['core.hooksPath', '/dev/null'], ...UNASKED_SETTINGS);
+  const programs = asked && policy?.programs !== false;
+  const hooks = programs && policy?.hooks !== false;
+  if (!hooks) settings.push(['core.hooksPath', '/dev/null']);
+  if (!programs) {
+    settings.push(...UNASKED_SETTINGS);
     const seen = new Set();
     for (const key of cwd ? readProgramKeys(cwd, env) : []) {
       const hook = HOOK_KEY.exec(key);
@@ -120,6 +128,69 @@ export function gitEnv(cwd, { asked = false, source = process.env } = {}) {
   });
   env.GIT_CONFIG_COUNT = String(start + settings.length);
   return env;
+}
+
+/**
+ * For git the agent asks for in `cwd` (its project is `workspaceRoot`):
+ * whether the repository's own programs and its hooks may run, outside the
+ * sandbox. A sandboxed command can write a repository's settings and hooks
+ * wherever it may write: in a repository it made itself inside the project,
+ * or in a hooks folder that core.hooksPath puts in the project (husky's
+ * .husky/_). The project's own git folders are kept read-only in the
+ * sandbox (commandSandbox.js gitGuards), as are folders outside the ones it
+ * may write to, so what they name still runs.
+ * Returns { programs, hooks, reason } (reason: why something won't run).
+ */
+export function agentGitPolicy(cwd, workspaceRoot, { home, tmp, source = process.env } = {}) {
+  const trust = { programs: true, hooks: true, reason: null };
+  if (!cwd || !workspaceRoot) return trust;
+  // Reading where things are runs nothing (and core.hooksPath must be read as the repository sets it).
+  const env = childEnv({ source });
+  const read = (args) => {
+    const res = spawnSync('git', args, { cwd, env, encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
+    return res.status === 0 ? String(res.stdout || '').split('\n').map((line) => line.trim()).filter(Boolean) : null;
+  };
+  const dirs = read(['rev-parse', '--path-format=absolute', '--git-dir', '--git-common-dir'])
+    || read(['rev-parse', '--git-dir', '--git-common-dir']);
+  if (!dirs?.length) return trust;
+  const [gitDir, commonDir = gitDir] = dirs.map((dir) => realPathOf(path.resolve(cwd, dir)));
+
+  const roots = writableRoots({ workspaceRoot, ...(home ? { home } : {}), ...(tmp ? { tmp } : {}) });
+  const writable = (target) => roots.some((root) => isPathInside(target, root) || isPathInside(target, realPathOf(root)));
+  const guarded = gitDirsOf(workspaceRoot);
+  const kept = (dir) => !writable(dir) || guarded.includes(dir);
+  if (!kept(gitDir) || !kept(commonDir)) {
+    return { programs: false, hooks: false, reason: `its git folder (${gitDir}) is one the agent's commands can change` };
+  }
+
+  // Hooks run from core.hooksPath (relative to the top of the working tree),
+  // or else from the shared git folder's hooks.
+  const configured = read(['config', '--path', '--get', 'core.hooksPath'])?.[0];
+  const top = configured ? read(['rev-parse', '--show-toplevel'])?.[0] : null;
+  const hooksDir = configured ? path.resolve(top || gitDir, configured) : path.join(commonDir, 'hooks');
+  const realHooks = realPathOf(hooksDir);
+  if (writable(realHooks) && !guarded.some((dir) => realHooks === realPathOf(path.join(dir, 'hooks')))) {
+    return { programs: true, hooks: false, reason: `its hooks folder (${hooksDir}) is one the agent's commands can change` };
+  }
+  return trust;
+}
+
+/**
+ * The environment for git the agent asked for in `cwd`, and a note for the
+ * model when the repository's hooks or programs were left out.
+ */
+export function agentGitEnv(cwd, workspaceRoot, options = {}) {
+  let policy;
+  try {
+    policy = agentGitPolicy(cwd, workspaceRoot, options);
+  } catch {
+    // Links that go round in circles: where its folders are can't be told.
+    policy = { programs: false, hooks: false, reason: "where its git folders lead can't be worked out" };
+  }
+  const env = gitEnv(cwd, { asked: true, policy, ...(options.source ? { source: options.source } : {}) });
+  if (policy.programs && policy.hooks) return { env, note: null };
+  const what = policy.programs ? "The repository's hooks didn't run" : "The repository's hooks and the programs its settings name (filters, signing…) didn't run";
+  return { env, note: `${what}: ${policy.reason}, so they could run a command's code outside the sandbox. If they matter, run them with run_command (sandboxed) or ask the user to commit.` };
 }
 
 export default gitEnv;

@@ -1,5 +1,5 @@
 import { execFileSync } from 'child_process';
-import { DIFF_SAFE, STATUS_SAFE, gitEnv } from './gitEnv.js';
+import { DIFF_SAFE, STATUS_SAFE, agentGitEnv, gitEnv } from './gitEnv.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -8,23 +8,28 @@ const DEFAULT_COMMIT_MESSAGE_DIFF_CHARS = 24000;
 
 // `asked`: a change someone asked for (commit, push…), which runs the
 // repository's hooks; everything else runs none of its programs (gitEnv.js).
-function runGit(args, cwd, timeout = 30000, { asked = false } = {}) {
+// `workspaceRoot`: the agent asked, in that project, so only the hooks and
+// programs its sandboxed commands can't have written run (agentGitPolicy).
+function runGit(args, cwd, timeout = 30000, { asked = false, workspaceRoot = null } = {}) {
+  const agent = asked && workspaceRoot ? agentGitEnv(cwd, workspaceRoot) : null;
+  const note = agent?.note ? { note: agent.note } : {};
   try {
     const output = execFileSync('git', args, {
       cwd,
-      env: gitEnv(cwd, { asked }),
+      env: agent ? agent.env : gitEnv(cwd, { asked }),
       encoding: 'utf8',
       timeout,
       maxBuffer: MAX_OUTPUT,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-    return { success: true, output: output.trim() };
+    return { success: true, output: output.trim(), ...note };
   } catch (err) {
     return {
       success: false,
       error: err.message,
       stderr: err.stderr?.toString() || '',
       stdout: err.stdout?.toString() || '',
+      ...note,
     };
   }
 }
@@ -360,12 +365,12 @@ export function getGitCommitMessageContext(cwd, { scope = 'auto', maxDiffChars =
   };
 }
 
-export function stageGitFiles(cwd, files = []) {
+export function stageGitFiles(cwd, files = [], { workspaceRoot = null } = {}) {
   const repo = ensureRepo(cwd);
   if (!repo.success) return repo;
   const paths = normalizeGitPaths(repo.root, files);
   const args = paths.length ? ['add', '--', ...paths] : ['add', '-A'];
-  const result = runGit(args, repo.root, 30000, { asked: true });
+  const result = runGit(args, repo.root, 30000, { asked: true, workspaceRoot });
   return { ...result, command: `git ${args.join(' ')}`, files: paths, all: paths.length === 0 };
 }
 
@@ -378,20 +383,20 @@ export function unstageGitFiles(cwd, files = []) {
   return { ...result, command: `git ${args.join(' ')}`, files: paths, all: paths.length === 0 };
 }
 
-export function commitGit(cwd, { message, files = [], amend = false } = {}) {
+export function commitGit(cwd, { message, files = [], amend = false, workspaceRoot = null } = {}) {
   const repo = ensureRepo(cwd);
   if (!repo.success) return repo;
   const cleanMessage = String(message || '').trim();
   if (!amend && !cleanMessage) return { success: false, error: 'Commit message is required.' };
   const paths = normalizeGitPaths(repo.root, files);
   if (paths.length) {
-    const stage = stageGitFiles(repo.root, paths);
+    const stage = stageGitFiles(repo.root, paths, { workspaceRoot });
     if (!stage.success) return stage;
   }
   const args = amend
     ? ['commit', '--amend', ...(cleanMessage ? ['-m', cleanMessage] : ['--no-edit'])]
     : ['commit', '-m', cleanMessage];
-  const result = runGit(args, repo.root, 60000, { asked: true });
+  const result = runGit(args, repo.root, 60000, { asked: true, workspaceRoot });
   const hash = result.success ? runGit(['log', '-1', '--format=%H'], repo.root, 5000).output : null;
   return {
     ...result,
@@ -404,27 +409,27 @@ export function commitGit(cwd, { message, files = [], amend = false } = {}) {
   };
 }
 
-export function pullGit(cwd, { remote = null, branch = null } = {}) {
+export function pullGit(cwd, { remote = null, branch = null, workspaceRoot = null } = {}) {
   const repo = ensureRepo(cwd);
   if (!repo.success) return repo;
   const args = ['pull'];
   if (remote) args.push(remote);
   if (branch) args.push(branch);
-  const result = runGit(args, repo.root, 120000, { asked: true });
+  const result = runGit(args, repo.root, 120000, { asked: true, workspaceRoot });
   return { ...result, command: `git ${args.join(' ')}` };
 }
 
-export function pushGit(cwd, { remote = 'origin', branch = null, setUpstream = false } = {}) {
+export function pushGit(cwd, { remote = 'origin', branch = null, setUpstream = false, workspaceRoot = null } = {}) {
   const repo = ensureRepo(cwd);
   if (!repo.success) return repo;
   const args = ['push'];
   if (setUpstream || branch) args.push('-u', remote || 'origin', branch || 'HEAD');
   else if (remote) args.push(remote);
-  const result = runGit(args, repo.root, 120000, { asked: true });
+  const result = runGit(args, repo.root, 120000, { asked: true, workspaceRoot });
   return { ...result, command: `git ${args.join(' ')}` };
 }
 
-export function stashGit(cwd, { action = 'list', message = null, index = null } = {}) {
+export function stashGit(cwd, { action = 'list', message = null, index = null, workspaceRoot = null } = {}) {
   const repo = ensureRepo(cwd);
   if (!repo.success) return repo;
   if (!['save', 'pop', 'drop', 'list'].includes(action)) {
@@ -437,7 +442,7 @@ export function stashGit(cwd, { action = 'list', message = null, index = null } 
       : action === 'drop'
         ? ['stash', 'drop', ...(index !== null ? [`stash@{${index}}`] : [])]
         : ['stash', 'list'];
-  const result = runGit(args, repo.root, 60000, { asked: action !== 'list' });
+  const result = runGit(args, repo.root, 60000, { asked: action !== 'list', workspaceRoot });
   
   if (action === 'list' && result.success) {
     const stashes = (result.output || '').split('\n').filter(Boolean).map(line => {
@@ -538,7 +543,7 @@ export function discardGitFiles(cwd, files = []) {
   return { ...result, command: `git ${args.join(' ')}`, files: paths, all: paths.length === 0 };
 }
 
-export function branchGit(cwd, { action = 'list', name = null } = {}) {
+export function branchGit(cwd, { action = 'list', name = null, workspaceRoot = null } = {}) {
   const repo = ensureRepo(cwd);
   if (!repo.success) return repo;
   if (action === 'list') {
@@ -549,11 +554,11 @@ export function branchGit(cwd, { action = 'list', name = null } = {}) {
     return { success: false, error: 'A valid branch name is required.' };
   }
   if (action === 'create') {
-    const result = runGit(['branch', name], repo.root, 30000, { asked: true });
+    const result = runGit(['branch', name], repo.root, 30000, { asked: true, workspaceRoot });
     return { ...result, command: `git branch ${name}`, branch: name };
   }
   if (action === 'switch') {
-    const result = runGit(['switch', name], repo.root, 30000, { asked: true });
+    const result = runGit(['switch', name], repo.root, 30000, { asked: true, workspaceRoot });
     return { ...result, command: `git switch ${name}`, branch: name };
   }
   return { success: false, error: 'Only list, create, and switch branch actions are available here.' };

@@ -11,7 +11,7 @@ import path from 'path';
 import { randomUUID } from 'crypto';
 import db from '../db/client.js';
 import { getWorkspaceRoot } from '../files/fileExplorerService.js';
-import { DIFF_SAFE, STATUS_SAFE, gitEnv } from './gitEnv.js';
+import { DIFF_SAFE, STATUS_SAFE, agentGitEnv, gitEnv } from './gitEnv.js';
 import { hiddenFolders, runInSandbox } from './commandSandbox.js';
 
 const COPY_SKIP = new Set([
@@ -101,10 +101,12 @@ function runGit(args, cwd) {
   }).trim();
 }
 
-function runGitResult(args, cwd, { asked = false } = {}) {
+// `workspaceRoot`: the agent asked, and its commands may change that folder
+// (agentGitPolicy says which of the repository's hooks and programs still run).
+function runGitResult(args, cwd, { asked = false, workspaceRoot = null } = {}) {
   const result = spawnSync('git', args, {
     cwd,
-    env: gitEnv(cwd, { asked }),
+    env: asked && workspaceRoot ? agentGitEnv(cwd, workspaceRoot).env : gitEnv(cwd, { asked }),
     encoding: 'utf8',
     timeout: 60_000,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -388,14 +390,16 @@ export function applySandboxPatch(userId, id, { filePaths = [], dryRun = false }
   }
 }
 
-export function commitSandboxBranch(userId, id, { message = 'Asyncat copy changes', filePaths = [] } = {}) {
+export function commitSandboxBranch(userId, id, { message = 'Asyncat copy changes', filePaths = [], agent = false } = {}) {
   const row = requireSandbox(userId, id);
   if (row.strategy !== 'worktree') throw new Error('Committing to a branch works for copies made with git worktree.');
   const paths = normalizePathList(filePaths);
   const addArgs = ['add'];
   if (paths.length) addArgs.push('--', ...paths);
   else addArgs.push('-A');
-  const add = runGitResult(addArgs, row.sandbox_path, { asked: true });
+  // Asked for by the agent, whose commands run in the copy.
+  const workspaceRoot = agent ? row.sandbox_path : null;
+  const add = runGitResult(addArgs, row.sandbox_path, { asked: true, workspaceRoot });
   if (add.status !== 0) throw new Error(add.stderr || add.stdout || "Couldn't stage the copy's changes.");
 
   const diff = runGitResult(['diff', ...DIFF_SAFE, '--cached', '--quiet'], row.sandbox_path);
@@ -403,7 +407,7 @@ export function commitSandboxBranch(userId, id, { message = 'Asyncat copy change
     return { success: true, committed: false, branchName: row.branch_name, message: 'The copy has no staged changes to commit.' };
   }
 
-  const commit = runGitResult(['commit', '-m', String(message || 'Asyncat copy changes')], row.sandbox_path, { asked: true });
+  const commit = runGitResult(['commit', '-m', String(message || 'Asyncat copy changes')], row.sandbox_path, { asked: true, workspaceRoot });
   if (commit.status !== 0) throw new Error(commit.stderr || commit.stdout || "Couldn't commit the copy's changes.");
   return {
     success: true,

@@ -11,10 +11,10 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 import { bwrapArgs, gitDirsOf, gitGuards, sandboxAvailable, sandboxedCommand, seatbeltProfile } from '../src/agent/commandSandbox.js';
-import { gitEnv, repoProgramKeys } from '../src/agent/gitEnv.js';
+import { agentGitPolicy, gitEnv, repoProgramKeys } from '../src/agent/gitEnv.js';
 import { childEnv } from '../src/agent/childEnv.js';
-import { getGitState, getGitDiff } from '../src/agent/gitService.js';
-import { gitLogTool } from '../src/agent/tools/gitTools.js';
+import { commitGit, getGitState, getGitDiff } from '../src/agent/gitService.js';
+import { gitCommitTool, gitLogTool } from '../src/agent/tools/gitTools.js';
 import { codebaseMetricsTool } from '../src/agent/tools/codebaseMetricsTools.js';
 import { hasBin } from '../src/agent/tools/shared.js';
 
@@ -247,6 +247,75 @@ test("in the sandbox a command can't change git's settings or hooks, but git sti
     assert.equal(fs.existsSync(path.join(project, '.git', 'hooks', 'post-checkout')), false);
     assert.ok(fs.existsSync(path.join(project, '.git', 'HEAD')));
   } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// git the agent asks for (git_commit and the like) runs outside the sandbox,
+// with the repository's hooks. Only those a sandboxed command can't have
+// written may run: not a nested repository's, which the command could have
+// made itself, nor ones core.hooksPath puts in the project (husky's).
+test('a commit the agent asks for runs no hook or filter a command could have written', { skip: noGit }, async () => {
+  const root = scratchDir('git-agent');
+  const project = path.join(root, 'project');
+  const nested = path.join(project, 'nested');
+  const marker = (name) => path.join(root, `ran-${name}`);
+  const hook = (name) => `#!/bin/sh\ntouch '${marker(name)}'\n`;
+  const saved = {};
+  const env = {
+    GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
+    GIT_AUTHOR_NAME: 'Demo', GIT_AUTHOR_EMAIL: 'demo@example.com', GIT_COMMITTER_NAME: 'Demo', GIT_COMMITTER_EMAIL: 'demo@example.com',
+  };
+  for (const [name, value] of Object.entries(env)) {
+    saved[name] = process.env[name];
+    process.env[name] = value;
+  }
+  try {
+    fs.mkdirSync(nested, { recursive: true });
+    git(project, 'init', '-q');
+    fs.writeFileSync(path.join(project, '.git', 'hooks', 'pre-commit'), hook('project-hook'), { mode: 0o755 });
+    git(nested, 'init', '-q');
+    fs.writeFileSync(path.join(nested, '.git', 'hooks', 'pre-commit'), hook('nested-hook'), { mode: 0o755 });
+    git(nested, 'config', 'filter.demo.clean', `sh -c "touch '${marker('nested-filter')}'; cat"`);
+    fs.writeFileSync(path.join(nested, '.gitattributes'), '* filter=demo\n');
+    fs.writeFileSync(path.join(nested, 'a.txt'), 'one\n');
+    fs.writeFileSync(path.join(project, 'readme.txt'), 'project\n');
+
+    const context = { workingDir: project };
+    assert.deepEqual(agentGitPolicy(nested, project), { programs: false, hooks: false, reason: `its git folder (${path.join(nested, '.git')}) is one the agent's commands can change` });
+    const inner = await gitCommitTool.execute({ path: 'nested', files: 'a.txt', message: 'nested' }, context);
+    assert.equal(inner.success, true, inner.error);
+    assert.match(inner.note, /hooks and the programs its settings name/);
+    assert.equal(fs.existsSync(marker('nested-hook')), false, "the nested repository's hook ran");
+    assert.equal(fs.existsSync(marker('nested-filter')), false, "the nested repository's filter ran");
+
+    // The project's own git folder is read-only in the sandbox: its hooks run.
+    assert.deepEqual(agentGitPolicy(project, project), { programs: true, hooks: true, reason: null });
+    const own = await gitCommitTool.execute({ files: 'readme.txt', message: 'project' }, context);
+    assert.equal(own.success, true, own.error);
+    assert.equal(own.note, undefined);
+    assert.ok(fs.existsSync(marker('project-hook')), "the project's own hook runs");
+
+    // Hooks kept in the project itself, as husky does, are a command's to change.
+    fs.mkdirSync(path.join(project, '.husky'));
+    fs.writeFileSync(path.join(project, '.husky', 'pre-commit'), hook('husky'), { mode: 0o755 });
+    git(project, 'config', 'core.hooksPath', '.husky');
+    fs.writeFileSync(path.join(project, 'readme.txt'), 'two\n');
+    assert.equal(agentGitPolicy(project, project).hooks, false);
+    const husky = await gitCommitTool.execute({ files: 'readme.txt', message: 'husky' }, context);
+    assert.equal(husky.success, true, husky.error);
+    assert.match(husky.note, /^The repository's hooks didn't run: its hooks folder/);
+    assert.equal(fs.existsSync(marker('husky')), false, 'the hook in the project ran');
+
+    // A commit you ask for (the Code panel) runs them, as in a terminal.
+    fs.writeFileSync(path.join(project, 'readme.txt'), 'three\n');
+    const yours = commitGit(project, { message: 'yours', files: ['readme.txt'] });
+    assert.equal(yours.success, true, yours.error);
+    assert.ok(fs.existsSync(marker('husky')));
+  } finally {
+    for (const [name, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[name]; else process.env[name] = value;
+    }
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
