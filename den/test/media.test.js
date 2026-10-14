@@ -441,6 +441,44 @@ test('the engine list carries a running install, so a page can pick it up again 
   }
 });
 
+// ── Keys ─────────────────────────────────────────────────────────────────────
+
+test('saving an empty key removes it, also a copy in .env (B6)', async () => {
+  const config = await import('../src/config/configController.js');
+  const call = (handler, body = {}) => {
+    let out = null;
+    const res = {
+      code: 200,
+      status(code) { this.code = code; return this; },
+      json(data) { out = { status: this.code, ...data }; return this; },
+    };
+    handler({ body }, res);
+    return out;
+  };
+  const envFile = process.env.ASYNCAT_ENV_PATH;
+
+  assert.equal(call(config.updateSecret, { key: 'OPENAI_API_KEY', value: 'sk-test-0123456789abcdef' }).success, true);
+  assert.equal(process.env.OPENAI_API_KEY, 'sk-test-0123456789abcdef');
+  assert.equal(call(config.updateSecret, { key: 'OPENAI_API_KEY' }).status, 400, 'no value at all is a mistake');
+  assert.equal(process.env.OPENAI_API_KEY, 'sk-test-0123456789abcdef', 'and keeps the key');
+  // An older version kept keys in the runtime .env.
+  fs.writeFileSync(envFile, 'PORT=8716\nOPENAI_API_KEY=sk-old-0123456789abcdef\n');
+
+  const removed = call(config.updateSecret, { key: 'OPENAI_API_KEY', value: '' });
+  assert.equal(removed.status, 200);
+  assert.equal(removed.removed, true);
+  assert.equal(process.env.OPENAI_API_KEY, undefined);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM app_config WHERE key = ?').get('OPENAI_API_KEY').n, 0);
+  const env = fs.readFileSync(envFile, 'utf8');
+  assert.match(env, /^OPENAI_API_KEY=$/m, 'blanked in .env, so it stays gone after a restart');
+  assert.match(env, /^PORT=8716$/m, 'other lines are kept');
+  assert.equal(call(config.getSecrets).secrets.OPENAI_API_KEY, '');
+  assert.equal(voice.voiceCatalog().cloud.openai.hasKey, false);
+
+  assert.equal(call(config.updateSecret, { key: 'HF_TOKEN', value: '' }).success, true, 'removing a key that isn\'t saved is fine');
+  assert.equal(call(config.updateSecret, { key: 'PORT', value: '' }).status, 400, 'only secrets');
+});
+
 // ── Images ───────────────────────────────────────────────────────────────────
 
 function addImageFile(name, body = 'weights') {

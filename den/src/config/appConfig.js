@@ -11,6 +11,7 @@
 import db from '../db/client.js';
 import { isSecretConfigKey } from '../db/sealSecrets.js';
 import { sealSecret } from '../lib/secretBox.js';
+import { ENV_FILE, readEnv, writeEnv } from '../lib/env.js';
 
 // Values that must remain in the runtime .env (read before the DB exists).
 export const BOOTSTRAP_KEYS = new Set([
@@ -62,5 +63,18 @@ export function setConfigValue(key, value) {
     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
   `).run(key, isSecretConfigKey(key) ? sealSecret(String(value)) : String(value));
   process.env[key] = String(value);
+  return true;
+}
+
+// Forget a value: its row, the live process.env, and a copy an older
+// version left in the runtime .env (blanked, so it doesn't come back at the
+// next start).
+export function deleteConfigValue(key) {
+  if (BOOTSTRAP_KEYS.has(key)) {
+    throw new Error(`${key} is a bootstrap value and must be changed in the runtime .env, not the database.`);
+  }
+  db.prepare('DELETE FROM app_config WHERE key = ?').run(key);
+  delete process.env[key];
+  if (Object.hasOwn(readEnv(ENV_FILE), key)) writeEnv(ENV_FILE, { [key]: '' });
   return true;
 }

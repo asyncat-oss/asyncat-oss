@@ -1,6 +1,6 @@
 // config/configController.js — read/write server config
 import { getWorkspaceRoot } from '../files/fileExplorerService.js';
-import { getAllConfig, setConfigValue, isBootstrapKey } from './appConfig.js';
+import { getAllConfig, setConfigValue, deleteConfigValue, isBootstrapKey } from './appConfig.js';
 import { ENV_FILE, readEnv as readEnvFile, writeEnv } from '../lib/env.js';
 import { buildEffectiveRuntimeConfig, runtimeDataRoot } from './runtimeConfig.js';
 import { SECRET_CONFIG_KEYS } from '../db/sealSecrets.js';
@@ -103,14 +103,27 @@ export function getSecrets(req, res) {
 }
 
 export function updateSecret(req, res) {
-  const { key, value } = req.body;
+  const body = req.body || {};
+  const { key, value } = body;
 
   if (!SECRETS.includes(key)) {
     return res.status(400).json({ success: false, error: `Invalid secret: ${key}` });
   }
 
-  if (!value || value.trim().length === 0) {
-    return res.status(400).json({ success: false, error: 'Secret value cannot be empty' });
+  // A request with no value at all is a mistake, never a removal.
+  if (!Object.hasOwn(body, 'value')) {
+    return res.status(400).json({ success: false, error: 'Secret value is missing' });
+  }
+
+  // An empty value removes the key.
+  if (!String(value ?? '').trim()) {
+    try {
+      deleteConfigValue(key);
+    } catch (error) {
+      console.error(`[config] Failed to remove ${key}:`, error.message);
+      return res.status(500).json({ success: false, error: 'Failed to remove secret' });
+    }
+    return res.json({ success: true, removed: true, message: 'Secret removed.' });
   }
 
   const success = persistConfig(key, value);
