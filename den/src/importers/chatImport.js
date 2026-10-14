@@ -12,6 +12,7 @@ import db from '../db/client.js';
 import { chatService } from '../ai/controllers/ai/chatService.js';
 import { publishAppEvent } from '../lib/appEvents.js';
 import { addMemory } from '../agent/memoryAdmin.js';
+import { syncMessageIndexInBackground } from '../search/messageIndex.js';
 
 const MAX_MESSAGE_CHARS = 100_000;
 
@@ -234,6 +235,11 @@ export function importChats(userId, { format, chats }, { workspaceId = null } = 
     }
   })();
   chatService.clearUserWorkspaceCache(userId, wsId);
+  // Index the imported messages in the background, so nothing waits for a
+  // large import; a search meanwhile answers from what is indexed so far.
+  if (imported) {
+    syncMessageIndexInBackground(db).catch(() => { /* the next search starts it again */ });
+  }
   if (imported) publishAppEvent('conversation.updated', { imported, isNew: true }, { userId });
   return { imported, skipped, messages: messageCount };
 }

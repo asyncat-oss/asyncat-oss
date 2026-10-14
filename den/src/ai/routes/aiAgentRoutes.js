@@ -4,6 +4,7 @@
 import express from 'express';
 import db from '../../db/client.js';
 import { chatService } from '../controllers/ai/chatService.js';
+import { searchChats, indexingChats } from '../../search/messageIndex.js';
 import { initializeAgent, AgentRuntime, AgentSession } from '../../agent/index.js';
 import { deleteCheckpoint, restoreCheckpoint } from '../../agent/AgentRuntime.js';
 import {
@@ -524,52 +525,19 @@ router.get('/chats', withWorkspaceContext, async (req, res) => {
   }
 });
 
-// ── Conversation full-text search ─────────────────────────────────────────────
+// ── Conversation search: titles and what was said (search/messageIndex.js) ──
 router.get('/chats/search', withWorkspaceContext, (req, res) => {
   try {
     const q = String(req.query.q || '').trim();
     if (!q) return res.status(400).json({ success: false, error: 'q parameter required' });
-    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
-
-    // Title search via FTS5 (fast, ranked)
-    let titleRows = [];
-    try {
-      const ftsTerms = q.split(/\s+/).filter(Boolean).map(t => `${t.replace(/[^a-zA-Z0-9_]/g, '')}*`).join(' OR ');
-      if (ftsTerms) {
-        titleRows = db.prepare(`
-          SELECT c.id, c.title, c.mode, c.message_count, c.last_message_at, c.created_at,
-                 c.is_pinned, c.is_archived, bm25(conversations_fts) AS rank,
-                 json_extract(c.metadata, '$.engine') AS engine,
-                 json_extract(c.metadata, '$.agentProfileId') AS agent_profile_id
-          FROM conversations_fts fts
-          JOIN conversations c ON c.id = fts.conversation_id
-          WHERE fts.conversations_fts MATCH ? AND c.user_id = ? AND c.deleted_at IS NULL
-          ORDER BY rank
-          LIMIT ?
-        `).all(ftsTerms, req.user.id, limit);
-      }
-    } catch { /* FTS table may not exist on older DBs */ }
-
-    // Content search via LIKE on messages blob (slower but catches message text)
-    const seen = new Set(titleRows.map(r => r.id));
-    const remaining = limit - titleRows.length;
-    let contentRows = [];
-    if (remaining > 0) {
-      contentRows = db.prepare(`
-        SELECT id, title, mode, message_count, last_message_at, created_at, is_pinned, is_archived,
-               json_extract(metadata, '$.engine') AS engine,
-               json_extract(metadata, '$.agentProfileId') AS agent_profile_id
-        FROM conversations
-        WHERE user_id = ? AND deleted_at IS NULL AND messages LIKE ?
-        ORDER BY last_message_at DESC
-        LIMIT ?
-      `).all(req.user.id, `%${q}%`, remaining + seen.size)
-        .filter(r => !seen.has(r.id))
-        .slice(0, remaining);
-    }
-
-    const conversations = [...titleRows, ...contentRows];
-    res.json({ success: true, count: conversations.length, query: q, conversations });
+    const conversations = searchChats(db, {
+      userId: req.user.id,
+      query: q,
+      limit: parseInt(req.query.limit) || 20,
+      hitsPerChat: 3,
+    });
+    // `indexing`: chats are still waiting to be indexed, so some may be missing.
+    res.json({ success: true, count: conversations.length, query: q, conversations, indexing: indexingChats(db) });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

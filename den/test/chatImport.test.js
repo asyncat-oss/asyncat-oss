@@ -11,6 +11,7 @@ import JSZip from 'jszip';
 
 const { default: db } = await import('../src/db/client.js');
 const { readExport, summarize, importChats, importMemories, parseMemories, fromChatGPT } = await import('../src/importers/chatImport.js');
+const { searchChats } = await import('../src/search/messageIndex.js');
 
 const userId = randomUUID();
 const workspaceId = randomUUID();
@@ -81,7 +82,7 @@ test('a ChatGPT export: the branch that was showing, without hidden or tool mess
   assert.equal(stored[0].user, 'Which tomatoes for a balcony?');
   assert.equal(stored[3].cat, 'Deeply, twice a week.');
   assert.equal(JSON.parse(row.metadata).importedFrom.id, 'cg-1');
-  assert.ok(db.prepare("SELECT 1 FROM conversations_fts WHERE conversations_fts MATCH 'tomatoes'").get(), 'searchable by title');
+  assert.equal(searchChats(db, { userId, query: 'tomatoes' })[0]?.id, row.id, 'searchable by title');
 
   assert.deepEqual(importChats(userId, data, { workspaceId }), { imported: 0, skipped: 1, messages: 0 }, 'not twice');
   assert.equal(summarize(userId, data).newChats, 0);

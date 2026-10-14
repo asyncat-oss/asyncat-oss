@@ -39,6 +39,7 @@ import installRouter from './install/installRouter.js';
 
 // ─── Search ───────────────────────────────────────────────────────────────────
 import searchRouter from './search/searchRouter.js';
+import { syncMessageIndexInBackground } from './search/messageIndex.js';
 
 // ─── Training / Fine-Tuning ───────────────────────────────────────────────────
 import trainingRouter from './ai/routes/trainingRoutes.js';
@@ -269,6 +270,11 @@ seed().then(async () => {
     logger.info(`den running on port ${PORT}`);
     logger.info(`environment: ${process.env.NODE_ENV || 'development'}`);
     logger.info(`frontend: ${process.env.FRONTEND_URL || 'http://127.0.0.1:8717'}`);
+    // Chats waiting to be indexed for search (every chat, the first start
+    // after an update), a few at a time while requests are answered.
+    syncMessageIndexInBackground(db)
+      .then((count) => { if (count > 0) logger.info(`Search: indexed the messages of ${count} chat(s)`); })
+      .catch((err) => logger.warn('Search: could not index chats:', err.message));
     // Finish or undo engine installs a previous run was stopped in the middle
     // of, before the last local model is loaded again.
     import('./lib/localEngine.js')

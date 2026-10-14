@@ -15,6 +15,7 @@ import fs from 'fs';
 import logger from '../logger.js';
 import { openingStatements, sealStoredSecrets } from './sealSecrets.js';
 import { secretStatus } from '../lib/secretBox.js';
+import { ensureMessageIndex } from '../search/messageIndex.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -241,6 +242,12 @@ function cleanupDeadTables() {
     DROP TABLE IF EXISTS mcp_access_tokens;
     DROP TABLE IF EXISTS TaskDependencies;
     DROP TABLE IF EXISTS agent_eval_runs;
+    -- The old title-only chat index; search/messageIndex.js searches titles
+    -- and messages now. Its triggers go first, or saving a chat would fail.
+    DROP TRIGGER IF EXISTS conversations_fts_ai;
+    DROP TRIGGER IF EXISTS conversations_fts_ad;
+    DROP TRIGGER IF EXISTS conversations_fts_au;
+    DROP TABLE IF EXISTS conversations_fts;
     DELETE FROM user_integrations WHERE provider IN ('google_calendar', 'outlook', 'github');
     DELETE FROM app_config WHERE key IN (
       'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET',
@@ -359,7 +366,7 @@ ensureNotesSchema();
 ensureAgentMemorySchema();
 ensureModelPathsSchema();
 ensureCheckpointSchema();
-ensureConversationFts();
+ensureMessageSearch();
 ensureSemanticSchema();
 
 try {
@@ -425,33 +432,16 @@ function ensureCheckpointSchema() {
   `);
 }
 
-function ensureConversationFts() {
-  const hasFts = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='conversations_fts'").get();
-  if (hasFts) return;
-
-  db.exec(`
-    CREATE VIRTUAL TABLE IF NOT EXISTS conversations_fts USING fts5(
-      conversation_id UNINDEXED,
-      title,
-      tokenize='unicode61'
-    );
-
-    INSERT INTO conversations_fts(conversation_id, title)
-    SELECT id, title FROM conversations WHERE deleted_at IS NULL;
-
-    CREATE TRIGGER IF NOT EXISTS conversations_fts_ai AFTER INSERT ON conversations BEGIN
-      INSERT INTO conversations_fts(conversation_id, title) VALUES (new.id, new.title);
-    END;
-
-    CREATE TRIGGER IF NOT EXISTS conversations_fts_ad AFTER DELETE ON conversations BEGIN
-      DELETE FROM conversations_fts WHERE conversation_id = old.id;
-    END;
-
-    CREATE TRIGGER IF NOT EXISTS conversations_fts_au AFTER UPDATE OF title ON conversations BEGIN
-      DELETE FROM conversations_fts WHERE conversation_id = old.id;
-      INSERT INTO conversations_fts(conversation_id, title) VALUES (new.id, new.title);
-    END;
-  `);
+// Search inside chats (search/messageIndex.js). The first start after this
+// was added queues every chat already there; index.js indexes them once the
+// server is up, so a long history doesn't hold up the start.
+function ensureMessageSearch() {
+  try {
+    const queued = ensureMessageIndex(db);
+    if (queued > 0) logger.info(`Search: ${queued} chat(s) to index`);
+  } catch (err) {
+    logger.warn('Search: could not set up message search:', err.message);
+  }
 }
 
 // ─── Hydrate DB-backed config into process.env ───────────────────────────────

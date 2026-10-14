@@ -1,9 +1,11 @@
 // den/src/search/searchRouter.js
 // GET /api/search?q=<query>&limit=<n>&types=projects,notes,conversations
-// Full-text search across user-owned content using SQLite LIKE queries.
+// The search palette (Ctrl+K): projects and notes by LIKE, chats by title
+// and by what was said in them (messageIndex.js).
 
 import express from 'express';
 import db from '../db/client.js';
+import { searchChats, indexingChats } from './messageIndex.js';
 
 const router = express.Router();
 
@@ -47,6 +49,8 @@ router.get('/', (req, res) => {
 
   const like = `%${q}%`;
   const results = [];
+  // Chats still waiting to be indexed: the palette says some may be missing.
+  let indexing = false;
 
   try {
     // ── Projects ─────────────────────────────────────────────────────────────
@@ -96,31 +100,33 @@ router.get('/', (req, res) => {
     }
 
     // ── Conversations ────────────────────────────────────────────────────────
+    // Title matches first, then chats where a message matched, each with the
+    // best message's snippet and its id, so the palette opens the chat at
+    // the message it shows (even when the name matched too). A chat found
+    // only by its name has neither and opens as usual. A third of the places
+    // are kept for chats found by what was said, so names can't fill them.
     if (rawTypes.includes('conversations')) {
-      const rows = db.prepare(`
-        SELECT id, title, updated_at
-        FROM conversations
-        WHERE user_id = ?
-          AND deleted_at IS NULL
-          AND title LIKE ?
-        ORDER BY updated_at DESC
-        LIMIT ?
-      `).all(userId, like, rawLimit);
-
-      rows.forEach(r => results.push({
-        _type: 'conversation',
-        id: r.id,
-        title: r.title || 'Untitled',
-        updatedAt: r.updated_at,
-      }));
+      const chats = searchChats(db, { userId, query: q, limit: rawLimit, hitsPerChat: 1, messageSlots: Math.floor(rawLimit / 3) });
+      indexing = indexingChats(db);
+      for (const chat of chats) {
+        const hit = chat.hits[0] || null;
+        results.push({
+          _type: 'conversation',
+          id: chat.id,
+          title: chat.title || 'Untitled',
+          updatedAt: chat.last_message_at || chat.updated_at,
+          pinned: chat.is_pinned,
+          titleMatch: chat.title_match,
+          snippet: hit?.snippet || '',
+          messageId: hit?.message_id || null,
+          messageAt: hit?.at || null,
+          matches: chat.hit_count,
+        });
+      }
     }
 
-    // Sort all results by updatedAt desc, then slice to limit
-    results.sort((a, b) =>
-      (b.updatedAt || '').localeCompare(a.updatedAt || '')
-    );
-
-    res.json({ results: results.slice(0, rawLimit * rawTypes.length), query: q, total: results.length });
+    // Each kind is already in its own order (newest, or best match first).
+    res.json({ results: results.slice(0, rawLimit * rawTypes.length), query: q, total: results.length, indexing });
   } catch (err) {
     console.error('[search] query error:', err.message);
     res.status(500).json({ error: 'Search failed', details: err.message });
