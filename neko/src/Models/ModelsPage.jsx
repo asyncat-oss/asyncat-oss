@@ -322,8 +322,6 @@ const ModelsPage = () => {
       onSearchQueryChange={setSearchQuery}
       onDownloadedSelect={handleDownloadedSelect}
       onModelRefresh={loadModelList}
-      onAudioRefresh={refreshVoiceData}
-      onVisualRefresh={refreshVisualData}
     />
   );
 

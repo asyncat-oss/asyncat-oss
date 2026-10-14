@@ -21,6 +21,8 @@ import { useToast, errorDetail } from '../components/toastContext.js';
 import { Badge, Panel, SectionHeader } from './modelPageShared.jsx';
 import { HFAuthorLogo } from './modelLogos.jsx';
 
+// Voice and image files are found and added on Models → Voice and Images;
+// this hub downloads language models only.
 const TARGETS = {
   model: {
     label: 'Model',
@@ -29,30 +31,6 @@ const TARGETS = {
     barColor: 'bg-gray-700 dark:bg-gray-300 midnight:bg-slate-400',
     subDir: '',
     extensions: ['.gguf', '.bin'],
-  },
-  whisper: {
-    label: 'STT',
-    color: 'bg-violet-50 text-violet-600 hover:bg-violet-100 dark:bg-violet-900/30 dark:text-violet-400 dark:hover:bg-violet-900/50 midnight:bg-violet-900/30 midnight:text-violet-300 midnight:hover:bg-violet-900/50',
-    accentBar: 'bg-violet-400',
-    barColor: 'bg-violet-500',
-    subDir: 'audio/whisper',
-    extensions: ['.bin', '.gguf'],
-  },
-  tts: {
-    label: 'TTS',
-    color: 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400 dark:hover:bg-emerald-900/50 midnight:bg-emerald-900/30 midnight:text-emerald-300 midnight:hover:bg-emerald-900/50',
-    accentBar: 'bg-emerald-400',
-    barColor: 'bg-emerald-500',
-    subDir: 'audio/tts',
-    extensions: ['.onnx', '.onnx.json'],
-  },
-  image: {
-    label: 'Image',
-    color: 'bg-fuchsia-50 text-fuchsia-700 hover:bg-fuchsia-100 dark:bg-fuchsia-900/30 dark:text-fuchsia-400 dark:hover:bg-fuchsia-900/50 midnight:bg-fuchsia-900/30 midnight:text-fuchsia-300 midnight:hover:bg-fuchsia-900/50',
-    accentBar: 'bg-fuchsia-400',
-    barColor: 'bg-fuchsia-500',
-    subDir: 'image',
-    extensions: ['.safetensors', '.ckpt', '.gguf', '.onnx', '.pt', '.pth', '.bin', '.json'],
   },
 };
 
@@ -82,44 +60,16 @@ const formatETA = (secondsLeft) => {
 
 const targetOptionsForFile = (filename, repoId = '') => {
   const lowerName = String(filename || '').toLowerCase();
-  const lowerRepo = String(repoId || '').toLowerCase();
-  const context = `${lowerRepo}/${lowerName}`;
-  const isWhisperLike = (
-    context.includes('whisper') ||
-    lowerName.startsWith('ggml-')
-  );
-  const isPiperLike = (
-    context.includes('piper') ||
-    lowerName.endsWith('.onnx') ||
-    lowerName.endsWith('.onnx.json')
-  );
-  const isImageLike = (
-    context.includes('stable-diffusion') ||
-    context.includes('sdxl') ||
-    context.includes('flux') ||
-    context.includes('diffusion') ||
-    context.includes('controlnet') ||
-    context.includes('lora') ||
-    context.includes('vae') ||
-    context.includes('text-to-image') ||
-    context.includes('image-generation')
-  );
-  const options = [];
-
+  const context = `${String(repoId || '').toLowerCase()}/${lowerName}`;
+  // Whisper models and image models are .bin and .gguf files too; they belong on Voice and Images.
+  const isWhisperLike = context.includes('whisper') || lowerName.startsWith('ggml-');
+  const isImageLike = [
+    'stable-diffusion', 'sdxl', 'flux', 'diffusion', 'controlnet', 'lora', 'vae', 'text-to-image', 'image-generation',
+  ].some((word) => context.includes(word));
   if ((lowerName.endsWith('.gguf') || lowerName.endsWith('.bin')) && !isWhisperLike && !isImageLike) {
-    options.push(['model', TARGETS.model]);
+    return [['model', TARGETS.model]];
   }
-  if ((lowerName.endsWith('.bin') || lowerName.endsWith('.gguf')) && isWhisperLike) {
-    options.push(['whisper', TARGETS.whisper]);
-  }
-  if (isPiperLike && (lowerName.endsWith('.onnx') || lowerName.endsWith('.onnx.json'))) {
-    options.push(['tts', TARGETS.tts]);
-  }
-  if (isImageLike && ['.safetensors', '.ckpt', '.gguf', '.onnx', '.pt', '.pth', '.bin', '.json'].some(ext => lowerName.endsWith(ext))) {
-    options.push(['image', TARGETS.image]);
-  }
-
-  return options;
+  return [];
 };
 
 const useHFSearch = (query, setQuery) => {
@@ -297,21 +247,21 @@ const TYPE_META = {
     activeBadge: 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400 midnight:bg-green-900/30 midnight:text-green-400',
   },
   whisper: {
-    label: 'STT',
+    label: 'Listening',
     icon: Mic,
     dotColor: 'bg-violet-400',
     iconBg: 'bg-violet-50 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 midnight:bg-violet-900/30 midnight:text-violet-300',
     badge: 'bg-violet-50 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 midnight:bg-violet-900/30 midnight:text-violet-300',
   },
   tts: {
-    label: 'TTS',
+    label: 'Speaking',
     icon: Volume2,
     dotColor: 'bg-emerald-400',
     iconBg: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 midnight:bg-emerald-900/30 midnight:text-emerald-300',
     badge: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 midnight:bg-emerald-900/30 midnight:text-emerald-300',
   },
   image: {
-    label: 'Image',
+    label: 'Images',
     icon: ImageIcon,
     dotColor: 'bg-fuchsia-400',
     iconBg: 'bg-fuchsia-50 text-fuchsia-600 dark:bg-fuchsia-900/30 dark:text-fuchsia-400 midnight:bg-fuchsia-900/30 midnight:text-fuchsia-300',
@@ -331,8 +281,8 @@ const TYPE_META = {
 const groupMatches = (matches) => {
   const order = [
     { key: 'model', label: 'Models' },
-    { key: 'audio', label: 'Audio' },
-    { key: 'image', label: 'Image' },
+    { key: 'audio', label: 'Voice' },
+    { key: 'image', label: 'Images' },
     { key: 'provider', label: 'Providers' },
   ];
   const groups = {};
@@ -359,8 +309,6 @@ const timeAgo = (dateStr) => {
 const FILTER_CHIPS = [
   { key: 'all', label: 'All' },
   { key: 'model', label: 'Models' },
-  { key: 'audio', label: 'Audio' },
-  { key: 'image', label: 'Image' },
   { key: 'provider', label: 'Providers' },
   { key: 'hf', label: 'HuggingFace' },
 ];
@@ -369,8 +317,6 @@ const matchesFilter = (item, filter) => {
   if (filter === 'all') return true;
   if (filter === 'hf') return false; // HF results are separate
   if (filter === 'model') return item.category === 'model';
-  if (filter === 'audio') return item.category === 'audio';
-  if (filter === 'image') return item.category === 'image';
   if (filter === 'provider') return item.category === 'provider';
   return true;
 };
@@ -381,11 +327,6 @@ const matchesHFFilter = (model, filter) => {
     const tag = (model.pipeline_tag || '').toLowerCase();
     return ['text-generation', 'image-text-to-text', 'text2text-generation'].some(t => tag.includes(t));
   }
-  if (filter === 'image') {
-    const tag = (model.pipeline_tag || '').toLowerCase();
-    const tags = (model.tags || []).map(t => t.toLowerCase());
-    return tag.includes('text-to-image') || tag.includes('image-generation') || tags.some(t => t.includes('diffusion') || t.includes('flux') || t.includes('sdxl') || t.includes('stable-diffusion'));
-  }
   return false;
 };
 
@@ -395,8 +336,6 @@ const ModelDownloadHub = ({
   onSearchQueryChange,
   onDownloadedSelect,
   onModelRefresh,
-  onAudioRefresh,
-  onVisualRefresh,
 }) => {
   const [activeDownloads, setActiveDownloads] = useState({});
   const toast = useToast();
@@ -413,25 +352,9 @@ const ModelDownloadHub = ({
     setQuery,
   } = useHFSearch(searchQuery, onSearchQueryChange || (() => {}));
 
-  const refreshAfterDownload = useCallback((targetKey) => {
+  const refreshAfterDownload = useCallback(() => {
     onModelRefresh?.();
-    if (targetKey === 'whisper' || targetKey === 'tts') {
-      onAudioRefresh?.();
-      window.dispatchEvent(new CustomEvent('asyncat-audio-models-updated'));
-      setTimeout(() => {
-        onAudioRefresh?.();
-        window.dispatchEvent(new CustomEvent('asyncat-audio-models-updated'));
-      }, 11000);
-    }
-    if (targetKey === 'image') {
-      onVisualRefresh?.();
-      window.dispatchEvent(new CustomEvent('asyncat-visual-models-updated'));
-      setTimeout(() => {
-        onVisualRefresh?.();
-        window.dispatchEvent(new CustomEvent('asyncat-visual-models-updated'));
-      }, 11000);
-    }
-  }, [onAudioRefresh, onModelRefresh, onVisualRefresh]);
+  }, [onModelRefresh]);
 
   const startTrackingDownload = useCallback((downloadId, filename, targetKey = 'model') => {
     const trackingKey = `${targetKey}:${filename}`;
@@ -512,7 +435,7 @@ const ModelDownloadHub = ({
           delete next[trackingKey];
           return next;
         });
-        if (data.status === 'complete') refreshAfterDownload(targetKey);
+        if (data.status === 'complete') refreshAfterDownload();
         delete cleanupFnsRef.current[trackingKey];
       },
       () => {
@@ -533,15 +456,9 @@ const ModelDownloadHub = ({
         if (!res.success || !res.downloads?.length) return;
         res.downloads.forEach((dl) => {
           if (dl.status !== 'downloading') return;
-          const filename = dl.filename || 'download';
-          const targetKey = String(dl.subDir || '').includes('audio/tts')
-            ? 'tts'
-            : String(dl.subDir || '').includes('audio/whisper')
-              ? 'whisper'
-              : String(dl.subDir || '').includes('image')
-                  ? 'image'
-                  : 'model';
-          startTrackingDownload(dl.downloadId, filename, targetKey);
+          // Voice and image files show their progress on the Voice and Images tabs.
+          if (/^(audio|image)/.test(String(dl.subDir || ''))) return;
+          startTrackingDownload(dl.downloadId, dl.filename || 'download', 'model');
         });
       })
       .catch(() => {});
@@ -594,8 +511,8 @@ const ModelDownloadHub = ({
   return (
     <Panel className="p-5">
       <SectionHeader
-        title="Download Models"
-        description="Search HuggingFace once, then save files as local LLM, voice, or image generation assets. Multimodal LLMs stay in the normal model library."
+        title="Download models"
+        description="Find language models on Hugging Face to run on this computer. Voice and image files are added on the Voice and Images tabs."
         action={activeEntries.length > 0 ? <Badge color="amber">{activeEntries.length} downloading</Badge> : null}
       />
 
@@ -676,7 +593,7 @@ const ModelDownloadHub = ({
             type="text"
             value={searchQuery}
             onChange={(e) => handleQueryChange(e.target.value)}
-            placeholder="Search downloads and library... e.g. llama, qwen, whisper.cpp, piper, llava, flux"
+            placeholder="Search your models and Hugging Face, e.g. llama, qwen, gemma"
             className="w-full rounded-lg border border-gray-200 bg-gray-50 py-2 pl-9 pr-9 text-sm text-gray-900 outline-none transition-shadow placeholder:text-gray-400 focus:border-gray-300 focus:ring-1 focus:ring-gray-300 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-gray-600 dark:focus:ring-gray-600 midnight:border-gray-800/80 midnight:bg-gray-900/50"
           />
           {searchQuery && (
@@ -847,7 +764,7 @@ const ModelDownloadHub = ({
               {activeFilter === 'all' ? `No results for "${searchQuery}"` : `No ${FILTER_CHIPS.find(c => c.key === activeFilter)?.label || ''} results for "${searchQuery}"`}
             </p>
             <p className="text-[10px] text-gray-300 dark:text-gray-600 midnight:text-slate-600">
-              {activeFilter === 'all' ? 'Try a broader keyword like "llama", "qwen", or "flux"' : 'Try switching the filter to "All" for broader results'}
+              {activeFilter === 'all' ? 'Try a broader word like "llama", "qwen" or "gemma"' : 'Try switching the filter to "All" for broader results'}
             </p>
           </div>
         )}
