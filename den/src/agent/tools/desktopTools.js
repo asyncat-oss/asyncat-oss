@@ -18,6 +18,7 @@ import { fileURLToPath } from 'url';
 import { childEnv } from '../childEnv.js';
 import { PermissionLevel } from './toolRegistry.js';
 import { IS_WIN, PLATFORM, hasBin, runFile, runPowerShell, runAppleScript, powerShellLiteral } from './shared.js';
+import { sandboxCanChange } from '../sandboxFolders.js';
 
 const isWayland = () => PLATFORM === 'linux' && Boolean(process.env.WAYLAND_DISPLAY);
 
@@ -210,7 +211,8 @@ function applicationDirs(env = process.env, home = os.homedir()) {
   const dataDirs = String(env.XDG_DATA_DIRS || '/usr/local/share:/usr/share').split(':').filter((dir) => path.isAbsolute(dir));
   const dirs = [dataHome, ...dataDirs, path.join(home, '.local/share/flatpak/exports/share'), '/var/lib/flatpak/exports/share', '/var/lib/snapd/desktop']
     .map((dir) => path.join(dir, 'applications'));
-  return [...new Set(dirs)];
+  // Not ones a sandboxed command can write to: an entry there would make any program an app.
+  return [...new Set(dirs)].filter((dir) => !sandboxCanChange(dir));
 }
 
 /** The [Desktop Entry] keys app_open needs from a .desktop file. */

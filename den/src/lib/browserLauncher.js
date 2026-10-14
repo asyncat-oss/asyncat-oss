@@ -1,11 +1,16 @@
 // Launch Chromium for puppeteer-based features (PDF export, browser tools).
 //
 // Desktop releases skip puppeteer's Chrome download to keep installers small,
-// so puppeteer.launch() on its own fails there with "Could not find Chrome".
-// In that case fall back to a Chrome, Chromium, or Edge already installed on
-// the machine. PUPPETEER_EXECUTABLE_PATH still wins when it is set.
+// so puppeteer's own Chrome is often missing. Then a Chrome, Chromium, Edge or
+// Brave already installed on the machine is used. Puppeteer's own is also
+// passed over when it sits where the agent's sandboxed commands can write
+// (~/.cache/puppeteer): the browser runs outside the sandbox, so a command
+// could otherwise leave a program there for den to start.
+// PUPPETEER_EXECUTABLE_PATH still wins when it is set.
 import fs from 'fs';
 import path from 'path';
+import { childEnv } from '../agent/childEnv.js';
+import { sandboxCanChange } from '../agent/sandboxFolders.js';
 
 const LINUX_COMMANDS = [
   'google-chrome',
@@ -44,7 +49,8 @@ function isExecutableFile(filePath) {
   }
 }
 
-export function findSystemBrowser({ platform = process.platform, env = process.env, home = env.HOME } = {}) {
+/** The first browser installed on this machine that `usable` accepts, or null. */
+export function findSystemBrowser({ platform = process.platform, env = process.env, home = env.HOME, usable = () => true } = {}) {
   let candidates = [];
   if (platform === 'win32') {
     candidates = WINDOWS_PATHS
@@ -57,22 +63,36 @@ export function findSystemBrowser({ platform = process.platform, env = process.e
     const dirs = String(env.PATH || '').split(path.delimiter).filter(Boolean);
     candidates = LINUX_COMMANDS.flatMap((command) => dirs.map((dir) => path.join(dir, command)));
   }
-  return candidates.find(isExecutableFile) || null;
+  return candidates.find((file) => isExecutableFile(file) && usable(file)) || null;
 }
 
-export async function launchBrowser(options = {}) {
-  const { default: puppeteer } = await import('puppeteer');
-  try {
-    return await puppeteer.launch(options);
-  } catch (err) {
-    if (options.executablePath || !/could not find/i.test(err.message)) throw err;
-    const executablePath = findSystemBrowser();
-    if (!executablePath) {
-      throw new Error(
-        'No Chromium-based browser found. Install Google Chrome (or Chromium or Microsoft Edge), '
-        + 'or set PUPPETEER_EXECUTABLE_PATH to one.',
-      );
-    }
-    return puppeteer.launch({ ...options, executablePath });
+/**
+ * Which browser to start: `own` is puppeteer's (null when it has none).
+ * Puppeteer's own only when a sandboxed command can't have put it there.
+ */
+export function chooseBrowser({ own, canChange = sandboxCanChange, findSystem = findSystemBrowser } = {}) {
+  if (own && isExecutableFile(own) && !canChange(own)) return own;
+  const system = findSystem({ usable: (file) => !canChange(file) });
+  if (system) return system;
+  if (own && isExecutableFile(own)) {
+    throw new Error(
+      `Puppeteer's own browser (${own}) is in a folder the agent's commands can change, so it isn't started. `
+      + 'Install Google Chrome (or Chromium, Microsoft Edge or Brave), or set PUPPETEER_EXECUTABLE_PATH to one.',
+    );
   }
+  throw new Error(
+    'No Chromium-based browser found. Install Google Chrome (or Chromium or Microsoft Edge), '
+    + 'or set PUPPETEER_EXECUTABLE_PATH to one.',
+  );
+}
+
+export async function launchBrowser(options = {}, { puppeteer: given = null } = {}) {
+  const puppeteer = given || (await import('puppeteer')).default;
+  // Like every program the agent starts, the browser gets den's environment
+  // without saved keys, unless the caller gives one.
+  const launchOptions = { ...options, env: options.env ?? childEnv() };
+  if (launchOptions.executablePath || process.env.PUPPETEER_EXECUTABLE_PATH) return puppeteer.launch(launchOptions);
+  let own = null;
+  try { own = await puppeteer.executablePath(); } catch { own = null; }
+  return puppeteer.launch({ ...launchOptions, executablePath: chooseBrowser({ own }) });
 }

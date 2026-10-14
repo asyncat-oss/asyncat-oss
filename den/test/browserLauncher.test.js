@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { findSystemBrowser, launchBrowser } from '../src/lib/browserLauncher.js';
+import { chooseBrowser, findSystemBrowser, launchBrowser } from '../src/lib/browserLauncher.js';
+import { sandboxCanChange } from '../src/agent/sandboxFolders.js';
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'asyncat-browser-launcher-'));
 after(() => fs.rmSync(scratch, { recursive: true, force: true }));
@@ -41,6 +42,52 @@ test('finds Edge under Program Files on Windows', { skip: process.platform === '
   fakeExecutable('pf', 'Microsoft', 'Edge', 'Application', 'msedge.exe');
   const found = findSystemBrowser({ platform: 'win32', env: { 'PROGRAMFILES(X86)': programFiles } });
   assert.match(found, /msedge\.exe$/);
+});
+
+// The browser runs outside the command sandbox, so a sandboxed command must
+// not be able to choose it: ~/.cache (where puppeteer keeps its own) and the
+// temporary folders are writable in the sandbox.
+test('a program in a folder sandboxed commands can write to is one they could have put there', () => {
+  const home = path.join(scratch, 'home');
+  const own = fakeExecutable('home', '.cache', 'puppeteer', 'chrome', 'linux-1', 'chrome-linux64', 'chrome');
+  assert.equal(sandboxCanChange(own, { home }), true, "puppeteer's own browser in ~/.cache");
+  assert.equal(sandboxCanChange(path.join(scratch, 'anything'), { home }), true, 'a temporary folder');
+  assert.equal(sandboxCanChange('/usr/bin/env', { home }), false);
+
+  // Folders kept read-only inside ~/.cache, unless a link leads there.
+  const corepack = fakeExecutable('home', '.cache', 'node', 'corepack', 'pnpm', 'pnpm.js');
+  assert.equal(sandboxCanChange(corepack, { home }), false, "corepack's folder is read-only");
+  const linkedHome = path.join(scratch, 'linked-home');
+  fs.mkdirSync(path.join(linkedHome, '.cache'), { recursive: true });
+  fs.symlinkSync(path.join(home, '.cache', 'node'), path.join(linkedHome, '.cache', 'node'));
+  assert.equal(sandboxCanChange(path.join(linkedHome, '.cache', 'node', 'corepack', 'pnpm', 'pnpm.js'), { home: linkedHome }), true, 'a command could replace the link');
+});
+
+test("puppeteer's own browser is passed over where a sandboxed command could have put it", () => {
+  const own = fakeExecutable('choose', 'own-chrome');
+  const system = fakeExecutable('choose', 'system-chrome');
+  const findSystem = ({ usable }) => [system].find(usable) || null;
+  assert.equal(chooseBrowser({ own, canChange: () => false, findSystem }), own, 'its own, where commands can\'t write');
+  assert.equal(chooseBrowser({ own, canChange: (file) => file === own, findSystem }), system, 'an installed browser instead');
+  assert.equal(chooseBrowser({ own: null, canChange: () => false, findSystem }), system, 'none of its own');
+  assert.throws(() => chooseBrowser({ own, canChange: () => true, findSystem }), /can change, so it isn't started/);
+  assert.throws(() => chooseBrowser({ own: null, canChange: () => false, findSystem: () => null }), /No Chromium-based browser found/);
+});
+
+test('the browser gets no saved keys, unless the caller gives its environment', async () => {
+  const launched = [];
+  const puppeteer = { launch: async (options) => { launched.push(options); return {}; }, executablePath: async () => null };
+  const saved = process.env.ASYNCAT_TEST_API_KEY;
+  process.env.ASYNCAT_TEST_API_KEY = 'sk-demo';
+  try {
+    await launchBrowser({ headless: true, executablePath: '/opt/chrome' }, { puppeteer });
+    assert.equal(launched[0].env.ASYNCAT_TEST_API_KEY, undefined);
+    assert.equal(launched[0].env.PATH, process.env.PATH);
+    await launchBrowser({ headless: true, executablePath: '/opt/chrome', env: { ONLY: '1' } }, { puppeteer });
+    assert.deepEqual(launched[1].env, { ONLY: '1' });
+  } finally {
+    if (saved === undefined) delete process.env.ASYNCAT_TEST_API_KEY; else process.env.ASYNCAT_TEST_API_KEY = saved;
+  }
 });
 
 const canLaunch = Boolean(findSystemBrowser()) || Boolean(process.env.PUPPETEER_EXECUTABLE_PATH);

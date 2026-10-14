@@ -20,23 +20,9 @@ import { IS_WIN, hasBin, isPathInside, runFile, runProcess } from './tools/share
 import { getConfigValue } from '../config/appConfig.js';
 import { runtimeDataRoot } from '../config/runtimeConfig.js';
 import { DEFAULT_REGISTRIES, extraRegistries, networkMode, networkPlan, networkSummary } from './sandboxNetwork.js';
+import { homeReadOnly, writableRoots } from './sandboxFolders.js';
 
-// Folders under the home folder that build tools download to. Folders of
-// programs (~/.cargo/bin, Rust toolchains, the .NET SDK, Gradle's own
-// downloads, pnpm's and Deno's commands) and of settings that run code
-// (~/.gradle/init.d) are left out: a command could leave a program there that
-// later runs outside the sandbox.
-const HOME_CACHE_DIRS = [
-  '.cache', '.npm', '.yarn/berry', '.pnpm-store', '.local/share/pnpm/store', '.bun/install/cache',
-  '.cargo/registry', '.cargo/git', '.rustup/downloads', '.rustup/tmp',
-  '.gradle/caches', '.gradle/daemon', '.gradle/native', '.gradle/.tmp',
-  '.m2/repository', '.nuget/packages', '.local/share/NuGet', '.local/state',
-  'go/pkg/mod', 'go/pkg/sumdb', '.config/configstore', 'Library/Caches',
-];
-// Inside those, still read-only: the pnpm and Yarn that corepack starts, and
-// the environments pre-commit runs from git hooks. Each is made before a
-// command starts, so a command can't make it either (prepareReadOnly).
-const HOME_READ_ONLY = ['.cache/node/corepack', '.cache/pre-commit'];
+export { sandboxCanChange, writableRoots } from './sandboxFolders.js';
 
 // Folders and files that hold sign-ins, keys and private data. The package
 // registry files hold publish tokens, which "Package registries only" would
@@ -393,13 +379,6 @@ export function gitGuards({ workspaceRoot, roots, gitDirs = gitDirsOf, prepare =
   return { gitDirs: dirs, readOnly };
 }
 
-/** Folders a sandboxed command may write to. */
-export function writableRoots({ workspaceRoot, home = os.homedir(), tmp = os.tmpdir() }) {
-  const roots = new Set([workspaceRoot, '/tmp', '/var/tmp', tmp].filter(Boolean).map((p) => path.resolve(p)));
-  for (const dir of HOME_CACHE_DIRS) roots.add(path.join(home, dir));
-  return [...roots];
-}
-
 function appleString(text) {
   return `"${String(text).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
@@ -530,7 +509,7 @@ export function sandboxedCommand({
   const net = network ?? networkPlan({ mode: networkMode(), platform, socat: platform === 'linux' && hasBin('socat') });
   const about = { mode: net.mode, effective: net.effective, ...(net.note ? { note: net.note } : {}) };
 
-  const readOnly = HOME_READ_ONLY.map((rel) => path.join(home, rel));
+  const readOnly = homeReadOnly(home);
   const git = gitGuards({ workspaceRoot, roots, ...(gitDirs ? { gitDirs } : {}) });
 
   if (platform === 'linux') {
