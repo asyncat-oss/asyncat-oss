@@ -8,9 +8,8 @@ import { getSetupJob, cancelSetupJob, latestSetupJob } from './setupJobs.js';
 import {
   chooseVoice, elevenLabsVoices, planVoiceSetup, previewVoice, startVoiceSetup, voiceCatalog, voiceSample, voiceStatus,
 } from './voiceService.js';
-import { chooseImage, imageCatalog, imageStatus, planImageSetup, startImageSetup } from './imageService.js';
+import { chooseImage, imageCatalog, imageStatus, planImageSetup, startImageSetup, tryImage } from './imageService.js';
 import { deleteGalleryImage, galleryFile, listGallery } from './gallery.js';
-import { generateImageTool } from '../agent/tools/visualTools.js';
 
 const router = express.Router();
 
@@ -134,13 +133,11 @@ router.post('/images/choose', async (req, res) => {
   }
 });
 
-// Make a picture with what is chosen, to try it: { prompt }.
+// Make an image with what is chosen, to try it: { prompt, negativePrompt,
+// width, height, steps, cfg, sampler, scheduler, seed, checkpoint }.
 router.post('/images/try', async (req, res) => {
   try {
-    const prompt = String(req.body?.prompt || '').trim() || 'A small cat asleep on a windowsill in the afternoon sun';
-    const result = await generateImageTool.execute({ prompt }, { workingDir: process.cwd() });
-    if (!result?.success) return res.status(422).json({ success: false, error: result?.error || "Couldn't make the picture." });
-    res.json({ success: true, image: { url: result.media?.url || null, prompt, runtime: result.runtime, width: result.width, height: result.height } });
+    res.json({ success: true, image: await tryImage(req.body || {}) });
   } catch (err) {
     sendError(res, err);
   }

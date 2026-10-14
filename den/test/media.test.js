@@ -8,13 +8,16 @@ import path from 'node:path';
 import { once } from 'node:events';
 
 // Voice and image setup (den/src/media/): the catalogs, the gallery, a
-// whole "Set up voice" run and the voice engines, against fakes on this
-// computer: a fake Hugging Face server (HF_ENDPOINT), a fake whisper-server
-// and a fake piper. Nothing is downloaded from the internet.
+// whole "Set up voice" run, the voice engines and trying images, against
+// fakes on this computer: a fake Hugging Face server (HF_ENDPOINT), a fake
+// whisper-server, piper and stable-diffusion.cpp, and a fake ComfyUI.
+// Nothing is downloaded from the internet.
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'asyncat-media-'));
 const bin = path.join(scratch, 'bin');
 fs.mkdirSync(bin, { recursive: true });
+// Engines Asyncat installs live here, not in the real ~/.asyncat.
+process.env.ASYNCAT_HOME = path.join(scratch, 'home');
 
 async function freePort() {
   const server = net.createServer();
@@ -52,9 +55,22 @@ process.stdin.on('data', (d) => { text += d; });
 process.stdin.on('end', () => { process.stdout.write(Buffer.alloc(text.length ? 3200 : 0)); });
 `, { mode: 0o755 });
 
+// A stable-diffusion.cpp stand-in: notes its arguments and writes a PNG
+// where -o says.
+const fakeSd = path.join(bin, 'sd');
+const sdLog = path.join(scratch, 'sd-args.json');
+fs.writeFileSync(fakeSd, `#!/usr/bin/env node
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+if (args.includes('--help')) { console.log('usage: sd [options]'); process.exit(0); }
+fs.writeFileSync(${JSON.stringify(sdLog)}, JSON.stringify(args));
+fs.writeFileSync(args[args.indexOf('-o') + 1], Buffer.from('89504e470d0a1a0a', 'hex'));
+`, { mode: 0o755 });
+
 process.env.WHISPER_SERVER_PORT = String(whisperPort);
 process.env.WHISPER_BINARY_PATH = fakeWhisper;
 process.env.PIPER_BINARY_PATH = fakePiper;
+process.env.IMAGEGEN_BINARY_PATH = fakeSd;
 
 // A Hugging Face stand-in with the files "Set up voice" asks for.
 const FILES = {
@@ -87,17 +103,53 @@ hf.listen(0, '127.0.0.1');
 await once(hf, 'listening');
 process.env.HF_ENDPOINT = `http://127.0.0.1:${hf.address().port}`;
 
+// A ComfyUI stand-in with two checkpoints; it keeps the workflows it is sent.
+const comfyPrompts = [];
+const comfy = http.createServer((req, res) => {
+  const send = (body) => { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(body)); };
+  if (req.url === '/system_stats') return send({ system: {}, devices: [] });
+  if (req.url === '/object_info') {
+    return send({
+      CheckpointLoaderSimple: { input: { required: { ckpt_name: [['dreamshaper_8.safetensors', 'juggernaut.safetensors']] } } },
+      KSampler: { input: { required: { sampler_name: [['euler', 'dpmpp_2m']], scheduler: [['normal', 'karras']] } } },
+    });
+  }
+  if (req.url === '/prompt' && req.method === 'POST') {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => { comfyPrompts.push(JSON.parse(body).prompt); send({ prompt_id: `p${comfyPrompts.length}` }); });
+    return undefined;
+  }
+  if (req.url.startsWith('/history/')) {
+    const id = decodeURIComponent(req.url.slice('/history/'.length));
+    return send({ [id]: { outputs: { 9: { images: [{ filename: 'out.png', subfolder: '', type: 'output' }] } } } });
+  }
+  if (req.url.startsWith('/view')) {
+    res.setHeader('content-type', 'image/png');
+    return res.end(Buffer.from('89504e470d0a1a0a', 'hex'));
+  }
+  res.statusCode = 404;
+  return res.end();
+});
+comfy.listen(0, '127.0.0.1');
+await once(comfy, 'listening');
+process.env.COMFYUI_BASE_URL = `http://127.0.0.1:${comfy.address().port}`;
+
 const { default: db } = await import('../src/db/client.js');
 const whisper = await import('../src/ai/controllers/ai/whisperServerManager.js');
 const voiceCatalog = await import('../src/media/voiceCatalog.js');
 const imageCatalog = await import('../src/media/imageCatalog.js');
 const gallery = await import('../src/media/gallery.js');
 const voice = await import('../src/media/voiceService.js');
+const images = await import('../src/media/imageService.js');
 const setupJobs = await import('../src/media/setupJobs.js');
+const visualModels = await import('../src/ai/controllers/ai/visualModelManager.js');
+const { default: mediaRouter } = await import('../src/media/mediaRoutes.js');
 
 test.after(async () => {
   await whisper.stopWhisper().catch(() => {});
   hf.close();
+  comfy.close();
   db.close();
   fs.rmSync(scratch, { recursive: true, force: true });
 });
@@ -119,6 +171,27 @@ function wav({ rate = 16000, channels = 1, bits = 16, samples = 1600 } = {}) {
   header.write('data', 36);
   header.writeUInt32LE(data.length, 40);
   return Buffer.concat([header, data]);
+}
+
+/** Serve a router on a free port, as the app mounts it, for one test. */
+async function serve(mount, router) {
+  const express = (await import('express')).default;
+  const app = express();
+  app.use(express.json());
+  app.use((req, _res, next) => { req.user = { id: 'media-test-user' }; next(); });
+  app.use(mount, router);
+  const server = app.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const base = `http://127.0.0.1:${server.address().port}${mount}`;
+  return {
+    get: (route) => fetch(`${base}${route}`).then(async (res) => ({ status: res.status, body: await res.json() })),
+    post: (route, body = {}) => fetch(`${base}${route}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then(async (res) => ({ status: res.status, body: await res.json() })),
+    close: () => new Promise((resolve) => server.close(resolve)),
+  };
 }
 
 async function until(check, ms = 15_000) {
@@ -266,4 +339,55 @@ test('cloud speech needs its key; choosing it saves the voice', async () => {
   await assert.rejects(voice.previewVoice({ provider: 'openai', voice: 'nova' }), /Add your OpenAI key/);
   await voice.chooseVoice({ tts: { provider: 'local' } });
   assert.equal((await voice.voiceStatus()).tts.ready, true);
+});
+
+// ── Images ───────────────────────────────────────────────────────────────────
+
+function addImageFile(name, body = 'weights') {
+  const file = path.join(images.IMAGE_DIR, name);
+  fs.mkdirSync(images.IMAGE_DIR, { recursive: true });
+  fs.writeFileSync(file, body);
+  visualModels.clearCache();
+  return file;
+}
+
+test('trying an image takes its options and says what it made (B1)', async () => {
+  const model = addImageFile('dreamshaper_8.safetensors');
+  await images.chooseImage({ provider: 'local', model });
+  const api = await serve('/api/media', mediaRouter);
+  try {
+    const { status, body } = await api.post('/images/try', {
+      prompt: 'A red bicycle by a canal',
+      negativePrompt: 'blurry',
+      width: 768,
+      height: 512,
+      steps: '8',
+      cfg: '',
+      sampler: 'euler',
+      seed: 42,
+    });
+    assert.equal(status, 200, JSON.stringify(body));
+    const { image } = body;
+    assert.equal(image.runtime, 'stable-diffusion.cpp');
+    assert.equal(image.model, 'dreamshaper_8.safetensors');
+    assert.deepEqual([image.width, image.height, image.seed, image.steps], [768, 512, 42, 8]);
+    assert.match(image.name, /^asyncat_.+\.png$/);
+    assert.equal(image.url, `/api/media/gallery/file/${image.name}`);
+
+    const args = JSON.parse(fs.readFileSync(sdLog, 'utf8'));
+    const arg = (flag) => args[args.indexOf(flag) + 1];
+    assert.equal(arg('-n'), 'blurry', 'the negative prompt reaches the engine');
+    assert.equal(arg('--steps'), '8');
+    assert.equal(arg('--cfg-scale'), '7', 'an empty field takes the default');
+    assert.equal(arg('--sampling-method'), 'euler');
+
+    const saved = gallery.listGallery().images.find((item) => item.name === image.name);
+    assert.equal(saved.prompt, 'A red bicycle by a canal', 'it is in the gallery with what it was made from');
+    assert.equal(saved.seed, 42);
+
+    const empty = await api.post('/images/try', {});
+    assert.equal(empty.body.image.prompt, images.TRY_PROMPT, 'no prompt tries the default one');
+  } finally {
+    await api.close();
+  }
 });

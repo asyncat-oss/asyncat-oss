@@ -42,7 +42,8 @@ export const mediaApi = {
     plan: (modelId) => apiRequest(`${BASE}/images/plan${query({ model: modelId })}`),
     setup: (modelId) => apiRequest(`${BASE}/images/setup`, send('POST', { modelId })),
     choose: (choice) => apiRequest(`${BASE}/images/choose`, send('POST', choice)),
-    tryIt: (prompt) => apiRequest(`${BASE}/images/try`, send('POST', { prompt })),
+    /** Make one image to try it; options: { negativePrompt, width, height, steps, cfg, sampler, scheduler, seed, checkpoint }. */
+    tryIt: (prompt, options = {}) => apiRequest(`${BASE}/images/try`, send('POST', { ...options, prompt })),
   },
   setup: {
     get: (jobId) => apiRequest(`${BASE}/setup/${encodeURIComponent(jobId)}`),

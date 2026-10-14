@@ -18,8 +18,10 @@ import { detectGpu, planManagedRuntimeInstall } from '../lib/localEngine.js';
 import { hfFileSize, hfFileUrl } from './hf.js';
 import { CLOUD_IMAGE, IMAGE_MODELS, fitForGpu } from './imageCatalog.js';
 import { startSetupJob } from './setupJobs.js';
+import { generateImageTool } from '../agent/tools/visualTools.js';
 
 export const IMAGE_DIR = path.join(MODELS_DIR, 'image');
+export const TRY_PROMPT = 'A small cat asleep on a sunny windowsill';
 const PLAN_TTL_MS = 60 * 60_000;
 let planCache = null;
 let gpuCache = null;
@@ -210,4 +212,52 @@ export async function startImageSetup({ modelId = null, userId = null } = {}) {
       return chooseImage({ provider: 'local', model: path.join(IMAGE_DIR, file) });
     },
   });
+}
+
+/** A number from a form; empty or nonsense means "the default". */
+function optionalNumber(value) {
+  if (value === undefined || value === null || String(value).trim() === '') return undefined;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : undefined;
+}
+
+function optionalText(value) {
+  const text = String(value ?? '').trim();
+  return text || undefined;
+}
+
+/**
+ * Make one image with what is chosen, to try it: { prompt, negativePrompt,
+ * width, height, steps, cfg, sampler, scheduler, seed, checkpoint }. Unset
+ * options take the model's defaults. It goes through generate_image, so it
+ * lands in the gallery with what it was made from, like any other image.
+ */
+export async function tryImage(options = {}) {
+  const prompt = String(options.prompt || '').trim() || TRY_PROMPT;
+  const args = Object.fromEntries(Object.entries({
+    prompt,
+    negative_prompt: optionalText(options.negativePrompt),
+    width: optionalNumber(options.width),
+    height: optionalNumber(options.height),
+    steps: optionalNumber(options.steps),
+    cfg: optionalNumber(options.cfg),
+    sampler: optionalText(options.sampler),
+    scheduler: optionalText(options.scheduler),
+    seed: optionalNumber(options.seed),
+    checkpoint: optionalText(options.checkpoint),
+  }).filter(([, value]) => value !== undefined));
+  const result = await generateImageTool.execute(args, { workingDir: process.cwd() });
+  if (!result?.success) throw imageError(result?.error || "Couldn't make the image.", 422);
+  const model = result.modelPath || result.checkpoint || result.model || null;
+  return {
+    url: result.media?.url || null,
+    name: result.media?.url && result.imagePath ? path.basename(result.imagePath) : null,
+    prompt,
+    runtime: result.runtime || null,
+    model: model ? path.basename(String(model)) : null,
+    width: result.width ?? null,
+    height: result.height ?? null,
+    seed: result.seed ?? null,
+    steps: result.steps ?? null,
+  };
 }

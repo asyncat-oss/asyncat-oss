@@ -103,6 +103,7 @@ function imageResultPayload(result, fallbackPrompt, extra = {}) {
     cfg: result.cfg,
     modelPath: result.modelPath || null,
     checkpoint: result.checkpoint || null,
+    model: result.model || null,
   };
 }
 
@@ -353,7 +354,7 @@ export const generateImageTool = {
         success: false,
         error: engine === 'comfyui'
           ? (comfy.error || 'ComfyUI is not running.')
-          : 'Pictures are not set up yet. Set up images in Models → Images (on this computer or with a cloud service).',
+          : "Images aren't set up yet. Set up images in Models → Images (on this computer or with a cloud service).",
       };
     } catch (err) {
       return { success: false, error: err.message || 'Image generation failed.' };
