@@ -620,3 +620,26 @@ test('trying an image takes its options and says what it made (B1)', async () =>
     await api.close();
   }
 });
+
+test('image status carries the defaults and samplers of the engine that draws (B7)', async () => {
+  let status = await images.imageStatus();
+  assert.equal(status.model.name, 'dreamshaper_8.safetensors');
+  assert.deepEqual(status.defaults, { width: 512, height: 512, steps: 24, cfg: 7 });
+  assert.ok(status.samplers.includes('euler_a'));
+  assert.deepEqual(status.schedulers, [], 'stable-diffusion.cpp has no scheduler to pick');
+
+  const turbo = addImageFile('sd_xl_turbo_1.0.q8_0.gguf');
+  status = await images.chooseImage({ provider: 'local', model: turbo });
+  assert.equal(status.defaults.steps, 4, 'a turbo model wants few steps');
+  assert.equal(status.model.name, 'SDXL Turbo', 'catalog files show their catalog name');
+
+  status = await images.chooseImage({ provider: 'comfyui' });
+  assert.equal(status.defaults.width, 768);
+  assert.deepEqual(status.samplers, ['euler', 'dpmpp_2m'], "ComfyUI's own lists");
+  assert.deepEqual(status.schedulers, ['normal', 'karras']);
+
+  status = await images.chooseImage({ provider: 'openai' });
+  assert.deepEqual(status.defaults, { width: 1024, height: 1024 });
+
+  await images.chooseImage({ provider: 'local', model: path.join(images.IMAGE_DIR, 'dreamshaper_8.safetensors') });
+});

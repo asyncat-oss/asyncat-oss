@@ -3,6 +3,7 @@
 import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
+import { COMFYUI_DEFAULTS } from '../../../media/imageCatalog.js';
 
 const DEFAULT_BASE_URL = 'http://127.0.0.1:8188';
 const DEFAULT_TIMEOUT_MS = 10000;
@@ -101,10 +102,10 @@ function clampFloat(value, fallback, min, max) {
 }
 
 function buildTxt2ImgWorkflow(options) {
-  const width = clampInt(options.width, 768, 256, 2048);
-  const height = clampInt(options.height, 768, 256, 2048);
-  const steps = clampInt(options.steps, 24, 1, 80);
-  const cfg = clampFloat(options.cfg, 7, 1, 20);
+  const width = clampInt(options.width, COMFYUI_DEFAULTS.width, 256, 2048);
+  const height = clampInt(options.height, COMFYUI_DEFAULTS.height, 256, 2048);
+  const steps = clampInt(options.steps, COMFYUI_DEFAULTS.steps, 1, 80);
+  const cfg = clampFloat(options.cfg, COMFYUI_DEFAULTS.cfg, 1, 20);
   const seed = options.seed === undefined || options.seed === null || options.seed === ''
     ? Math.floor(Math.random() * 1_000_000_000_000)
     : clampInt(options.seed, 1, 0, Number.MAX_SAFE_INTEGER);
@@ -117,8 +118,8 @@ function buildTxt2ImgWorkflow(options) {
           seed,
           steps,
           cfg,
-          sampler_name: options.sampler || 'euler',
-          scheduler: options.scheduler || 'normal',
+          sampler_name: options.sampler || COMFYUI_DEFAULTS.sampler,
+          scheduler: options.scheduler || COMFYUI_DEFAULTS.scheduler,
           denoise: 1,
           model: ['4', 0],
           positive: ['6', 0],

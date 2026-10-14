@@ -13,7 +13,7 @@ import { runtimeGeneratedImagesPath } from '../../config/runtimeConfig.js';
 import { checkSdCpp, generateSdCppImage } from '../../ai/controllers/ai/sdCppManager.js';
 import { checkComfyUi, editComfyUiImage, generateComfyUiImage } from '../../ai/controllers/ai/comfyUiManager.js';
 import { isDrawableImageModel } from '../../ai/controllers/ai/visualModelManager.js';
-import { CLOUD_IMAGE } from '../../media/imageCatalog.js';
+import { CLOUD_IMAGE, COMFYUI_DEFAULTS } from '../../media/imageCatalog.js';
 import { galleryFile, galleryUrl, recordGalleryImage } from '../../media/gallery.js';
 
 const GENERATED_DIR = runtimeGeneratedImagesPath();
@@ -340,8 +340,8 @@ export const generateImageTool = {
       if (comfy.found) {
         const result = await generateComfyUiImage({
           ...common,
-          width: clampInt(args.width, 768, 256, 2048),
-          height: clampInt(args.height, 768, 256, 2048),
+          width: clampInt(args.width, COMFYUI_DEFAULTS.width, 256, 2048),
+          height: clampInt(args.height, COMFYUI_DEFAULTS.height, 256, 2048),
           checkpoint: args.checkpoint,
         });
         return imageResultPayload(result, prompt);

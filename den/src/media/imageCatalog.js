@@ -39,6 +39,12 @@ export function imageModelDefaults(modelPath = '') {
   return { width: 512, height: 512, steps: 24, cfg: 7 };
 }
 
+/** What ComfyUI draws with when a setting is left empty (comfyUiManager.js). */
+export const COMFYUI_DEFAULTS = { width: 768, height: 768, steps: 24, cfg: 7, sampler: 'euler', scheduler: 'normal' };
+
+/** The sampling methods stable-diffusion.cpp takes (--sampling-method). */
+export const SD_CPP_SAMPLERS = ['euler', 'euler_a', 'heun', 'dpm2', 'dpm++2s_a', 'dpm++2m', 'dpm++2mv2', 'ipndm', 'ipndm_v', 'lcm', 'ddim_trailing', 'tcd'];
+
 /**
  * How well a model suits a graphics card: 'fits', 'tight' (works, other
  * apps may need closing), 'too_big', 'unknown' (a card whose memory can't

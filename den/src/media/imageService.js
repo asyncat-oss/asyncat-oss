@@ -16,7 +16,7 @@ import { huggingFaceHeaders } from '../ai/controllers/ai/huggingFaceAuth.js';
 import { setConfigValue } from '../config/appConfig.js';
 import { detectGpu, planManagedRuntimeInstall } from '../lib/localEngine.js';
 import { hfFileSize, hfFileUrl } from './hf.js';
-import { CLOUD_IMAGE, IMAGE_MODELS, fitForGpu } from './imageCatalog.js';
+import { CLOUD_IMAGE, COMFYUI_DEFAULTS, IMAGE_MODELS, SD_CPP_SAMPLERS, fitForGpu, imageModelDefaults } from './imageCatalog.js';
 import { startSetupJob } from './setupJobs.js';
 import { generateImageTool } from '../agent/tools/visualTools.js';
 
@@ -68,7 +68,11 @@ function modelLabel(modelPath) {
   return IMAGE_MODELS.find((model) => model.file === file)?.title || file;
 }
 
-/** What makes pictures now, and whether it's ready. */
+/**
+ * What makes images now, and whether it's ready. `defaults` are the size,
+ * steps and guidance used when Try it's options are left empty, and
+ * `samplers`/`schedulers` what the engine that draws offers.
+ */
 export async function imageStatus() {
   const provider = imageProvider();
   const ramGb = Math.round(os.totalmem() / 1024 ** 3);
@@ -78,13 +82,19 @@ export async function imageStatus() {
       checkComfyUi().catch(() => ({ found: false })),
     ]);
     const model = chosenImageModel();
+    // generate_image draws with the chosen engine, else the other one.
+    const local = Boolean(engine.found && model);
+    const comfyDraws = Boolean(comfy.found && (provider === 'comfyui' || !local));
     return {
       provider,
       engine: Boolean(engine.found),
       model: model ? { path: model, name: modelLabel(model) } : null,
-      ready: Boolean((engine.found && model) || comfy.found),
+      ready: Boolean(local || comfy.found),
       reason: comfy.found ? null : !engine.found ? 'needs_engine' : !model ? 'needs_model' : null,
       comfyui: Boolean(comfy.found),
+      defaults: comfyDraws ? { ...COMFYUI_DEFAULTS } : imageModelDefaults(model || ''),
+      samplers: comfyDraws ? comfy.samplers || [] : SD_CPP_SAMPLERS,
+      schedulers: comfyDraws ? comfy.schedulers || [] : [],
       gpu: gpuInfo(),
       ramGb,
     };
@@ -98,6 +108,8 @@ export async function imageStatus() {
     reason: service && !hasKey(service.keyName) ? 'needs_key' : null,
     keyName: service?.keyName || null,
     edits: Boolean(service?.edits),
+    // The size generate_image asks services for; Wide and Tall follow from it.
+    defaults: { width: 1024, height: 1024 },
     gpu: gpuInfo(),
     ramGb,
   };
