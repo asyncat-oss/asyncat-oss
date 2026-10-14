@@ -24,6 +24,12 @@ import { shellQuote } from './tools/shared.js';
 export const NETWORK_MODES = ['open', 'registries', 'off'];
 export const PROXY_PORT = 3128;
 
+// Local services that reach the network for programs: name lookups
+// (systemd-resolved's socket, D-Bus, nscd, Avahi) and printing (CUPS can
+// send a job to any printer address). Without the network they would still
+// answer, and a command could leak data through them, so they are covered too.
+const NAME_SERVICES = ['/run/systemd/resolve', '/run/dbus', '/run/nscd', '/run/avahi-daemon', '/run/cups'];
+
 // Where package managers download from. "registry.npmjs.org" also covers
 // its subdomains; "host:port" allows that port only (otherwise 443 and 80).
 export const DEFAULT_REGISTRIES = [
@@ -292,7 +298,7 @@ export function bridgeScript(links) {
  * arguments, a wrapper for the command, environment, extra sandbox-exec
  * rules, and what it ends up as (`effective`) with a note when that differs.
  */
-export function networkPlan({ mode = networkMode(), platform = process.platform, socat = false, bridges: given = null } = {}) {
+export function networkPlan({ mode = networkMode(), platform = process.platform, socat = false, bridges: given = null, exists = fs.existsSync } = {}) {
   if (mode === 'open' || (platform !== 'linux' && platform !== 'darwin')) {
     // Sockets started for another mode stay out of sight, so a command
     // can't remove them.
@@ -324,7 +330,11 @@ export function networkPlan({ mode = networkMode(), platform = process.platform,
   // network off.
   const bwrap = ['--unshare-net'];
   const shown = mode === 'registries' ? [links.modelsDir, links.proxy.dir] : [links.modelsDir];
-  const mounts = ['--tmpfs', links.dir, ...shown.flatMap((dir) => ['--ro-bind', dir, dir])];
+  const mounts = [
+    ...NAME_SERVICES.filter((dir) => exists(dir)).flatMap((dir) => ['--tmpfs', dir]),
+    '--tmpfs', links.dir,
+    ...shown.flatMap((dir) => ['--ro-bind', dir, dir]),
+  ];
   if (!socat) {
     return {
       mode, effective: 'off', bwrap, mounts, wrap: null, env: {}, seatbelt: [],

@@ -77,10 +77,15 @@ test('the network plan per mode and platform', () => {
   // Sockets started for another mode are out of sight (and out of reach).
   assert.deepEqual(open.mounts, ['--tmpfs', bridges.dir]);
 
-  const off = networkPlan({ mode: 'off', platform: 'linux', socat: true, bridges });
+  const off = networkPlan({ mode: 'off', platform: 'linux', socat: true, bridges, exists: (dir) => dir === '/run/systemd/resolve' });
   assert.deepEqual(off.bwrap, ['--unshare-net']);
-  // Of the sockets, only the local model's are there: not the proxy's.
-  assert.deepEqual(off.mounts, ['--tmpfs', bridges.dir, '--ro-bind', bridges.modelsDir, bridges.modelsDir]);
+  // The local name service is covered too, so names can't carry data out,
+  // and of the sockets only the local model's are there: not the proxy's.
+  assert.deepEqual(off.mounts, [
+    '--tmpfs', '/run/systemd/resolve',
+    '--tmpfs', bridges.dir,
+    '--ro-bind', bridges.modelsDir, bridges.modelsDir,
+  ]);
   assert.deepEqual(off.env, {});
   const [shell, argv] = off.wrap('npm', ['test']);
   assert.equal(shell, '/bin/sh');
@@ -206,12 +211,14 @@ test('with the network off or limited, commands reach only registries and the lo
     const off = await runSandboxed([
       curl(`http://127.0.0.1:${hostPort}/`),
       `curl -s -m 5 'http://127.0.0.1:${modelPort}/v1/models'`,
+      '[ -e /run/systemd/resolve/io.systemd.Resolve ] || [ -e /run/dbus/system_bus_socket ] || [ -e /run/avahi-daemon/socket ] || [ -e /run/cups/cups.sock ]; echo "names:$?"',
       // Straight at the proxy's socket, past the missing bridge.
       `curl -s -m 5 --unix-socket '${proxy.socket}' -o /dev/null -w 'proxy=%{http_code}\\n' 'http://registry.test:${registryPort}/leak' || echo proxy=fail`,
     ].join('; '), project);
     assert.equal(off.plan.network.effective, 'off');
     assert.doesNotMatch(off.out, /=200/, 'with the network off, the host server is out of reach');
     assert.match(off.out, /model \/v1\/models/, 'the local model stays reachable');
+    assert.match(off.out, /names:1/, 'the local name service is out of reach');
     assert.match(off.out, /proxy=(fail|000)/, "with the network off, the proxy's socket is out of reach");
     assert.doesNotMatch(off.out, /registry \/leak/);
 
