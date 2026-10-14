@@ -31,7 +31,9 @@ export default function RunsOnRow({ kind, value, cloud, unsupportedReason = null
           onChange={onChange}
           options={options}
           disabled={disabled}
-          menuWidth={260}
+          // Images list ComfyUI and four services, some with a second line: all show at once.
+          menuWidth={kind === 'image' ? 300 : 260}
+          menuHeight={kind === 'image' ? 380 : undefined}
           aria-label={NAMES[kind]}
         />
       )}

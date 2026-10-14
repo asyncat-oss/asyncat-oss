@@ -55,7 +55,9 @@ function labelText(trigger, labelledby) {
  * `variant="field"` looks like an Input and fills its width (unless
  * `fullWidth={false}`); `variant="inline"` is a borderless value for a
  * settings row. More than ten options add a search field (or pass
- * `searchable`). `onChange(value, option)` runs only when the value changes.
+ * `searchable`). `menuWidth` is the list's least width and `menuHeight` its
+ * greatest height (it scrolls past it). `onChange(value, option)` runs only
+ * when the value changes.
  * Name it with aria-label, aria-labelledby or a <label htmlFor> on its id;
  * the list and its search field take the same name.
  *
@@ -79,6 +81,7 @@ const Select = forwardRef(function Select(
     id,
     className = '',
     menuWidth,
+    menuHeight = MAX_HEIGHT,
     placement = 'bottom-start',
     'aria-label': ariaLabel,
     'aria-labelledby': ariaLabelledby,
@@ -250,7 +253,7 @@ const Select = forwardRef(function Select(
       {open ? createPortal(
         <div
           ref={panelRef}
-          style={floatingStyle(position, { maxHeight: MAX_HEIGHT })}
+          style={floatingStyle(position, { maxHeight: menuHeight })}
           className={PANEL_CLASS}
           // A click anywhere in the panel (padding, headings, the scrollbar)
           // leaves focus on the trigger or in the search field.
@@ -326,6 +329,7 @@ Select.propTypes = {
   id: PropTypes.string,
   className: PropTypes.string,
   menuWidth: PropTypes.number,
+  menuHeight: PropTypes.number,
   placement: PropTypes.oneOf(['bottom-start', 'bottom-end', 'top-start', 'top-end']),
   'aria-label': PropTypes.string,
   'aria-labelledby': PropTypes.string,
