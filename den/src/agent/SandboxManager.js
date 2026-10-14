@@ -12,7 +12,7 @@ import { randomUUID } from 'crypto';
 import db from '../db/client.js';
 import { getWorkspaceRoot } from '../files/fileExplorerService.js';
 import { DIFF_SAFE, gitEnv } from './gitEnv.js';
-import { runInSandbox } from './commandSandbox.js';
+import { hiddenFolders, runInSandbox } from './commandSandbox.js';
 
 const COPY_SKIP = new Set([
   '.git',
@@ -128,6 +128,28 @@ function gitRoot(dir) {
 function isInside(child, parent) {
   const rel = path.relative(path.resolve(parent), path.resolve(child));
   return rel === '' || (!!rel && !rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
+function realOrSelf(target) {
+  try { return fs.realpathSync(target); } catch { return path.resolve(target); }
+}
+
+/**
+ * A copy's folder is its commands' project, which the sandbox lets them read
+ * in full. So no copy of a folder the sandbox hides (~/.ssh, Asyncat's
+ * data…) or of one inside it, and no plain copy (`whole`) of one holding it.
+ */
+function refuseHiddenSource(source, { whole }) {
+  const real = realOrSelf(source);
+  for (const item of hiddenFolders()) {
+    const hidden = realOrSelf(item.path);
+    if (isInside(real, hidden)) {
+      throw new Error(`Commands can't read ${item.label} (${item.path}), so it can't be copied for them. It can be allowed in Settings → Privacy & safety.`);
+    }
+    if (whole && isInside(hidden, real)) {
+      throw new Error(`This folder holds ${item.label} (${item.path}), which commands can't read, so it can't be copied for them.`);
+    }
+  }
 }
 
 function ensureSandboxRoot() {
@@ -507,6 +529,9 @@ export function createSandbox({
   }
   const useWorktree = strategy !== 'copy' && Boolean(repoRoot);
   const resolvedSource = useWorktree ? repoRoot : source;
+  // A worktree holds only the files git tracks.
+  refuseHiddenSource(source, { whole: !useWorktree });
+  if (useWorktree) refuseHiddenSource(resolvedSource, { whole: false });
   const sandboxRootPath = ensureSandboxRootFor(resolvedSource);
   const sandboxPath = sandboxPathFor(id, label, resolvedSource);
   const branchName = useWorktree ? `asyncat-copy/${label}-${id.slice(0, 8)}` : null;

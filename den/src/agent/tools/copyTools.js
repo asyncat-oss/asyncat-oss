@@ -17,7 +17,9 @@ import {
   runSandboxCommand,
   sandboxRoot,
 } from '../SandboxManager.js';
+import path from 'path';
 import { PermissionLevel } from './toolRegistry.js';
+import { isPathInside } from './shared.js';
 
 const RENAMED_KEYS = { sandbox: 'copy', sandboxes: 'copies', sandboxPath: 'copyPath', sandboxId: 'copyId' };
 
@@ -40,19 +42,28 @@ export const copyTools = [
       type: 'object',
       properties: {
         name: { type: 'string', description: 'A short name for the copy.' },
-        sourcePath: { type: 'string', description: 'Folder to copy. Defaults to the active Project folder.' },
+        sourcePath: { type: 'string', description: 'Folder to copy: the active Project folder (the default) or a folder inside it.' },
         strategy: { type: 'string', description: 'auto, worktree, or copy. auto prefers worktree for git repositories.' },
         baseRef: { type: 'string', description: 'Git ref to branch from when using worktree. Defaults to HEAD.' },
       },
     },
-    execute: async (args, context) => forModel(createSandbox({
-      userId: context.userId,
-      workspaceId: context.workspaceId,
-      name: args.name || 'Copy',
-      sourcePath: args.sourcePath || context.workspaceRoot || context.workingDir,
-      strategy: args.strategy || 'auto',
-      baseRef: args.baseRef || 'HEAD',
-    })),
+    execute: async (args, context) => {
+      // A copy's folder is what its commands may read and change in full, so
+      // only the project (or a folder inside it) is copied.
+      const project = context.workspaceRoot || context.workingDir || null;
+      const source = args.sourcePath ? path.resolve(project || process.cwd(), String(args.sourcePath)) : project;
+      if (project && !isPathInside(source, project)) {
+        return { success: false, error: `copy_create copies the project or a folder inside it, and ${source} is outside it.` };
+      }
+      return forModel(createSandbox({
+        userId: context.userId,
+        workspaceId: context.workspaceId,
+        name: args.name || 'Copy',
+        sourcePath: source,
+        strategy: args.strategy || 'auto',
+        baseRef: args.baseRef || 'HEAD',
+      }));
+    },
   },
   {
     name: 'copy_list',

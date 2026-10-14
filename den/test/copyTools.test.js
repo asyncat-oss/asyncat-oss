@@ -81,3 +81,26 @@ test('a new copy gets a copy branch, and its commands see ASYNCAT_COPY_PATH', as
     fs.rmSync(source, { recursive: true, force: true });
   }
 });
+
+// A copy's folder is its commands' project, which they may read in full.
+test("a copy is never made of a folder the sandbox hides, or one that holds it", async () => {
+  const userId = `user-${randomUUID()}`;
+  db.prepare("INSERT INTO users (id, email, name) VALUES (?, ?, 'Demo')").run(userId, `${userId}@example.test`);
+  const data = process.env.ASYNCAT_DATA_PATH; // Asyncat's data folder, hidden from commands
+  fs.mkdirSync(path.join(data, 'inner'), { recursive: true });
+  const project = fs.mkdtempSync(path.join(os.tmpdir(), 'asyncat-copy-project-'));
+  try {
+    for (const sourcePath of [data, path.join(data, 'inner')]) {
+      const made = await toolRegistry.execute('copy_create', { sourcePath, strategy: 'copy' }, { userId });
+      assert.notEqual(made.success, true, sourcePath);
+    }
+    await assert.rejects(async () => (await import('../src/agent/SandboxManager.js')).createSandbox({ userId, sourcePath: path.dirname(data), strategy: 'copy' }), /holds Asyncat's data/);
+
+    // From a project, only the project or a folder inside it.
+    const outside = await toolRegistry.execute('copy_create', { sourcePath: os.homedir() }, { userId, workspaceRoot: project, workingDir: project });
+    assert.equal(outside.success, false);
+    assert.match(outside.error, /outside/);
+  } finally {
+    fs.rmSync(project, { recursive: true, force: true });
+  }
+});
