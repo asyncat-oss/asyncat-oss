@@ -1,6 +1,6 @@
 # asyncat
 
-**A local-first AI agent desktop app.** 230+ tools. 51 skills. Agents that work on their own. Self-improving. Desktop automation. Fully offline.
+**A local-first AI agent desktop app.** 230+ tools. 51 skills. Agents that work on their own. Learns from your chats, as far as you let it. Desktop automation. Fully offline.
 
 > **v0.8.0-beta.8** · MIT · [Install](#quick-start) · [Screenshots](#screenshots) · [Website](https://asyncat.com)
 
@@ -14,7 +14,7 @@
 
 asyncat is a full-stack AI agent you run on your own hardware as a **native desktop application** (powered by Electron). It bundles a backend API engine (`den`) and a React web interface (`neko`) into a single installable app. You connect any model — local or cloud — and it can do real work on your machine.
 
-It is not a chatbot wrapper. It controls your screen, writes and runs code, manages files, runs agents (Cats) that work on their own when something happens, and gets better over time through a self-improving engine called Basal Ganglia.
+It is not a chatbot wrapper. It controls your screen, writes and runs code, manages files, runs agents (Cats) that work on their own when something happens, and gets better over time: it remembers what matters from your chats and can offer to save what it worked out as a skill.
 
 ---
 
@@ -24,7 +24,7 @@ It is not a chatbot wrapper. It controls your screen, writes and runs code, mana
 |---|---|
 | **230+ tools** | Files, shell, git, browser, Docker, screen, keyboard, semantic memory, RAG, notes, system, network, audio, image, design canvases, code analysis, sandboxes, Cats, model management, integrations, and any tools your connectors add |
 | **51 bundled skills** | Reusable instruction modules: code review, debugging, TDD, deployment, security audit, incident response, data engineering, and more |
-| **Basal Ganglia** | Watches which tools succeed for which kinds of goals. After 3 successful runs of the same goal pattern with the same set of tools it writes a new skill automatically. No annotation, no config |
+| **Learning from chats** | Lasting facts, preferences and corrections from chats are saved as memories. Turn on **Suggest skills from my chats** and, after a chat where the agent worked through a task, it offers to save the steps as a skill: nothing is written until you pick **Save**. Both switches are in **Settings → Privacy & safety**; temporary chats never teach it anything |
 | **One chat box** | Chat and agent work happen in the same place. The **Tools** setting decides per message: **Auto** runs the agent when the model supports tools or a project, file or mention is involved; **Just chat** talks to the model directly; **Always use tools** always runs the agent. The agent works in `plan` (read-only tools), `action` (full ReAct loop, asks before risky tools) or **Yolo** (`action` with auto-approve). A `design` mode (canvases, artifacts and images; no source edits or shell/git writes) is available through the API |
 | **Claude Code, Codex and ACP agents** | Hand a chat to Claude Code or Codex installed on your computer, signed in with your own account. Pick one, and its model, under the message box; follow-ups continue the same session and its steps show in the chat. Your existing Claude Code and Codex sessions (from the terminal or their apps) are listed in the sidebar: open one and carry on where you left off. In Action mode Claude Code asks through the usual approval card before running commands. Any agent that speaks the Agent Client Protocol (Gemini CLI, Qwen Code, Goose, …) can answer chats too: its edits show as diffs on the approval card, and its file access stays inside the chat's project folder. **Customize → Agents → Coding agents** shows install and sign-in status, plan usage limits, ACP agents and every session |
 | **Projects** | A home for related work, like Claude and ChatGPT Projects: custom instructions every chat in it follows, files it knows (text, PDF, Word and images), its chats, and optionally folders the agent can work in. Files that fit in the model's context window go in whole; bigger sets are searched and the relevant passages sent. The project page shows how much of the model's window they take and whether the model can see images. Things the agent remembers in a project stay with that project |
@@ -309,7 +309,7 @@ asyncat-oss/
 ├── den/             # Backend — Express API + Agent Runtime
 │   ├── src/
 │   │   ├── index.js           # Server entry (routes, DB, CORS, SSE streaming)
-│   │   ├── agent/             # AgentRuntime, BasalGanglia, tools, skills, souls,
+│   │   ├── agent/             # AgentRuntime, tools, skills, skill suggestions, souls,
 │   │   │                      #   sessions, SandboxManager, profiles, ACP client (agent/acp)
 │   │   ├── ai/                # Providers, local engines, chat/agent/training routes
 │   │   ├── boot/              # Runs first at start: a requested "Delete everything"
@@ -383,27 +383,21 @@ User goal
   → Core tool set for the task; tool_search loads others on demand
   → Any model provider (local or cloud)
   → Tool execution with permission guards
-  → BasalGanglia observes patterns, synthesizes skills
+  → After the answer: memories from the chat, and a skill suggestion if turned on
   → AgentSession persists audit trail
   → Results streamed to browser via SSE
 ```
 
 ---
 
-## Basal Ganglia — how self-improvement works
+## Learning from chats
 
-asyncat watches which tools succeed for which kinds of goals. A pattern is the goal's key words plus the set of tools used (order doesn't matter). When the same pattern succeeds three times, the Basal Ganglia module writes a new `auto-…` skill to `~/.asyncat/skills` and uses it from then on — no annotation, no manual configuration.
+**Settings → Privacy & safety → Learning from chats** has two switches:
 
-Failures and user corrections get encoded into corrective memory. The agent avoids patterns that have been flagged without being told explicitly.
+- **Remember things from chats** (on): after a run that used tools, one short request to the model picks out lasting facts and preferences worth keeping, and corrections ("no, use the other folder") are kept as feedback. Off, the agent saves a memory only when you ask. **Tools & Skills → Memory** shows and edits what it remembers.
+- **Suggest skills from my chats** (off): after a chat where the agent worked through a task with several steps, one more request drafts a skill from them. The chat shows **Save this as a skill?** with its name and description; **Save** writes it to `~/.asyncat/skills`, **Not now** drops it. A chat keeps one draft at a time, and turning the switch off drops any that are waiting.
 
-```
-session #41  "fix failing parser tests"   read_file, edit_file, run_tests  ✓
-session #44  "fix failing auth tests"     read_file, edit_file, run_tests  ✓
-session #47  "fix failing tests"          read_file, edit_file, run_tests  ✓
-
-[basal-ganglia] Created skill: auto-fix-failing-tests
-                brain_region basal-ganglia · weight 0.8
-```
+Temporary chats never learn anything. Cats and helper agents don't suggest skills.
 
 ---
 
