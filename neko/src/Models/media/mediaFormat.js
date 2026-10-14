@@ -33,12 +33,15 @@ export const STEP_STATUS = {
   cancelled: 'Cancelled',
 };
 
-/** "24 of 60 MB" while a step downloads, or its message. */
+/**
+ * "24 of 60 MB" while a step downloads, or its message without the archive
+ * it names ("Extracting…", not "Extracting sd-master-…-x86_64.zip").
+ */
 export function stepProgressText(step) {
   if (step.status !== 'running') return STEP_STATUS[step.status] || step.status;
   if (step.downloaded && step.total) return transferDetail({ done: step.downloaded, total: step.total });
   if (step.downloaded) return `${formatBytes(step.downloaded)} downloaded`;
-  return step.detail || 'Working…';
+  return String(step.detail || 'Working…').replace(/\s+\S+\.(zip|tar\.gz|tgz|tar\.xz)$/i, '…');
 }
 
 /**

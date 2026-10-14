@@ -18,6 +18,8 @@ test('sizes and step states read plainly', () => {
   assert.equal(stepSizeText({ bytes: null, error: 'No prebuilt download', unavailable: true }), 'Not available');
   assert.equal(stepProgressText({ status: 'running', downloaded: 24_000_000, total: 60_000_000 }), '24 of 60 MB');
   assert.equal(stepProgressText({ status: 'skipped' }), 'Already here');
+  assert.equal(stepProgressText({ status: 'running', detail: 'Extracting sd-master-1a2b3c4-bin-Linux-x86_64.zip' }), 'Extracting…');
+  assert.equal(stepProgressText({ status: 'running', detail: 'Checking that Piper runs on this computer' }), 'Checking that Piper runs on this computer');
   assert.equal(stepProgressText({ status: 'waiting' }), 'Waiting');
   // An engine that won't start says so in one sentence, not its whole output.
   assert.equal(stepErrorText("whisper.cpp was downloaded, but it doesn't run on this computer:\n/x/whisper-server --version: failed\nstderr: …"),
