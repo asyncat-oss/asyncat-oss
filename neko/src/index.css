@@ -279,6 +279,13 @@
   .shimmer-text { animation: none; background: none; color: var(--as-fg-subtle); }
 }
 @keyframes shimmer-text { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+/* Indeterminate progress (components/ui/Progress.jsx): a short bar slides
+   across. With reduced motion it holds still as a faint full bar. */
+.progress-indeterminate { animation: indeterminate 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .progress-indeterminate { animation: none; width: 100%; opacity: 0.4; }
+}
+@keyframes indeterminate { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
 @keyframes startup-ground { from { background-position: 0 0; } to { background-position: -22px 0; } }
 @keyframes cat-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.1); } }
 @keyframes cat-tail { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(7deg); } }
