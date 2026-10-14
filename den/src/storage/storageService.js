@@ -2,23 +2,23 @@ import fs from 'fs';
 import fsp from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import db from '../db/client.js';
 import { getModelsDir } from '../ai/controllers/ai/modelManager.js';
 import { runtimeHome } from '../config/runtimeConfig.js';
+import { logRoot } from '../logger.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..');
-const LOGS_ROOT = path.join(PROJECT_ROOT, 'logs');
-
+// den's logs are in logRoot(), one folder per kind. The folder above it holds
+// other .log files, such as the desktop app's backend-process.log.
 const LOG_CATEGORIES = {
-  'backend-app': { dir: 'backend/app', label: 'Backend App' },
-  'backend-error': { dir: 'backend/error', label: 'Backend Error' },
-  'backend-http': { dir: 'backend/http', label: 'Backend HTTP' },
-  'backend-process': { dir: 'backend/process', label: 'Backend Process' },
-  'cli': { dir: 'cli', label: 'CLI' },
-  'other': { dir: '.', label: 'Other Logs' },
+  'backend-app': { dir: 'app', label: 'Backend App' },
+  'backend-error': { dir: 'error', label: 'Backend Error' },
+  'backend-http': { dir: 'http', label: 'Backend HTTP' },
+  'other': { dir: null, label: 'Other Logs', match: /\.log$/i },
 };
+
+function logCategoryDir(config) {
+  return config.dir ? path.join(logRoot(), config.dir) : path.dirname(logRoot());
+}
 
 const DEFAULT_SCAN_LIMIT = 25000;
 const MANAGED_UPLOAD_CONTAINERS = ['notes', 'kanban-attachments'];
@@ -314,123 +314,107 @@ export async function clearManagedUploads() {
   };
 }
 
-function listFilesInDir(dirPath, recursive = true) {
+// The log files of one category: plain files only (no links, no folders).
+function listLogFiles(config) {
+  const dirPath = logCategoryDir(config);
   const files = [];
+  let entries = [];
   try {
-    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-    for (const entry of entries) {
-      const entryPath = path.join(dirPath, entry.name);
-      if (entry.isDirectory() && recursive) {
-        files.push(...listFilesInDir(entryPath, recursive));
-      } else if (entry.isFile()) {
-        const stat = safeStat(entryPath);
-        if (stat) {
-          files.push({
-            name: entry.name,
-            relativePath: path.relative(LOGS_ROOT, entryPath),
-            bytes: stat.size,
-            formatted: formatBytes(stat.size),
-            modifiedAt: stat.mtime.toISOString(),
-          });
-        }
-      }
-    }
+    entries = fs.readdirSync(dirPath, { withFileTypes: true });
   } catch {
-    // ignore
+    return files;
+  }
+  for (const entry of entries) {
+    if (!entry.isFile() || (config.match && !config.match.test(entry.name))) continue;
+    const stat = safeLstat(path.join(dirPath, entry.name));
+    if (!stat?.isFile()) continue;
+    files.push({
+      name: entry.name,
+      relativePath: path.relative(path.dirname(logRoot()), path.join(dirPath, entry.name)),
+      bytes: stat.size,
+      formatted: formatBytes(stat.size),
+      modifiedAt: stat.mtime.toISOString(),
+    });
   }
   return files;
 }
 
 export function getLogsSummary() {
-  const categories = Object.keys(LOG_CATEGORIES).map((id) => {
-    const config = LOG_CATEGORIES[id];
-    const dirPath = path.join(LOGS_ROOT, config.dir);
-    const usage = directoryUsage(dirPath);
-
-    const fileList =
-      id === 'other'
-        ? listFilesInDir(dirPath, false)
-        : listFilesInDir(dirPath, true);
-
+  const categories = Object.entries(LOG_CATEGORIES).map(([id, config]) => {
+    const fileList = listLogFiles(config);
     fileList.sort((a, b) => new Date(b.modifiedAt) - new Date(a.modifiedAt));
+    const bytes = fileList.reduce((sum, file) => sum + file.bytes, 0);
 
     return {
       id,
       label: config.label,
-      ...usage,
+      exists: fs.existsSync(logCategoryDir(config)),
+      path: logCategoryDir(config),
+      bytes,
+      formatted: formatBytes(bytes),
+      files: fileList.length,
+      directories: 0,
+      truncated: false,
       latestModifiedAt: fileList[0]?.modifiedAt || null,
       recentFiles: fileList.slice(0, 10),
     };
   });
 
-  const rootUsage = directoryUsage(LOGS_ROOT);
+  const totalBytes = categories.reduce((sum, category) => sum + category.bytes, 0);
 
   return {
     success: true,
     generatedAt: new Date().toISOString(),
-    totalBytes: rootUsage.bytes,
-    totalFormatted: formatBytes(rootUsage.bytes),
+    path: logRoot(),
+    totalBytes,
+    totalFormatted: formatBytes(totalBytes),
     categories,
   };
 }
 
+// Removes the files getLogsSummary lists, and nothing else in those folders.
 export async function clearLogs() {
-  const before = directoryUsage(LOGS_ROOT);
-
-  async function clearDir(dirPath) {
-    const entries = await fsp.readdir(dirPath, { withFileTypes: true });
-    for (const entry of entries) {
-      const entryPath = path.join(dirPath, entry.name);
-      if (entry.isDirectory()) {
-        await clearDir(entryPath);
-      } else {
-        await fsp.unlink(entryPath);
+  let deletedBytes = 0;
+  let deletedFiles = 0;
+  for (const config of Object.values(LOG_CATEGORIES)) {
+    const dirPath = logCategoryDir(config);
+    for (const file of listLogFiles(config)) {
+      try {
+        await fsp.unlink(path.join(dirPath, file.name));
+        deletedBytes += file.bytes;
+        deletedFiles += 1;
+      } catch {
+        // gone already, or not ours to remove
       }
     }
   }
 
-  if (fs.existsSync(LOGS_ROOT)) {
-    await clearDir(LOGS_ROOT);
-  }
-
-  const after = directoryUsage(LOGS_ROOT);
-  const deletedBytes = Math.max(0, (before.bytes || 0) - (after.bytes || 0));
-  const deletedFiles = Math.max(0, (before.files || 0) - (after.files || 0));
-
   return {
     success: true,
     action: 'clear-logs',
-    path: LOGS_ROOT,
+    path: logRoot(),
     deletedBytes,
     deletedFormatted: formatBytes(deletedBytes),
     deletedFiles,
-    before,
-    after,
   };
 }
 
 export function readLogFile(category, filename, lines = 200) {
-  const config = LOG_CATEGORIES[category];
+  const config = Object.hasOwn(LOG_CATEGORIES, category) ? LOG_CATEGORIES[category] : null;
   if (!config) {
     throw new Error('Invalid log category');
   }
 
-  const sanitized = path.normalize(filename).replace(/^(\.\.(\/|\\|$))+/, '');
-  if (sanitized.includes('..') || path.isAbsolute(sanitized)) {
+  const name = String(filename || '');
+  if (!name || path.basename(name) !== name || name.includes('\0') || name === '.' || name === '..') {
     throw new Error('Invalid filename');
   }
 
-  const categoryDir = path.join(LOGS_ROOT, config.dir);
-  const filePath = path.join(categoryDir, sanitized);
-
-  if (!assertInside(categoryDir, filePath)) {
-    throw new Error('Invalid file path');
-  }
-
-  const stat = safeStat(filePath);
-  if (!stat || !stat.isFile()) {
+  const listed = listLogFiles(config).some((file) => file.name === name);
+  if (!listed) {
     throw new Error('Log file not found');
   }
+  const filePath = path.join(logCategoryDir(config), name);
 
   const content = fs.readFileSync(filePath, 'utf-8');
   const allLines = content.split('\n');
@@ -440,7 +424,7 @@ export function readLogFile(category, filename, lines = 200) {
   return {
     success: true,
     category,
-    filename: sanitized,
+    filename: name,
     lines: allLines.length,
     returnedLines: tail.split('\n').length,
     content: tail,

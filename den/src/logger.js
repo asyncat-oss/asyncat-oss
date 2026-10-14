@@ -5,11 +5,19 @@ import winston from 'winston';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..', '..');
-// ASYNCAT_LOG_DIR is set by Electron in packaged builds to a writable OS path,
-// because __dirname resolves into the read-only asar archive in production.
-const LOG_ROOT = process.env.ASYNCAT_LOG_DIR
-  ? path.join(process.env.ASYNCAT_LOG_DIR, 'backend')
-  : path.join(ROOT, 'logs', 'backend');
+
+/**
+ * The folder den writes its logs to, one folder per kind (app, error, http).
+ * ASYNCAT_LOG_DIR/backend in packaged builds, where Electron sets it because
+ * __dirname is inside the read-only app bundle; logs/backend in the source
+ * tree otherwise. Everything that lists, reads or clears logs asks this, so it
+ * looks where they are written.
+ */
+export function logRoot() {
+  return process.env.ASYNCAT_LOG_DIR
+    ? path.resolve(process.env.ASYNCAT_LOG_DIR, 'backend')
+    : path.join(ROOT, 'logs', 'backend');
+}
 
 const SENSITIVE_KEY_RE = /^(apikey|api_key|key|token|password|secret|bearer|authorization|database_url|connection_string)$/i;
 const SENSITIVE_PATTERNS = [
@@ -35,7 +43,7 @@ function dateStamp() {
 }
 
 function ensureDir(category) {
-  const dir = path.join(LOG_ROOT, category);
+  const dir = path.join(logRoot(), category);
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
