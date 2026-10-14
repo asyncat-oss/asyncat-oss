@@ -14,6 +14,7 @@ import Button from '../components/ui/Button.jsx';
 import Cat from '../components/ui/Cat.jsx';
 import UpdateScreen from '../components/UpdateScreen.jsx';
 import FolderDropProject from '../projects/FolderDropProject.jsx';
+import { useFirstRunSetup } from '../welcome/useFirstRunSetup.js';
 
 const ConnectionNotice = () => {
   const network = useNetworkStatus({ pollMs: 6000 });
@@ -152,6 +153,9 @@ const AppLayout = () => {
   const hasWorkspaces = workspaces && workspaces.length > 0;
   
   const projectStorageUnavailable = !workspacesLoading && !workspacesError && !hasWorkspaces;
+
+  // A fresh install opens the first-run setup instead of the chat home.
+  const setupPending = useFirstRunSetup(!workspacesLoading && !workspacesError);
 
   const refreshProjects = useCallback(() => {
     invalidateProjectsCache();
@@ -332,6 +336,10 @@ const AppLayout = () => {
         <Button variant="primary" size="md" icon={RotateCw} onClick={refreshWorkspaces} className="mt-5">Try again</Button>
       </div>
     );
+  }
+
+  if (setupPending) {
+    return <StartupScene label="Opening your workspace…" />;
   }
 
   const navigationPaddingClass = hideSidebar

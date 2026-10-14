@@ -24,6 +24,10 @@ test('the setup opens on a fresh start only, and never over a link to another pa
   assert.equal(shouldOpenSetup({ show: true }, '/conversations/abc'), false);
   assert.equal(shouldOpenSetup({ show: false }, '/home'), false);
   assert.equal(shouldOpenSetup(null, '/home'), false);
+  // Chats went to Claude Code, Codex or an ACP agent before: not a fresh start.
+  assert.equal(shouldOpenSetup({ show: true }, '/home', 'asyncat'), true);
+  assert.equal(shouldOpenSetup({ show: true }, '/home', 'claude-code'), false);
+  assert.equal(shouldOpenSetup({ show: true }, '/home', 'codex'), false);
   assert.equal(isLandingPath(''), true);
   assert.equal(isLandingPath('/welcome'), false);
 });

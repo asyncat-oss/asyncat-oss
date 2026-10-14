@@ -24,9 +24,14 @@ export function isLandingPath(pathname) {
   return LANDING.has(String(pathname || '/').replace(/\/+$/, '') || '/');
 }
 
-/** Whether to open the setup instead of `pathname`: { show } from GET /api/setup. */
-export function shouldOpenSetup(setup, pathname) {
-  return Boolean(setup?.show) && isLandingPath(pathname);
+/**
+ * Whether to open the setup instead of `pathname`: { show } from GET
+ * /api/setup, and `engine`, the agent chats were last sent to (localStorage
+ * 'asyncat_engine'). Claude Code, Codex or an ACP agent there means
+ * Asyncat was used before, without a model of its own.
+ */
+export function shouldOpenSetup(setup, pathname, engine = null) {
+  return Boolean(setup?.show) && isLandingPath(pathname) && (!engine || engine === 'asyncat');
 }
 
 // The name a fresh profile gets (den/src/db/seed.js) isn't one to show back.
