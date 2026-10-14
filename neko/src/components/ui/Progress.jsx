@@ -62,8 +62,9 @@ export function DownloadLine({ label, bytes, total, percent, detail, error, onCa
   const text = detail ?? transferDetail({ done: bytes, total, rate: speed.rate });
   return (
     <div className={`space-y-1.5 ${className}`} data-download-line>
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="min-w-0 truncate text-[13px] text-fg">{label}</span>
+      {/* On a narrow screen the numbers go under the name instead of squeezing it. */}
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+        <span className="min-w-0 max-w-full truncate text-[13px] text-fg">{label}</span>
         {text ? <span className="shrink-0 text-[12px] tabular-nums text-fg-subtle">{text}</span> : null}
       </div>
       <div className="flex items-center gap-2">
