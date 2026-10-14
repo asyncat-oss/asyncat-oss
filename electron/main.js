@@ -23,6 +23,7 @@ import { keepRunningAfterClose, noteKeptRunning, registerBackgroundIPC, setEnabl
 import { setupBrowserHost, handleAgentCommand, shutdownBrowserHost, clearCatBrowserData, forgetAllBrowsing } from './browserHost.js';
 import { isAllowedBrowserUrl as isAllowedBrowserUrlFor } from './browserPolicy.js';
 import { openFolderOnly } from './folder-open.js';
+import { openFile, revealFile, trashFile } from './files-host.js';
 import http from 'http';
 import net from 'net';
 import fs from 'fs';
@@ -633,6 +634,11 @@ function setupHostBridge() {
   registerHostHandler('app.focus', () => bootApp(''));
   // "Delete everything" (Settings → Privacy & safety): the browser's data too.
   registerHostHandler('app.forgetBrowsing', () => forgetAllBrowsing());
+  // Files: Show in folder, Open in another app and Move to Trash, for a file
+  // den has found and checked; files-host.js checks the path again.
+  registerHostHandler('files.reveal', ({ path: target } = {}) => revealFile(target, { showItemInFolder: (file) => shell.showItemInFolder(file) }));
+  registerHostHandler('files.open', ({ path: target } = {}) => openFile(target, { openPath: (file) => shell.openPath(file) }));
+  registerHostHandler('files.trash', ({ path: target } = {}) => trashFile(target, { trashItem: (file) => shell.trashItem(file), keep: [USER_DATA] }));
 
   powerMonitor.on('resume', () => postHostEvent('power.resume'));
   powerMonitor.on('unlock-screen', () => postHostEvent('power.resume'));

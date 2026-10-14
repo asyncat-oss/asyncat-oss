@@ -25,6 +25,7 @@ This directory contains the Electron main-process code that wraps the asyncat de
 | `menu.js` | Native OS menu bar with keyboard shortcuts |
 | `preload.js` | Context-isolated bridge between the renderer and main process |
 | `folder-open.js`, `folder-open.test.js` | What the page may open with `shell:open`: folders only, never a file (or a macOS app), and their tests |
+| `files-host.js`, `files-host.test.js` | What the Files page asks of the desktop app through den: Show in folder, Open in another app (folders, documents, pictures, sound and video only, checked by name and by first bytes) and Move to Trash (never the home folder or the app's data), and their tests |
 | `updater.js` | In-app updates from GitHub Releases (packaged builds): check, download, verify, install |
 | `update-policy.js`, `update-policy.test.js` | Pure version, release and installer-asset selection helpers, and their tests |
 | `update-install.js`, `update-install.test.js` | Pure download, checksum, install and clean-up helpers for the updater, and their tests |

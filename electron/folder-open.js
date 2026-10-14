@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 // Folders macOS runs or installs when opened.
-const MAC_PACKAGES = /\.(app|pkg|mpkg|prefpane|saver|workflow|action|appex|xpc|qlgenerator|mdimporter)$/i;
+export const MAC_PACKAGES =/\.(app|pkg|mpkg|prefpane|saver|workflow|action|appex|xpc|qlgenerator|mdimporter)$/i;
 
 /**
  * Opens `target` when it is an existing folder, through `openPath` (Electron's
