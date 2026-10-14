@@ -28,6 +28,7 @@ const AgentPage = lazy(() => import('../Agent/AgentPage'));
 const CatsPage = lazy(() => import('../Cats/CatsPage'));
 const CatPage = lazy(() => import('../Cats/CatPage'));
 const FilesPage = lazy(() => import('../files/FilesPage'));
+const WelcomePage = lazy(() => import('../welcome/WelcomePage'));
 // The desktop app's Quick ask window: its own small page, outside the app's
 // layout and providers (electron/quick.js).
 const QuickAsk = lazy(() => import('../quick/QuickAsk'));
@@ -99,6 +100,12 @@ const createRouter = () => createBrowserRouter([
       {
         path: "home",
         element: <CommandCenterV2Enhanced />,
+        errorElement: <RouteErrorElement />
+      },
+      {
+        // First-run setup; the layout hides the sidebar here.
+        path: "welcome",
+        element: <WelcomePage />,
         errorElement: <RouteErrorElement />
       },
       {

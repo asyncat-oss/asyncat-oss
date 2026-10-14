@@ -20,8 +20,12 @@ function monthYear(iso) {
   return iso ? new Date(iso).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) : '';
 }
 
-/** Chats (and memories) from a ChatGPT or Claude data export. */
-export function ImportChats() {
+/**
+ * Chats (and memories) from a ChatGPT or Claude data export. The first-run
+ * setup passes `title={null}`, as its own heading says it, and secondary
+ * buttons, as its Continue is the page's one primary.
+ */
+export function ImportChats({ title = 'Bring your chats from ChatGPT or Claude', actionVariant = 'primary' }) {
   const toast = useToast();
   const [reading, setReading] = useState(false);
   const [preview, setPreview] = useState(null); // { token, preview }
@@ -80,8 +84,8 @@ export function ImportChats() {
     <div className="rounded-xl border border-line px-4 py-3" data-import>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <p className="text-[13px] font-medium text-fg">Bring your chats from ChatGPT or Claude</p>
-          <p className="mt-0.5 text-[12px] leading-5 text-fg-muted">
+          {title ? <p className="text-[13px] font-medium text-fg">{title}</p> : null}
+          <p className={`${title ? 'mt-0.5 ' : ''}text-[12px] leading-5 text-fg-muted`}>
             Ask either for a copy of your data (ChatGPT: Settings → Data controls → Export; Claude: Settings → Privacy → Export data), then pick the .zip it emails you. Chats keep their titles and dates; ones brought over before are skipped.
           </p>
         </div>
@@ -106,7 +110,7 @@ export function ImportChats() {
             </label>
           ) : null}
           <div className="mt-2 flex gap-2">
-            <Button size="sm" variant="primary" loading={importing} disabled={!info.newChats && !(info.memories && withMemories)} onClick={run}>Bring them over</Button>
+            <Button size="sm" variant={actionVariant} loading={importing} disabled={!info.newChats && !(info.memories && withMemories)} onClick={run}>Bring them over</Button>
             <Button size="sm" variant="ghost" onClick={() => setPreview(null)}>Cancel</Button>
           </div>
         </div>
@@ -123,7 +127,7 @@ export function ImportChats() {
             <p className="text-[12px] leading-5 text-fg-muted">Memories aren&apos;t always in an export. Copy ChatGPT&apos;s from Settings → Personalization → Memory → Manage, and paste them here, one per line.</p>
             <textarea rows={4} value={pasted} onChange={(event) => setPasted(event.target.value)} aria-label="Memories to add" className="w-full rounded-lg border border-line-strong bg-canvas px-3 py-2 text-[13px] text-fg outline-none focus:border-accent focus:ring-2 focus:ring-accent/20" />
             <div className="flex gap-2">
-              <Button size="sm" variant="primary" loading={savingMemories} disabled={!pasted.trim()} onClick={saveMemories}>Add memories</Button>
+              <Button size="sm" variant={actionVariant} loading={savingMemories} disabled={!pasted.trim()} onClick={saveMemories}>Add memories</Button>
               <Button size="sm" variant="ghost" onClick={() => setPasteOpen(false)}>Cancel</Button>
             </div>
           </div>
@@ -134,6 +138,8 @@ export function ImportChats() {
     </div>
   );
 }
+
+ImportChats.propTypes = { title: PropTypes.node, actionVariant: PropTypes.oneOf(['primary', 'secondary']) };
 
 export function ExportEverything() {
   const toast = useToast();

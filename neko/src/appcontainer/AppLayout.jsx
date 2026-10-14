@@ -141,6 +141,8 @@ const AppLayout = () => {
   
   const basePage = location.pathname.split('/').filter(Boolean)[0] || 'home';
   const isSettingsPage = basePage === 'settings';
+  // Settings and the first-run setup use the whole window.
+  const hideSidebar = isSettingsPage || basePage === 'welcome';
   // All chat URLs are one page: a new chat moves from /home to
   // /conversations/:id after its first message is saved, and keying on that
   // would rebuild the whole chat and replay the page fade mid-conversation.
@@ -332,7 +334,7 @@ const AppLayout = () => {
     );
   }
 
-  const navigationPaddingClass = isSettingsPage
+  const navigationPaddingClass = hideSidebar
     ? ''
     : sidebarState === 'collapsed'
       ? 'pl-16'
@@ -343,7 +345,7 @@ const AppLayout = () => {
     <div className="flex h-screen bg-canvas">
       <ConnectionNotice />
       <FolderDropProject />
-      {!isSettingsPage && (
+      {!hideSidebar && (
         <Sidebar
           onNewChat={handleNewChatWithNavigation}
           basePage={basePage}
