@@ -116,7 +116,10 @@ export default function LocalModelChoice({ local, brain }) {
           {engine.error}
         </Notice>
       ) : !engine.installed ? (
-        <Notice>Also downloads llama.cpp, the engine that runs it{engine.bytes ? ` (${formatBytes(engine.bytes)})` : ''}.</Notice>
+        <Notice>
+          Also downloads llama.cpp, the engine that runs it
+          {engine.bytes ? <> <span className="whitespace-nowrap">({formatBytes(engine.bytes)}).</span></> : '.'}
+        </Notice>
       ) : null}
       {failure || error ? <Notice tone="error">{failure || error}</Notice> : null}
       <Button
