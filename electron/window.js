@@ -4,6 +4,7 @@ import {
   NEKO_INDEX, PRELOAD_PATH,
   ICONS, IS_MAC, IS_WIN, APP_NAME, WINDOWS_APP_ID, FRONTEND_PORT, OPEN_DEVTOOLS,
 } from './constants.js';
+import { guardNavigation } from './navigation.js';
 
 let mainWindow = null;
 
@@ -75,31 +76,16 @@ export function createWindow() {
     }
   });
 
-  // ─── Open external links in the OS browser ─────────────────────────
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    try {
-      const target = new URL(url);
-      if (target.protocol === 'http:' || target.protocol === 'https:') shell.openExternal(url).catch(() => {});
-    } catch { /* deny malformed and privileged URLs */ }
-    return { action: 'deny' };
+  // ─── Open external links in the OS browser, stay on the app's pages ─
+  guardNavigation(mainWindow.webContents, {
+    frontendPort: FRONTEND_PORT,
+    openExternal: (url) => shell.openExternal(url),
   });
 
   // Reassert the icon after native window creation; this avoids the Electron
   // executable icon winning the first Windows taskbar paint in source runs.
   if (IS_WIN) applyWindowsTaskbarIdentity(mainWindow, windowIcon);
   else if (!IS_MAC && !windowIcon.isEmpty()) mainWindow.setIcon(windowIcon);
-
-  // ─── Handle navigation to external URLs ─────────────────────────────
-  mainWindow.webContents.on('will-navigate', (event, url) => {
-    let target;
-    try { target = new URL(url); } catch { event.preventDefault(); return; }
-    const isAppOrigin = target.protocol === 'http:'
-      && ['localhost', '127.0.0.1'].includes(target.hostname)
-      && target.port === String(FRONTEND_PORT);
-    if (isAppOrigin) return;
-    event.preventDefault();
-    if (target.protocol === 'http:' || target.protocol === 'https:') shell.openExternal(url).catch(() => {});
-  });
 
   // ─── Cleanup ────────────────────────────────────────────────────────
   mainWindow.on('closed', () => {
