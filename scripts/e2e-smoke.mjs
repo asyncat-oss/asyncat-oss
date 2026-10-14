@@ -492,7 +492,14 @@ async function main() {
     await noCrash();
   });
 
-  for (const [label, route] of [['Models', '/models'], ['Models → Voice', '/models?tab=audio'], ['Settings → Profile', '/settings/profile'], ['Settings → Connections', '/settings/connections'], ['Settings → Notifications', '/settings/notifications'], ['Settings → Background', '/settings/background'], ['Settings → Engines', '/settings/runtime'], ['Tools & Skills', '/tools'], ['Gallery (made by agents)', '/made']]) {
+  await check('Models → Voice shows Listening and Speaking', async () => {
+    await page.goto(`${app}/models?tab=audio`, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('[data-voice-page] [data-voice-group="stt"] [data-runs-on="stt"]', { timeout: 20000 });
+    await page.waitForSelector('[data-voice-page] [data-voice-group="tts"] [data-runs-on="tts"]', { timeout: 20000 });
+    await noCrash();
+  });
+
+  for (const [label, route] of [['Models', '/models'], ['Settings → Profile', '/settings/profile'], ['Settings → Connections', '/settings/connections'], ['Settings → Notifications', '/settings/notifications'], ['Settings → Background', '/settings/background'], ['Settings → Engines', '/settings/runtime'], ['Tools & Skills', '/tools'], ['Gallery (made by agents)', '/made']]) {
     await check(`${label} opens`, async () => {
       await page.goto(`${app}${route}`, { waitUntil: 'domcontentloaded' });
       // Pages keep live connections open (/api/events), so the network never

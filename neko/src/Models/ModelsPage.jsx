@@ -2,14 +2,13 @@ import { lazy, Suspense, useState, useEffect, useMemo, useCallback } from 'react
 import { useSearchParams } from 'react-router-dom';
 import {
   RefreshCw, TriangleAlert, X,
-  Mic, Volume2, Image, MessageSquare, BarChart3, GraduationCap, Loader2
+  Mic, Image, MessageSquare, BarChart3, GraduationCap, Loader2
 } from 'lucide-react';
 import Button from '../components/ui/Button.jsx';
 import { Segmented, Tabs } from '../components/ui/Tabs.jsx';
 import ActiveBrainPanel from './ActiveBrainPanel.jsx';
 import ProvidersSection from './ProvidersSection.jsx';
 import LocalModelsPane from './LocalModelsPane.jsx';
-import AudioModelsSection from './AudioModelsSection.jsx';
 import VisualModelsSection from './VisualModelsSection.jsx';
 import CapabilityProvidersSection from './CapabilityProvidersSection.jsx';
 import ModelUsageSection from './ModelUsageSection.jsx';
@@ -17,10 +16,11 @@ import ConfirmDeleteDialog from './ConfirmDeleteDialog.jsx';
 import ModelDownloadHub from './ModelDownloadHub.jsx';
 import ManagedEngineCard from './ManagedEngineCard.jsx';
 import LocalEnginePanel from './LocalEnginePanel.jsx';
-import VoiceSetupCard from './media/VoiceSetupCard.jsx';
+import VoicePage from './media/VoicePage.jsx';
 import ImageSetupCard from './media/ImageSetupCard.jsx';
 import GallerySection from './media/GallerySection.jsx';
 import { Advanced } from './media/MediaParts.jsx';
+import { onEvents } from './media/notify.js';
 import {
   STATUS_META, conciseHardwareSummary, getModelContextLimit,
   providerLabel
@@ -37,7 +37,7 @@ const VIEW_KEYS = ['connected', 'add', 'local'];
 
 const TAB_SUBTITLES = {
   chat: 'Choose what powers chats and agents: a cloud provider, a server on your computer, or a downloaded model.',
-  audio: 'Speech to text and text to speech, on your computer or through a provider.',
+  audio: 'Talk to Asyncat with the mic, and hear answers read aloud.',
   image: 'Generate images with a downloaded model or a cloud provider.',
   usage: 'Requests and tokens your models have handled.',
   training: 'Fine-tune models on your own data.',
@@ -98,6 +98,7 @@ const ModelsPage = () => {
   const [audioModels, setAudioModels] = useState({ whisper: [], tts: [] });
   const [visualModels, setVisualModels] = useState({ image: [] });
   const [highlightedItem, setHighlightedItem] = useState(null);
+  const [voiceHighlight, setVoiceHighlight] = useState(null);
   const [galleryKey, setGalleryKey] = useState(0);
   const [usageRange, setUsageRange] = useState('30d');
   const [modelUsage, setModelUsage] = useState(null);
@@ -148,6 +149,9 @@ const ModelsPage = () => {
     refreshVisualData();
   }, [refreshVoiceData, refreshVisualData]);
 
+  // Files added or deleted on the Voice tab show in the search at once.
+  useEffect(() => onEvents(['asyncat-audio-models-updated'], refreshVoiceData), [refreshVoiceData]);
+
   useEffect(() => {
     refreshUsageData();
   }, [refreshUsageData]);
@@ -179,6 +183,14 @@ const ModelsPage = () => {
       return next;
     }, { replace: true });
   }, [setSearchParams]);
+
+  // A search's highlight shows once: leaving its tab drops it, so coming
+  // back doesn't flash the row and scroll to it again.
+  const [highlightTab, setHighlightTab] = useState(activeTab);
+  if (highlightTab !== activeTab) {
+    setHighlightTab(activeTab);
+    if (highlightTab === 'audio') setVoiceHighlight(null);
+  }
 
   // ── Unified search ─────────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState('');
@@ -264,16 +276,19 @@ const ModelsPage = () => {
     setHighlightedItem(item);
     if (item.type === 'model') setActiveView('local');
     if (item.type === 'provider') setActiveView('connected');
-    if (item.type === 'whisper' || item.type === 'tts') setActiveTab('audio');
+    if (item.type === 'whisper' || item.type === 'tts') {
+      // The file's row in Voice → Model files scrolls into view and flashes.
+      setVoiceHighlight({ id: `voice-file-${item.type}-${item.id}`, at: Date.now() });
+      setActiveTab('audio');
+      return;
+    }
     if (item.type === 'image') setActiveTab('image');
     window.setTimeout(() => {
       const id = item.type === 'model'
         ? `model-card-${item.id}`
-        : item.type === 'whisper' || item.type === 'tts'
-          ? `audio-card-${item.type}-${item.id}`
-          : item.type === 'provider'
-            ? `provider-card-${item.id}`
-            : `visual-card-${item.type}-${item.id}`;
+        : item.type === 'provider'
+          ? `provider-card-${item.id}`
+          : `visual-card-${item.type}-${item.id}`;
       document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 180);
   };
@@ -473,44 +488,7 @@ const ModelsPage = () => {
               </>
             )}
 
-            {activeTab === 'audio' && (
-              <>
-                <VoiceSetupCard />
-                <Advanced title="Advanced" hint="Engines, any model from Hugging Face or a file, cloud keys">
-                {downloadHub}
-                <div className="grid gap-6 xl:grid-cols-2">
-                  <div className="space-y-4">
-                    <h2 className="flex items-center gap-2 text-[14px] font-semibold text-fg">
-                      <Mic className="h-4 w-4 text-fg-subtle" /> Speech to text
-                    </h2>
-                    <ManagedEngineCard
-                      runtimeId="whisper"
-                      name="whisper.cpp"
-                      purpose="Turns speech into text on this computer, for the mic and voice mode."
-                      icon={Mic}
-                      onChanged={refreshVoiceData}
-                    />
-                    <CapabilityProvidersSection capability="stt" />
-                    <AudioModelsSection mode="whisper" highlightedItem={highlightedItem} onModelsChange={setAudioModels} />
-                  </div>
-                  <div className="space-y-4">
-                    <h2 className="flex items-center gap-2 text-[14px] font-semibold text-fg">
-                      <Volume2 className="h-4 w-4 text-fg-subtle" /> Text to speech
-                    </h2>
-                    <ManagedEngineCard
-                      runtimeId="piper"
-                      name="Piper"
-                      purpose="Reads answers aloud on this computer, with natural voices."
-                      icon={Volume2}
-                      onChanged={refreshVoiceData}
-                    />
-                    <CapabilityProvidersSection capability="tts" />
-                    <AudioModelsSection mode="tts" highlightedItem={highlightedItem} onModelsChange={setAudioModels} />
-                  </div>
-                </div>
-                </Advanced>
-              </>
-            )}
+            {activeTab === 'audio' && <VoicePage highlight={voiceHighlight} />}
 
             {activeTab === 'image' && (
               <>
