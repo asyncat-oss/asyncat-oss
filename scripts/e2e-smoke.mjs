@@ -5,8 +5,9 @@
 // the main flows: chat, a project with instructions, agents, Cats, a note made
 // by the agent, connectors (with a fake MCP server), an ACP agent (a fake
 // one), searching inside chats, pinning a chat, a model per chat, Models →
-// Voice and Images (and a Models search that finds a voice file), Files, and
-// the main pages.
+// Voice and Images (and a Models search that finds a voice file), Files, the
+// first-run setup (which a fresh install offers and an install with a model
+// doesn't), and the main pages.
 //
 // Needs a Chromium-based browser (Chrome, Chromium, Edge or Brave), found the
 // same way PDF export finds one; PUPPETEER_EXECUTABLE_PATH picks another.
@@ -212,6 +213,9 @@ async function main() {
     return json;
   };
 
+  // A fresh install would open the first-run setup; with a model it doesn't.
+  const freshSetup = await api('GET', '/api/setup');
+
   // A model to talk to: the fake one.
   const created = await api('POST', '/api/ai/providers/profiles', {
     name: 'Smoke model', provider_id: 'custom', provider_type: 'custom',
@@ -236,9 +240,13 @@ async function main() {
 
   log('Running checks:');
 
-  await check('the home screen opens', async () => {
-    await page.goto(`${app}/home`, { waitUntil: 'domcontentloaded' });
+  await check('the home screen opens, not the first-run setup, once there is a model', async () => {
+    assert(freshSetup.setup?.show === true, `a fresh install should offer the setup: ${JSON.stringify(freshSetup.setup)}`);
+    const { setup } = await api('GET', '/api/setup');
+    assert(setup.show === false && setup.hasModel === true, `with a model the setup should stay away: ${JSON.stringify(setup)}`);
+    await page.goto(`${app}/`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('textarea', { timeout: 20000 });
+    assert(new URL(page.url()).pathname === '/home', `"/" went to ${page.url()}`);
     await noCrash();
   });
 
@@ -493,6 +501,20 @@ async function main() {
     await clickText('[role="menuitem"]', 'Unpin');
     await waitFor(async () => !(await pinnedInSidebar()), { timeout: 10000, what: 'the sidebar to drop the pin' });
     await waitFor(async () => !(await api('GET', '/api/ai/chats?limit=80&mode=all')).conversations.some((chat) => chat.is_pinned), { timeout: 10000, what: 'the unpin to be saved' });
+    await noCrash();
+  });
+
+  await check('Run setup again opens the first-run setup, and Skip comes back', async () => {
+    await page.goto(`${app}/settings/profile`, { waitUntil: 'domcontentloaded' });
+    await clickText('[data-run-setup] button', 'Run setup again');
+    await page.waitForSelector('[data-welcome][data-step="welcome"]', { timeout: 15000 });
+    await clickText('[data-welcome] button', 'Continue');
+    await page.waitForSelector('[data-welcome][data-step="model"]', { timeout: 10000 });
+    await textAppears('Chats use smoke-model');
+    await clickText('[data-welcome] button', 'Skip setup');
+    await waitFor(() => page.evaluate(() => location.pathname === '/home'), { timeout: 10000, what: 'the chat home' });
+    const { setup } = await api('GET', '/api/setup');
+    assert(setup.done === true, 'skipping did not mark the setup done');
     await noCrash();
   });
 
