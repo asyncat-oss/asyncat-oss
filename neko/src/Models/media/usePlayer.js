@@ -1,48 +1,34 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+// Play buttons on the Voice page: one sound at a time across the whole
+// page. Starting a sound here stops one playing in any other component,
+// whose button goes back to Play.
 
-/** One sound at a time: play(key, url or () => Promise<url>), stop(). */
+import { useCallback, useEffect, useId, useSyncExternalStore } from 'react';
+import { player } from './player.js';
+
+/**
+ *   const sound = usePlayer();
+ *   sound.play('lessac', () => mediaApi.voice.preview(…)); sound.stop();
+ *   sound.playing === 'lessac', sound.loading, sound.error
+ *
+ * `playing`, `loading` and `error` are this caller's own: the key it played
+ * while that sound plays or loads, and why it couldn't play.
+ */
 export function usePlayer() {
-  const audioRef = useRef(null);
-  const requestRef = useRef(0);
-  const [playing, setPlaying] = useState(null);
-  const [loading, setLoading] = useState(null);
-  const [error, setError] = useState('');
+  const owner = useId();
+  const state = useSyncExternalStore(player.subscribe, player.snapshot);
+  const mine = state.owner === owner;
 
-  const stop = useCallback(() => {
-    const audio = audioRef.current;
-    if (audio) {
-      audio.pause();
-      if (audio.src.startsWith('blob:')) URL.revokeObjectURL(audio.src);
-    }
-    audioRef.current = null;
-    setPlaying(null);
-  }, []);
+  const play = useCallback((key, source) => player.play(owner, key, source), [owner]);
+  const stop = useCallback(() => player.stop(owner), [owner]);
 
-  useEffect(() => stop, [stop]);
+  // A sound stops when the button that started it goes away.
+  useEffect(() => () => player.stop(owner), [owner]);
 
-  const play = useCallback(async (key, source) => {
-    stop();
-    // A newer play wins; what the older one ran into doesn't count.
-    requestRef.current += 1;
-    const request = requestRef.current;
-    setError('');
-    setLoading(key);
-    try {
-      const url = typeof source === 'function' ? await source() : source;
-      if (request !== requestRef.current) return;
-      const audio = new Audio(url);
-      audioRef.current = audio;
-      audio.onended = () => { if (audioRef.current === audio) stop(); };
-      await audio.play();
-      if (request === requestRef.current) setPlaying(key);
-    } catch (err) {
-      if (request !== requestRef.current || err?.name === 'AbortError') return;
-      setError(err.message || "Couldn't play it.");
-      stop();
-    } finally {
-      if (request === requestRef.current) setLoading(null);
-    }
-  }, [stop]);
-
-  return { playing, loading, error, play, stop };
+  return {
+    playing: mine && state.playing ? state.key : null,
+    loading: mine && state.loading ? state.key : null,
+    error: state.errorOwner === owner ? state.error : '',
+    play,
+    stop,
+  };
 }
