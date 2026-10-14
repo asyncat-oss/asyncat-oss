@@ -424,24 +424,7 @@ CREATE TRIGGER IF NOT EXISTS agent_memory_au AFTER UPDATE ON agent_memory BEGIN
   VALUES (new.id, new.key, new.content);
 END;
 
--- ─── Agent Feedback & Patterns ───────────────────────────────────────────────
-
-CREATE TABLE IF NOT EXISTS agent_patterns (
-  id                   TEXT PRIMARY KEY,
-  user_id              TEXT NOT NULL,
-  workspace_id         TEXT,
-  pattern_hash         TEXT NOT NULL,
-  pattern_summary      TEXT NOT NULL,
-  tool_sequence        TEXT NOT NULL,
-  success_count        INTEGER DEFAULT 1,
-  failure_count        INTEGER DEFAULT 0,
-  last_seen_at         TEXT NOT NULL,
-  last_failure_at      TEXT,
-  created_at           TEXT NOT NULL,
-  auto_skill_created   INTEGER DEFAULT 0,
-  corrections          TEXT NOT NULL DEFAULT '[]'
-);
-CREATE INDEX IF NOT EXISTS idx_patterns_user_pattern ON agent_patterns(user_id, pattern_hash);
+-- ─── Agent Tool Audit ────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS agent_tool_audit (
   id                  TEXT PRIMARY KEY,

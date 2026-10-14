@@ -126,7 +126,6 @@ test('a temporary chat runs normally but leaves nothing behind', async () => {
   assert.equal(count("SELECT COUNT(*) AS n FROM agent_sessions_fts WHERE agent_sessions_fts MATCH 'fruit'"), 0, 'nothing in the search index');
   assert.equal(count('SELECT COUNT(*) AS n FROM agent_tool_audit'), 0, 'no tool audit');
   assert.equal(count('SELECT COUNT(*) AS n FROM agent_memory'), 0, 'no memories or corrections');
-  assert.equal(count('SELECT COUNT(*) AS n FROM agent_patterns'), 0, 'no workflow patterns');
   assert.equal(count('SELECT COUNT(*) AS n FROM agent_checkpoints'), 0, 'no saved checkpoint');
   assert.deepEqual(skillFiles(), [], 'no learned skills');
   assert.equal(listCheckpoints().length, 0, 'the checkpoint is gone once the run ends');
@@ -201,7 +200,6 @@ test('the same run without the flag is saved and learned from', async () => {
   assert.ok(count('SELECT COUNT(*) AS n FROM agent_tool_audit') > 0);
   assert.ok(count('SELECT COUNT(*) AS n FROM agent_memory WHERE source = ?', 'auto') > 0, 'memories are extracted');
   assert.ok(count('SELECT COUNT(*) AS n FROM agent_memory WHERE source = ?', 'correction') > 0, 'the correction is learned');
-  assert.ok(count('SELECT COUNT(*) AS n FROM agent_patterns') > 0, 'the workflow is tracked');
   assert.ok(count('SELECT COUNT(*) AS n FROM agent_checkpoints') > 0, 'the checkpoint is kept for undo');
   assert.ok(skillFiles().length > 0, 'a skill is synthesised');
 });

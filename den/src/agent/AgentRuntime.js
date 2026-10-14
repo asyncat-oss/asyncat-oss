@@ -15,7 +15,6 @@ import { toolRegistry } from './tools/toolRegistry.js';
 import { permissionManager, PermissionManager } from './PermissionManager.js';
 import { AgentSession } from './AgentSession.js';
 import { buildAgentSystemPrompt, loadSoul } from './prompts/agentSystemPrompt.js';
-import { basalGanglia } from './BasalGanglia.js';
 import { Compactor } from './Compactor.js';
 import { normalizeTags, selectRelevantSkillsWithLlm, synthesizeSkillFromRun } from './skills.js';
 import { listMemories, searchMemories, enforceMemoryCap, decayMemoryImportance, memoryProjectFor, memoryCatFor } from './tools/memoryTools.js';
@@ -321,7 +320,7 @@ export class AgentRuntime {
     this.session = null;
     // A temporary chat: the session, tool audit and checkpoint live only in
     // memory for the run, and nothing is learned from it (no memories,
-    // skills, workflow patterns or corrections; usage keeps only counts).
+    // skills or corrections; usage keeps only counts).
     this.ephemeral = opts.ephemeral === true;
     this.continueSessionId = this.ephemeral ? null : (opts.continueSessionId || null);
     this.soulOverride = opts.soul || null;
@@ -374,11 +373,6 @@ export class AgentRuntime {
 
     // Track whether we've already sent a loop-nudge (strategy change before stopping)
     this._loopNudgeSent = false;
-
-    // Wire BasalGanglia events and LLM client (skill auto-discovery + LLM-generated bodies)
-    basalGanglia.onEvent = (event) => this.onEvent(event);
-    basalGanglia.aiClient = this.aiClient;
-    basalGanglia.model = this.model;
 
     // Wire MemoryConsolidator LLM client (LLM-backed cluster merging)
     memoryConsolidator.aiClient = this.aiClient;
@@ -848,7 +842,6 @@ export class AgentRuntime {
           if (!isRetryable || attempt >= LLM_MAX_RETRIES) {
             this.onEvent({ type: 'error', data: { message: `LLM call failed: ${err.message}`, round } });
             this.session.fail(err.message);
-            this._trackFailure(goal, err.message);
             return { answer: `Error: ${err.message}`, session: this.session, toolCalls: this.session.toolHistory };
           }
           // Exponential backoff before retry
@@ -915,7 +908,6 @@ export class AgentRuntime {
         answer = finalAnswer;
         this._completeAutoPlan(round);
         this.onEvent({ type: 'answer', data: { answer, round } });
-        this._trackWorkflow(goal);
         break;
       }
 
@@ -1462,8 +1454,6 @@ export class AgentRuntime {
     this.session.setScratchpad('conversationRounds', rounds);
 
     this.session.complete();
-
-    this._trackWorkflow(goal);
 
     // Post-run memory extraction — proactively save durable facts from the conversation
     this._extractMemories(goal, answer, messages).catch(err =>
@@ -2770,34 +2760,6 @@ export class AgentRuntime {
       return collected;
     } catch {
       return [];
-    }
-  }
-
-  _trackWorkflow(goal) {
-    if (this.ephemeral) return;
-    if (this.session?.toolHistory?.length > 0) {
-      const tools = this.session.toolHistory.map(t => t.tool);
-      basalGanglia.trackWorkflow({
-        userId: this.userId,
-        workspaceId: this.workspaceId,
-        goal,
-        tools,
-        success: true,
-      }).catch(err => console.error('[basal-ganglia] Track error:', err.message));
-    }
-  }
-
-  _trackFailure(goal, error) {
-    if (this.ephemeral) return;
-    if (this.session?.toolHistory?.length > 0) {
-      const tools = this.session.toolHistory.map(t => t.tool);
-      basalGanglia.trackWorkflow({
-        userId: this.userId,
-        workspaceId: this.workspaceId,
-        goal,
-        tools,
-        success: false,
-      }).catch(err => console.error('[basal-ganglia] Track failure error:', err.message));
     }
   }
 

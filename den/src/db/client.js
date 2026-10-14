@@ -242,6 +242,7 @@ function cleanupDeadTables() {
     DROP TABLE IF EXISTS mcp_access_tokens;
     DROP TABLE IF EXISTS TaskDependencies;
     DROP TABLE IF EXISTS agent_eval_runs;
+    DROP TABLE IF EXISTS agent_patterns;
     -- The old title-only chat index; search/messageIndex.js searches titles
     -- and messages now. Its triggers go first, or saving a chat would fail.
     DROP TRIGGER IF EXISTS conversations_fts_ai;
