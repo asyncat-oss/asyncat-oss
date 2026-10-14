@@ -167,8 +167,8 @@ function notifyProviderStatus(userId) {
 onDefaultModelChange(notifyProviderStatus);
 
 // The context size is kept so the model can be reloaded the same way when
-// Asyncat next starts (see localModelRestore.js).
-function saveBuiltinProviderConfig(userId, filename, ctxSize = getLlamaStatus()?.ctxSize) {
+// Asyncat next starts (see localModelRestore.js). First-run setup uses it too.
+export function saveBuiltinProviderConfig(userId, filename, ctxSize = getLlamaStatus()?.ctxSize) {
   saveDefaultLocalModel(userId, filename, ctxSize);
   notifyProviderStatus(userId);
 }
