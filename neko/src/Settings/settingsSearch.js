@@ -2,7 +2,7 @@
 // Settings finds "quiet hours" or "MCP" without knowing where they live.
 
 export const SETTINGS_INDEX = [
-  { tab: 'profile', terms: ['profile', 'name', 'display name', 'avatar', 'picture', 'photo'] },
+  { tab: 'profile', terms: ['profile', 'name', 'display name', 'avatar', 'picture', 'photo', 'setup', 'run setup again', 'first-run setup', 'welcome', 'onboarding'] },
   { tab: 'appearance', terms: ['appearance', 'theme', 'dark mode', 'light mode', 'midnight', 'colour', 'color', 'font', 'motion', 'sidebar', 'navigation', 'keyboard', 'shortcuts', 'hotkeys', 'pet', 'cat on screen'] },
   { tab: 'connections', view: 'services', label: 'Services', terms: ['services', 'rss', 'feeds', 'read later', 'email', 'mail', 'imap', 'smtp', 'discord', 'slack', 'telegram', 'webhook', 'hugging face', 'hf token'] },
   { tab: 'connections', view: 'connectors', label: 'Connectors', terms: ['connectors', 'mcp', 'model context protocol', 'notion', 'github', 'linear', 'sentry', 'stripe', 'supabase', 'context7', 'oauth', 'sign in', 'npx', 'tools from apps'] },

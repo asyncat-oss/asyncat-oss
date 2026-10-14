@@ -7,6 +7,7 @@ const tabs = [
   { id: 'notifications', label: 'Notifications', description: 'Desktop notifications' },
   { id: 'privacy', label: 'Privacy & safety', description: 'What agents may do' },
   { id: 'appearance', label: 'Appearance', description: 'Theme' },
+  { id: 'profile', label: 'Profile', description: 'Your name' },
 ];
 
 test('settings search finds where a setting lives', () => {
@@ -15,6 +16,7 @@ test('settings search finds where a setting lives', () => {
   assert.equal(searchSettings('mcp', tabs)[0].view, 'connectors');
   assert.equal(searchSettings('sandbox', tabs)[0].tab, 'privacy');
   assert.equal(searchSettings('dark', tabs)[0].tab, 'appearance');
+  assert.equal(searchSettings('setup', tabs)[0].tab, 'profile', 'Run setup again');
   assert.deepEqual(searchSettings('', tabs), []);
   assert.deepEqual(searchSettings('zzzz', tabs), []);
 });

@@ -25,6 +25,7 @@ import BackgroundSection from './BackgroundSection';
 import ConnectorsSection from '../Connectors/ConnectorsSection.jsx';
 import PrivacySection from './PrivacySection.jsx';
 import NotificationsSection from './NotificationsSection.jsx';
+import RunSetupAgain from '../welcome/RunSetupAgain.jsx';
 import { SettingsSearchBox, SettingsSearchResults } from './SettingsSearchBox.jsx';
 import { resultRoute, searchSettings } from './settingsSearch.js';
 import { Segmented } from '../components/ui/Tabs.jsx';
@@ -163,7 +164,10 @@ const SettingsPage = () => {
   }, [navigate, tab]);
 
   const renderProfile = () => (
-    <GeneralSection />
+    <div className="space-y-5">
+      <GeneralSection />
+      <RunSetupAgain />
+    </div>
   );
 
   const renderAdvanced = () => (
