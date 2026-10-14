@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- ─── Workspaces (replaces public.teams) ──────────────────────────────────────
--- The local account creates its workspace from the first-run walkthrough.
+-- The local profile's one workspace is made on first boot (db/seed.js).
 
 CREATE TABLE IF NOT EXISTS workspaces (
   id          TEXT PRIMARY KEY,

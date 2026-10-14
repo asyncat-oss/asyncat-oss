@@ -84,6 +84,9 @@ import madeRouter from './made/madeRoutes.js';
 // Learning from chats: its settings and "Save this as a skill?" drafts
 import learningRouter from './agent/learningRoutes.js';
 
+// First-run setup: whether it shows, and a model on this computer
+import setupRouter from './setup/setupRoutes.js';
+
 // ─── Database ─────────────────────────────────────────────────────────────────
 import db from './db/client.js';         // opens SQLite, applies schema
 import { seed } from './db/seed.js';     // creates the local profile on first boot
@@ -228,6 +231,9 @@ app.use('/api/made', madeRouter);
 
 // Routes: learning from chats (memories and skill suggestions)
 app.use('/api/learning', learningRouter);
+
+// Routes: first-run setup
+app.use('/api/setup', setupRouter);
 
 // ─── Routes: Training / Fine-Tuning ──────────────────────────────────────────
 app.use('/api/training/guide', trainingGuideRouter);
