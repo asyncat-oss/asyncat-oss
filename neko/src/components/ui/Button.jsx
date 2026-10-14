@@ -8,6 +8,7 @@ const VARIANTS = {
   secondary: 'border border-line-strong bg-surface text-fg hover:bg-hover',
   ghost: 'text-fg-muted hover:bg-hover hover:text-fg',
   danger: 'text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10',
+  destructive: 'bg-red-600 text-white hover:bg-red-700 shadow-sm',
 };
 
 const SIZES = {
@@ -28,7 +29,8 @@ export function buttonClass(variant = 'secondary', size = 'sm') {
 
 /**
  * The app's button. `variant`: primary (solid), accent, secondary (outlined),
- * ghost, danger. `size`: xs, sm, md, icon, icon-sm. `loading` swaps the icon
+ * ghost, danger (red text), destructive (solid red, for confirming a
+ * delete). `size`: xs, sm, md, icon, icon-sm. `loading` swaps the icon
  * for a spinner and disables the button.
  */
 const Button = forwardRef(function Button(
