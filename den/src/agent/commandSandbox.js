@@ -175,9 +175,35 @@ const PROBE_TTL_MS = 5 * 60 * 1000;
 const OPTIONAL_FLAGS = ['--new-session', '--unshare-pid', '--unshare-ipc', '--unshare-uts'];
 const PROBE_MOUNTS = ['--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc'];
 let linuxProbe = null;
+let bwrapFound;
+
+/**
+ * bwrap's full path, found on den's own PATH. The sandbox is always started
+ * by this path, never by name: a command's environment can carry a PATH of
+ * its own (process_spawn's env_vars), and a "bwrap" found through that could
+ * be any program, run outside the sandbox. Not found, it is a path that
+ * doesn't exist, so starting it fails instead of searching anywhere.
+ */
+export function bwrapPath({ searchPath = process.env.PATH, recheck = false } = {}) {
+  if (bwrapFound === undefined || recheck) {
+    bwrapFound = null;
+    for (const dir of String(searchPath || '').split(path.delimiter)) {
+      if (!dir || !path.isAbsolute(dir)) continue;
+      const candidate = path.join(dir, 'bwrap');
+      try {
+        fs.accessSync(candidate, fs.constants.X_OK);
+        if (fs.statSync(candidate).isFile()) {
+          bwrapFound = candidate;
+          break;
+        }
+      } catch { /* not here */ }
+    }
+  }
+  return bwrapFound || '/usr/bin/bwrap';
+}
 
 function bwrapRuns(flags) {
-  return runFile('bwrap', ['--die-with-parent', ...flags, ...PROBE_MOUNTS, '--', 'true'], { timeout: 5000 });
+  return runFile(bwrapPath(), ['--die-with-parent', ...flags, ...PROBE_MOUNTS, '--', 'true'], { timeout: 5000 });
 }
 
 function readSysctl(file) {
@@ -223,6 +249,7 @@ export function probeLinuxSandbox({ recheck = false } = {}) {
 /** Forget the cached probe (tests, or after installing bwrap). */
 export function resetSandboxProbe() {
   linuxProbe = null;
+  bwrapFound = undefined;
 }
 
 /** Pretend the probe found `probe` ({ ok, flags, net, reason }); for tests. */
@@ -364,11 +391,24 @@ function appleString(text) {
 }
 
 /**
+ * Environment variables for the program inside the sandbox only, as
+ * [name, value] pairs (value null: removed). Names that aren't plain
+ * variable names are dropped.
+ */
+function innerEnvEntries(env) {
+  if (!env || typeof env !== 'object' || Array.isArray(env)) return [];
+  return Object.entries(env)
+    .filter(([name]) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(name))
+    .map(([name, value]) => [name, value === undefined || value === null ? null : String(value)]);
+}
+
+/**
  * bwrap arguments for a command that may write to `roots` and not read
  * `hidden`, started in `cwd` (the project when not given). `git` is from
  * gitGuards(); `network` is a sandboxNetwork.js plan (its flags and mounts).
+ * `env` is set for the command inside, never for bwrap itself.
  */
-export function bwrapArgs({ file, args, workspaceRoot, cwd = workspaceRoot, roots, hidden, readOnly = [], git = null, flags = OPTIONAL_FLAGS, network = null, inspect = inspectPath }) {
+export function bwrapArgs({ file, args, workspaceRoot, cwd = workspaceRoot, roots, hidden, readOnly = [], git = null, flags = OPTIONAL_FLAGS, network = null, env = null, inspect = inspectPath }) {
   const mounts = [];
   // Writable folders first, then empty folders over the secret ones (some sit
   // inside a writable folder, like Asyncat's data in a project or /tmp), then
@@ -398,12 +438,14 @@ export function bwrapArgs({ file, args, workspaceRoot, cwd = workspaceRoot, root
   // read-only, so a write there fails (and the hint says why) instead of
   // seeming to work and then vanishing.
   for (const cover of covers) mounts.push('--remount-ro', cover);
+  const setenv = innerEnvEntries(env).flatMap(([name, value]) => (value === null ? ['--unsetenv', name] : ['--setenv', name, value]));
   return [
     '--die-with-parent', ...flags, ...(network?.bwrap || []),
     '--ro-bind', '/', '/',
     '--dev', '/dev',
     '--proc', '/proc',
     ...mounts,
+    ...setenv,
     '--chdir', cwd,
     '--', file, ...args,
   ];
@@ -439,16 +481,24 @@ export function seatbeltProfile({ roots, hidden, readOnly = [], gitDirs = [], ne
 /**
  * How to start `file args` sandboxed, in `cwd` (the project when not given).
  * Returns { file, args, sandboxed, env, network } — unchanged when sandboxing
- * is off or unavailable. `env` is to be added to the program's environment
- * (the proxy, in "registries" mode). Spawn it in `cwd` too: on macOS the
- * program starts in the folder sandbox-exec was started in.
+ * is off or unavailable. The returned `env` is to be added to the
+ * environment it is spawned with (the proxy, in "registries" mode). Spawn it
+ * in `cwd` too: on macOS the program starts in the folder sandbox-exec was
+ * started in.
+ *
+ * `env` (given) is for the program itself, such as process_spawn's
+ * env_vars. In the sandbox it is set inside, so a PATH or LD_PRELOAD in it
+ * can't change which sandbox program starts or what that loads; without the
+ * sandbox it comes back in the returned `env`.
  */
 export function sandboxedCommand({
   file, args = [], workspaceRoot, cwd = null, platform = process.platform, home = os.homedir(), tmp = os.tmpdir(), force = null,
-  hidden = null, flags = null, inspect = inspectPath, network = null, gitDirs = null,
+  hidden = null, flags = null, inspect = inspectPath, network = null, gitDirs = null, env = null,
 }) {
+  const inner = innerEnvEntries(env);
+  const unsandboxed = () => ({ file, args, sandboxed: false, ...(inner.length ? { env: Object.fromEntries(inner) } : {}) });
   const enabled = force ?? (sandboxState({ platform }).state === 'on');
-  if (!enabled || !workspaceRoot) return { file, args, sandboxed: false };
+  if (!enabled || !workspaceRoot) return unsandboxed();
   const roots = writableRoots({ workspaceRoot, home, tmp });
   // bwrap starts the command in the folder named here, not the one bwrap was
   // started in, so a tool's subfolder (one package of a monorepo, say) must
@@ -467,9 +517,9 @@ export function sandboxedCommand({
 
   if (platform === 'linux') {
     const probeFlags = flags ?? (force ? OPTIONAL_FLAGS : probeLinuxSandbox().flags);
-    const [inner, innerArgs] = net.wrap ? net.wrap(file, args) : [file, args];
-    const bwrap = bwrapArgs({ file: inner, args: innerArgs, workspaceRoot, cwd: start, roots, hidden: secret, readOnly, git, flags: probeFlags, network: net, inspect });
-    return { file: 'bwrap', args: bwrap, sandboxed: true, env: net.env, network: about };
+    const [innerFile, innerArgs] = net.wrap ? net.wrap(file, args) : [file, args];
+    const bwrap = bwrapArgs({ file: innerFile, args: innerArgs, workspaceRoot, cwd: start, roots, hidden: secret, readOnly, git, flags: probeFlags, network: net, env, inspect });
+    return { file: bwrapPath(), args: bwrap, sandboxed: true, env: net.env, network: about };
   }
 
   if (platform === 'darwin') {
@@ -477,10 +527,15 @@ export function sandboxedCommand({
     // is really in /private/tmp).
     const real = secret.map((item) => ({ ...item, path: inspect(item.path).real }));
     const profile = seatbeltProfile({ roots, hidden: real, readOnly, gitDirs: git.gitDirs, network: net.seatbelt });
-    return { file: '/usr/bin/sandbox-exec', args: ['-p', profile, file, ...args], sandboxed: true, env: net.env, network: about };
+    // The program's own variables are set by env, inside the sandbox.
+    const command = inner.length
+      ? ['/usr/bin/env', ...inner.flatMap(([name, value]) => (value === null ? ['-u', name] : [])),
+        ...inner.filter(([, value]) => value !== null).map(([name, value]) => `${name}=${value}`), file, ...args]
+      : [file, ...args];
+    return { file: '/usr/bin/sandbox-exec', args: ['-p', profile, ...command], sandboxed: true, env: net.env, network: about };
   }
 
-  return { file, args, sandboxed: false };
+  return unsandboxed();
 }
 
 const NETWORK_FAILURE = /ENOTFOUND|EAI_AGAIN|getaddrinfo|Could not resolve|name resolution|Network is unreachable|ENETUNREACH|ECONNREFUSED|403 Forbidden|only lets commands reach package registries/i;

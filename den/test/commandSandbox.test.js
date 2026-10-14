@@ -28,7 +28,7 @@ test('the sandbox only lets commands write in the project, temp and caches', () 
   assert.ok(!roots.includes('/home/me'));
 
   const linux = sandboxedCommand({ file: '/bin/sh', args: ['-c', 'ls'], workspaceRoot: '/work/project', platform: 'linux', home: '/home/me', force: true, hidden: [] });
-  assert.equal(linux.file, 'bwrap');
+  assert.ok(path.isAbsolute(linux.file) && path.basename(linux.file) === 'bwrap', 'bwrap is started by its full path');
   assert.equal(linux.args[0], '--die-with-parent');
   assert.deepEqual(linux.args.slice(-4), ['--', '/bin/sh', '-c', 'ls']);
 

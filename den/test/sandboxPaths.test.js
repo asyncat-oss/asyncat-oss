@@ -89,6 +89,54 @@ test('process_spawn runs in the sandbox', { skip: noSandbox || process.platform 
   }
 });
 
+// process_spawn's env_vars come from the model. They are the command's own:
+// set inside the sandbox, never on bwrap or sandbox-exec, so a PATH can't
+// pick another "bwrap" from the project and LD_PRELOAD can't load a library
+// into the sandbox program before it isolates anything.
+test("a command's own variables are set inside the sandbox, not on it", () => {
+  const env = { PATH: '/work/project/bin', LD_PRELOAD: '/work/project/evil.so', DYLD_INSERT_LIBRARIES: '/work/project/evil.dylib', 'BAD NAME': 'x', GONE: null };
+  const linux = sandboxedCommand({ file: '/bin/sh', args: ['-c', 'ls'], workspaceRoot: '/work/project', platform: 'linux', home: '/home/me', tmp: '/tmp', force: true, hidden: [], env });
+  assert.ok(path.isAbsolute(linux.file), 'bwrap starts by its full path');
+  assert.ok(!String(linux.file).startsWith('/work/project'));
+  const end = linux.args.indexOf('--');
+  const before = linux.args.slice(0, end);
+  const setenv = (name) => before.findIndex((arg, i) => arg === '--setenv' && before[i + 1] === name);
+  assert.equal(before[setenv('PATH') + 2], '/work/project/bin');
+  assert.equal(before[setenv('LD_PRELOAD') + 2], '/work/project/evil.so');
+  assert.ok(before.includes('--unsetenv') && before[before.indexOf('--unsetenv') + 1] === 'GONE');
+  assert.ok(!before.includes('BAD NAME'), 'only plain variable names');
+  for (const name of Object.keys(env)) assert.ok(!(name in (linux.env || {})), `${name} is not in bwrap's own environment`);
+
+  const mac = sandboxedCommand({ file: '/bin/sh', args: ['-c', 'ls'], workspaceRoot: '/Users/me/p', platform: 'darwin', home: '/Users/me', force: true, hidden: [], env });
+  assert.equal(mac.file, '/usr/bin/sandbox-exec');
+  assert.deepEqual(mac.args.slice(2), ['/usr/bin/env', '-u', 'GONE', 'PATH=/work/project/bin', 'LD_PRELOAD=/work/project/evil.so', 'DYLD_INSERT_LIBRARIES=/work/project/evil.dylib', '/bin/sh', '-c', 'ls']);
+  for (const name of Object.keys(env)) assert.ok(!(name in (mac.env || {})), `${name} is not in sandbox-exec's own environment`);
+
+  // Without the sandbox they are the program's environment, as before.
+  const off = sandboxedCommand({ file: '/bin/sh', args: ['-c', 'ls'], workspaceRoot: '/work/project', platform: 'linux', force: false, env: { PATH: '/x' } });
+  assert.deepEqual(off, { file: '/bin/sh', args: ['-c', 'ls'], sandboxed: false, env: { PATH: '/x' } });
+});
+
+test("process_spawn's env_vars can't start another bwrap", { skip: (noSandbox || process.platform !== 'linux') && 'needs bwrap' }, async () => {
+  const dir = project();
+  const marker = path.join(dir, 'fake-bwrap-ran.txt');
+  fs.mkdirSync(path.join(dir, 'bin'));
+  fs.writeFileSync(path.join(dir, 'bin', 'bwrap'), `#!/bin/sh\necho ran > '${marker}'\n`, { mode: 0o755 });
+  try {
+    const res = await processSpawnTool.execute({
+      command: 'echo "$PATH" > path.txt; echo "$LD_PRELOAD" > preload.txt',
+      env_vars: { PATH: `${path.join(dir, 'bin')}:/usr/bin:/bin`, LD_PRELOAD: '' },
+    }, { workingDir: dir, workspaceRoot: dir });
+    assert.equal(res.success, true, res.error);
+    assert.equal(res.sandboxed, true);
+    await waitFor(() => fs.existsSync(path.join(dir, 'preload.txt')));
+    assert.equal(fs.existsSync(marker), false, "the project's bwrap ran instead of the real one");
+    assert.match(fs.readFileSync(path.join(dir, 'path.txt'), 'utf8'), new RegExp(`^${path.join(dir, 'bin')}:`), 'the command still gets its PATH');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('a sandboxed command starts in the folder the tool asked for', () => {
   const plan = (cwd) => sandboxedCommand({ file: 'pwd', workspaceRoot: '/work/project', cwd, platform: 'linux', home: '/home/me', tmp: '/tmp', force: true, hidden: [] });
   const startsIn = (args) => args[args.indexOf('--chdir') + 1];

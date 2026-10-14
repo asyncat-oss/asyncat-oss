@@ -107,9 +107,11 @@ export const processSpawnTool = {
       // The command itself is meant to be a shell command (this tool is
       // dangerous and asks first); only the way it is started changed. It
       // may change files in the project only, like run_command.
+      // env_vars are the command's own: in the sandbox they are set inside
+      // it, so a PATH or LD_PRELOAD there can't swap or change bwrap itself.
       const [shell, shellArgs] = IS_WIN ? ['cmd.exe', ['/c', args.command]] : ['/bin/sh', ['-c', args.command]];
-      const plan = sandboxedCommand({ file: shell, args: shellArgs, workspaceRoot: context.workspaceRoot || context.workingDir, cwd });
-      const env = childEnv({ extra: { ...(plan.env || {}), ...(args.env_vars || {}) } });
+      const plan = sandboxedCommand({ file: shell, args: shellArgs, workspaceRoot: context.workspaceRoot || context.workingDir, cwd, env: args.env_vars });
+      const env = childEnv({ extra: plan.env || {} });
       const sandboxed = plan.sandboxed ? { sandboxed: true } : {};
       const proc = spawn(plan.file, plan.args, {
         cwd, env, shell: false, windowsHide: true,
