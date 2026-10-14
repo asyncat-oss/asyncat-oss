@@ -3,7 +3,7 @@
 import fs from 'fs';
 import path from 'path';
 import db from '../../../db/client.js';
-import { MODELS_DIR } from './modelManager.js';
+import { MODELS_DIR, onDownloadComplete } from './modelManager.js';
 
 const VISION_DIR = path.join(MODELS_DIR, 'vision');
 const IMAGE_DIR = path.join(MODELS_DIR, 'image');
@@ -208,5 +208,8 @@ export function clearCache() {
   cachedVisualModels = null;
   lastVisualScan = 0;
 }
+
+// A finished download shows up at once.
+onDownloadComplete(() => clearCache());
 
 export { VISION_DIR, IMAGE_DIR };

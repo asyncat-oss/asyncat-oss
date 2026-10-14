@@ -147,6 +147,14 @@ function getContextLength(meta = {}) {
 
 // Active downloads map: { downloadId -> { progress, total, status, abortController } }
 const activeDownloads = new Map();
+// Called with { filename, subDir, path } when a download finishes, so the
+// voice and image file lists can forget what they cached.
+const downloadListeners = new Set();
+
+export function onDownloadComplete(listener) {
+  downloadListeners.add(listener);
+  return () => downloadListeners.delete(listener);
+}
 
 // Simple in-memory caches
 let cachedGgufModels = null;
@@ -506,6 +514,9 @@ export async function startDownload(url, filename, subDir = '', options = {}) {
         finalDl.progress = 100;
         clearCache();
       }
+      for (const listener of downloadListeners) {
+        try { listener({ filename: safeFilename, subDir: subDir || '', path: destPath }); } catch { /* a list to refresh later */ }
+      }
 
 
 
@@ -523,7 +534,8 @@ export async function startDownload(url, filename, subDir = '', options = {}) {
       }
     } finally {
       // Keep in map for 30s so client can read final status, then clean up
-      setTimeout(() => activeDownloads.delete(downloadId), 30000);
+      // (without keeping the process alive for it).
+      setTimeout(() => activeDownloads.delete(downloadId), 30000).unref?.();
     }
   })();
 
@@ -577,6 +589,7 @@ export function listActiveDownloads() {
     downloadedFormatted: formatBytes(dl.downloaded),
     totalFormatted: dl.total > 0 ? formatBytes(dl.total) : 'unknown',
     status: dl.status,
+    error: dl.error || null,
     startedAt: dl.startedAt,
   }));
 }

@@ -7,6 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import db from '../../../db/client.js';
 import { runtimeModelsPath } from '../../../config/runtimeConfig.js';
+import { onDownloadComplete } from './modelManager.js';
 
 // Audio models live inside the same data/models directory as LLMs
 const BASE_MODELS_DIR = runtimeModelsPath();
@@ -376,5 +377,8 @@ export function clearCache(type = null) {
   if (!type || type === 'whisper') { cachedWhisperModels = null; lastWhisperScan = 0; }
   if (!type || type === 'tts') { cachedTtsModels = null; lastTtsScan = 0; }
 }
+
+// A finished download shows up at once.
+onDownloadComplete(() => clearCache());
 
 export { WHISPER_DIR, TTS_DIR, AUDIO_DIR };

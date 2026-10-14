@@ -731,6 +731,30 @@ test('a setup that fails keeps what it was started with, for "Try again"', async
   assert.deepEqual(setupJobs.latestSetupJob('images').options, { modelId: 'sd15-q8' });
 });
 
+test('a finished download is in the file lists at once, and a failed one says why', async () => {
+  const listening = await import('../src/ai/controllers/ai/audioModelManager.js');
+  const models = await import('../src/ai/controllers/ai/modelManager.js');
+  FILES['ggerganov/whisper.cpp/ggml-tiny.en.bin'] = Buffer.alloc(1024, 3);
+  FILES['acme/tiny-sd/tiny-sd-q8_0.gguf'] = Buffer.alloc(1024, 4);
+  // Both lists are cached now.
+  assert.equal(listening.listWhisperModels().some((item) => item.filename === 'ggml-tiny.en.bin'), false);
+  assert.equal(visualModels.listVisualModels().image.some((item) => item.filename === 'tiny-sd-q8_0.gguf'), false);
+
+  const finish = async (id) => until(() => ['complete', 'error'].includes(models.getDownloadStatus(id)?.status) && models.getDownloadStatus(id));
+  const whisperDownload = await models.startDownload(`${process.env.HF_ENDPOINT}/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin`, 'ggml-tiny.en.bin', 'audio/whisper');
+  const imageDownload = await models.startDownload(`${process.env.HF_ENDPOINT}/acme/tiny-sd/resolve/main/tiny-sd-q8_0.gguf`, 'tiny-sd-q8_0.gguf', 'image');
+  assert.equal((await finish(whisperDownload)).status, 'complete');
+  assert.equal((await finish(imageDownload)).status, 'complete');
+  assert.ok(listening.listWhisperModels().some((item) => item.filename === 'ggml-tiny.en.bin'), 'listening files');
+  assert.ok(visualModels.listVisualModels().image.some((item) => item.filename === 'tiny-sd-q8_0.gguf'), 'image files');
+
+  const failed = await models.startDownload(`${process.env.HF_ENDPOINT}/acme/tiny-sd/resolve/main/gone.gguf`, 'gone.gguf', 'image');
+  await finish(failed);
+  const listed = models.listActiveDownloads().find((item) => item.downloadId === failed);
+  assert.equal(listed.status, 'error');
+  assert.match(listed.error, /404/, 'the list says why, for the progress row');
+});
+
 // ── Hugging Face ─────────────────────────────────────────────────────────────
 
 test('Hugging Face search sends the task filter, and repo files come with sizes (B10)', async () => {
