@@ -79,13 +79,14 @@ export default function RadioGroup({ value, onChange, label, options, maxHeight,
                   {checked ? <span className="h-1.5 w-1.5 rounded-full bg-accent" /> : null}
                 </span>
                 <span className="min-w-0 flex-1">
+                  {/* The meta sits at the right of the first line, and goes under the name when the row is too narrow for both. */}
                   <span className="flex flex-wrap items-baseline gap-x-2">
                     <span className="text-[13px] font-medium leading-5 text-fg">{option.label}</span>
                     {option.aside ? <span className="text-[11px] text-fg-subtle">{option.aside}</span> : null}
+                    {option.meta ? <span className="ml-auto shrink-0 pl-2 text-[12px] leading-5 tabular-nums text-fg-subtle">{option.meta}</span> : null}
                   </span>
                   {option.description ? <span className="block text-[12px] leading-5 text-fg-muted">{option.description}</span> : null}
                 </span>
-                {option.meta ? <span className="shrink-0 text-[12px] leading-5 tabular-nums text-fg-subtle">{option.meta}</span> : null}
               </div>
               {option.extra ? (
                 <div className="shrink-0" onClick={(event) => event.stopPropagation()}>
