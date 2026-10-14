@@ -489,6 +489,97 @@ function addImageFile(name, body = 'weights') {
   return file;
 }
 
+test('a LoRA, VAE or settings file is never taken for the image model (B8)', async () => {
+  const lora = addImageFile('add_detail_lora.safetensors');
+  addImageFile('sdxl_vae.safetensors');
+  addImageFile('workflow.json', '{}');
+  assert.equal(images.chosenImageModel(), null);
+  const status = await images.imageStatus();
+  assert.equal(status.model, null, 'the Model row names no file');
+  await assert.rejects(images.chooseImage({ provider: 'local', model: lora }), /isn't an image model/);
+  assert.equal(visualModels.isDrawableImageModel(lora), false);
+  // With no ComfyUI either, trying an image says images aren't set up.
+  const comfyUrl = process.env.COMFYUI_BASE_URL;
+  process.env.COMFYUI_BASE_URL = `http://127.0.0.1:${await freePort()}`;
+  try {
+    await assert.rejects(images.tryImage(), (err) => err.status === 422 && /^Images aren't set up yet\./.test(err.message));
+  } finally {
+    process.env.COMFYUI_BASE_URL = comfyUrl;
+  }
+
+  const model = addImageFile('dreamshaper_8.safetensors');
+  assert.equal(images.chosenImageModel(), model, 'the first real image model is used');
+  assert.equal(images.imageCatalog().models.every((item) => item.installed === false), true);
+
+  // A VAE or LoRA downloaded later (so listed first) never becomes the model.
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  const later = ['sdxlVAE_sdxlVAE.safetensors', 'ClearVAE_V2.3_fp16.safetensors', 'detailTweakerLora.safetensors', 'animeLoRA_v1.safetensors'];
+  for (const name of later) addImageFile(name);
+  try {
+    assert.equal(images.chosenImageModel(), model);
+    const choices = visualModels.listVisualModels().image.filter(visualModels.isDrawableImageModel);
+    assert.deepEqual(choices.map((item) => item.path), [model], "stable-diffusion.cpp's own list");
+  } finally {
+    for (const name of later) fs.rmSync(path.join(images.IMAGE_DIR, name));
+    visualModels.clearCache();
+  }
+
+  // A LoRA or VAE says so anywhere in its name; only a whole model's name
+  // may say how its VAE is.
+  const drawable = (name, sizeBytes) => visualModels.isDrawableImageModel({ path: path.join(images.IMAGE_DIR, name), sizeBytes });
+  for (const [name, sizeBytes] of [
+    ['sdxlVAE_sdxlVAE.safetensors', 335e6],
+    ['ClearVAE_V2.3_fp16.safetensors', 167e6],
+    ['detailTweakerLora.safetensors', 144e6],
+    ['animeLoRA_v1.safetensors', 38e6],
+    ['vae-ft-mse-840000-ema-pruned.safetensors', 335e6],
+    ['lcm-lora-sdv1-5.safetensors', 135e6],
+    ['control_v11p_sd15_canny.safetensors', 723e6],
+  ]) {
+    assert.equal(drawable(name, sizeBytes), false, name);
+    assert.equal(visualModels.isDrawableImageModel(path.join(images.IMAGE_DIR, name)), false, `${name}, by its name alone`);
+  }
+  for (const name of ['sd_xl_base_1.0_0.9vae.safetensors', 'dreamshaper_8BakedVae.safetensors', 'anything_v5_with_vae.safetensors']) {
+    assert.equal(drawable(name, 0), true, name);
+  }
+  // A file the size of a whole model is one, whatever its name says.
+  for (const name of ['realisticVisionV60B1_v51VAE.safetensors', 'epicrealism_naturalSinRC1VAE.safetensors', 'floralMix_v2.safetensors']) {
+    assert.equal(drawable(name, 2.13e9), true, name);
+  }
+
+  const baked = addImageFile('sd_xl_base_1.0_0.9vae.safetensors');
+  // A sparse 2.2 GB file: it takes no room on disk.
+  const big = addImageFile('realisticVisionV60B1_v51VAE.safetensors');
+  fs.truncateSync(big, 2.2e9);
+  const onnx = addImageFile('sd_turbo.onnx');
+  try {
+    const chosen = await images.chooseImage({ provider: 'local', model: baked });
+    assert.equal(chosen.model.path, baked, 'a checkpoint with a VAE baked in can be chosen');
+    assert.equal(images.chosenImageModel(), baked, 'and the saved choice is kept');
+    assert.equal((await images.chooseImage({ provider: 'local', model: big })).model.path, big, 'so can a big one');
+    await assert.rejects(images.chooseImage({ provider: 'local', model: onnx }), /isn't an image model/);
+
+    // The file lists say what each file is, and which can be chosen.
+    const listed = (filename) => visualModels.listVisualModels().image.find((item) => item.filename === filename);
+    assert.deepEqual(
+      ['sd_xl_base_1.0_0.9vae.safetensors', 'realisticVisionV60B1_v51VAE.safetensors', 'sdxl_vae.safetensors', 'add_detail_lora.safetensors', 'sd_turbo.onnx', 'workflow.json']
+        .map((filename) => [filename, listed(filename)?.assetKind, listed(filename)?.drawable]),
+      [
+        ['sd_xl_base_1.0_0.9vae.safetensors', 'Image model', true],
+        ['realisticVisionV60B1_v51VAE.safetensors', 'Image model', true],
+        ['sdxl_vae.safetensors', 'VAE', false],
+        ['add_detail_lora.safetensors', 'LoRA', false],
+        ['sd_turbo.onnx', 'Image model', false],
+        ['workflow.json', 'Config', false],
+      ],
+    );
+  } finally {
+    for (const file of [baked, big, onnx]) fs.rmSync(file);
+    visualModels.clearCache();
+    await images.chooseImage({ provider: 'local', model });
+  }
+});
+
 test('trying an image takes its options and says what it made (B1)', async () => {
   const model = addImageFile('dreamshaper_8.safetensors');
   await images.chooseImage({ provider: 'local', model });

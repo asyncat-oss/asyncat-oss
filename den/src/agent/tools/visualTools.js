@@ -12,6 +12,7 @@ import { getWorkspaceRoot } from '../../files/fileExplorerService.js';
 import { runtimeGeneratedImagesPath } from '../../config/runtimeConfig.js';
 import { checkSdCpp, generateSdCppImage } from '../../ai/controllers/ai/sdCppManager.js';
 import { checkComfyUi, editComfyUiImage, generateComfyUiImage } from '../../ai/controllers/ai/comfyUiManager.js';
+import { isDrawableImageModel } from '../../ai/controllers/ai/visualModelManager.js';
 import { CLOUD_IMAGE } from '../../media/imageCatalog.js';
 import { galleryFile, galleryUrl, recordGalleryImage } from '../../media/gallery.js';
 
@@ -42,7 +43,7 @@ function localImageModel(status, requested) {
   const asked = String(requested || '').trim();
   if (asked) return asked;
   const saved = String(process.env.ASYNCAT_IMAGE_MODEL || '').trim();
-  if (saved && fs.existsSync(saved)) return saved;
+  if (saved && fs.existsSync(saved) && isDrawableImageModel(saved)) return saved;
   return String(status?.models?.[0]?.path || '').trim();
 }
 

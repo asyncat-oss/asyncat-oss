@@ -11,7 +11,7 @@ import path from 'path';
 import { MODELS_DIR } from '../ai/controllers/ai/modelManager.js';
 import { checkSdCpp } from '../ai/controllers/ai/sdCppManager.js';
 import { checkComfyUi } from '../ai/controllers/ai/comfyUiManager.js';
-import { clearCache as clearVisualCache, listVisualModels } from '../ai/controllers/ai/visualModelManager.js';
+import { clearCache as clearVisualCache, isDrawableImageModel, listVisualModels } from '../ai/controllers/ai/visualModelManager.js';
 import { huggingFaceHeaders } from '../ai/controllers/ai/huggingFaceAuth.js';
 import { setConfigValue } from '../config/appConfig.js';
 import { detectGpu, planManagedRuntimeInstall } from '../lib/localEngine.js';
@@ -47,9 +47,10 @@ export function gpuInfo() {
   return gpu;
 }
 
+/** Image models on this computer to draw with (no LoRA, VAE or settings files). */
 function localImageModels() {
   try {
-    return (listVisualModels().image || []).filter((model) => model.path && fs.existsSync(model.path));
+    return (listVisualModels().image || []).filter((model) => isDrawableImageModel(model) && fs.existsSync(model.path));
   } catch {
     return [];
   }
@@ -58,7 +59,7 @@ function localImageModels() {
 /** The local model to draw with: the chosen one, else the first there is. */
 export function chosenImageModel() {
   const saved = String(process.env.ASYNCAT_IMAGE_MODEL || '').trim();
-  if (saved && fs.existsSync(saved)) return saved;
+  if (saved && fs.existsSync(saved) && isDrawableImageModel(saved)) return saved;
   return localImageModels()[0]?.path || null;
 }
 
@@ -135,6 +136,7 @@ export async function chooseImage({ provider = 'local', model = '' } = {}) {
     const modelPath = String(model || '').trim();
     if (modelPath) {
       if (!fs.existsSync(modelPath)) throw imageError("That image model isn't on this computer.");
+      if (!isDrawableImageModel(modelPath)) throw imageError("That file isn't an image model Asyncat can draw with.");
       setConfigValue('ASYNCAT_IMAGE_MODEL', modelPath);
     }
     setConfigValue('ASYNCAT_IMAGE_PROVIDER', 'local');

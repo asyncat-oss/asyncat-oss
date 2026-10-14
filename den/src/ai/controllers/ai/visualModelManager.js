@@ -51,7 +51,16 @@ function isAllowedFile(filename, type) {
   return config.extensions.some(ext => lower.endsWith(ext));
 }
 
-function classifyAsset(filename, type) {
+// A whole image model is about 2 GB or more (SD 1.5 at fp16); a VAE is about
+// 330 MB and a LoRA rarely passes 1 GB. A file this big is a model, whatever
+// its name says ("floralMix", "realisticVision_v51VAE").
+const WHOLE_MODEL_BYTES = 1.8e9;
+
+// A whole model that says how its VAE is: "…BakedVae", "…_with_vae",
+// "…-no-vae", the official "sd_xl_base_1.0_0.9vae".
+const VAE_IN_MODEL = /baked[_\-. ]?vae|with(out)?[_\-. ]?vae|no[_\-. ]vae|[_\-. ]0\.9vae/;
+
+function classifyAsset(filename, type, sizeBytes = 0) {
   const lower = String(filename || '').toLowerCase();
   if (type === 'vision') {
     if (lower.includes('mmproj') || lower.endsWith('.mmproj')) return 'Projector';
@@ -60,11 +69,36 @@ function classifyAsset(filename, type) {
     return 'Vision model';
   }
 
-  if (lower.includes('controlnet')) return 'ControlNet';
-  if (lower.includes('lora')) return 'LoRA';
-  if (lower.includes('vae')) return 'VAE';
+  // A LoRA or VAE says so anywhere in its name ("sdxlVAE", "detailTweakerLora").
+  const big = sizeBytes >= WHOLE_MODEL_BYTES;
+  if (lower.includes('control')) return 'ControlNet';
+  if (/lora|locon|loha|lokr|lycoris/.test(lower) && !big) return 'LoRA';
+  if (lower.includes('vae') && !big && !VAE_IN_MODEL.test(lower)) return 'VAE';
   if (lower.endsWith('.json')) return 'Config';
   return 'Image model';
+}
+
+function fileSize(filePath) {
+  try {
+    return fs.statSync(filePath).size;
+  } catch {
+    return 0;
+  }
+}
+
+const DRAWABLE_EXTENSIONS = /\.(safetensors|ckpt|gguf|bin)$/i;
+
+/**
+ * Whether stable-diffusion.cpp can draw with an image file (a path or a
+ * listed model): a whole image model, not a LoRA, VAE, ControlNet or
+ * settings file.
+ */
+export function isDrawableImageModel(fileOrModel) {
+  const model = typeof fileOrModel === 'string' ? { path: fileOrModel } : fileOrModel;
+  if (!model?.path || model.isMissing) return false;
+  const filename = model.filename || path.basename(model.path);
+  const kind = model.assetKind || classifyAsset(filename, 'image', model.sizeBytes ?? fileSize(model.path));
+  return kind === 'Image model' && DRAWABLE_EXTENSIONS.test(filename);
 }
 
 function normalizeModel(type, filePath, stat, extra = {}) {
@@ -74,7 +108,7 @@ function normalizeModel(type, filePath, stat, extra = {}) {
     name: extra.name || filename.replace(/(\.onnx\.json|\.(safetensors|ckpt|gguf|onnx|pt|pth|bin|json|mmproj))$/i, ''),
     type,
     engineType: TYPE_CONFIG[type]?.engineType || type,
-    assetKind: classifyAsset(filename, type),
+    assetKind: classifyAsset(filename, type, stat?.size),
     extension: extensionFor(filename),
     filename,
     path: filePath,
@@ -146,7 +180,8 @@ export function listVisualModels() {
 
   cachedVisualModels = {
     vision: listType('vision'),
-    image: listType('image'),
+    // drawable: stable-diffusion.cpp can draw with it, so it can be chosen.
+    image: listType('image').map(model => ({ ...model, drawable: isDrawableImageModel(model) })),
   };
   lastVisualScan = now;
   return cachedVisualModels;

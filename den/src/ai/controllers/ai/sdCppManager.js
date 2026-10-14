@@ -7,7 +7,7 @@ import { randomUUID } from 'crypto';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { MODELS_DIR } from './modelManager.js';
-import { listVisualModels } from './visualModelManager.js';
+import { isDrawableImageModel, listVisualModels } from './visualModelManager.js';
 import { runtimeGeneratedImagesPath, runtimeHome } from '../../../config/runtimeConfig.js';
 import { imageModelDefaults } from '../../../media/imageCatalog.js';
 
@@ -88,12 +88,7 @@ function clampFloat(value, fallback, min, max) {
 
 function imageModelChoices() {
   return listVisualModels().image
-    .filter(model => (
-      !model.isMissing &&
-      model.path &&
-      model.assetKind === 'Image model' &&
-      /\.(safetensors|ckpt|gguf|bin)$/i.test(model.filename || model.path)
-    ))
+    .filter(isDrawableImageModel)
     .map(model => ({
       id: model.id,
       name: model.name,
