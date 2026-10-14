@@ -39,6 +39,7 @@ import fs from 'fs';
 import path from 'path';
 import { execFileSync, execSync } from 'child_process';
 import { childEnv } from './childEnv.js';
+import { gitEnv } from './gitEnv.js';
 import { SANDBOXED_TOOLS, runInSandbox, sandboxCantStart } from './commandSandbox.js';
 import { lspManager } from './LspManager.js';
 
@@ -2417,9 +2418,11 @@ export class AgentRuntime {
       let checkpoint;
       try {
         if (forceSnapshot) throw new Error('snapshot requested');
-        execSync('git rev-parse --is-inside-work-tree', { cwd: workspace, env: childEnv(), stdio: 'ignore', timeout: 3000 });
-        execFileSync('git', ['stash', 'push', '--include-untracked', '-m', message], { cwd: workspace, env: childEnv(), stdio: 'ignore', timeout: 15000 });
-        const list = execSync('git stash list', { cwd: workspace, env: childEnv(), encoding: 'utf8', timeout: 3000 });
+        // Checkpoints run none of the project's git programs (gitEnv.js).
+        const env = gitEnv(workspace);
+        execSync('git rev-parse --is-inside-work-tree', { cwd: workspace, env, stdio: 'ignore', timeout: 3000 });
+        execFileSync('git', ['stash', 'push', '--include-untracked', '-m', message], { cwd: workspace, env, stdio: 'ignore', timeout: 15000 });
+        const list = execSync('git stash list', { cwd: workspace, env, encoding: 'utf8', timeout: 3000 });
         const first = list.split('\n').find(line => line.includes(message));
         checkpoint = {
           id,
@@ -3336,7 +3339,7 @@ export function deleteCheckpoint(checkpoint) {
         fs.rmSync(cp.dir, { recursive: true, force: true });
       }
     } else if (cp.kind === 'git_stash' && /^stash@\{\d+\}$/.test(cp.ref)) {
-      try { execFileSync('git', ['stash', 'drop', cp.ref], { cwd: cp.workspace, env: childEnv(), stdio: 'ignore', timeout: 15000 }); } catch {}
+      try { execFileSync('git', ['stash', 'drop', cp.ref], { cwd: cp.workspace, env: gitEnv(cp.workspace), stdio: 'ignore', timeout: 15000 }); } catch {}
     }
     CHECKPOINTS.delete(cp.id);
     _deletePersistedCheckpoint(cp.id);
@@ -3353,7 +3356,7 @@ export function restoreCheckpoint(id) {
   if (!cp) return { success: false, error: 'No checkpoint found' };
   try {
     if (cp.kind === 'git_stash') {
-      execFileSync('git', ['stash', 'apply', cp.ref], { cwd: cp.workspace, env: childEnv(), stdio: 'pipe', timeout: 30000 });
+      execFileSync('git', ['stash', 'apply', cp.ref], { cwd: cp.workspace, env: gitEnv(cp.workspace), stdio: 'pipe', timeout: 30000 });
     } else if (cp.kind === 'dir_snapshot') {
       if (!cp.dir || !fs.existsSync(cp.dir)) {
         return { success: false, error: 'Checkpoint snapshot is missing', checkpoint: cp };

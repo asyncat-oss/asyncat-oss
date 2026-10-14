@@ -9,6 +9,7 @@ import * as parser from '@babel/parser';
 import { PermissionLevel } from './toolRegistry.js';
 import { clampInt, firstLines, hasBin, runFile, safePath, truncate } from './shared.js';
 import { applyHunks, parseUnifiedDiff, stripComponents } from './unifiedDiff.js';
+import { DIFF_SAFE, gitEnv } from '../gitEnv.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -897,7 +898,9 @@ export const fileDiffTool = {
       // Programs run with argument lists, not a shell: file names inside the
       // folder can contain $(...) or quotes.
       const run = (file, argv) => {
-        const res = runFile(file, argv, { cwd: context.workingDir, timeout: 10000 });
+        // git runs none of the project's own programs here (gitEnv.js).
+        const env = file === 'git' ? gitEnv(context.workingDir) : undefined;
+        const res = runFile(file, argv, { cwd: context.workingDir, timeout: 10000, env });
         // diff exits 1 when the files differ; only a failure to run is null.
         return res.status === null ? null : res.stdout;
       };
@@ -907,7 +910,7 @@ export const fileDiffTool = {
         output = run('diff', ['-u', '--', comparePath, filePath]) ?? '';
       } else {
         const cl = Math.min(Math.max(Number.parseInt(args.context_lines, 10) || 3, 0), 50);
-        output = run('git', ['diff', '--no-color', `-U${cl}`, '--', filePath])
+        output = run('git', ['diff', ...DIFF_SAFE, '--no-color', `-U${cl}`, '--', filePath])
           || run('diff', ['-u', '/dev/null', filePath])
           || 'No git repo and no compare_to specified';
       }

@@ -1,16 +1,18 @@
 import { execFileSync } from 'child_process';
-import { childEnv } from './childEnv.js';
+import { DIFF_SAFE, gitEnv } from './gitEnv.js';
 import fs from 'fs';
 import path from 'path';
 
 const MAX_OUTPUT = 1024 * 1024;
 const DEFAULT_COMMIT_MESSAGE_DIFF_CHARS = 24000;
 
-function runGit(args, cwd, timeout = 30000) {
+// `asked`: a change someone asked for (commit, push…), which runs the
+// repository's hooks; everything else runs none of its programs (gitEnv.js).
+function runGit(args, cwd, timeout = 30000, { asked = false } = {}) {
   try {
     const output = execFileSync('git', args, {
       cwd,
-      env: childEnv(),
+      env: gitEnv(cwd, { asked }),
       encoding: 'utf8',
       timeout,
       maxBuffer: MAX_OUTPUT,
@@ -162,7 +164,7 @@ function diffUntrackedFiles(repoRoot, files = [], remainingChars = DEFAULT_COMMI
     const abs = path.join(repoRoot, safeFile);
     if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) continue;
 
-    const result = runGit(['diff', '--no-index', '--no-color', '/dev/null', safeFile], repoRoot, 10000);
+    const result = runGit(['diff', ...DIFF_SAFE, '--no-index', '--no-color', '/dev/null', safeFile], repoRoot, 10000);
     const output = result.output || result.stdout || '';
     if (!output) {
       parts.push(`Untracked file: ${safeFile}`);
@@ -272,11 +274,11 @@ export function getGitDiff(cwd, { file = null, staged = false, compare = null } 
   const safeFile = file ? normalizeGitPath(repo.root, file) : null;
   let args;
   if (compare) {
-    args = ['diff', '--no-color', `${compare}^..${compare}`];
+    args = ['diff', ...DIFF_SAFE, '--no-color', `${compare}^..${compare}`];
   } else if (staged) {
-    args = ['diff', '--cached', '--no-color'];
+    args = ['diff', ...DIFF_SAFE, '--cached', '--no-color'];
   } else {
-    args = ['diff', '--no-color', 'HEAD'];
+    args = ['diff', ...DIFF_SAFE, '--no-color', 'HEAD'];
   }
   if (safeFile) args.push('--', safeFile);
   const result = runGit(args, repo.root, 10000);
@@ -286,7 +288,7 @@ export function getGitDiff(cwd, { file = null, staged = false, compare = null } 
     const tracked = runGit(['ls-files', '--error-unmatch', '--', safeFile], repo.root, 5000);
     const abs = path.join(repo.root, safeFile);
     if (!tracked.success && fs.existsSync(abs) && fs.statSync(abs).isFile()) {
-      const fallback = runGit(['diff', '--no-index', '--no-color', '/dev/null', safeFile], repo.root, 10000);
+      const fallback = runGit(['diff', ...DIFF_SAFE, '--no-index', '--no-color', '/dev/null', safeFile], repo.root, 10000);
       output = fallback.output || fallback.stdout || '';
     }
   }
@@ -320,8 +322,8 @@ export function getGitCommitMessageContext(cwd, { scope = 'auto', maxDiffChars =
   }
 
   const diffArgs = useStaged
-    ? ['diff', '--cached', '--no-color']
-    : ['diff', '--no-color', 'HEAD'];
+    ? ['diff', ...DIFF_SAFE, '--cached', '--no-color']
+    : ['diff', ...DIFF_SAFE, '--no-color', 'HEAD'];
   const diffResult = runGit(diffArgs, state.root, 30000);
   let diff = diffResult.output || diffResult.stdout || '';
 
@@ -363,7 +365,7 @@ export function stageGitFiles(cwd, files = []) {
   if (!repo.success) return repo;
   const paths = normalizeGitPaths(repo.root, files);
   const args = paths.length ? ['add', '--', ...paths] : ['add', '-A'];
-  const result = runGit(args, repo.root, 30000);
+  const result = runGit(args, repo.root, 30000, { asked: true });
   return { ...result, command: `git ${args.join(' ')}`, files: paths, all: paths.length === 0 };
 }
 
@@ -372,7 +374,7 @@ export function unstageGitFiles(cwd, files = []) {
   if (!repo.success) return repo;
   const paths = normalizeGitPaths(repo.root, files);
   const args = paths.length ? ['restore', '--staged', '--', ...paths] : ['restore', '--staged', '.'];
-  const result = runGit(args, repo.root, 30000);
+  const result = runGit(args, repo.root, 30000, { asked: true });
   return { ...result, command: `git ${args.join(' ')}`, files: paths, all: paths.length === 0 };
 }
 
@@ -389,7 +391,7 @@ export function commitGit(cwd, { message, files = [], amend = false } = {}) {
   const args = amend
     ? ['commit', '--amend', ...(cleanMessage ? ['-m', cleanMessage] : ['--no-edit'])]
     : ['commit', '-m', cleanMessage];
-  const result = runGit(args, repo.root, 60000);
+  const result = runGit(args, repo.root, 60000, { asked: true });
   const hash = result.success ? runGit(['log', '-1', '--format=%H'], repo.root, 5000).output : null;
   return {
     ...result,
@@ -408,7 +410,7 @@ export function pullGit(cwd, { remote = null, branch = null } = {}) {
   const args = ['pull'];
   if (remote) args.push(remote);
   if (branch) args.push(branch);
-  const result = runGit(args, repo.root, 120000);
+  const result = runGit(args, repo.root, 120000, { asked: true });
   return { ...result, command: `git ${args.join(' ')}` };
 }
 
@@ -418,7 +420,7 @@ export function pushGit(cwd, { remote = 'origin', branch = null, setUpstream = f
   const args = ['push'];
   if (setUpstream || branch) args.push('-u', remote || 'origin', branch || 'HEAD');
   else if (remote) args.push(remote);
-  const result = runGit(args, repo.root, 120000);
+  const result = runGit(args, repo.root, 120000, { asked: true });
   return { ...result, command: `git ${args.join(' ')}` };
 }
 
@@ -435,7 +437,7 @@ export function stashGit(cwd, { action = 'list', message = null, index = null } 
       : action === 'drop'
         ? ['stash', 'drop', ...(index !== null ? [`stash@{${index}}`] : [])]
         : ['stash', 'list'];
-  const result = runGit(args, repo.root, 60000);
+  const result = runGit(args, repo.root, 60000, { asked: action !== 'list' });
   
   if (action === 'list' && result.success) {
     const stashes = (result.output || '').split('\n').filter(Boolean).map(line => {
@@ -458,13 +460,13 @@ export function getGitCommit(cwd, hash) {
   const repo = ensureRepo(cwd);
   if (!repo.success) return repo;
 
-  const info = runGit(['show', '-s', '--format=%H%x00%h%x00%an%x00%ae%x00%aI%x00%cn%x00%ce%x00%cI%x00%s%x00%b%x00%P', hash], repo.root, 5000);
+  const info = runGit(['show', ...DIFF_SAFE, '-s', '--format=%H%x00%h%x00%an%x00%ae%x00%aI%x00%cn%x00%ce%x00%cI%x00%s%x00%b%x00%P', hash], repo.root, 5000);
   if (!info.success) return info;
 
   const parts = info.output.split('\x00');
   const [fullHash, shortHash, author, authorEmail, authorDate, committer, committerEmail, commitDate, subject, body, parentsRaw] = parts;
 
-  const statResult = runGit(['show', '--stat', '--format=', hash], repo.root, 5000);
+  const statResult = runGit(['show', ...DIFF_SAFE, '--stat', '--format=', hash], repo.root, 5000);
   const changedFiles = [];
   if (statResult.success && statResult.output) {
     const lines = statResult.output.trim().split('\n');
@@ -532,7 +534,7 @@ export function discardGitFiles(cwd, files = []) {
   if (!repo.success) return repo;
   const paths = normalizeGitPaths(repo.root, files);
   const args = paths.length ? ['checkout', '--', ...paths] : ['checkout', '--', '.'];
-  const result = runGit(args, repo.root, 30000);
+  const result = runGit(args, repo.root, 30000, { asked: true });
   return { ...result, command: `git ${args.join(' ')}`, files: paths, all: paths.length === 0 };
 }
 
@@ -547,11 +549,11 @@ export function branchGit(cwd, { action = 'list', name = null } = {}) {
     return { success: false, error: 'A valid branch name is required.' };
   }
   if (action === 'create') {
-    const result = runGit(['branch', name], repo.root, 30000);
+    const result = runGit(['branch', name], repo.root, 30000, { asked: true });
     return { ...result, command: `git branch ${name}`, branch: name };
   }
   if (action === 'switch') {
-    const result = runGit(['switch', name], repo.root, 30000);
+    const result = runGit(['switch', name], repo.root, 30000, { asked: true });
     return { ...result, command: `git switch ${name}`, branch: name };
   }
   return { success: false, error: 'Only list, create, and switch branch actions are available here.' };

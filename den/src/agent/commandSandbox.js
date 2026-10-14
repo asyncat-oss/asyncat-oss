@@ -292,6 +292,66 @@ export function sandboxStatus({ platform = process.platform, recheck = false, ho
   };
 }
 
+// ── git's own settings and hooks ─────────────────────────────────────────────
+
+function readText(file) {
+  try { return fs.readFileSync(file, 'utf8'); } catch { return ''; }
+}
+
+function isDir(target) {
+  try { return fs.statSync(target).isDirectory(); } catch { return false; }
+}
+
+/** The git folders of the repository at `root` and of its submodules (real paths). */
+export function gitDirsOf(root) {
+  const dotGit = path.join(root, '.git');
+  const dirs = [];
+  if (isDir(dotGit)) {
+    dirs.push(dotGit);
+  } else {
+    // A worktree: its .git file names its git folder, which names the shared one.
+    const named = /^gitdir:\s*(.+)$/m.exec(readText(dotGit))?.[1]?.trim();
+    if (!named) return [];
+    const gitDir = path.resolve(root, named);
+    dirs.push(gitDir);
+    const common = readText(path.join(gitDir, 'commondir')).trim();
+    if (common) dirs.push(path.resolve(gitDir, common));
+  }
+  // Submodules keep theirs in modules/ (their names can hold slashes, and nest).
+  const walk = (dir, depth) => {
+    if (depth > 4 || !isDir(dir)) return;
+    for (const name of fs.readdirSync(dir)) {
+      const child = path.join(dir, name);
+      if (!isDir(child)) continue;
+      if (fs.existsSync(path.join(child, 'HEAD'))) {
+        dirs.push(child);
+        walk(path.join(child, 'modules'), depth + 1);
+      } else {
+        walk(child, depth + 1);
+      }
+    }
+  };
+  for (const dir of [...dirs]) walk(path.join(dir, 'modules'), 0);
+  return [...new Set(dirs.filter(isDir).map((dir) => fs.realpathSync(dir)))];
+}
+
+/**
+ * What keeps git's settings and hooks in the project read-only, for git
+ * folders a command could otherwise change: { gitDirs, readOnly }. den runs
+ * git there later, outside the sandbox (the Code panel, checkpoints, copies),
+ * and a command that set core.fsmonitor or added a hook would get a program
+ * of its own run there. Each git folder is also bound onto itself, so it can't
+ * be renamed and replaced by one with other settings.
+ */
+export function gitGuards({ workspaceRoot, roots, gitDirs = gitDirsOf }) {
+  const writable = (target) => roots.some((root) => isPathInside(target, root));
+  const dirs = workspaceRoot ? gitDirs(workspaceRoot).filter(writable) : [];
+  const readOnly = dirs
+    .flatMap((dir) => ['config', 'config.worktree', 'hooks'].map((name) => path.join(dir, name)))
+    .filter((target) => fs.existsSync(target));
+  return { gitDirs: dirs, readOnly };
+}
+
 /** Folders a sandboxed command may write to. */
 export function writableRoots({ workspaceRoot, home = os.homedir(), tmp = os.tmpdir() }) {
   const roots = new Set([workspaceRoot, '/tmp', '/var/tmp', tmp].filter(Boolean).map((p) => path.resolve(p)));
@@ -305,10 +365,10 @@ function appleString(text) {
 
 /**
  * bwrap arguments for a command that may write to `roots` and not read
- * `hidden`, started in `cwd` (the project when not given). `network` is a
- * sandboxNetwork.js plan (its flags and mounts).
+ * `hidden`, started in `cwd` (the project when not given). `git` is from
+ * gitGuards(); `network` is a sandboxNetwork.js plan (its flags and mounts).
  */
-export function bwrapArgs({ file, args, workspaceRoot, cwd = workspaceRoot, roots, hidden, readOnly = [], flags = OPTIONAL_FLAGS, network = null, inspect = inspectPath }) {
+export function bwrapArgs({ file, args, workspaceRoot, cwd = workspaceRoot, roots, hidden, readOnly = [], git = null, flags = OPTIONAL_FLAGS, network = null, inspect = inspectPath }) {
   const mounts = [];
   // Writable folders first, then empty folders over the secret ones (some sit
   // inside a writable folder, like Asyncat's data in a project or /tmp), then
@@ -331,6 +391,8 @@ export function bwrapArgs({ file, args, workspaceRoot, cwd = workspaceRoot, root
   for (const root of roots) {
     if (covers.some((cover) => cover !== root && isPathInside(root, cover))) mounts.push('--bind-try', root, root);
   }
+  for (const dir of git?.gitDirs || []) mounts.push('--bind', dir, dir);
+  for (const target of git?.readOnly || []) mounts.push('--ro-bind', target, target);
   mounts.push(...(network?.mounts || []));
   // Last, once nothing more is mounted inside them: the empty folders turn
   // read-only, so a write there fails (and the hint says why) instead of
@@ -349,10 +411,11 @@ export function bwrapArgs({ file, args, workspaceRoot, cwd = workspaceRoot, root
 
 /**
  * The sandbox-exec profile: write only to `roots` (but not `readOnly` inside
- * them), read anything but `hidden`, connect to none of the hidden sockets,
- * and `network` rules from a sandboxNetwork.js plan.
+ * them, nor the settings and hooks of `gitDirs`), read anything but `hidden`,
+ * connect to none of the hidden sockets, and `network` rules from a
+ * sandboxNetwork.js plan.
  */
-export function seatbeltProfile({ roots, hidden, readOnly = [], network = [] }) {
+export function seatbeltProfile({ roots, hidden, readOnly = [], gitDirs = [], network = [] }) {
   // /tmp and the per-user temp folder live under /private on macOS.
   const macRoots = [...roots, '/private/tmp', '/private/var/folders'];
   const covered = (root) => hidden.some((item) => isPathInside(root, item.path));
@@ -364,6 +427,8 @@ export function seatbeltProfile({ roots, hidden, readOnly = [], network = [] }) 
     `(allow file-write* ${macRoots.map((root) => `(subpath ${appleString(root)})`).join(' ')})`,
     '(allow file-write* (literal "/dev/null") (literal "/dev/zero") (regex #"^/dev/tty") (regex #"^/dev/fd/"))',
     ...(readOnly.length ? [`(deny file-write* ${readOnly.map((target) => `(subpath ${appleString(target)})`).join(' ')})`] : []),
+    // Even where they don't exist yet, and the git folder itself (renaming it).
+    ...gitDirs.map((dir) => `(deny file-write* (literal ${appleString(dir)}) ${['config', 'config.worktree', 'commondir'].map((name) => `(literal ${appleString(path.join(dir, name))})`).join(' ')} (subpath ${appleString(path.join(dir, 'hooks'))}))`),
     ...(hidden.length ? [`(deny file-read* ${hidden.map((item) => `(subpath ${appleString(item.path)})`).join(' ')})`] : []),
     ...macRoots.filter(covered).map((root) => `(allow file-read* (subpath ${appleString(root)}))`),
     ...network,
@@ -380,7 +445,7 @@ export function seatbeltProfile({ roots, hidden, readOnly = [], network = [] }) 
  */
 export function sandboxedCommand({
   file, args = [], workspaceRoot, cwd = null, platform = process.platform, home = os.homedir(), tmp = os.tmpdir(), force = null,
-  hidden = null, flags = null, inspect = inspectPath, network = null,
+  hidden = null, flags = null, inspect = inspectPath, network = null, gitDirs = null,
 }) {
   const enabled = force ?? (sandboxState({ platform }).state === 'on');
   if (!enabled || !workspaceRoot) return { file, args, sandboxed: false };
@@ -398,11 +463,12 @@ export function sandboxedCommand({
   const about = { mode: net.mode, effective: net.effective, ...(net.note ? { note: net.note } : {}) };
 
   const readOnly = HOME_READ_ONLY.map((rel) => path.join(home, rel));
+  const git = gitGuards({ workspaceRoot, roots, ...(gitDirs ? { gitDirs } : {}) });
 
   if (platform === 'linux') {
     const probeFlags = flags ?? (force ? OPTIONAL_FLAGS : probeLinuxSandbox().flags);
     const [inner, innerArgs] = net.wrap ? net.wrap(file, args) : [file, args];
-    const bwrap = bwrapArgs({ file: inner, args: innerArgs, workspaceRoot, cwd: start, roots, hidden: secret, readOnly, flags: probeFlags, network: net, inspect });
+    const bwrap = bwrapArgs({ file: inner, args: innerArgs, workspaceRoot, cwd: start, roots, hidden: secret, readOnly, git, flags: probeFlags, network: net, inspect });
     return { file: 'bwrap', args: bwrap, sandboxed: true, env: net.env, network: about };
   }
 
@@ -410,7 +476,7 @@ export function sandboxedCommand({
     // sandbox-exec matches real paths, so follow links (a data folder in /tmp
     // is really in /private/tmp).
     const real = secret.map((item) => ({ ...item, path: inspect(item.path).real }));
-    const profile = seatbeltProfile({ roots, hidden: real, readOnly, network: net.seatbelt });
+    const profile = seatbeltProfile({ roots, hidden: real, readOnly, gitDirs: git.gitDirs, network: net.seatbelt });
     return { file: '/usr/bin/sandbox-exec', args: ['-p', profile, file, ...args], sandboxed: true, env: net.env, network: about };
   }
 

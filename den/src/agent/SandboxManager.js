@@ -11,7 +11,7 @@ import path from 'path';
 import { randomUUID } from 'crypto';
 import db from '../db/client.js';
 import { getWorkspaceRoot } from '../files/fileExplorerService.js';
-import { childEnv } from './childEnv.js';
+import { DIFF_SAFE, gitEnv } from './gitEnv.js';
 import { runInSandbox } from './commandSandbox.js';
 
 const COPY_SKIP = new Set([
@@ -89,20 +89,22 @@ function publicJob(row) {
   };
 }
 
+// Git here runs none of the repository's programs (hooks, fsmonitor,
+// filters: gitEnv.js), except for a commit someone asked for (`asked`).
 function runGit(args, cwd) {
   return execFileSync('git', args, {
     cwd,
-    env: childEnv(),
+    env: gitEnv(cwd),
     encoding: 'utf8',
     timeout: 60_000,
     stdio: ['ignore', 'pipe', 'pipe'],
   }).trim();
 }
 
-function runGitResult(args, cwd) {
+function runGitResult(args, cwd, { asked = false } = {}) {
   const result = spawnSync('git', args, {
     cwd,
-    env: childEnv(),
+    env: gitEnv(cwd, { asked }),
     encoding: 'utf8',
     timeout: 60_000,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -223,10 +225,10 @@ function filePatch(row, filePath) {
 
   const status = runGitResult(['status', '--porcelain=v1', '--', rel], row.sandbox_path).stdout.trim();
   if (status.startsWith('??')) {
-    const result = runGitResult(['diff', '--no-index', '--binary', '--', '/dev/null', rel], row.sandbox_path);
+    const result = runGitResult(['diff', ...DIFF_SAFE, '--no-index', '--binary', '--', '/dev/null', rel], row.sandbox_path);
     return result.stdout || '';
   }
-  return runGitResult(['diff', '--binary', 'HEAD', '--', rel], row.sandbox_path).stdout || '';
+  return runGitResult(['diff', ...DIFF_SAFE, '--binary', 'HEAD', '--', rel], row.sandbox_path).stdout || '';
 }
 
 function createWorktreePatch(row, filePaths = []) {
@@ -236,7 +238,7 @@ function createWorktreePatch(row, filePaths = []) {
   else addArgs.push('.');
   runGitResult(addArgs, row.sandbox_path);
 
-  const diffArgs = ['diff', '--binary', 'HEAD'];
+  const diffArgs = ['diff', ...DIFF_SAFE, '--binary', 'HEAD'];
   if (paths.length) diffArgs.push('--', ...paths);
   const result = runGitResult(diffArgs, row.sandbox_path);
   if (result.error) throw result.error;
@@ -371,15 +373,15 @@ export function commitSandboxBranch(userId, id, { message = 'Asyncat copy change
   const addArgs = ['add'];
   if (paths.length) addArgs.push('--', ...paths);
   else addArgs.push('-A');
-  const add = runGitResult(addArgs, row.sandbox_path);
+  const add = runGitResult(addArgs, row.sandbox_path, { asked: true });
   if (add.status !== 0) throw new Error(add.stderr || add.stdout || "Couldn't stage the copy's changes.");
 
-  const diff = runGitResult(['diff', '--cached', '--quiet'], row.sandbox_path);
+  const diff = runGitResult(['diff', ...DIFF_SAFE, '--cached', '--quiet'], row.sandbox_path);
   if (diff.status === 0) {
     return { success: true, committed: false, branchName: row.branch_name, message: 'The copy has no staged changes to commit.' };
   }
 
-  const commit = runGitResult(['commit', '-m', String(message || 'Asyncat copy changes')], row.sandbox_path);
+  const commit = runGitResult(['commit', '-m', String(message || 'Asyncat copy changes')], row.sandbox_path, { asked: true });
   if (commit.status !== 0) throw new Error(commit.stderr || commit.stdout || "Couldn't commit the copy's changes.");
   return {
     success: true,

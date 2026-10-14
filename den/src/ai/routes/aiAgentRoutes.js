@@ -7,6 +7,7 @@ import { chatService } from '../controllers/ai/chatService.js';
 import { searchChats, indexingChats } from '../../search/messageIndex.js';
 import { initializeAgent, AgentRuntime, AgentSession } from '../../agent/index.js';
 import { deleteCheckpoint, restoreCheckpoint } from '../../agent/AgentRuntime.js';
+import { gitEnv } from '../../agent/gitEnv.js';
 import {
   applySandboxPatch,
   commitSandboxBranch,
@@ -2833,7 +2834,8 @@ function checkpointAvailability(checkpoint) {
 }
 
 function execGitStashList(cwd) {
-  return execSync('git stash list', { cwd: cwd || process.cwd(), encoding: 'utf8', timeout: 3000 });
+  const dir = cwd || process.cwd();
+  return execSync('git stash list', { cwd: dir, env: gitEnv(dir), encoding: 'utf8', timeout: 3000 });
 }
 
 export default router;

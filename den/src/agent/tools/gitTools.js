@@ -3,16 +3,18 @@
 // Git operations for the agent: clone, pull, commit, push, branch, log, diff, status.
 
 import { spawn } from 'child_process';
-import { childEnv } from '../childEnv.js';
+import { DIFF_SAFE, gitEnv } from '../gitEnv.js';
 import path from 'path';
 import { PermissionLevel } from './toolRegistry.js';
 import { branchGit, commitGit, getGitDiff, getGitState, pullGit, pushGit, stashGit } from '../gitService.js';
 import { clampInt, runFile, safePath } from './shared.js';
 
 // Git runs with an argument list, never through a shell: refs, file names,
-// URLs and messages all come from the model.
-function runGit(argv, cwd, timeout = 30000) {
-  const res = runFile('git', argv, { cwd, timeout });
+// URLs and messages all come from the model. `asked`: a change the agent asked
+// for, which runs the repository's hooks; reads run none of its programs
+// (gitEnv.js).
+function runGit(argv, cwd, { asked = false, timeout = 30000 } = {}) {
+  const res = runFile('git', argv, { cwd, timeout, env: gitEnv(cwd, { asked }) });
   if (res.ok) return { success: true, output: res.stdout.trim() };
   return { success: false, error: res.error, stderr: res.stderr };
 }
@@ -20,7 +22,7 @@ function runGit(argv, cwd, timeout = 30000) {
 function runGitStream(argv, cwd, timeout = 30000) {
   return new Promise((resolve) => {
     let stdout = '', stderr = '';
-    const proc = spawn('git', argv, { cwd, env: childEnv(), shell: false, windowsHide: true });
+    const proc = spawn('git', argv, { cwd, env: gitEnv(null, { asked: true }), shell: false, windowsHide: true });
     const timer = setTimeout(() => { proc.kill(); resolve({ success: false, error: `Timed out after ${timeout / 1000}s`, stdout, stderr }); }, timeout);
     proc.stdout?.on('data', d => { stdout += d.toString(); });
     proc.stderr?.on('data', d => { stderr += d.toString(); });
@@ -140,7 +142,7 @@ export const gitDiffTool = {
   execute: async (args, context) => {
     if (args.compare) {
       const cwd = repoDir(args, context);
-      const result = runGit(['diff', '--no-color', gitName(args.compare, 'compare'), ...(args.file ? ['--', String(args.file)] : [])], cwd);
+      const result = runGit(['diff', ...DIFF_SAFE, '--no-color', gitName(args.compare, 'compare'), ...(args.file ? ['--', String(args.file)] : [])], cwd);
       const output = result.output || '';
       const added = (output.match(/^\+[^+]/gm) || []).length;
       const removed = (output.match(/^-[^-]/gm) || []).length;
@@ -210,7 +212,7 @@ export const gitBranchTool = {
       return branchGit(cwd, { action: 'create', name: args.create });
     }
     if (args.delete) {
-      const result = runGit(['branch', '-d', gitName(args.delete, 'branch')], cwd);
+      const result = runGit(['branch', '-d', gitName(args.delete, 'branch')], cwd, { asked: true });
       return { ...result, deleted: args.delete };
     }
     if (args.switch) {
@@ -287,7 +289,7 @@ export const gitCommitTool = {
   },
   execute: async (args, context) => {
     if (args.amend) {
-      return runGit(['commit', '--amend', '--no-edit'], repoDir(args, context));
+      return runGit(['commit', '--amend', '--no-edit'], repoDir(args, context), { asked: true });
     }
     const files = args.all || args.files === '.' ? [] : args.files ? [args.files] : [];
     return commitGit(repoDir(args, context), { message: args.message, files });
@@ -336,7 +338,7 @@ export const gitStashTool = {
   },
   execute: async (args, context) => {
     const cwd = repoDir(args, context);
-    if (args.action === 'drop') return runGit(['stash', 'drop'], cwd);
+    if (args.action === 'drop') return runGit(['stash', 'drop'], cwd, { asked: true });
     if (args.action === 'clear') return { success: false, error: 'Stash clear is destructive and not available through this tool.' };
     const result = stashGit(cwd, { action: args.action, message: args.message || null });
     if (args.action === 'list') {
@@ -380,12 +382,12 @@ export const gitRemoteTool = {
       if (!/^(https?:\/\/|ssh:\/\/|git@[\w.-]+:)/i.test(url)) {
         return { success: false, error: 'Remote URLs must start with https://, ssh:// or git@host:.' };
       }
-      const result = runGit(['remote', 'add', gitName(args.name, 'remote name'), url], cwd);
+      const result = runGit(['remote', 'add', gitName(args.name, 'remote name'), url], cwd, { asked: true });
       return { ...result, added: args.name, url: args.url };
     }
     if (args.action === 'remove') {
       if (!args.name) return { success: false, error: 'name required for remove action' };
-      const result = runGit(['remote', 'remove', gitName(args.name, 'remote name')], cwd);
+      const result = runGit(['remote', 'remove', gitName(args.name, 'remote name')], cwd, { asked: true });
       return { ...result, removed: args.name };
     }
     return { success: false, error: `Unknown action: ${args.action}` };
