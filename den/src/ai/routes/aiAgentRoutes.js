@@ -1584,7 +1584,10 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
       externalSessionId = null,
       externalCwd = null,
       engineModel = null,
+      // A temporary chat: nothing from this run is saved or learned from.
+      ephemeral = false,
     } = req.body;
+    const temporary = ephemeral === true;
     const resolvedAgentMode = agentMode === 'design'
       ? 'design'
       : agentMode === 'plan' || enableTools === false
@@ -1594,6 +1597,10 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
 
     if (!baseGoal) {
       return res.status(400).json({ success: false, error: 'Goal is required' });
+    }
+    // Claude Code, Codex and other outside agents keep their own history.
+    if (temporary && (isAcpEngine(engine) || isExternalEngine(engine))) {
+      return res.status(400).json({ success: false, error: "A temporary chat can only use Asyncat's own agent: other agents keep their own history." });
     }
     if (isAcpEngine(engine)) {
       await runAcpEngineTurn(req, res, {
@@ -1742,6 +1749,7 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
       clientTimestamp,
       clientTimezone,
       abortSignal: abortController.signal,
+      ephemeral: temporary,
       usageContext: {
         operation: 'agent',
         conversationId,

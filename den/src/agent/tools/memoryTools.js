@@ -487,7 +487,9 @@ export async function hybridRecall(context, { query, kind = 'all', limit = 10 } 
     query,
     kind,
     limit,
-    bumpAccess: true,
+    // A recall counts as a use, which ranks a memory higher and keeps it from
+    // fading; a temporary chat leaves no such trace.
+    bumpAccess: context.ephemeral !== true,
   });
 
   if (bm25Results.length < 3 && typeof context.computeEmbedding === 'function') {

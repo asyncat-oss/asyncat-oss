@@ -1,7 +1,8 @@
 // den/src/agent/AgentSession.js
 // ─── Agent Session State ─────────────────────────────────────────────────────
 // Tracks state for a single agent run: goal, plan, tool history, scratchpad.
-// Persists to SQLite for resumability.
+// Persists to SQLite for resumability, except a temporary chat's session,
+// which lives only in memory.
 
 import { randomUUID } from 'crypto';
 import db from '../db/client.js';
@@ -36,8 +37,9 @@ function toJson(value, fallback = '{}') {
 }
 
 export class AgentSession {
-  constructor({ id, userId, workspaceId, goal, workingDir }) {
+  constructor({ id, userId, workspaceId, goal, workingDir, ephemeral = false }) {
     this.id = id || randomUUID();
+    this.ephemeral = ephemeral === true;
     this.userId = userId;
     this.workspaceId = workspaceId;
     this.goal = goal;
@@ -114,6 +116,7 @@ export class AgentSession {
 
   /** Persist session to database (atomic UPSERT). */
   _persist() {
+    if (this.ephemeral) return;
     try {
       db.prepare(`
         INSERT INTO agent_sessions (
@@ -149,6 +152,7 @@ export class AgentSession {
   }
 
   _persistToolAudit(toolName, args, result, entry, meta = {}) {
+    if (this.ephemeral) return;
     try {
       const existing = db.prepare('SELECT id FROM agent_sessions WHERE id = ?').get(this.id);
       if (!existing) this._persist();

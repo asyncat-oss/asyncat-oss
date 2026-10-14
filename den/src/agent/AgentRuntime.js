@@ -92,6 +92,8 @@ const MULTI_STEP_GOAL_RE = /\b(and then|after that|also|then|next|finally|step[\
 const AUTO_PLAN_IDS = new Set(['auto_plan_inspect', 'auto_plan_understand', 'auto_plan_apply', 'auto_plan_verify']);
 const RETRYABLE_TOOLS = new Set(['run_command', 'run_python', 'run_node', 'browse_website', 'web_search']);
 const PLAN_DYNAMIC_SAFE_TOOLS = new Set(['run_command', 'package_manager']);
+// A temporary chat may read memories but never change them.
+const TEMPORARY_BLOCKED_TOOLS = new Set(['save_memory', 'forget_memory', 'optimize_memory']);
 const PLAN_BLOCKED_SAFE_TOOLS = new Set([
   'save_memory',
   'forget_memory',
@@ -298,6 +300,7 @@ export class AgentRuntime {
    * @param {number} [opts.maxRounds] - Max ReAct iterations
    * @param {(event: AgentEvent) => void} [opts.onEvent] - Event callback for streaming
    * @param {string} [opts.continueSessionId] - Existing session ID to continue
+   * @param {boolean} [opts.ephemeral] - A temporary chat: nothing is kept once the run ends
    */
   constructor(opts) {
     this.aiClient = opts.aiClient;
@@ -316,7 +319,11 @@ export class AgentRuntime {
     this.askUser = opts.askUser || null;
     this.sessionApprovedTools = new Set();
     this.session = null;
-    this.continueSessionId = opts.continueSessionId || null;
+    // A temporary chat: the session, tool audit and checkpoint live only in
+    // memory for the run, and nothing is learned from it (no memories,
+    // skills, workflow patterns or corrections; usage keeps only counts).
+    this.ephemeral = opts.ephemeral === true;
+    this.continueSessionId = this.ephemeral ? null : (opts.continueSessionId || null);
     this.soulOverride = opts.soul || null;
     this.providerInfo = opts.providerInfo || null;
     this.reasoningEffort = opts.reasoningEffort || 'auto';
@@ -405,6 +412,17 @@ export class AgentRuntime {
    * @returns {Promise<{answer: string, session: AgentSession, toolCalls: Array}>}
    */
   async run(goal, conversationHistory = []) {
+    if (!this.ephemeral) return this._run(goal, conversationHistory);
+    try {
+      return await this._run(goal, conversationHistory);
+    } finally {
+      // A temporary chat keeps no way back to before the run.
+      const checkpoint = this.session?.scratchpad?.baselineCheckpoint;
+      if (checkpoint) deleteCheckpoint(checkpoint);
+    }
+  }
+
+  async _run(goal, conversationHistory = []) {
     let conversationRoundStart = 0;
     let conversationToolStart = 0;
     const reasoningEvents = [];
@@ -442,6 +460,7 @@ export class AgentRuntime {
           workspaceId: this.workspaceId,
           goal,
           workingDir: this.workingDir,
+          ephemeral: this.ephemeral,
         });
         this.session.save();
       }
@@ -453,6 +472,7 @@ export class AgentRuntime {
         workspaceId: this.workspaceId,
         goal,
         workingDir: this.workingDir,
+        ephemeral: this.ephemeral,
       });
       this.session.save();
     }
@@ -556,10 +576,11 @@ export class AgentRuntime {
       agentMode: this.agentMode,
       capabilitiesSection: this.capabilitiesSection,
       temporalContext: this._buildTemporalContext(),
+      temporary: this.ephemeral,
     }) + (this.knowledgeContext ? `\n\n${this.knowledgeContext}` : '');
 
     // Auto-detect and store corrections from user's latest message in continued conversations
-    if (conversationHistory.length > 0) {
+    if (conversationHistory.length > 0 && !this.ephemeral) {
       this._extractCorrections(goal, conversationHistory);
     }
 
@@ -617,6 +638,7 @@ export class AgentRuntime {
       workingDir: this.workingDir,
       workspaceRoot: this.workspaceRoot,
       conversationId: this.usageContext?.conversationId || null,
+      ephemeral: this.ephemeral,
       session: this.session,
       emitEvent: (event) => this.onEvent(event),
       requestPermission: this.requestPermission
@@ -1450,13 +1472,15 @@ export class AgentRuntime {
 
     // Post-run skill synthesis — if the run was non-trivial and successful,
     // ask the LLM if a reusable skill can be extracted and saved for future runs.
-    synthesizeSkillFromRun({
-      aiClient: this.aiClient,
-      model: this.model,
-      goal,
-      toolHistory: this.session.toolHistory,
-      answer,
-    }).catch(err => console.error('[agent] Post-run skill synthesis failed:', err.message));
+    if (!this.ephemeral) {
+      synthesizeSkillFromRun({
+        aiClient: this.aiClient,
+        model: this.model,
+        goal,
+        toolHistory: this.session.toolHistory,
+        answer,
+      }).catch(err => console.error('[agent] Post-run skill synthesis failed:', err.message));
+    }
 
     return { answer, stopReason, session: this.session, toolCalls: this.session.toolHistory };
   }
@@ -2007,14 +2031,16 @@ export class AgentRuntime {
   }
 
   _recordUsageEvent(data = {}) {
+    // A temporary chat's usage keeps its counts, not what it belonged to.
+    const linked = !this.ephemeral;
     try {
       recordModelUsage({
         userId: this.userId,
         workspaceId: this.workspaceId,
-        conversationId: this.usageContext.conversationId || null,
-        messageId: this.usageContext.userMessageId || this.usageContext.messageId || null,
-        assistantMessageId: this.usageContext.assistantMessageId || null,
-        agentSessionId: this.session?.id || null,
+        conversationId: linked ? this.usageContext.conversationId || null : null,
+        messageId: linked ? this.usageContext.userMessageId || this.usageContext.messageId || null : null,
+        assistantMessageId: linked ? this.usageContext.assistantMessageId || null : null,
+        agentSessionId: linked ? this.session?.id || null : null,
         providerProfileId: data.providerProfileId || null,
         providerId: data.providerId || null,
         providerType: data.providerType || null,
@@ -2045,6 +2071,7 @@ export class AgentRuntime {
           isLocal: data.isLocal,
           agentMode: this.agentMode,
           reasoningEffort: this.reasoningEffort,
+          ...(this.ephemeral ? { temporary: true } : {}),
         },
       });
     } catch (err) {
@@ -2157,8 +2184,11 @@ export class AgentRuntime {
     const scopedTools = this.allowedTools
       ? visibleTools.filter(tool => this.allowedTools.has(tool.name) || ALWAYS_AVAILABLE.has(tool.name))
       : visibleTools;
+    const runTools = this.ephemeral
+      ? scopedTools.filter(tool => !TEMPORARY_BLOCKED_TOOLS.has(tool.name))
+      : scopedTools;
 
-    return this._rankToolsForGoal(scopedTools, goal);
+    return this._rankToolsForGoal(runTools, goal);
   }
 
   // Pick the tool definitions to describe to the model: the essentials, then
@@ -2360,7 +2390,7 @@ export class AgentRuntime {
         };
       }
       CHECKPOINTS.set(id, checkpoint);
-      _persistCheckpoint(checkpoint);
+      if (!this.ephemeral) _persistCheckpoint(checkpoint);
       return checkpoint;
     } catch (err) {
       this.onEvent({ type: 'error', data: { message: `Checkpoint failed: ${err.message}` } });
@@ -2686,7 +2716,7 @@ export class AgentRuntime {
           query: goal,
           kind,
           limit: 6,
-          bumpAccess: true,
+          bumpAccess: !this.ephemeral,
         });
         for (const row of rows) {
           if (seenIds.has(row.id)) continue;
@@ -2709,7 +2739,7 @@ export class AgentRuntime {
           query: goal,
           kind: 'all',
           limit: 15,
-          bumpAccess: true,
+          bumpAccess: !this.ephemeral,
         });
         for (const row of fillRows) {
           if (seenIds.has(row.id)) continue;
@@ -2744,6 +2774,7 @@ export class AgentRuntime {
   }
 
   _trackWorkflow(goal) {
+    if (this.ephemeral) return;
     if (this.session?.toolHistory?.length > 0) {
       const tools = this.session.toolHistory.map(t => t.tool);
       basalGanglia.trackWorkflow({
@@ -2757,6 +2788,7 @@ export class AgentRuntime {
   }
 
   _trackFailure(goal, error) {
+    if (this.ephemeral) return;
     if (this.session?.toolHistory?.length > 0) {
       const tools = this.session.toolHistory.map(t => t.tool);
       basalGanglia.trackWorkflow({
@@ -2774,6 +2806,7 @@ export class AgentRuntime {
    * durable facts from the conversation that should be remembered.
    */
   async _extractMemories(goal, answer, messages) {
+    if (this.ephemeral) return;
     if (!this.aiClient?.messages?.create && !this.aiClient?.client?.chat?.completions?.create) return;
     if (!answer || answer.length < 50) return;
     if ((this.session?.toolHistory?.length || 0) < 2) return;

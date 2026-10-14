@@ -242,6 +242,7 @@ export const sandboxTools = [
         askUser: context.askUser,
         providerInfo: provider.providerInfo,
         usageContext: { operation: 'sandbox-agent' },
+        ephemeral: context.ephemeral === true,
       });
 
       const result = await subAgent.run(args.task);

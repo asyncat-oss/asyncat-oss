@@ -61,6 +61,7 @@ export function listSouls() {
  * @param {object[]} opts.skills - Relevant skills from Cerebellum
  * @param {object[]} opts.mentionedAgents - Agent profiles explicitly mentioned by the user
  * @param {string} [opts.soul] - Soul/persona content loaded from souls/*.md
+ * @param {boolean} [opts.temporary] - A temporary chat: nothing from it is saved or remembered
  * @returns {string}
  */
 function getShellName(platform) {
@@ -83,6 +84,7 @@ export function buildAgentSystemPrompt(opts = {}) {
     platform = process.platform,
     capabilitiesSection = '',   // multimodal capability status — injected here, NOT in the goal
     temporalContext = '',
+    temporary = false,
   } = opts;
 
   const shellName = getShellName(platform);
@@ -160,6 +162,41 @@ export function buildAgentSystemPrompt(opts = {}) {
   const capSection = capabilitiesSection
     ? `\n## Multimodal Capabilities\n${capabilitiesSection}\n`
     : '';
+  // A temporary chat isn't saved and teaches the agent nothing, so it gets
+  // no memory-saving guidance (and no tools to save memories).
+  const memoryGuidance = temporary
+    ? `## Temporary Chat
+This is a temporary chat: it isn't saved, and nothing from it is remembered. You can't save, change or forget memories here, so don't offer to remember anything for later. Memories shown below are from earlier chats and you may use them.
+
+`
+    : `## Memory Guidance
+You have access to durable memory that persists across sessions. **Proactively save** information that will help future sessions.
+
+Memory kinds:
+- \`user\`: stable facts about the user, their identity, preferences, or recurring constraints.
+- \`feedback\`: corrections, critiques, or instructions the user gave about how to improve.
+- \`project\`: durable project state, architecture, conventions, or decisions.
+- \`reference\`: external pointers, docs, URLs, commands, or file locations worth finding again.
+- \`fact\`: general durable facts that do not fit another category.
+- \`preference\`: explicit likes/dislikes or formatting/style preferences.
+- \`context\`: reusable working context for this workspace.
+- \`task_state\`: state needed to resume a specific unfinished task.
+
+**When to save** (do this proactively, don't wait to be asked):
+- The user explicitly says to remember something.
+- The user corrects your output → save as \`feedback\` so you don't repeat the mistake.
+- You learn a coding style, naming convention, or project structure → save as \`project\`.
+- You discover a stable preference (formatting, language, framework choice) → save as \`preference\`.
+- You find important files, endpoints, or architecture details that took effort → save as \`reference\`.
+- A recurring workflow emerges → save as \`context\`.
+- You discover a non-obvious project convention or decision → save as \`project\`.
+
+When NOT to save:
+- Do not save one-off details, temporary observations, secrets, credentials, or noisy command output.
+- Prefer updating an existing memory key over creating duplicates.
+- Do not save things that are trivially re-discoverable from the codebase.
+
+`;
   const timeSection = temporalContext
     ? `\n## Time Context\n${temporalContext}\n`
     : '';
@@ -196,34 +233,7 @@ OR, when the task is complete:
 10. **Don't ask what you can discover.** Read files, inspect configs, or use safe tools before asking the user for facts available in the environment.
 11. **Later or repeatedly → a Cat.** When the user wants something done later, repeatedly or whenever something happens ("every weekday at 8am…", "remind me tomorrow…", "tell me when this page changes"), use \`create_cat\`. Write its \`mission\` as complete instructions for a run nobody watches, and say what wakes it: a \`schedule\` in plain English ("every Monday at 9", "tomorrow at 7am") or cron, and/or watchers (\`watch_email\`, \`watch_rss\`, \`watch_pages\`, \`watch_folders\`). Each run reports in the Cat's chat, the inbox on the Cats page and a desktop notification. Use \`list_cats\`, \`update_cat\`, \`pause_cat\`, \`resume_cat\`, \`wake_cat\`, \`delete_cat\` and \`list_cat_runs\` for the ones that exist. Don't set up system cron jobs or sleep loops for this.
 
-## Memory Guidance
-You have access to durable memory that persists across sessions. **Proactively save** information that will help future sessions.
-
-Memory kinds:
-- \`user\`: stable facts about the user, their identity, preferences, or recurring constraints.
-- \`feedback\`: corrections, critiques, or instructions the user gave about how to improve.
-- \`project\`: durable project state, architecture, conventions, or decisions.
-- \`reference\`: external pointers, docs, URLs, commands, or file locations worth finding again.
-- \`fact\`: general durable facts that do not fit another category.
-- \`preference\`: explicit likes/dislikes or formatting/style preferences.
-- \`context\`: reusable working context for this workspace.
-- \`task_state\`: state needed to resume a specific unfinished task.
-
-**When to save** (do this proactively, don't wait to be asked):
-- The user explicitly says to remember something.
-- The user corrects your output → save as \`feedback\` so you don't repeat the mistake.
-- You learn a coding style, naming convention, or project structure → save as \`project\`.
-- You discover a stable preference (formatting, language, framework choice) → save as \`preference\`.
-- You find important files, endpoints, or architecture details that took effort → save as \`reference\`.
-- A recurring workflow emerges → save as \`context\`.
-- You discover a non-obvious project convention or decision → save as \`project\`.
-
-When NOT to save:
-- Do not save one-off details, temporary observations, secrets, credentials, or noisy command output.
-- Prefer updating an existing memory key over creating duplicates.
-- Do not save things that are trivially re-discoverable from the codebase.
-
-## Tool Call Format
+${memoryGuidance}## Tool Call Format
 To call a tool, output EXACTLY this machine-readable block:
 
 \`\`\`

@@ -118,6 +118,7 @@ export const agentTools = [
         askUser: context.askUser,
         providerInfo: providerInfo.providerInfo,
         usageContext: { operation: 'delegated-agent' },
+        ephemeral: context.ephemeral === true,
         sessionIdOverride: subagentSessionId,
         onEvent: (event) => {
           context.emitEvent?.({
@@ -261,6 +262,7 @@ export const agentTools = [
         soul: resolvedSoul,
         providerInfo: providerInfo.providerInfo,
         usageContext: { operation: 'delegated-agent' },
+        ephemeral: context.ephemeral === true,
         sessionIdOverride: subagentSessionId,
         onEvent: (event) => {
           context.emitEvent?.({
