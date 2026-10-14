@@ -10,14 +10,16 @@
  * Windows, or when the tool is missing, commands run as before. Settings:
  *   ASYNCAT_COMMAND_SANDBOX     "auto" (default: sandbox when possible) or "off"
  *   ASYNCAT_SANDBOX_ALLOW_READ  hidden folders you allowed back (a JSON list)
+ *   ASYNCAT_SANDBOX_NETWORK     "open", "registries" or "off" (sandboxNetwork.js)
  */
 
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { IS_WIN, isPathInside, runFile, runProcess } from './tools/shared.js';
+import { IS_WIN, hasBin, isPathInside, runFile, runProcess } from './tools/shared.js';
 import { getConfigValue } from '../config/appConfig.js';
 import { runtimeDataRoot } from '../config/runtimeConfig.js';
+import { networkMode, networkPlan } from './sandboxNetwork.js';
 
 // Folders under the home folder that build tools download to. Folders of
 // programs (~/.cargo/bin, Rust toolchains, the .NET SDK, Gradle's own
@@ -203,14 +205,15 @@ export function bwrapFailureReason(result, { readFile = readSysctl } = {}) {
 export function probeLinuxSandbox({ recheck = false } = {}) {
   if (linuxProbe && !recheck && Date.now() - linuxProbe.at < PROBE_TTL_MS) return linuxProbe;
   let probe;
-  if (bwrapRuns(OPTIONAL_FLAGS).ok) {
-    probe = { ok: true, flags: [...OPTIONAL_FLAGS], reason: null };
+  if (bwrapRuns([...OPTIONAL_FLAGS, '--unshare-net']).ok) {
+    probe = { ok: true, flags: [...OPTIONAL_FLAGS], net: true, reason: null };
   } else {
     const base = bwrapRuns([]);
     if (!base.ok) {
-      probe = { ok: false, flags: [], reason: bwrapFailureReason(base) };
+      probe = { ok: false, flags: [], net: false, reason: bwrapFailureReason(base) };
     } else {
-      probe = { ok: true, flags: OPTIONAL_FLAGS.filter((flag) => bwrapRuns([flag]).ok), reason: null };
+      const flags = OPTIONAL_FLAGS.filter((flag) => bwrapRuns([flag]).ok);
+      probe = { ok: true, flags, net: bwrapRuns([...flags, '--unshare-net']).ok, reason: null };
     }
   }
   linuxProbe = { ...probe, at: Date.now() };
@@ -242,9 +245,10 @@ function appleString(text) {
 
 /**
  * bwrap arguments for a command that may write to `roots` and not read
- * `hidden`, started in `cwd` (the project when not given).
+ * `hidden`, started in `cwd` (the project when not given). `network` is a
+ * sandboxNetwork.js plan (its flags and mounts).
  */
-export function bwrapArgs({ file, args, workspaceRoot, cwd = workspaceRoot, roots, hidden, readOnly = [], flags = OPTIONAL_FLAGS, inspect = inspectPath }) {
+export function bwrapArgs({ file, args, workspaceRoot, cwd = workspaceRoot, roots, hidden, readOnly = [], flags = OPTIONAL_FLAGS, network = null, inspect = inspectPath }) {
   const mounts = [];
   // Writable folders first, then empty folders over the secret ones (some sit
   // inside a writable folder, like Asyncat's data in a project or /tmp), then
@@ -267,12 +271,13 @@ export function bwrapArgs({ file, args, workspaceRoot, cwd = workspaceRoot, root
   for (const root of roots) {
     if (covers.some((cover) => cover !== root && isPathInside(root, cover))) mounts.push('--bind-try', root, root);
   }
+  mounts.push(...(network?.mounts || []));
   // Last, once nothing more is mounted inside them: the empty folders turn
   // read-only, so a write there fails (and the hint says why) instead of
   // seeming to work and then vanishing.
   for (const cover of covers) mounts.push('--remount-ro', cover);
   return [
-    '--die-with-parent', ...flags,
+    '--die-with-parent', ...flags, ...(network?.bwrap || []),
     '--ro-bind', '/', '/',
     '--dev', '/dev',
     '--proc', '/proc',
@@ -284,9 +289,10 @@ export function bwrapArgs({ file, args, workspaceRoot, cwd = workspaceRoot, root
 
 /**
  * The sandbox-exec profile: write only to `roots` (but not `readOnly` inside
- * them), read anything but `hidden`, and connect to none of the hidden sockets.
+ * them), read anything but `hidden`, connect to none of the hidden sockets,
+ * and `network` rules from a sandboxNetwork.js plan.
  */
-export function seatbeltProfile({ roots, hidden, readOnly = [] }) {
+export function seatbeltProfile({ roots, hidden, readOnly = [], network = [] }) {
   // /tmp and the per-user temp folder live under /private on macOS.
   const macRoots = [...roots, '/private/tmp', '/private/var/folders'];
   const covered = (root) => hidden.some((item) => isPathInside(root, item.path));
@@ -300,19 +306,21 @@ export function seatbeltProfile({ roots, hidden, readOnly = [] }) {
     ...(readOnly.length ? [`(deny file-write* ${readOnly.map((target) => `(subpath ${appleString(target)})`).join(' ')})`] : []),
     ...(hidden.length ? [`(deny file-read* ${hidden.map((item) => `(subpath ${appleString(item.path)})`).join(' ')})`] : []),
     ...macRoots.filter(covered).map((root) => `(allow file-read* (subpath ${appleString(root)}))`),
+    ...network,
     ...(sockets.length ? [`(deny network-outbound ${sockets.map((item) => `(literal ${appleString(item.path)})`).join(' ')})`] : []),
   ].join('\n');
 }
 
 /**
  * How to start `file args` sandboxed, in `cwd` (the project when not given).
- * Returns { file, args, sandboxed } — unchanged when sandboxing is off or
- * unavailable. Spawn it in `cwd` too: on macOS the program starts in the
- * folder sandbox-exec was started in.
+ * Returns { file, args, sandboxed, env, network } — unchanged when sandboxing
+ * is off or unavailable. `env` is to be added to the program's environment
+ * (the proxy, in "registries" mode). Spawn it in `cwd` too: on macOS the
+ * program starts in the folder sandbox-exec was started in.
  */
 export function sandboxedCommand({
   file, args = [], workspaceRoot, cwd = null, platform = process.platform, home = os.homedir(), tmp = os.tmpdir(), force = null,
-  hidden = null, flags = null, inspect = inspectPath,
+  hidden = null, flags = null, inspect = inspectPath, network = null,
 }) {
   const enabled = force ?? (setting() !== 'off' && sandboxAvailable(platform));
   if (!enabled || !workspaceRoot) return { file, args, sandboxed: false };
@@ -326,31 +334,46 @@ export function sandboxedCommand({
     throw new Error(`A sandboxed command can only start in a folder it may change, and ${start} isn't one.`);
   }
   const secret = hidden ?? hiddenFolders({ platform, home, workspaceRoot });
+  const net = network ?? networkPlan({ mode: networkMode(), platform, socat: platform === 'linux' && hasBin('socat') });
+  const about = { mode: net.mode, effective: net.effective, ...(net.note ? { note: net.note } : {}) };
 
   const readOnly = HOME_READ_ONLY.map((rel) => path.join(home, rel));
 
   if (platform === 'linux') {
     const probeFlags = flags ?? (force ? OPTIONAL_FLAGS : probeLinuxSandbox().flags);
-    const bwrap = bwrapArgs({ file, args, workspaceRoot, cwd: start, roots, hidden: secret, readOnly, flags: probeFlags, inspect });
-    return { file: 'bwrap', args: bwrap, sandboxed: true };
+    const [inner, innerArgs] = net.wrap ? net.wrap(file, args) : [file, args];
+    const bwrap = bwrapArgs({ file: inner, args: innerArgs, workspaceRoot, cwd: start, roots, hidden: secret, readOnly, flags: probeFlags, network: net, inspect });
+    return { file: 'bwrap', args: bwrap, sandboxed: true, env: net.env, network: about };
   }
 
   if (platform === 'darwin') {
     // sandbox-exec matches real paths, so follow links (a data folder in /tmp
     // is really in /private/tmp).
     const real = secret.map((item) => ({ ...item, path: inspect(item.path).real }));
-    const profile = seatbeltProfile({ roots, hidden: real, readOnly });
-    return { file: '/usr/bin/sandbox-exec', args: ['-p', profile, file, ...args], sandboxed: true };
+    const profile = seatbeltProfile({ roots, hidden: real, readOnly, network: net.seatbelt });
+    return { file: '/usr/bin/sandbox-exec', args: ['-p', profile, file, ...args], sandboxed: true, env: net.env, network: about };
   }
 
   return { file, args, sandboxed: false };
 }
 
-/** A note for the model when a sandboxed command failed to write somewhere. */
-export function sandboxHint(result) {
+const NETWORK_FAILURE = /ENOTFOUND|EAI_AGAIN|getaddrinfo|Could not resolve|name resolution|Network is unreachable|ENETUNREACH|ECONNREFUSED|403 Forbidden|only lets commands reach package registries/i;
+
+/**
+ * A note for the model when a sandboxed command failed to write somewhere,
+ * or failed to reach the network while the sandbox keeps it off or limited.
+ */
+export function sandboxHint(result, network = null) {
   const text = `${result?.stderr || ''}\n${result?.stdout || ''}`;
-  if (result?.success || !/Read-only file system|Operation not permitted|EROFS/i.test(text)) return null;
-  return 'This command ran in Asyncat\'s sandbox, which only allows writing inside the project folder, temporary folders and package caches. If it really needs to write elsewhere, tell the user; they can turn the sandbox off in Settings → Privacy & safety or run the command themselves.';
+  if (result?.success) return null;
+  if (/Read-only file system|Operation not permitted|EROFS/i.test(text)) {
+    return 'This command ran in Asyncat\'s sandbox, which only allows writing inside the project folder, temporary folders and package caches. If it really needs to write elsewhere, tell the user; they can turn the sandbox off in Settings → Privacy & safety or run the command themselves.';
+  }
+  if (network && network.effective !== 'open' && NETWORK_FAILURE.test(text)) {
+    const how = network.effective === 'registries' ? 'can only reach package registries' : 'has no network';
+    return `This command ran in Asyncat's sandbox, which ${how}${network.note ? ` (${network.note})` : ''}. If it really needs other sites, tell the user; they can change Network in Settings → Privacy & safety.`;
+  }
+  return null;
 }
 
 /**
@@ -371,6 +394,6 @@ export async function runInSandbox(cmd, args = [], { workspaceRoot, ...options }
     return { success: false, exit_code: null, stdout: '', stderr: '', error: err.message };
   }
   const result = await runProcess(plan.file, plan.args, { ...options, cwd, env: { ...(plan.env || {}), ...(options.env || {}) } });
-  const hint = plan.sandboxed ? sandboxHint(result) : null;
+  const hint = plan.sandboxed ? sandboxHint(result, plan.network) : null;
   return { ...result, ...(plan.sandboxed ? { sandboxed: true } : {}), ...(hint ? { note: hint } : {}) };
 }

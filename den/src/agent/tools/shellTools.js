@@ -40,7 +40,7 @@ async function runInProject(file, args, context, options) {
     return { success: false, error: err.message };
   }
   const result = await runProcess(plan.file, plan.args, { ...options, env: { ...(plan.env || {}), ...(options.env || {}) } });
-  const hint = plan.sandboxed ? sandboxHint(result) : null;
+  const hint = plan.sandboxed ? sandboxHint(result, plan.network) : null;
   return { ...result, ...(plan.sandboxed ? { sandboxed: true } : {}), ...(hint ? { note: hint } : {}) };
 }
 
