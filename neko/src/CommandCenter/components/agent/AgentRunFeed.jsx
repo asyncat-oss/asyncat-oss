@@ -20,6 +20,9 @@ import { extractLocalhostUrl } from '../../utils/localhostUrl.js';
 import { connectorToolLabel } from '../../../Connectors/connectorFormat.js';
 import Tooltip from '../../../components/ui/Tooltip.jsx';
 import AskUserForm from './AskUserForm.jsx';
+import SkillSuggestionCard from './SkillSuggestionCard.jsx';
+import useSkillSuggestions from '../../hooks/useSkillSuggestions.js';
+import { placeSkillSuggestions } from '../../utils/skillSuggestions.js';
 
 // ── Inline @mention rendering ─────────────────────────────────────────────────
 function renderGoalWithMentions(goal = "", fileAttachments = []) {
@@ -1864,27 +1867,6 @@ function MemorySavedEvent({ data }) {
   );
 }
 
-// Skill auto-discovery notification
-function SkillSuggestedEvent({ data }) {
-  return (
-    <FeedFrame className="mb-2">
-      <div className="flex items-center gap-2 py-1.5 px-2 rounded-md bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-200/30 dark:border-emerald-800/20">
-        <Zap className="w-3 h-3 text-emerald-500 dark:text-emerald-400 flex-shrink-0" />
-        <div className="min-w-0 flex-1">
-          <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-            Skill auto-learned: {data?.skillName || 'unnamed'}
-          </span>
-          {data?.summary && (
-            <p className="text-[10px] text-emerald-500/70 dark:text-emerald-500/50 truncate mt-0.5">
-              Pattern: {data.summary}
-            </p>
-          )}
-        </div>
-      </div>
-    </FeedFrame>
-  );
-}
-
 // Live streaming preview — shown while LLM is generating
 function StreamingPreview({ text, reasoningText = '' }) {
   const { thinking, answer } = extractReasoningFromText(text);
@@ -2282,7 +2264,6 @@ function GeneratedMediaLibrary({ events }) {
 function buildRunStats(events = []) {
   let rounds = 0;
   let memoriesSaved = 0;
-  let skillsLearned = 0;
   const toolsSeen = {};
   let completedAt = 0;
 
@@ -2299,11 +2280,10 @@ function buildRunStats(events = []) {
       toolsSeen[tool] = (toolsSeen[tool] || 0) + 1;
       if (tool === 'save_memory' && ev.result?.success) memoriesSaved++;
     }
-    if (ev.type === 'skill_suggested') skillsLearned++;
     if (ev.arrivedAt > completedAt) completedAt = ev.arrivedAt;
   }
 
-  return { rounds, memoriesSaved, skillsLearned, toolsSeen, completedAt };
+  return { rounds, memoriesSaved, toolsSeen, completedAt };
 }
 
 function RunSummaryCard({ events, runStartedAt, sessionId, session, onViewArtifactInPanel }) {
@@ -2315,9 +2295,8 @@ function RunSummaryCard({ events, runStartedAt, sessionId, session, onViewArtifa
   const [showRevertConfirm, setShowRevertConfirm] = useState(false);
 
   const hasAnswer = (events || []).some(ev => ev.type === 'answer');
-  const { rounds, memoriesSaved, skillsLearned, toolsSeen, completedAt } = buildRunStats(events || []);
+  const { rounds, memoriesSaved, toolsSeen, completedAt } = buildRunStats(events || []);
   const hasMemoryActivity = memoriesSaved > 0;
-  const hasSkillActivity = skillsLearned > 0;
 
   const fallbackChanges = useMemo(() => extractChanges(events || []), [events]);
   const files = stateData?.changes?.files || fallbackChanges.files;
@@ -2359,7 +2338,7 @@ function RunSummaryCard({ events, runStartedAt, sessionId, session, onViewArtifa
   useEffect(() => { refreshState(); }, [refreshState]);
 
   if (!hasAnswer) return null;
-  if (!hasFiles && !hasCommands && !hasArtifacts && !hasMemoryActivity && !hasSkillActivity) return null;
+  if (!hasFiles && !hasCommands && !hasArtifacts && !hasMemoryActivity) return null;
 
   const elapsedMs = runStartedAt && completedAt > runStartedAt ? completedAt - runStartedAt : 0;
   const topTools = Object.entries(toolsSeen).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([name, count]) => ({ name, count }));
@@ -2385,7 +2364,6 @@ function RunSummaryCard({ events, runStartedAt, sessionId, session, onViewArtifa
   if (hasArtifacts) summaryParts.push(`${runArtifacts.length} artifact${runArtifacts.length !== 1 ? 's' : ''}`);
   if (hasFiles) summaryParts.push(`${files.length} file${files.length !== 1 ? 's' : ''}`);
   if (hasMemoryActivity) summaryParts.push(`${memoriesSaved} mem`);
-  if (hasSkillActivity) summaryParts.push(`${skillsLearned} skill`);
   if (elapsedMs > 0) summaryParts.push(formatElapsed(elapsedMs));
   const summaryLine = summaryParts.join(' · ');
 
@@ -2628,9 +2606,6 @@ function renderWorkContent(workEvents, { onPermissionDecision, onRetryTool, onAs
         break;
       case 'memory_saved':
         rendered.push(<MemorySavedEvent key={i} data={ev.data} />);
-        break;
-      case 'skill_suggested':
-        rendered.push(<SkillSuggestedEvent key={i} data={ev.data} />);
         break;
       default:
         break;
@@ -2913,12 +2888,24 @@ export default function AgentRunFeed({
   highlightedMessageId = null,
   ttsReady = false,
   renderPendingInteractionsInline = true,
+  conversationId = null,
 }) {
+  const skillSuggestions = useSkillSuggestions(conversationId);
   const hasContent = (events && events.length > 0) || streamingText || isRunning;
   if (!hasContent) return null;
 
   const evList = events || [];
   const segments = buildEventSegments(evList);
+  // "Save this as a skill?" cards: after the answer they came from.
+  const suggestionSpots = placeSkillSuggestions(
+    segments.map(seg => seg.answerEvent?.data?.messageId || null),
+    skillSuggestions.suggestions,
+  );
+  const renderSuggestion = (suggestion) => (
+    <FeedFrame key={`skill_${suggestion.id}`} className="mb-3">
+      <SkillSuggestionCard suggestion={suggestion} onSave={skillSuggestions.save} onDismiss={skillSuggestions.dismiss} />
+    </FeedFrame>
+  );
 
   return (
     <div className="space-y-0">
@@ -3000,6 +2987,7 @@ export default function AgentRunFeed({
                 isLatest={si === segments.length - 1}
               />
             )}
+            {(suggestionSpots.bySegment.get(si) || []).map(renderSuggestion)}
           </div>
         );
       })}
@@ -3007,6 +2995,7 @@ export default function AgentRunFeed({
       {isRunning && <StreamingPreview text={streamingText} reasoningText={streamingReasoning} />}
       {isRunning && !streamingText && !streamingReasoning && !segments.some((segment) => !segment.divider && segment.workEvents?.length > 0) && <RunningIndicator runStartedAt={runStartedAt} />}
       {!isRunning && <RunSummaryCard events={evList} runStartedAt={runStartedAt} sessionId={sessionId} session={session} onViewArtifactInPanel={onViewArtifactInPanel} />}
+      {!isRunning && suggestionSpots.atEnd.map(renderSuggestion)}
     </div>
   );
 }

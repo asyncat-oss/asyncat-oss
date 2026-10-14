@@ -17,6 +17,7 @@ import { MEMORY_KIND_OPTIONS } from './memoryKinds.js';
 import Select from '../components/ui/Select.jsx';
 import { backdropCloses, useLayer } from '../components/ui/floating.js';
 import { useMemoryOwners } from './useMemoryOwners.js';
+import { getSkillOrigin } from './skillOrigin.js';
 
 const PERM_META = {
   safe:      { label: 'Safe',      dot: 'bg-emerald-500 midnight:bg-emerald-600/80', badge: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300 midnight:bg-emerald-950/30 midnight:text-emerald-400/75' },
@@ -94,21 +95,6 @@ function formatSkillAge(isoString) {
 function getRegionMeta(region) {
   const key = (region || 'unknown').toLowerCase().replace(/[\s-]+/g, '_');
   return BRAIN_REGION_META[key] || BRAIN_REGION_META.unknown;
-}
-
-function getSkillOrigin(skill) {
-  if (skill?.source !== 'user') return 'default';
-  const tags = Array.isArray(skill.tags) ? skill.tags.map(tag => String(tag).toLowerCase()) : [];
-  if (
-    skill.created_by === 'basal-ganglia' ||
-    skill.created_by === 'skill-synthesizer' ||
-    tags.includes('auto-generated') ||
-    tags.includes('auto-synthesized') ||
-    tags.includes('learned')
-  ) {
-    return 'auto';
-  }
-  return 'user';
 }
 
 function formatLabel(value) {

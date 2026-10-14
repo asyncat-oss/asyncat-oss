@@ -48,7 +48,6 @@ import {
   GitBranch,
   BookMarked,
   FilePlus,
-  Sparkles,
   Globe,
   Link2,
   SquareTerminal,
@@ -194,42 +193,6 @@ function buildConversationHighlights(messages = []) {
     pinnedMessages: [],
     bookmarkedMessages: messages.filter(msg => msg?.bookmarked).map(toItem),
   };
-}
-
-// ── Skill-learned toast ───────────────────────────────────────────────────────
-
-function SkillLearnedToast({ toast, onDismiss }) {
-  if (!toast) return null;
-  return (
-    <div
-      className="fixed bottom-20 left-1/2 z-[200] -translate-x-1/2 animate-in fade-in zoom-in-95 duration-200"
-      style={{ maxWidth: '22rem', width: 'max-content' }}
-    >
-      <div
-        className="flex items-start gap-3 rounded-2xl border border-emerald-200/60 bg-white/90 px-4 py-3 shadow-xl backdrop-blur-sm dark:border-emerald-800/40 dark:bg-gray-900/90 midnight:border-emerald-800/30 midnight:bg-slate-900/90"
-        style={{ boxShadow: '0 8px 32px -4px rgba(16,185,129,0.15), 0 2px 8px -2px rgba(0,0,0,0.12)' }}
-      >
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-950/60">
-          <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-        </span>
-        <div className="min-w-0 flex-1 pt-0.5">
-          <p className="text-xs font-semibold text-gray-800 dark:text-gray-100">Skill learned</p>
-          <p className="mt-0.5 text-[11px] text-emerald-700 dark:text-emerald-400 font-medium truncate">{toast.name}</p>
-          {toast.summary && (
-            <p className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500 line-clamp-2 leading-relaxed">{toast.summary}</p>
-          )}
-        </div>
-        <button
-          type="button"
-          onClick={onDismiss}
-          className="ml-1 shrink-0 rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
-          aria-label="Dismiss"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
-    </div>
-  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -442,8 +405,6 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
   }, [conversationMetadata, setConversationMetadata]);
   const [agentLoadingSession, setAgentLoadingSession] = useState(false);
   const [showDeleteAgentConfirm, setShowDeleteAgentConfirm] = useState(false);
-  // Skill-learned toast
-  const [skillToast, setSkillToast] = useState(null);
   // Track whether we're on an xl+ (≥1280px) viewport so we can skip mounting
   // the mobile-overlay SidePanel on desktop. CSS display:none alone is NOT
   // enough — a hidden <webview> still runs JS and plays audio in Electron.
@@ -456,7 +417,6 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
   }, []);
-  const skillToastTimerRef = useRef(null);
   // Brain stats (welcome screen ambient indicator)
   const currentRunKey = currentConversationId || '__draft__';
   const currentRun = chatRuns[currentRunKey] || {};
@@ -582,13 +542,6 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     };
   }, [loadRuntimeStatus, showActivitySidebar, sidePanelTab]);
 
-
-  // Clean up skill toast timer on unmount
-  useEffect(() => {
-    return () => {
-      if (skillToastTimerRef.current) clearTimeout(skillToastTimerRef.current);
-    };
-  }, []);
 
   useEffect(() => {
     if (!agentSessionId) return;
@@ -1537,7 +1490,6 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
           });
           continue;
         }
-        // Skill learned — fire the in-app toast
         if (event.type === 'preview_url') {
           const url = event.data?.url;
           if (url) {
@@ -1551,17 +1503,6 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
             setSidePanelTab('preview');
             try { localStorage.setItem('asyncat_show_command_side_panel', 'true'); } catch { /* storage may be unavailable */ }
           }
-        }
-
-        if (event.type === 'skill_suggested') {
-          const toast = {
-            id: Date.now(),
-            name: event.data?.skillName || event.data?.name || 'Skill',
-            summary: event.data?.summary || event.data?.description || '',
-          };
-          setSkillToast(toast);
-          if (skillToastTimerRef.current) clearTimeout(skillToastTimerRef.current);
-          skillToastTimerRef.current = setTimeout(() => setSkillToast(null), 5000);
         }
 
         const eventWithMode = event.type === 'answer'
@@ -3237,6 +3178,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                     highlightedMessageId={highlightedMessageId}
                     ttsReady={ttsReady}
                     renderPendingInteractionsInline={false}
+                    conversationId={isTemporaryChat ? null : currentConversationId}
                   />
                   <div ref={messagesEndRef} className="h-4" />
                 </div>
@@ -3477,15 +3419,6 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
         onClose={() => setShowDeleteAgentConfirm(false)}
         onConfirm={handleAgentDelete}
         title={agentCurrentGoal}
-      />
-
-      {/* ── Skill-learned floating toast ── */}
-      <SkillLearnedToast
-        toast={skillToast}
-        onDismiss={() => {
-          if (skillToastTimerRef.current) clearTimeout(skillToastTimerRef.current);
-          setSkillToast(null);
-        }}
       />
 
     </div>
