@@ -39,7 +39,7 @@ import fs from 'fs';
 import path from 'path';
 import { execFileSync, execSync } from 'child_process';
 import { childEnv } from './childEnv.js';
-import { runInSandbox } from './commandSandbox.js';
+import { SANDBOXED_TOOLS, runInSandbox, sandboxCantStart } from './commandSandbox.js';
 import { lspManager } from './LspManager.js';
 
 const MAX_ROUNDS_DEFAULT = 25;
@@ -1563,16 +1563,24 @@ export class AgentRuntime {
       };
     }
 
-    if (this.autoApprove) {
+    // The sandbox is on but can't start: a command would run without it, so
+    // it is asked every time, whatever was approved before.
+    const unsandboxed = SANDBOXED_TOOLS.has(toolCall.tool_name) ? sandboxCantStart() : null;
+    const sandboxNote = unsandboxed
+      ? `Asyncat's sandbox can't start: ${unsandboxed} This command would run without it, so Asyncat asks each time.`
+      : null;
+
+    if (this.autoApprove && !unsandboxed) {
       return { allowed: true, decision: 'auto_approved' };
     }
 
-    if (this.sessionApprovedTools.has(toolCall.tool_name)) {
+    if (this.sessionApprovedTools.has(toolCall.tool_name) && !unsandboxed) {
       return { allowed: true, decision: 'session_approved' };
     }
 
     if (this.requestPermission) {
       const request = {
+        ...(unsandboxed ? { unsandboxed, sandboxNote } : {}),
         sessionId: this.session?.id,
         tool: toolCall.tool_name,
         toolCallId: toolCall.call_id,
@@ -1589,7 +1597,7 @@ export class AgentRuntime {
       const decisionName = normalizeApprovalDecision(decision?.decision);
       const allowed = approvalAllows(decisionName);
 
-      if (approvalCoversRun(decisionName)) {
+      if (approvalCoversRun(decisionName) && !unsandboxed) {
         this.sessionApprovedTools.add(toolCall.tool_name);
       }
 
@@ -1605,7 +1613,9 @@ export class AgentRuntime {
     return {
       allowed: false,
       decision: 'no_approver',
-      reason: `Nobody can approve "${toolCall.tool_name}" for this run. Pre-approve the tool or enable auto-approve to allow it.`,
+      reason: unsandboxed
+        ? `${sandboxNote} Nobody can approve it in this run.`
+        : `Nobody can approve "${toolCall.tool_name}" for this run. Pre-approve the tool or enable auto-approve to allow it.`,
     };
   }
   // ── Prompt caching ─────────────────────────────────────────────────────────
@@ -2161,6 +2171,8 @@ export class AgentRuntime {
   }
 
   _effectivePermission(toolName, args = {}, fallbackPermission = 'dangerous') {
+    // Without the sandbox even a command that only reads asks first.
+    if (SANDBOXED_TOOLS.has(toolName) && sandboxCantStart()) return 'dangerous';
     if (toolName === 'run_command' && this._looksReadOnlyShellCommand(args.command || '')) {
       return 'safe';
     }
@@ -3159,10 +3171,15 @@ export class AgentRuntime {
 
     const checks = [];
     const workDir = this.workingDir;
+    // While the sandbox is on but can't start, the project's own checks (its
+    // language server, linter and type checker) would run without it and
+    // without asking, so they wait until it can.
+    const cantStart = sandboxCantStart();
+    const skipped = (check, what) => checks.push({ check, status: 'skipped', output: `The sandbox can't start, so the project's ${what} didn't run.` });
 
     try {
       // 1. LSP Diagnostics Check (Compiler-in-the-Loop)
-      for (const pf of codeFiles) {
+      for (const pf of cantStart ? [] : codeFiles) {
         const ext = path.extname(pf).toLowerCase();
         let lang = null;
         if (['.js', '.jsx', '.ts', '.tsx'].includes(ext)) lang = 'typescript';
@@ -3221,7 +3238,9 @@ export class AgentRuntime {
         // The project's linter and type checker are its own code: they run in
         // the command sandbox, like run_command.
         const sandboxRoot = toolContext?.workspaceRoot || this.workspaceRoot || workDir;
-        if (jsFiles.length > 0 && (deps.eslint || scripts.lint)) {
+        if (cantStart && jsFiles.length > 0 && (deps.eslint || scripts.lint)) {
+          skipped('lint', 'linter');
+        } else if (jsFiles.length > 0 && (deps.eslint || scripts.lint)) {
           const fileArgs = jsFiles.slice(0, 5).map(f => path.relative(workDir, f));
           const result = deps.eslint
             ? await runInSandbox('npx', ['eslint', '--no-error-on-unmatched-pattern', '--max-warnings=50', ...fileArgs], { cwd: workDir, timeout: 15000, workspaceRoot: sandboxRoot })
@@ -3240,7 +3259,9 @@ export class AgentRuntime {
         }
 
         // TypeScript check (if tsconfig exists)
-        if (fs.existsSync(path.join(workDir, 'tsconfig.json')) && jsFiles.some(f => /\.tsx?$/.test(f))) {
+        if (cantStart && fs.existsSync(path.join(workDir, 'tsconfig.json')) && jsFiles.some(f => /\.tsx?$/.test(f))) {
+          skipped('typecheck', 'type checker');
+        } else if (fs.existsSync(path.join(workDir, 'tsconfig.json')) && jsFiles.some(f => /\.tsx?$/.test(f))) {
           const result = await runInSandbox('npx tsc --noEmit --pretty false 2>&1 | head -20', [], { cwd: workDir, timeout: 20000, workspaceRoot: sandboxRoot });
           const output = `${result.stdout || ''}\n${result.stderr || ''}`.trim();
           if (output.includes('error TS')) {
@@ -3273,12 +3294,13 @@ export class AgentRuntime {
       const hasErrors = checks.some(c => c.status === 'errors' || c.status === 'error');
       const summary = checks.map(c => {
         if (c.status === 'clean') return `✓ ${c.check}: clean`;
+        if (c.status === 'skipped') return `- ${c.check}: skipped. ${c.output}`;
         return `✗ ${c.check}: ${c.output?.split('\n').slice(0, 3).join(' | ') || c.status}`;
       }).join('\n');
 
       this.onEvent({
         type: 'thinking',
-        data: { thought: `Auto-verification: ${hasErrors ? 'issues found' : 'all clean'}\n${summary}`, round: this.session?.totalRounds || 0 },
+        data: { thought: `Auto-verification: ${hasErrors ? 'issues found' : checks.some(c => c.status === 'skipped') ? 'some checks skipped' : 'all clean'}\n${summary}`, round: this.session?.totalRounds || 0 },
       });
 
       return { checks, hasErrors, summary };

@@ -410,9 +410,12 @@ async function pauseFor(cat, entry, { kind, title, body, data }) {
   return result;
 }
 
-/** Allowed by the Cat's freedom, or ask? Sensitive steps are always asked. */
+/**
+ * Allowed by the Cat's freedom, or ask? Sensitive steps are always asked, and
+ * so are commands while the sandbox is on but can't start.
+ */
 export function freedomAllows(freedom, request) {
-  if (request?.sensitive) return false;
+  if (request?.sensitive || request?.unsandboxed) return false;
   if (freedom === 'alone') return true;
   if (freedom === 'ask_risky') return request?.permission !== 'dangerous';
   return false;
@@ -433,12 +436,14 @@ async function askPermission(cat, entry, request) {
   const result = await pauseFor(cat, entry, {
     kind: 'approval',
     title: `${request.sensitive ? 'Sensitive step: ' : ''}${what}`.slice(0, 280),
-    body: request.sensitive ? 'A site marked this as sensitive (a payment, password or sending something).' : `Tool: ${request.tool}`,
+    body: request.sensitive ? 'A site marked this as sensitive (a payment, password or sending something).'
+      : request.sandboxNote || `Tool: ${request.tool}`,
     data: {
       tool: request.tool,
       args: argsSummary(request.args),
       permission: request.permission,
       sensitive: request.sensitive || null,
+      unsandboxed: request.unsandboxed || null,
       diff: request.diff ? String(request.diff).slice(0, 4000) : null,
     },
   });

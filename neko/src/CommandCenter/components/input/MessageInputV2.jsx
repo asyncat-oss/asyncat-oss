@@ -431,6 +431,9 @@ function PendingInteractionInput({ interaction, onPermissionDecision, onAskUserA
               {data.workingDir && (
                 <p className="mt-1 truncate text-[10px] text-fg-subtle">{data.workingDir}</p>
               )}
+              {data.sandboxNote && (
+                <p className="mt-1.5 text-xs leading-5 text-amber-700 dark:text-amber-400" data-sandbox-note>{data.sandboxNote}</p>
+              )}
               {data.error && (
                 <p role="alert" className="mt-1.5 text-xs text-red-600 dark:text-red-400 midnight:text-red-400">
                   Couldn&apos;t send your choice ({data.error}). Try again.
@@ -470,15 +473,15 @@ function PendingInteractionInput({ interaction, onPermissionDecision, onAskUserA
                 {resolving && <Loader2 className="h-3 w-3 animate-spin" />}
                 Approve once
               </button>
-              <button
+              {!data.unsandboxed && <button
                 type="button"
                 onClick={() => onPermissionDecision?.(data.requestId, "allow_session")}
                 disabled={resolving || expired}
                 className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-white disabled:opacity-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-900"
               >
                 Trust run
-              </button>
-              <button
+              </button>}
+              {!data.unsandboxed && <button
                 type="button"
                 onClick={() => onPermissionDecision?.(data.requestId, "allow_always")}
                 disabled={resolving || expired}
@@ -486,7 +489,7 @@ function PendingInteractionInput({ interaction, onPermissionDecision, onAskUserA
               >
                 <ShieldOff className="h-3 w-3" />
                 Always
-              </button>
+              </button>}
             </div>
           </div>
         </div>

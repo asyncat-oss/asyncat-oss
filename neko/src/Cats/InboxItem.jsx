@@ -52,7 +52,7 @@ function ApprovalActions({ item, onDone }) {
       ) : null}
       <div className="flex flex-wrap items-center gap-1.5">
         <Button size="xs" variant="primary" icon={Check} loading={busy === 'allow_once'} disabled={Boolean(busy)} onClick={() => answer('allow_once')}>Allow once</Button>
-        {!item.data?.sensitive ? (
+        {!item.data?.sensitive && !item.data?.unsandboxed ? (
           <Button size="xs" icon={CheckCircle2} loading={busy === 'allow_always'} disabled={Boolean(busy)} onClick={() => answer('allow_always')}>Always allow</Button>
         ) : null}
         <Button

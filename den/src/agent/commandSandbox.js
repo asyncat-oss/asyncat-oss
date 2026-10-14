@@ -19,7 +19,7 @@ import path from 'path';
 import { IS_WIN, hasBin, isPathInside, runFile, runProcess } from './tools/shared.js';
 import { getConfigValue } from '../config/appConfig.js';
 import { runtimeDataRoot } from '../config/runtimeConfig.js';
-import { networkMode, networkPlan } from './sandboxNetwork.js';
+import { DEFAULT_REGISTRIES, extraRegistries, networkMode, networkPlan, networkSummary } from './sandboxNetwork.js';
 
 // Folders under the home folder that build tools download to. Folders of
 // programs (~/.cargo/bin, Rust toolchains, the .NET SDK, Gradle's own
@@ -225,11 +225,69 @@ export function resetSandboxProbe() {
   linuxProbe = null;
 }
 
+/** Pretend the probe found `probe` ({ ok, flags, net, reason }); for tests. */
+export function setSandboxProbe(probe) {
+  linuxProbe = { flags: [], net: true, reason: null, ...probe, at: Date.now() };
+}
+
 /** True when a sandbox can be used here. */
 export function sandboxAvailable(platform = process.platform) {
   if (platform === 'linux') return probeLinuxSandbox().ok;
   if (platform === 'darwin') return fs.existsSync('/usr/bin/sandbox-exec');
   return false;
+}
+
+// Tools that run commands in the sandbox. While the sandbox is on but can't
+// start, each of these asks first, every time (AgentRuntime). linter_run
+// also fixes (code_fix was its old name).
+export const SANDBOXED_TOOLS = new Set([
+  'run_command', 'run_python', 'run_node', 'shell_session_start', 'shell_session_run', 'process_spawn',
+  'run_tests', 'package_manager', 'build_runner', 'linter_run', 'dependency_audit', 'sandbox_run_command',
+]);
+
+/**
+ * on           commands run in the sandbox
+ * unavailable  the sandbox is on but can't start here (`reason` says why)
+ * off          the user turned it off
+ * unsupported  no sandbox on this system (Windows)
+ */
+function sandboxState({ platform = process.platform, recheck = false } = {}) {
+  if (platform !== 'linux' && platform !== 'darwin') return { state: 'unsupported', reason: "Windows doesn't have a sandbox for commands yet." };
+  if (setting() === 'off') return { state: 'off', reason: null };
+  if (platform === 'darwin') {
+    return fs.existsSync('/usr/bin/sandbox-exec') ? { state: 'on', reason: null } : { state: 'unavailable', reason: 'sandbox-exec is missing from this Mac.' };
+  }
+  const probe = probeLinuxSandbox({ recheck });
+  if (!probe.ok) return { state: 'unavailable', reason: probe.reason };
+  if (networkMode() !== 'open' && !probe.net) {
+    return { state: 'unavailable', reason: "bwrap can't give commands a network of their own here, so Network can't be limited." };
+  }
+  return { state: 'on', reason: null };
+}
+
+/** Why the sandbox is on but can't start, or null. Cheap: the probe is cached. */
+export function sandboxCantStart(platform = process.platform) {
+  const { state, reason } = sandboxState({ platform });
+  return state === 'unavailable' ? reason : null;
+}
+
+/** Everything Settings → Privacy & safety shows about the sandbox. */
+export function sandboxStatus({ platform = process.platform, recheck = false, home = os.homedir() } = {}) {
+  const { state, reason } = sandboxState({ platform, recheck });
+  const allowRead = allowedReads();
+  const folders = hiddenFolders({ platform, home, allowRead: [] })
+    .filter((item) => !item.follows)
+    .map((item) => ({ id: item.id, path: item.path, label: item.label, allowed: allowRead.includes(item.path), exists: inspectPath(item.path).kind !== null }))
+    .filter((item) => item.exists || item.allowed);
+  return {
+    platform,
+    enabled: setting() !== 'off',
+    state,
+    reason,
+    network: networkSummary({ platform, socat: platform === 'linux' && hasBin('socat') }),
+    registries: { builtIn: DEFAULT_REGISTRIES, added: extraRegistries() },
+    hiddenFolders: folders,
+  };
 }
 
 /** Folders a sandboxed command may write to. */
@@ -322,7 +380,7 @@ export function sandboxedCommand({
   file, args = [], workspaceRoot, cwd = null, platform = process.platform, home = os.homedir(), tmp = os.tmpdir(), force = null,
   hidden = null, flags = null, inspect = inspectPath, network = null,
 }) {
-  const enabled = force ?? (setting() !== 'off' && sandboxAvailable(platform));
+  const enabled = force ?? (sandboxState({ platform }).state === 'on');
   if (!enabled || !workspaceRoot) return { file, args, sandboxed: false };
   const roots = writableRoots({ workspaceRoot, home, tmp });
   // bwrap starts the command in the folder named here, not the one bwrap was

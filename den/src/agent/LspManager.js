@@ -7,7 +7,7 @@
 
 import { spawn } from 'child_process';
 import { childEnv } from './childEnv.js';
-import { sandboxedCommand } from './commandSandbox.js';
+import { sandboxCantStart, sandboxedCommand } from './commandSandbox.js';
 import path from 'path';
 
 class LspClient {
@@ -211,6 +211,9 @@ class LspManager {
   }
 
   async getClient(language, workspaceRoot) {
+    // Without the sandbox a project's server would run unasked: wait for it.
+    const cantStart = sandboxCantStart();
+    if (cantStart) throw new Error(`Language servers are off while the sandbox can't start: ${cantStart}`);
     const rootPath = path.resolve(workspaceRoot);
     if (!this.clients.has(rootPath)) {
       this.clients.set(rootPath, new Map());

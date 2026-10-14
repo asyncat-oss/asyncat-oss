@@ -248,6 +248,18 @@ export function closeBridges() {
   bridges?.close();
 }
 
+const NO_SOCAT = {
+  registries: "socat isn't installed, so commands run with the network off (and can't reach your local model).",
+  off: "socat isn't installed, so commands can't reach your local model either.",
+};
+
+/** What `mode` amounts to here, without starting anything (for Settings). */
+export function networkSummary({ mode = networkMode(), platform = process.platform, socat = false } = {}) {
+  if (mode === 'open' || (platform !== 'linux' && platform !== 'darwin')) return { mode, effective: 'open', note: null };
+  if (platform === 'linux' && !socat) return { mode, effective: 'off', note: NO_SOCAT[mode] };
+  return { mode, effective: mode, note: null };
+}
+
 const PROXY_URL = `http://127.0.0.1:${PROXY_PORT}`;
 
 /** Environment that sends package managers through the proxy. */
@@ -316,9 +328,7 @@ export function networkPlan({ mode = networkMode(), platform = process.platform,
   if (!socat) {
     return {
       mode, effective: 'off', bwrap, mounts, wrap: null, env: {}, seatbelt: [],
-      note: mode === 'registries'
-        ? "socat isn't installed, so commands run with the network off (and can't reach your local model)."
-        : "socat isn't installed, so commands can't reach your local model either.",
+      note: NO_SOCAT[mode],
     };
   }
   const forwards = links.models();

@@ -1,6 +1,6 @@
 // den/src/privacy/privacyRoutes.js
-// /api/privacy: where things are kept, sites agents never open, export
-// everything, delete everything.
+// /api/privacy: where things are kept, sites agents never open, the command
+// sandbox, export everything, delete everything.
 
 import express from 'express';
 import { runtimeDataRoot } from '../config/runtimeConfig.js';
@@ -8,6 +8,8 @@ import { isHostConnected, requestFromHost } from '../lib/hostBridge.js';
 import { exportEstimate, exportEverything, privacyOverview } from './privacyService.js';
 import { getBlockedSites, setBlockedSites } from './blockedSites.js';
 import { cancelReset, pendingReset, requestReset } from './resetData.js';
+import { sandboxStatus } from '../agent/commandSandbox.js';
+import { updateSandboxSettings } from './sandboxSettings.js';
 
 export const RESET_PHRASE = 'delete everything';
 
@@ -28,6 +30,25 @@ router.put('/blocked-sites', (req, res) => {
     res.json({ success: true, blockedSites: setBlockedSites(req.body.sites) });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// The command sandbox: on and working, on but unable to start (and why),
+// or off; its network; hidden folders. ?recheck=1 tries bwrap again.
+router.get('/sandbox', (req, res) => {
+  try {
+    res.json({ success: true, sandbox: sandboxStatus({ recheck: req.query.recheck === '1' }) });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// { enabled?, network?: open|registries|off, allowRead?: [path], registries?: [host] }
+router.put('/sandbox', (req, res) => {
+  try {
+    res.json({ success: true, sandbox: updateSandboxSettings(req.body || {}) });
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, error: err.message });
   }
 });
 

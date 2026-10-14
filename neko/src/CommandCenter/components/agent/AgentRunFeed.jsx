@@ -1088,6 +1088,9 @@ function CompactPermissionEvent({ data, onDecision }) {
               {intent.value}
             </code>
           </div>
+          {data?.sandboxNote && (
+            <p className="mt-1.5 text-xs leading-5 text-amber-700 dark:text-amber-400" data-sandbox-note>{data.sandboxNote}</p>
+          )}
           {data?.error && (
             <p role="alert" className="mt-1.5 text-xs text-red-600 dark:text-red-400 midnight:text-red-400">
               Couldn&apos;t send your choice ({data.error}). Try again.
@@ -1131,14 +1134,14 @@ function CompactPermissionEvent({ data, onDecision }) {
               {data?.resolving && <Loader2 className="h-3 w-3 animate-spin" />}
               Approve once
             </button>
-            <button
+            {!data?.unsandboxed && <button
               onClick={() => onDecision?.(data?.requestId, 'allow_session')}
               disabled={data?.resolving || expired}
               className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
             >
               Trust this run
-            </button>
-            <button
+            </button>}
+            {!data?.unsandboxed && <button
               onClick={() => onDecision?.(data?.requestId, 'allow_always')}
               disabled={data?.resolving || expired}
               title={`Always allow ${data?.tool} without asking`}
@@ -1146,7 +1149,7 @@ function CompactPermissionEvent({ data, onDecision }) {
             >
               <ShieldOff className="h-3 w-3" />
               Always allow
-            </button>
+            </button>}
       </div>
     </div>
   );
