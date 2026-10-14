@@ -46,13 +46,15 @@ export default function ChatFloatingNav({ items = [], scrollContainerRef }) {
 
   return (
     <div className="absolute left-0 top-0 bottom-0 z-20 hidden xl:flex items-center pointer-events-none">
+      {/* Only the dots and the open panel take the pointer: the closed panel
+          still takes room, and would block clicks on the chat beside it. */}
       <div
-        className="pointer-events-auto flex items-center"
+        className="flex items-center"
         onMouseEnter={handleEnter}
         onMouseLeave={handleLeave}
       >
         {/* ── Thin line + dots trigger ── */}
-        <div className="flex flex-col items-center gap-[5px] px-2.5 py-3 cursor-default">
+        <div className="pointer-events-auto flex flex-col items-center gap-[5px] px-2.5 py-3 cursor-default">
           {items.map((_, i) => (
             <span
               key={i}
