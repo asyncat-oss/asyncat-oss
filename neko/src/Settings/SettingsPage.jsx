@@ -18,7 +18,6 @@ import GeneralSection from './GeneralSection';
 import AppearanceSection from './AppearanceSection';
 import ServerSection from './ServerSection';
 import UpdateSection from './UpdateSection';
-import StorageSection from './StorageSection';
 import IntegrationsSection from './IntegrationsSection';
 import RuntimeSection from './RuntimeSection';
 import WorkbenchSection from './WorkbenchSection';
@@ -30,6 +29,8 @@ import { SettingsSearchBox, SettingsSearchResults } from './SettingsSearchBox.js
 import { resultRoute, searchSettings } from './settingsSearch.js';
 import { Segmented } from '../components/ui/Tabs.jsx';
 import Switch from '../components/ui/Switch.jsx';
+import Button from '../components/ui/Button.jsx';
+import { RowGroup, SettingsRow } from '../components/ui/Rows.jsx';
 
 const TAB_ALIASES = {
   general: 'profile',
@@ -57,7 +58,6 @@ const SettingsPage = () => {
   const { tab } = useParams();
   const navigate = useNavigate();
   const { theme, setTheme } = useUiPreferences();
-  const [advancedView, setAdvancedView] = useState(tab === 'server' ? 'server' : 'storage');
   const [connectionsView, setConnectionsView] = useState(tab === 'connectors' || tab === 'mcp' ? 'connectors' : 'services');
   const [devOptions, setDevOptions] = useState(readDevOptions);
   const [query, setQuery] = useState('');
@@ -123,7 +123,7 @@ const SettingsPage = () => {
       id: 'advanced',
       group: 'System',
       label: 'Advanced',
-      description: 'Storage, logs and maintenance, and developer options.',
+      description: 'Developer options and the local server.',
       icon: Wrench,
     },
     {
@@ -150,13 +150,12 @@ const SettingsPage = () => {
 
   const changeDevOptions = (value) => {
     setDevOptions(value);
-    if (!value) setAdvancedView('storage');
     try { localStorage.setItem(DEV_OPTIONS_KEY, String(value)); } catch { /* localStorage may be unavailable */ }
   };
 
   useEffect(() => {
-    if (tab === 'server') setAdvancedView('server');
-    if (tab === 'storage') setAdvancedView('storage');
+    // Storage & logs moved to Files.
+    if (tab === 'storage') navigate('/files/logs', { replace: true });
     if (tab === 'connectors' || tab === 'mcp') setConnectionsView('connectors');
     if (tab === 'integrations') setConnectionsView('services');
     // Projects moved out of Settings to their own pages.
@@ -167,25 +166,22 @@ const SettingsPage = () => {
     <GeneralSection />
   );
 
-  const showServer = devOptions && advancedView === 'server';
   const renderAdvanced = () => (
-    <div className="space-y-5">
-      <div className="flex items-start justify-between gap-4 rounded-xl border border-line px-4 py-3" data-developer-options>
-        <div className="min-w-0">
-          <p className="text-[13px] font-medium text-fg">Developer options</p>
-          <p className="mt-0.5 text-[12px] leading-5 text-fg-muted">Show the server&apos;s ports and paths, its service addresses and its restart button. Most people never need these.</p>
-        </div>
-        <Switch checked={devOptions} onChange={changeDevOptions} label="Developer options" />
-      </div>
-      {devOptions ? (
-        <Segmented
-          value={advancedView}
-          onChange={setAdvancedView}
-          items={[{ value: 'storage', label: 'Storage & logs' }, { value: 'server', label: 'Server' }]}
-          label="Advanced"
-        />
-      ) : null}
-      {showServer ? <ServerSection /> : <StorageSection />}
+    <div className="space-y-6">
+      <RowGroup>
+        <SettingsRow label="Storage and logs" hint="Moved to Files, with everything else Asyncat keeps on this computer.">
+          <Button onClick={() => navigate('/files/logs')}>Open Files</Button>
+        </SettingsRow>
+        <SettingsRow
+          label="Developer options"
+          hint="Show the server's ports and paths, its service addresses, its database and its restart button. Most people never need these."
+          stack={false}
+          data-developer-options
+        >
+          <Switch checked={devOptions} onChange={changeDevOptions} label="Developer options" />
+        </SettingsRow>
+      </RowGroup>
+      {devOptions ? <ServerSection /> : null}
     </div>
   );
 

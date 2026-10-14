@@ -719,39 +719,6 @@ export const configApi = {
 };
 
 // ===========================================
-// STORAGE API FUNCTIONS
-// ===========================================
-
-export const storageApi = {
-	getSummary: async () => {
-		return apiCall(`${MAIN_URL}/api/storage/summary`);
-	},
-
-	clearUploads: async () => {
-		return apiCall(`${MAIN_URL}/api/storage/uploads`, {
-			method: 'DELETE',
-			body: JSON.stringify({ confirm: 'clear uploads' }),
-		});
-	},
-
-	getLogsSummary: async () => {
-		return apiCall(`${MAIN_URL}/api/storage/logs`);
-	},
-
-	clearLogs: async () => {
-		return apiCall(`${MAIN_URL}/api/storage/logs`, {
-			method: 'DELETE',
-			body: JSON.stringify({ confirm: 'clear logs' }),
-		});
-	},
-
-	readLogFile: async (category, filename, lines = 200) => {
-		const params = new URLSearchParams({ category, filename, lines: String(lines) });
-		return apiCall(`${MAIN_URL}/api/storage/logs/read?${params.toString()}`);
-	},
-};
-
-// ===========================================
 // UPDATE API FUNCTIONS
 // ===========================================
 
