@@ -6,8 +6,14 @@ import {
   RotateCcw,
   CheckCircle2,
   AlertTriangle,
+  Database,
 } from "lucide-react";
 import { configApi, updateApi, apiUtils } from "./settingApi";
+import { SettingsSection } from "../components/ui/Rows.jsx";
+import Skeleton from "../components/ui/Skeleton.jsx";
+import Notice from "../components/ui/Notice.jsx";
+import { storageApi } from "../files/storageApi.js";
+import { formatBytes } from "../files/fileFormat.js";
 
 const settingsFontBase = "font-sans";
 
@@ -22,6 +28,48 @@ const readOnlyCls =
   "w-full px-3 py-2 rounded-lg border border-gray-200/60 dark:border-gray-700/40 midnight:border-gray-700/40 " +
   "bg-gray-50 dark:bg-gray-800/50 midnight:bg-gray-800/50 " +
   "text-gray-400 dark:text-gray-500 midnight:text-gray-500 text-sm cursor-default select-none";
+
+// The database's file and how many rows each table has (Developer options
+// only; den's GET /api/storage/database).
+function DatabaseTables() {
+  const [info, setInfo] = useState(null);
+  useEffect(() => {
+    storageApi.database().then(setInfo).catch((err) => setInfo({ error: apiUtils.handleError(err, "Couldn't read the database") }));
+  }, []);
+  const tables = [...(info?.tables || [])].sort((a, b) => (b.rows ?? -1) - (a.rows ?? -1) || a.name.localeCompare(b.name));
+  return (
+    <SettingsSection
+      icon={Database}
+      title="Database"
+      hint={info?.path ? <span className="break-all font-mono">{info.path}</span> : null}
+      aside={info?.totalBytes != null ? `${formatBytes(info.totalBytes)} · ${tables.length} tables` : null}
+      data-database
+    >
+      {info?.error ? <Notice tone="error">{info.error}</Notice> : !info ? (
+        <Skeleton className="h-32" />
+      ) : (
+        <div className="max-h-80 overflow-y-auto rounded-xl border border-line">
+          <table className="w-full text-[12px]">
+            <thead className="sticky top-0 bg-canvas text-fg-subtle">
+              <tr className="border-b border-line">
+                <th className="px-4 py-2 text-left font-medium">Table</th>
+                <th className="px-4 py-2 text-right font-medium">Rows</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {tables.map((table) => (
+                <tr key={table.name}>
+                  <td className="px-4 py-1.5 font-mono text-fg">{table.name}</td>
+                  <td className="px-4 py-1.5 text-right tabular-nums text-fg-muted">{table.rows == null ? "?" : table.rows.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </SettingsSection>
+  );
+}
 
 const ServerSection = () => {
   const [config, setConfig] = useState({});
@@ -251,6 +299,10 @@ const ServerSection = () => {
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="border-t border-line pt-6">
+        <DatabaseTables />
       </div>
 
       {/* Restart */}
