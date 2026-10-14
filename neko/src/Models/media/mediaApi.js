@@ -51,7 +51,6 @@ export const mediaApi = {
   },
   gallery: {
     list: (params = {}) => apiRequest(`${BASE}/gallery${query(params)}`),
-    remove: (name) => apiRequest(`${BASE}/gallery/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   },
 };
 

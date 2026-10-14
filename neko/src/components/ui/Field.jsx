@@ -36,19 +36,3 @@ export const Input = forwardRef(function Input({ className = '', ...rest }, ref)
 });
 
 Input.propTypes = { className: PropTypes.string };
-
-/**
- * @deprecated The native <select> opens an OS list that ignores the theme.
- * Use components/ui/Select.jsx. This stays only for Models/media/
- * VoiceSetupCard.jsx and ImageSetupCard.jsx, which are being rewritten; delete
- * it with them.
- */
-export const Select = forwardRef(function Select({ className = '', children, ...rest }, ref) {
-  return (
-    <select ref={ref} className={`h-9 ${CONTROL_CLASS} pr-8 ${className}`} {...rest}>
-      {children}
-    </select>
-  );
-});
-
-Select.propTypes = { className: PropTypes.string, children: PropTypes.node };
