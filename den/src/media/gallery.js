@@ -7,6 +7,7 @@
 import fs from 'fs';
 import path from 'path';
 import { runtimeGeneratedImagesPath } from '../config/runtimeConfig.js';
+import { plainFileIn } from '../storage/safeFs.js';
 
 const IMAGE_FILE = /\.(png|jpe?g|webp)$/i;
 
@@ -19,12 +20,21 @@ export function galleryUrl(name) {
   return `/api/media/gallery/file/${encodeURIComponent(name)}`;
 }
 
-/** A picture's full path if `name` is one in the gallery folder, else null. */
+/**
+ * A picture's full path if `name` is one in the gallery folder, else null.
+ * Only a regular file there counts: a link is never served, whatever it
+ * points at.
+ */
 export function galleryFile(name) {
-  const base = path.basename(String(name || ''));
-  if (!base || base !== String(name) || !IMAGE_FILE.test(base)) return null;
-  const file = path.join(galleryDir(), base);
-  return fs.existsSync(file) ? file : null;
+  const value = String(name ?? '');
+  if (!IMAGE_FILE.test(value)) return null;
+  return plainFileIn(galleryDir(), value)?.file || null;
+}
+
+// A picture's notes file, when there is one that is a regular file. A link in
+// its place is neither read nor written through.
+function notesFile(file) {
+  return plainFileIn(path.dirname(file), `${path.basename(file)}.json`)?.file || null;
 }
 
 /** Remember what a picture was made from. Ignores pictures outside the gallery. */
@@ -32,7 +42,9 @@ export function recordGalleryImage(imagePath, meta = {}) {
   try {
     const dir = path.resolve(galleryDir());
     const file = path.resolve(String(imagePath || ''));
-    if (path.dirname(file) !== dir || !fs.existsSync(file)) return null;
+    if (path.dirname(file) !== dir || !plainFileIn(dir, path.basename(file))) return null;
+    const notes = `${file}.json`;
+    if (isThere(notes) && !notesFile(file)) return null;
     const record = {
       prompt: meta.prompt ? String(meta.prompt).slice(0, 4000) : null,
       runtime: meta.runtime || null,
@@ -43,16 +55,28 @@ export function recordGalleryImage(imagePath, meta = {}) {
       editedFrom: meta.editedFrom ? path.basename(String(meta.editedFrom)) : null,
       createdAt: new Date().toISOString(),
     };
-    fs.writeFileSync(`${file}.json`, JSON.stringify(record, null, 2));
+    fs.writeFileSync(notes, JSON.stringify(record, null, 2));
     return record;
   } catch {
     return null;
   }
 }
 
-function readMeta(file) {
+// Anything at all at this path, a broken link included.
+function isThere(file) {
   try {
-    return JSON.parse(fs.readFileSync(`${file}.json`, 'utf8'));
+    fs.lstatSync(file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function readMeta(file) {
+  const notes = notesFile(file);
+  if (!notes) return {};
+  try {
+    return JSON.parse(fs.readFileSync(notes, 'utf8'));
   } catch {
     return {};
   }
@@ -68,10 +92,8 @@ function galleryEntries() {
     return [];
   }
   const items = names.map((name) => {
-    const file = path.join(dir, name);
-    let stat = null;
-    try { stat = fs.statSync(file); } catch { /* gone */ }
-    return stat?.isFile() ? { name, file, stat } : null;
+    const found = plainFileIn(dir, name);
+    return found ? { name, file: found.file, stat: found.stat } : null;
   }).filter(Boolean);
   return items.sort((a, b) => b.stat.mtimeMs - a.stat.mtimeMs);
 }

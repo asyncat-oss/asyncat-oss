@@ -82,19 +82,21 @@ test('pictures carry what they were made from, and page past the first ones', ()
   assert.deepEqual(pages.map((page) => page.length), [100, 100, 6]);
   assert.equal(new Set(pages.flat().map((item) => item.name)).size, 206, 'no picture twice');
 
-  // A page reads the notes of its own pictures only, not all 206.
-  const readFileSync = fs.readFileSync;
-  let notesRead = 0;
-  fs.readFileSync = function countNotes(file, ...rest) {
-    if (String(file).endsWith('.png.json')) notesRead += 1;
-    return readFileSync.call(this, file, ...rest);
+  // A page looks for the notes of its own pictures only, not all 206.
+  const { readFileSync, lstatSync } = fs;
+  const notesLookedFor = new Set();
+  const counting = (original) => function countNotes(file, ...rest) {
+    if (String(file).endsWith('.png.json')) notesLookedFor.add(String(file));
+    return original.call(this, file, ...rest);
   };
+  fs.readFileSync = counting(readFileSync);
+  fs.lstatSync = counting(lstatSync);
   try {
     assert.equal(listMade(userId, { kind: 'picture', limit: 10 }).items.length, 10);
   } finally {
-    fs.readFileSync = readFileSync;
+    Object.assign(fs, { readFileSync, lstatSync });
   }
-  assert.equal(notesRead, 10);
+  assert.equal(notesLookedFor.size, 10);
 });
 
 test('files are found by folder id and name only', () => {
@@ -126,6 +128,57 @@ test('the file route sends pages as sandboxed text', async () => {
     assert.equal(pictures.items.length, 6);
     assert.equal(pictures.total, 206);
     assert.equal((await fetch(`${base}/file?root=project:${folderId}&name=..%2F..%2Fsecret.txt`)).status, 404);
+  } finally {
+    server.close();
+  }
+});
+
+test('links in artifact and picture folders lead nowhere', async () => {
+  const secret = path.join(scratch, 'secret.txt');
+  const artifacts = path.join(projectDir, '.asyncat', 'artifacts');
+  fs.symlinkSync(secret, path.join(artifacts, 'hosts.md'));
+
+  // A Cat whose .asyncat is a link to a folder elsewhere.
+  const linkedCatId = randomUUID();
+  const linkedCatDir = path.join(scratch, 'linked-cat');
+  const elsewhere = path.join(scratch, 'elsewhere');
+  write(path.join(elsewhere, 'artifacts', 'leak.md'), 'from elsewhere');
+  fs.mkdirSync(linkedCatDir, { recursive: true });
+  fs.symlinkSync(elsewhere, path.join(linkedCatDir, '.asyncat'));
+  db.prepare("INSERT INTO cats (id, user_id, name, mission, folder) VALUES (?, ?, 'Linked Cat', 'x', ?)").run(linkedCatId, userId, linkedCatDir);
+
+  const pictures = process.env.IMAGEGEN_OUTPUT_PATH;
+  fs.symlinkSync(secret, path.join(pictures, 'leak.png'));
+  write(path.join(pictures, 'mint.png'), 'png');
+  fs.symlinkSync(secret, path.join(pictures, 'mint.png.json'));
+
+  const titles = listMade(userId, { limit: 1000 }).items.map((item) => item.name || item.title);
+  assert.ok(!titles.includes('hosts.md'), 'a linked artifact is not listed');
+  assert.ok(!titles.includes('leak.md'), 'nor one behind a linked .asyncat');
+  assert.ok(!titles.includes('leak.png'), 'nor a linked picture');
+  assert.ok(titles.includes('plan.md'), 'real files still are');
+  assert.equal(madeFile(userId, `project:${folderId}`, 'hosts.md'), null);
+  assert.equal(madeFile(userId, `cat:${linkedCatId}`, 'leak.md'), null);
+
+  const gallery = await import('../src/media/gallery.js');
+  assert.equal(gallery.galleryFile('leak.png'), null);
+  assert.equal(gallery.galleryFile('mint.png'), path.join(pictures, 'mint.png'));
+  const mint = gallery.galleryPictures().find((picture) => picture.name === 'mint.png');
+  assert.equal(mint.describe().prompt, null, 'a linked notes file is not read');
+  assert.equal(gallery.recordGalleryImage(path.join(pictures, 'mint.png'), { prompt: 'Mint' }), null);
+  assert.equal(fs.readFileSync(secret, 'utf8'), 'not yours', 'nor written through');
+
+  // The picture route serves only real pictures.
+  const express = (await import('express')).default;
+  const { default: mediaRouter } = await import('../src/media/mediaRoutes.js');
+  const app = express();
+  app.use('/api/media', mediaRouter);
+  const server = app.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  try {
+    const base = `http://127.0.0.1:${server.address().port}/api/media/gallery/file`;
+    assert.equal((await fetch(`${base}/leak.png`)).status, 404);
+    assert.equal((await fetch(`${base}/mint.png`)).status, 200);
   } finally {
     server.close();
   }

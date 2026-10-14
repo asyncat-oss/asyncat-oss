@@ -15,6 +15,7 @@ import { getArtifactsDir, getLegacyArtifactsDir } from '../agent/workspacePaths.
 import { getWorkspaceRoot } from '../files/fileExplorerService.js';
 import { defaultCatFolder } from '../cats/catStore.js';
 import { galleryPictures } from '../media/gallery.js';
+import { isRealSubdir, plainFileIn } from '../storage/safeFs.js';
 
 const KINDS = {
   '.md': 'document', '.markdown': 'document', '.txt': 'document', '.pdf': 'document', '.docx': 'document',
@@ -51,19 +52,27 @@ export function madeRoot(userId, id) {
   return madeRoots(userId).find((root) => root.id === id) || null;
 }
 
+// A root's artifact folders that are really inside it: a link in place of
+// .asyncat or artifacts could point anywhere, so such a folder is skipped.
+function artifactDirs(root) {
+  return [getArtifactsDir(root.dir), getLegacyArtifactsDir(root.dir)]
+    .filter((dir) => isRealSubdir(root.dir, dir));
+}
+
+// Top-level regular files only: a link inside the folder is never listed or
+// read, wherever it leads.
 function artifactFiles(root) {
   const seen = new Set();
   const files = [];
-  for (const dir of [getArtifactsDir(root.dir), getLegacyArtifactsDir(root.dir)]) {
+  for (const dir of artifactDirs(root)) {
     let names = [];
     try { names = fs.readdirSync(dir); } catch { continue; }
     for (const name of names) {
       if (name.startsWith('.') || seen.has(name)) continue;
-      let stat;
-      try { stat = fs.statSync(path.join(dir, name)); } catch { continue; }
-      if (!stat.isFile()) continue;
+      const found = plainFileIn(dir, name);
+      if (!found) continue;
       seen.add(name);
-      files.push({ name, stat });
+      files.push({ name, stat: found.stat });
     }
   }
   return files;
@@ -72,11 +81,10 @@ function artifactFiles(root) {
 /** A saved artifact's full path, or null (by root id and file name only). */
 export function madeFile(userId, rootId, name) {
   const root = madeRoot(userId, rootId);
-  const base = path.basename(String(name || ''));
-  if (!root || !base || base !== String(name)) return null;
-  for (const dir of [getArtifactsDir(root.dir), getLegacyArtifactsDir(root.dir)]) {
-    const file = path.join(dir, base);
-    if (fs.existsSync(file) && fs.statSync(file).isFile()) return file;
+  if (!root) return null;
+  for (const dir of artifactDirs(root)) {
+    const found = plainFileIn(dir, String(name ?? ''));
+    if (found) return found.file;
   }
   return null;
 }
