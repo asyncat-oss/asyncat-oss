@@ -83,12 +83,17 @@ another `Origin`, or addressed to a non-local `Host`, are rejected.
 
 ## Agent tools
 
-About 215 tools are registered. Each agent step sends the model a core set
+About 205 tools are registered. Each agent step sends the model a core set
 chosen for the task: about 40 with native tool calling, 24 for models that
 read tool definitions from the prompt. The rest stay reachable through the
 `tool_search` tool, which returns matching definitions and makes those tools
 callable for the rest of the run. This keeps a step's prompt small enough for
 local models.
+
+Tools that were merged into others keep their old names as aliases
+(`src/agent/tools/toolAliases.js`): saved agent profiles, Cats, chat
+approvals and old chats that name them still work, with the arguments
+reshaped for the tool that replaced them. Aliases are never listed.
 
 In Action mode, any tool not marked safe asks for approval first
 (`_checkPermission` in `src/agent/AgentRuntime.js`). File edit and write

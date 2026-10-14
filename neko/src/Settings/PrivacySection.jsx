@@ -169,7 +169,7 @@ function BrowserRules({ blockedSites, onChange }) {
         <p className="mb-1.5 text-[13px] font-medium text-fg">Always</p>
         <ul className="list-disc space-y-1 pl-4">
           <li>Agents open web pages only: never files on your computer, Asyncat itself, or the hidden addresses cloud machines use for their settings.</li>
-          <li>Agents browse in the built-in browser&apos;s Standard profile, so they are signed in where you are there. Incognito tabs are never shared.</li>
+          <li>In the desktop app, agents browse in the built-in browser&apos;s Standard profile, so they are signed in where you are there; without it, in a headless browser with a fresh profile for each chat or Cat. Incognito tabs are never shared.</li>
           <li>Before typing a password or card number, choosing a file, or pressing a button like Buy, Delete or Send, an agent asks you.</li>
           <li>Each Cat browses in a profile of its own, and only on the sites on its list (a Cat&apos;s Settings → Freedom).</li>
           <li>Coding agents such as Claude Code, Codex and ACP agents use their own web tools, so these rules don&apos;t reach them.</li>

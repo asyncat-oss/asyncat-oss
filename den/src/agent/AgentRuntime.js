@@ -160,7 +160,7 @@ const TOOL_PROFILE_PATTERNS = {
   schedule: /\b(schedule|scheduled|cron|remind|reminder|every\s+\d*|hourly|daily|tomorrow|later)\b/i,
   navigation: /\b(open|browser|page|website|screenshot|click|navigate|inspect\s+page|localhost)\b/i,
 };
-// The prompt carries a core set of tool definitions, not all ~220; the rest are
+// The prompt carries a core set of tool definitions, not all ~200; the rest are
 // reachable through tool_search. Every definition is resent on every step: with
 // native tool calling the full set cost ~32k tokens (and was also repeated as
 // text in the system prompt), OpenAI-style APIs reject more than 128 tools, and

@@ -1,7 +1,7 @@
 // den/src/agent/tools/toolSearchTool.js
 // ─── Tool discovery ─────────────────────────────────────────────────────────
 // The agent's prompt carries a core set of tools picked for the current task,
-// not all ~220: sending every definition on every step cost ~60k tokens with
+// not all ~200: sending every definition on every step cost ~60k tokens with
 // native tool calling (the list was sent twice) and ~28k as text, which local
 // models could barely fit, and OpenAI-style APIs reject more than 128 tools.
 // This tool lets the agent find the rest by keyword. The runtime decides which
