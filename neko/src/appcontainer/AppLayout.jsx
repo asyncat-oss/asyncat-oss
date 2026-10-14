@@ -118,6 +118,20 @@ const AppLayout = () => {
     return () => unsubscribe?.();
   }, [navigate]);
 
+  // A new chat from the desktop app (Quick ask's Ctrl+Enter, File → New
+  // Chat), with text to send in it or none. Text that arrived while this
+  // window was starting is picked up here.
+  useEffect(() => {
+    const api = window.electronAPI;
+    if (!api?.onCompose) return undefined;
+    const start = (payload) => {
+      navigate('/home', { state: { startProjectChat: { initialMessage: String(payload?.text || '') } } });
+    };
+    api.takeCompose?.().then((payload) => { if (payload) start(payload); }).catch(() => {});
+    const unsubscribe = api.onCompose(start);
+    return () => unsubscribe?.();
+  }, [navigate]);
+
   // UI state
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const { pageTransitionsEnabled, sidebarState } = useUiPreferences();

@@ -80,19 +80,37 @@ app.on('activate', () => {
 
 // ─── IPC Handlers ─────────────────────────────────────────────────────────────
 
+// Text for a new chat in the main window (the popup, File → New Chat). A
+// window that is still loading takes it once the app has started.
+let pendingCompose = null;
+const COMPOSE_TTL_MS = 60 * 1000;
+
+function composeInApp(text = '') {
+  pendingCompose = { text: String(text || '').slice(0, 100_000), at: Date.now() };
+  const win = getMainWindow();
+  const appLoaded = win && !win.webContents.isLoading() && win.webContents.getURL().startsWith('http');
+  if (appLoaded) {
+    win.webContents.send('app:compose', pendingCompose);
+    pendingCompose = null;
+    bootApp('');
+  } else {
+    bootApp(win ? '' : '/home');
+  }
+}
+
 function setupPopupIPC() {
   ipcMain.handle('popup:status', () => ({ running: isBackendRunning() }));
 
   ipcMain.on('popup:new-chat', (_e, text) => {
     closePopup();
-    const win = getMainWindow();
-    if (win) {
-      win.show();
-      win.focus();
-      win.webContents.send('menu:new-chat', text || '');
-    } else {
-      bootApp();
-    }
+    composeInApp(typeof text === 'string' ? text : '');
+  });
+
+  // The main window asks once it has started (see AppLayout).
+  ipcMain.handle('app:take-compose', () => {
+    const waiting = pendingCompose;
+    pendingCompose = null;
+    return waiting && Date.now() - waiting.at < COMPOSE_TTL_MS ? waiting : null;
   });
 
   ipcMain.on('popup:open-app', () => {
@@ -636,12 +654,7 @@ app.whenReady().then(async () => {
   // Build native menu
   buildAppMenu({
     onNewChat: () => {
-      const win = getMainWindow();
-      if (win) {
-        win.webContents.send('menu:new-chat');
-        win.show();
-        win.focus();
-      }
+      if (getMainWindow()) composeInApp('');
     },
     onSettings: async () => {
       const win = getMainWindow();

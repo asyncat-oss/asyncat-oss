@@ -25,6 +25,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // ─── Navigation from the desktop (e.g. clicking a notification) ───────
   onNavigate: (callback) => subscribe('app:navigate', (_event, route) => callback(route)),
+  // A new chat, with text to send in it or none (Quick ask's Ctrl+Enter, File → New Chat).
+  onCompose: (cb) => subscribe('app:compose', (_event, payload) => cb(payload)),
+  takeCompose: () => ipcRenderer.invoke('app:take-compose'),
 
   // ─── Backend Status ───────────────────────────────────────────────────
   restartBackend:   () => ipcRenderer.invoke('backend:restart'),
