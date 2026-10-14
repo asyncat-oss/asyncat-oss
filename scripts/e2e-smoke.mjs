@@ -4,7 +4,7 @@
 // OpenAI-compatible model, then drives the app in a headless browser through
 // the main flows: chat, a project with instructions, agents, Cats, a note made
 // by the agent, connectors (with a fake MCP server), an ACP agent (a fake
-// one), and the main pages.
+// one), searching inside chats, pinning a chat, and the main pages.
 //
 // Needs a Chromium-based browser (Chrome, Chromium, Edge or Brave), found the
 // same way PDF export finds one; PUPPETEER_EXECUTABLE_PATH picks another.
@@ -415,6 +415,80 @@ async function main() {
     assert(saved.conversationId, 'the rated chat was not saved');
     await page.goto(`${app}/models?tab=training`, { waitUntil: 'domcontentloaded' });
     await waitFor(() => page.evaluate(() => document.querySelector('[data-guide-step="data"]')?.innerText.includes('rated 👍 (1)')), { timeout: 20000, what: 'the rated answer in the training steps' });
+    await noCrash();
+  });
+
+  await check('Ctrl+K finds a word said deep in a long chat and scrolls the chat to it', async () => {
+    const messages = [];
+    for (let i = 0; i < 30; i += 1) {
+      messages.push({ id: `msg_${i}_user_e2e_search`, type: 'user', content: `Packing question ${i + 1} for the coast walk` });
+      messages.push({
+        id: `msg_${i}_assistant_e2e_search`,
+        type: 'assistant',
+        content: i === 20
+          ? 'On the island you will likely meet a quokka. Keep your distance.'
+          : `Bring water and a hat for part ${i + 1}.\n\n${'Check the tide times before you set off. '.repeat(6)}`,
+      });
+    }
+    const saved = await api('POST', '/api/ai/chats/save', { messages, title: 'Coast walk', mode: 'chat' });
+    assert(saved.conversationId, 'the long chat was not saved');
+    await page.goto(`${app}/home`, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('textarea', { timeout: 20000 });
+    await page.keyboard.down('Control');
+    await page.keyboard.press('k');
+    await page.keyboard.up('Control');
+    const input = await page.waitForSelector('input[role="combobox"]', { timeout: 10000 });
+    await input.type('quokka');
+    await waitFor(() => page.evaluate(() => [...document.querySelectorAll('[role="option"] mark')].some((mark) => mark.textContent.toLowerCase() === 'quokka')), { timeout: 10000, what: 'the message hit in the palette' });
+    await page.keyboard.press('Enter');
+    await waitFor(() => page.evaluate((id) => location.pathname === `/conversations/${id}` && !location.search, saved.conversationId), { timeout: 15000, what: 'the chat to open' });
+    const shown = await waitFor(() => page.evaluate(() => {
+      const target = document.querySelector('[data-message-id="msg_20_assistant_e2e_search"]');
+      // The chat's scrolling box: the nearest parent that scrolls.
+      let chat = target?.parentElement;
+      while (chat && !(chat.scrollHeight > chat.clientHeight && /auto|scroll/.test(getComputedStyle(chat).overflowY))) chat = chat.parentElement;
+      if (!chat) return null;
+      const view = chat.getBoundingClientRect();
+      const box = target.getBoundingClientRect();
+      if (box.top < view.top || box.bottom > view.bottom) return null;
+      // Where the message sits in the whole chat: more than a screen from
+      // either end, so it is in view only because the chat scrolled to it.
+      const top = box.top - view.top + chat.scrollTop;
+      return {
+        deep: top > chat.clientHeight && chat.scrollHeight - (top + box.height) > chat.clientHeight,
+        highlighted: Boolean(target.querySelector('.bg-selected')),
+      };
+    }), { timeout: 10000, what: 'the message scrolled into view' });
+    assert(shown.deep, 'the chat is too short for the message to need a scroll');
+    assert(shown.highlighted, 'the message was not highlighted');
+    await noCrash();
+  });
+
+  await check('a chat pinned from the sidebar stays pinned, and unpins from All chats', async () => {
+    const saved = await api('POST', '/api/ai/chats/save', {
+      messages: [{ id: 'msg_1_user_e2e_pin', type: 'user', content: 'Plan the allotment' }],
+      title: 'Allotment plan',
+      mode: 'chat',
+    });
+    const pinnedInSidebar = () => page.evaluate(() => Boolean(document.querySelector('aside section[aria-label="Pinned chats"]')?.innerText.includes('Allotment plan')));
+    await page.goto(`${app}/home`, { waitUntil: 'domcontentloaded' });
+    const options = await page.waitForSelector('aside button[aria-label="Options for Allotment plan"]', { timeout: 20000 });
+    await options.focus();
+    await page.keyboard.press('Enter');
+    await clickText('[role="menuitem"]', 'Pin');
+    await waitFor(pinnedInSidebar, { timeout: 10000, what: 'the Pinned group' });
+    const isPinnedNow = async () => (await api('GET', '/api/ai/chats?limit=80&mode=all')).conversations.some((chat) => chat.id === saved.conversationId && chat.is_pinned);
+    await waitFor(isPinnedNow, { timeout: 10000, what: 'the pin to be saved' });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await waitFor(pinnedInSidebar, { timeout: 20000, what: 'the pin to survive a reload' });
+    const { conversations } = await api('GET', '/api/ai/chats?limit=80&mode=all');
+    assert(conversations[0]?.id === saved.conversationId && conversations[0].is_pinned, 'the pinned chat is not first in the list');
+    await page.goto(`${app}/all-chats`, { waitUntil: 'domcontentloaded' });
+    await waitFor(() => page.evaluate(() => Boolean(document.querySelector('[data-command-center] section[aria-label="Pinned chats"]')?.innerText.includes('Allotment plan'))), { timeout: 20000, what: 'the chat among pinned on All chats' });
+    await page.click('[data-command-center] button[aria-label="Options for Allotment plan"]');
+    await clickText('[role="menuitem"]', 'Unpin');
+    await waitFor(async () => !(await pinnedInSidebar()), { timeout: 10000, what: 'the sidebar to drop the pin' });
+    await waitFor(async () => !(await api('GET', '/api/ai/chats?limit=80&mode=all')).conversations.some((chat) => chat.is_pinned), { timeout: 10000, what: 'the unpin to be saved' });
     await noCrash();
   });
 
