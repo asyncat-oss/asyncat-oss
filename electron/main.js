@@ -22,6 +22,7 @@ import { postHostEvent, registerHostHandler, sendTokenFromWindows, startHostBrid
 import { keepRunningAfterClose, noteKeptRunning, registerBackgroundIPC, setEnabledTaskCount, startsHidden } from './background.js';
 import { setupBrowserHost, handleAgentCommand, shutdownBrowserHost, clearCatBrowserData, forgetAllBrowsing } from './browserHost.js';
 import { isAllowedBrowserUrl as isAllowedBrowserUrlFor } from './browserPolicy.js';
+import { openFolderOnly } from './folder-open.js';
 import http from 'http';
 import net from 'net';
 import fs from 'fs';
@@ -342,8 +343,9 @@ const isAllowedBrowserUrl = (value, opts = {}) => isAllowedBrowserUrlFor(value, 
 // ─── Desktop IPC (shell, dialogs, badge) ─────────────────────────────────────
 
 function setupDesktopIPC() {
-  // Open a file/folder with the default OS app
-  ipcMain.handle('shell:open', (_event, filePath) => shell.openPath(filePath));
+  // Open a folder in the file manager. Folders only: opening a file with its
+  // default app could run it (folder-open.js).
+  ipcMain.handle('shell:open', (_event, folderPath) => openFolderOnly(folderPath, { openPath: (folder) => shell.openPath(folder) }));
 
   // Open a validated web URL in the default OS browser.
   ipcMain.handle('shell:openExternal', async (_event, url) => {

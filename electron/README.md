@@ -24,6 +24,7 @@ This directory contains the Electron main-process code that wraps the asyncat de
 | `pet.js`, `pet.html`, `pet-preload.js` | Optional always-on-top desktop companion that shows agent status |
 | `menu.js` | Native OS menu bar with keyboard shortcuts |
 | `preload.js` | Context-isolated bridge between the renderer and main process |
+| `folder-open.js`, `folder-open.test.js` | What the page may open with `shell:open`: folders only, never a file (or a macOS app), and their tests |
 | `updater.js` | In-app updates from GitHub Releases (packaged builds): check, download, verify, install |
 | `update-policy.js`, `update-policy.test.js` | Pure version, release and installer-asset selection helpers, and their tests |
 | `update-install.js`, `update-install.test.js` | Pure download, checksum, install and clean-up helpers for the updater, and their tests |
