@@ -17,12 +17,6 @@ import { KeyField, PlanList, SetupProgress } from './MediaParts.jsx';
 import { useMediaSetup } from './useMediaSetup.js';
 
 const CLOUD_ORDER = ['openai', 'gemini', 'stability', 'fal'];
-const TONE = {
-  green: 'text-emerald-700 dark:text-emerald-400',
-  amber: 'text-amber-700 dark:text-amber-400',
-  red: 'text-red-700 dark:text-red-400',
-  muted: 'text-fg-subtle',
-};
 
 function TryPicture({ onMade }) {
   const toast = useToast();
@@ -120,7 +114,7 @@ function LocalSetup({ catalog, onStarted }) {
                 <span className="ml-auto text-[12px] font-normal text-fg-subtle">{model.installed ? 'On this computer' : formatBytes(model.bytes)}</span>
               </span>
               <span className="mt-1 text-[12px] leading-5 text-fg-muted">{model.note}</span>
-              <span className={`mt-1 text-[12px] ${TONE[fit.tone]}`}>{fit.label}</span>
+              <span className={`mt-1 text-[12px] ${fit.className}`}>{fit.label}</span>
             </label>
           );
         })}
