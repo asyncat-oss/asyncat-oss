@@ -62,6 +62,7 @@ export function listSouls() {
  * @param {object[]} opts.mentionedAgents - Agent profiles explicitly mentioned by the user
  * @param {string} [opts.soul] - Soul/persona content loaded from souls/*.md
  * @param {boolean} [opts.temporary] - A temporary chat: nothing from it is saved or remembered
+ * @param {boolean} [opts.rememberChats] - Off when the user turned off "Remember things from chats"
  * @returns {string}
  */
 function getShellName(platform) {
@@ -85,6 +86,7 @@ export function buildAgentSystemPrompt(opts = {}) {
     capabilitiesSection = '',   // multimodal capability status — injected here, NOT in the goal
     temporalContext = '',
     temporary = false,
+    rememberChats = true,
   } = opts;
 
   const shellName = getShellName(platform);
@@ -163,13 +165,19 @@ export function buildAgentSystemPrompt(opts = {}) {
     ? `\n## Multimodal Capabilities\n${capabilitiesSection}\n`
     : '';
   // A temporary chat isn't saved and teaches the agent nothing, so it gets
-  // no memory-saving guidance (and no tools to save memories).
+  // no memory-saving guidance (and no tools to save memories). With
+  // "Remember things from chats" off, memories are saved only on request.
   const memoryGuidance = temporary
     ? `## Temporary Chat
 This is a temporary chat: it isn't saved, and nothing from it is remembered. You can't save, change or forget memories here, so don't offer to remember anything for later. Memories shown below are from earlier chats and you may use them.
 
 `
-    : `## Memory Guidance
+    : !rememberChats
+      ? `## Memory Guidance
+You have access to durable memory that persists across sessions. The user has turned off remembering things from chats: save a memory only when they ask you to remember something, and never on your own. Memories shown below are from earlier and you may use them.
+
+`
+      : `## Memory Guidance
 You have access to durable memory that persists across sessions. **Proactively save** information that will help future sessions.
 
 Memory kinds:

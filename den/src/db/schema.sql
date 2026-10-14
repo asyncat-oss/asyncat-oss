@@ -424,6 +424,23 @@ CREATE TRIGGER IF NOT EXISTS agent_memory_au AFTER UPDATE ON agent_memory BEGIN
   VALUES (new.id, new.key, new.content);
 END;
 
+-- ─── Skill suggestions ───────────────────────────────────────────────────────
+-- A skill the agent drafted from a chat, waiting for Save or Not now on the
+-- card in that chat (Settings → Privacy & safety → Suggest skills from my
+-- chats). One per chat at most; see agent/skillSuggestions.js.
+
+CREATE TABLE IF NOT EXISTS agent_skill_suggestions (
+  id                   TEXT PRIMARY KEY,
+  user_id              TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  conversation_id      TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  message_id           TEXT,
+  name                 TEXT NOT NULL,
+  description          TEXT NOT NULL DEFAULT '',
+  draft                TEXT NOT NULL,
+  created_at           TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+CREATE INDEX IF NOT EXISTS idx_skill_suggestions_chat ON agent_skill_suggestions(user_id, conversation_id);
+
 -- ─── Agent Tool Audit ────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS agent_tool_audit (

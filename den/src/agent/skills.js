@@ -439,21 +439,36 @@ function _runDeterministic(goal, limit) {
   return [...direct, ...tagMatches].slice(0, limit);
 }
 
-// ── Post-run skill synthesis ──────────────────────────────────────────────────
-// After a non-trivial run succeeds, ask the LLM if a reusable skill can be
-// extracted.  Fires as fire-and-forget (called without await in AgentRuntime).
-// Trivial / conversational runs are skipped by checking tool count and goal
-// structure so the LLM call is only made when it's worth it.
+// ── Skill drafts from a chat ─────────────────────────────────────────────────
+// After a chat run that worked through a task, ask the model once whether the
+// steps make a reusable skill. Only a draft comes back: nothing is written
+// until the user picks Save on the card in that chat (see skillSuggestions.js).
+// Trivial and conversational runs are skipped by tool count and goal wording
+// so the call is only made when it's worth it.
 
 const ACTION_GOAL_RE_SYNTH = /\b(create|add|update|edit|delete|remove|move|rename|write|save|run|execute|install|fix|change|modify|implement|build|generate|refactor|deploy|configure|setup|analyze|parse|convert)\b/i;
 
-export async function synthesizeSkillFromRun({ aiClient, model, goal, toolHistory, answer } = {}) {
-  if (!aiClient?.client?.chat?.completions?.create) return;
+const oneLine = (value, max) => String(value || '').replace(/\s+/g, ' ').trim().slice(0, max);
+const listOf = (list, max) => (Array.isArray(list) ? list : [])
+  .map(item => oneLine(item, 300))
+  .filter(Boolean)
+  .slice(0, max);
 
-  // Only synthesize for action-oriented runs with 3+ successful tool calls
+/** Is there already a skill (yours or bundled) by this name? */
+export function skillExists(name) {
+  const slug = slugifyName(String(name || ''));
+  if (!slug) return false;
+  if (fs.existsSync(path.join(USER_SKILLS_DIR, `${slug}.md`))) return true;
+  return loadedSkills.some(skill => slugifyName(String(skill.name || '')) === slug);
+}
+
+export async function draftSkillFromRun({ aiClient, model, goal, toolHistory, answer } = {}) {
+  if (!aiClient?.client?.chat?.completions?.create) return null;
+
+  // Only for action-oriented runs with 3+ successful tool calls
   const successfulTools = (toolHistory || []).filter(t => t.result?.success !== false);
-  if (successfulTools.length < 3) return;
-  if (!ACTION_GOAL_RE_SYNTH.test(goal || '')) return;
+  if (successfulTools.length < 3) return null;
+  if (!ACTION_GOAL_RE_SYNTH.test(goal || '')) return null;
 
   try {
     const llmCreate = aiClient.client.chat.completions.create.bind(aiClient.client.chat.completions);
@@ -493,36 +508,44 @@ export async function synthesizeSkillFromRun({ aiClient, model, goal, toolHistor
 
     const raw = response.choices?.[0]?.message?.content || '';
     const parsed = extractJsonObject(raw);
-    if (!parsed?.should_create || !parsed?.name) return;
+    if (!parsed?.should_create || !parsed?.name) return null;
 
-    const slug = slugifyName(parsed.name);
-    const skillPath = path.join(USER_SKILLS_DIR, `${slug}.md`);
-    if (fs.existsSync(skillPath)) return; // skill already exists — don't overwrite
-
-    const body = [
-      `## When to Use\n${parsed.when_to_use || ''}`,
-      `## Key Steps\n${(parsed.key_steps || []).map((s, i) => `${i + 1}. ${s}`).join('\n')}`,
-      `## Pitfalls\n${(parsed.pitfalls || []).map(p => `- ${p}`).join('\n') || '- None noted'}`,
-      `## Source\nAuto-synthesized from a ${successfulTools.length}-tool run on: "${String(goal || '').slice(0, 80)}".`,
-    ].join('\n\n');
-
-    fs.mkdirSync(USER_SKILLS_DIR, { recursive: true });
-    const content = buildSkillMarkdown({
-      name: parsed.name,
-      description: parsed.description || '',
-      brain_region: 'hippocampus', // hippocampus = Recall — synthesized patterns aid future recall
-      weight: 0.9,
-      tags: Array.isArray(parsed.tags) ? parsed.tags : ['auto-synthesized'],
-      when_to_use: parsed.when_to_use || '',
-      created_by: 'skill-synthesizer',
-      body,
-    });
-
-    fs.writeFileSync(skillPath, content, 'utf8');
-    reloadSkills();
-    console.log(`[skills] Synthesized new skill: ${parsed.name} (${slug}.md)`);
+    const name = oneLine(parsed.name, 60);
+    if (!slugifyName(name)) return null;
+    return {
+      name,
+      description: oneLine(parsed.description, 200),
+      when_to_use: oneLine(parsed.when_to_use, 300),
+      tags: listOf(parsed.tags, 8).map(tag => tag.replace(/[,[\]]/g, ' ').trim().slice(0, 40)).filter(Boolean),
+      key_steps: listOf(parsed.key_steps, 12),
+      pitfalls: listOf(parsed.pitfalls, 8),
+      goal: oneLine(goal, 80),
+    };
   } catch (err) {
-    // Non-critical path — swallow errors silently
-    console.warn('[skills] Skill synthesis skipped:', err.message);
+    // Non-critical path: no draft this time
+    console.warn('[skills] Skill draft skipped:', err.message);
+    return null;
   }
+}
+
+/** The skill file a draft becomes when the user saves it (see createSkill). */
+export function skillFromDraft(draft = {}) {
+  const body = [
+    `## When to Use\n${draft.when_to_use || ''}`,
+    `## Key Steps\n${(draft.key_steps || []).map((s, i) => `${i + 1}. ${s}`).join('\n')}`,
+    `## Pitfalls\n${(draft.pitfalls || []).map(p => `- ${p}`).join('\n') || '- None noted'}`,
+    `## Source\nSaved from a chat: "${draft.goal || ''}".`,
+  ].join('\n\n');
+  return {
+    name: draft.name,
+    description: draft.description || '',
+    brain_region: 'hippocampus', // hippocampus = Recall — learned patterns aid future recall
+    weight: 0.9,
+    tags: draft.tags || [],
+    when_to_use: draft.when_to_use || '',
+    // The user chose to save it, so the Skills page files it with theirs,
+    // not with the skills older versions wrote on their own.
+    created_by: 'chat-suggestion',
+    body,
+  };
 }

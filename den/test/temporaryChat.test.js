@@ -15,6 +15,9 @@ process.env.DB_PATH = path.join(scratch, 'asyncat.db');
 process.env.ASYNCAT_DATA_PATH = path.join(scratch, 'data');
 // Learned skills are written under ASYNCAT_HOME; keep them in the scratch folder.
 process.env.ASYNCAT_HOME = path.join(scratch, 'home');
+// Skill suggestions are off unless asked for; this test asks, so it can show
+// a temporary chat still gets none.
+process.env.ASYNCAT_SUGGEST_SKILLS = 'on';
 
 const { default: db } = await import('../src/db/client.js');
 const { initializeAgent } = await import('../src/agent/index.js');
@@ -35,6 +38,8 @@ const userId = randomUUID();
 const workspaceId = randomUUID();
 db.prepare("INSERT INTO users (id, email, name) VALUES (?, 'demo@example.test', 'Demo')").run(userId);
 db.prepare("INSERT INTO workspaces (id, name, owner_id) VALUES (?, 'Home', ?)").run(workspaceId, userId);
+const savedChatId = randomUUID();
+db.prepare("INSERT INTO conversations (id, user_id, workspace_id, title) VALUES (?, ?, ?, 'Fruit notes')").run(savedChatId, userId, workspaceId);
 
 function makeFolder(name) {
   const folder = path.join(scratch, name);
@@ -98,7 +103,7 @@ async function runOnce({ ephemeral }) {
     ephemeral,
     onEvent: (event) => events.push(event),
     // The temporary chat names a chat that was never saved; its usage must not.
-    usageContext: { operation: 'agent', conversationId: ephemeral ? 'unsaved-chat' : null, userMessageId: 'u1', assistantMessageId: 'a1' },
+    usageContext: { operation: 'agent', conversationId: ephemeral ? 'unsaved-chat' : savedChatId, userMessageId: 'u1', assistantMessageId: 'a1' },
   });
   const history = [
     { role: 'user', content: 'Summarise my garden notes' },
@@ -106,7 +111,7 @@ async function runOnce({ ephemeral }) {
     { role: 'user', content: 'Actually, use the fruit notes in this folder instead' },
   ];
   const result = await runtime.run('Write a summary of the fruit notes in this folder to summary.md', history);
-  // Memory extraction and skill synthesis run after the answer, unawaited.
+  // Memory extraction and the skill suggestion run after the answer, unawaited.
   await new Promise((resolve) => setTimeout(resolve, 150));
   return { result, folder, asked, events };
 }
@@ -126,6 +131,7 @@ test('a temporary chat runs normally but leaves nothing behind', async () => {
   assert.equal(count("SELECT COUNT(*) AS n FROM agent_sessions_fts WHERE agent_sessions_fts MATCH 'fruit'"), 0, 'nothing in the search index');
   assert.equal(count('SELECT COUNT(*) AS n FROM agent_tool_audit'), 0, 'no tool audit');
   assert.equal(count('SELECT COUNT(*) AS n FROM agent_memory'), 0, 'no memories or corrections');
+  assert.equal(count('SELECT COUNT(*) AS n FROM agent_skill_suggestions'), 0, 'no skill suggestions');
   assert.equal(count('SELECT COUNT(*) AS n FROM agent_checkpoints'), 0, 'no saved checkpoint');
   assert.deepEqual(skillFiles(), [], 'no learned skills');
   assert.equal(listCheckpoints().length, 0, 'the checkpoint is gone once the run ends');
@@ -192,7 +198,7 @@ test('the same run without the flag is saved and learned from', async () => {
   db.prepare('DELETE FROM ai_model_usage_events').run();
   const { result } = await runOnce({ ephemeral: false });
   const deadline = Date.now() + 3000;
-  while ((count('SELECT COUNT(*) AS n FROM agent_memory WHERE source = ?', 'auto') === 0 || skillFiles().length === 0) && Date.now() < deadline) {
+  while ((count('SELECT COUNT(*) AS n FROM agent_memory WHERE source = ?', 'auto') === 0 || count('SELECT COUNT(*) AS n FROM agent_skill_suggestions') === 0) && Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
 
@@ -201,5 +207,6 @@ test('the same run without the flag is saved and learned from', async () => {
   assert.ok(count('SELECT COUNT(*) AS n FROM agent_memory WHERE source = ?', 'auto') > 0, 'memories are extracted');
   assert.ok(count('SELECT COUNT(*) AS n FROM agent_memory WHERE source = ?', 'correction') > 0, 'the correction is learned');
   assert.ok(count('SELECT COUNT(*) AS n FROM agent_checkpoints') > 0, 'the checkpoint is kept for undo');
-  assert.ok(skillFiles().length > 0, 'a skill is synthesised');
+  assert.equal(count('SELECT COUNT(*) AS n FROM agent_skill_suggestions WHERE conversation_id = ?', savedChatId), 1, 'a skill is suggested');
+  assert.deepEqual(skillFiles(), [], 'but not written until the user saves it');
 });

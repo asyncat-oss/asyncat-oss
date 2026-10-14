@@ -16,7 +16,9 @@ import { permissionManager, PermissionManager } from './PermissionManager.js';
 import { AgentSession } from './AgentSession.js';
 import { buildAgentSystemPrompt, loadSoul } from './prompts/agentSystemPrompt.js';
 import { Compactor } from './Compactor.js';
-import { normalizeTags, selectRelevantSkillsWithLlm, synthesizeSkillFromRun } from './skills.js';
+import { normalizeTags, selectRelevantSkillsWithLlm } from './skills.js';
+import { learningSettings } from './learningSettings.js';
+import { suggestSkillFromRun } from './skillSuggestions.js';
 import { listMemories, searchMemories, enforceMemoryCap, decayMemoryImportance, memoryProjectFor, memoryCatFor } from './tools/memoryTools.js';
 import { currentCatRun } from './scheduledRunContext.js';
 import { memoryConsolidator } from './MemoryConsolidator.js';
@@ -320,7 +322,7 @@ export class AgentRuntime {
     this.session = null;
     // A temporary chat: the session, tool audit and checkpoint live only in
     // memory for the run, and nothing is learned from it (no memories,
-    // skills or corrections; usage keeps only counts).
+    // skill suggestions or corrections; usage keeps only counts).
     this.ephemeral = opts.ephemeral === true;
     this.continueSessionId = this.ephemeral ? null : (opts.continueSessionId || null);
     this.soulOverride = opts.soul || null;
@@ -421,6 +423,9 @@ export class AgentRuntime {
     let conversationToolStart = 0;
     const reasoningEvents = [];
     this.currentGoal = goal;
+    // What this run may learn (Settings → Privacy & safety → Learning from
+    // chats). A temporary chat learns nothing.
+    this.learning = this.ephemeral ? { rememberChats: false, suggestSkills: false } : learningSettings();
 
     this._throwIfAborted();
 
@@ -571,10 +576,11 @@ export class AgentRuntime {
       capabilitiesSection: this.capabilitiesSection,
       temporalContext: this._buildTemporalContext(),
       temporary: this.ephemeral,
+      rememberChats: this.learning.rememberChats,
     }) + (this.knowledgeContext ? `\n\n${this.knowledgeContext}` : '');
 
     // Auto-detect and store corrections from user's latest message in continued conversations
-    if (conversationHistory.length > 0 && !this.ephemeral) {
+    if (conversationHistory.length > 0 && this.learning.rememberChats) {
       this._extractCorrections(goal, conversationHistory);
     }
 
@@ -1460,16 +1466,20 @@ export class AgentRuntime {
       console.error('[agent] Post-run memory extraction failed:', err.message)
     );
 
-    // Post-run skill synthesis — if the run was non-trivial and successful,
-    // ask the LLM if a reusable skill can be extracted and saved for future runs.
-    if (!this.ephemeral) {
-      synthesizeSkillFromRun({
+    // "Save this as a skill?" — when the user asked for suggestions, a chat
+    // run that worked through a task is drafted into a skill. Nothing is
+    // written until they pick Save on the card in the chat.
+    if (this.learning.suggestSkills && this.usageContext?.operation === 'agent' && stopReason === 'answer') {
+      suggestSkillFromRun({
         aiClient: this.aiClient,
         model: this.model,
+        userId: this.userId,
+        conversationId: this.usageContext.conversationId || null,
+        messageId: this.usageContext.assistantMessageId || null,
         goal,
         toolHistory: this.session.toolHistory,
         answer,
-      }).catch(err => console.error('[agent] Post-run skill synthesis failed:', err.message));
+      }).catch(err => console.error('[agent] Post-run skill suggestion failed:', err.message));
     }
 
     return { answer, stopReason, session: this.session, toolCalls: this.session.toolHistory };
@@ -2768,7 +2778,7 @@ export class AgentRuntime {
    * durable facts from the conversation that should be remembered.
    */
   async _extractMemories(goal, answer, messages) {
-    if (this.ephemeral) return;
+    if (this.ephemeral || !this.learning?.rememberChats) return;
     if (!this.aiClient?.messages?.create && !this.aiClient?.client?.chat?.completions?.create) return;
     if (!answer || answer.length < 50) return;
     if ((this.session?.toolHistory?.length || 0) < 2) return;
