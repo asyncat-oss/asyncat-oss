@@ -61,7 +61,7 @@ function ScheduleFields({ schedule, onChange, idPrefix }) {
   try { preview = describeSchedule(scheduleFromForm(form)); } catch (err) { preview = err.message; }
   return (
     <div className="space-y-2.5">
-      <Segmented label="How often" value={form.cron ? '' : form.kind} onChange={(kind) => set({ kind, cron: '' })} items={SCHEDULE_KINDS} className="flex-wrap" />
+      <Segmented label="How often" role="radiogroup" value={form.cron ? '' : form.kind} onChange={(kind) => set({ kind, cron: '' })} items={SCHEDULE_KINDS} className="flex-wrap" />
       {form.cron ? null : (
         <div className="flex flex-wrap items-end gap-3">
           {form.kind === 'once' ? (

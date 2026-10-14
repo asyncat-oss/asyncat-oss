@@ -48,27 +48,56 @@ Tabs.propTypes = {
   label: PropTypes.string,
 };
 
+const SEGMENT_SIZES = {
+  md: { track: 'gap-0.5 rounded-xl p-1', item: 'h-7 gap-1.5 rounded-lg px-3 text-[13px]', icon: 'h-3.5 w-3.5' },
+  sm: { track: 'gap-0.5 rounded-lg p-0.5', item: 'h-6 gap-1 rounded-md px-2.5 text-[12px]', icon: 'h-3 w-3' },
+};
+const NEXT = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
+
 /**
- * A compact switch between a few views inside one page.
+ * A compact switch between a few choices.
  *   <Segmented value={view} onChange={setView} items={[{ value: 'connected', label: 'Connected' }]} />
+ *
+ * `role="tablist"` (the default) when it switches views on the page;
+ * `role="radiogroup"` when it holds a setting. Arrow keys, Home and End move
+ * the choice. `size="sm"` is the compact one for dense rows.
  */
-export function Segmented({ value, onChange, items, className = '', label }) {
+export function Segmented({ value, onChange, items, className = '', label, size = 'md', role = 'tablist' }) {
+  const look = SEGMENT_SIZES[size] || SEGMENT_SIZES.md;
+  const radio = role === 'radiogroup';
+  const current = items.findIndex((item) => item.value === value);
+
+  const onKeyDown = (event) => {
+    const index = Math.max(current, 0);
+    let next = null;
+    if (event.key in NEXT) next = (index + NEXT[event.key] + items.length) % items.length;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = items.length - 1;
+    if (next === null) return;
+    event.preventDefault();
+    onChange(items[next].value);
+    event.currentTarget.querySelectorAll('[data-segment]')[next]?.focus();
+  };
+
   return (
-    <div role="tablist" aria-label={label} className={`inline-flex items-center gap-0.5 rounded-xl bg-hover p-1 ${className}`}>
-      {items.map(({ value: itemValue, label: itemLabel, icon: Icon, meta }) => {
+    <div role={radio ? 'radiogroup' : 'tablist'} aria-label={label} onKeyDown={onKeyDown} className={`inline-flex items-center bg-hover ${look.track} ${className}`}>
+      {items.map(({ value: itemValue, label: itemLabel, icon: Icon, meta }, index) => {
         const active = itemValue === value;
         return (
           <button
             key={itemValue}
             type="button"
-            role="tab"
-            aria-selected={active}
+            role={radio ? 'radio' : 'tab'}
+            aria-selected={radio ? undefined : active}
+            aria-checked={radio ? active : undefined}
+            tabIndex={active || (current === -1 && index === 0) ? 0 : -1}
+            data-segment
             onClick={() => onChange(itemValue)}
-            className={`flex h-7 items-center gap-1.5 rounded-lg px-3 text-[13px] font-medium outline-none transition-[background-color,color,box-shadow] focus-visible:ring-2 focus-visible:ring-accent/40 ${
+            className={`flex items-center font-medium outline-none transition-[background-color,color,box-shadow] focus-visible:ring-2 focus-visible:ring-accent/40 ${look.item} ${
               active ? 'bg-elevated text-fg shadow-sm ring-1 ring-line' : 'text-fg-muted hover:text-fg'
             }`}
           >
-            {Icon ? <Icon className="h-3.5 w-3.5" strokeWidth={1.75} /> : null}
+            {Icon ? <Icon className={look.icon} strokeWidth={1.75} /> : null}
             {itemLabel}
             {meta ? <span className="text-[11px] tabular-nums text-fg-subtle">{meta}</span> : null}
           </button>
@@ -78,4 +107,8 @@ export function Segmented({ value, onChange, items, className = '', label }) {
   );
 }
 
-Segmented.propTypes = Tabs.propTypes;
+Segmented.propTypes = {
+  ...Tabs.propTypes,
+  size: PropTypes.oneOf(['md', 'sm']),
+  role: PropTypes.oneOf(['tablist', 'radiogroup']),
+};

@@ -157,6 +157,8 @@ export default function ProviderConnectDialog({ entry = null, profile = null, ca
               <Segmented
                 value={providerId}
                 onChange={chooseVariant}
+                label={entry.variantLabel || 'Variant'}
+                role="radiogroup"
                 items={variants.map(({ preset: item, label }) => ({ value: item.providerId, label }))}
               />
             ) : (

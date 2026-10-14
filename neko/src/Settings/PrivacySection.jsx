@@ -266,6 +266,7 @@ export default function PrivacySection() {
               onChange={changeMode}
               items={[{ value: 'last', label: 'Last used' }, { value: 'plan', label: 'Plan' }, { value: 'action', label: 'Action' }]}
               label="New chats start in"
+              role="radiogroup"
             />
           </SettingsRow>
           <CommandSandbox />
