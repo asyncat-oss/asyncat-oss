@@ -14,8 +14,9 @@ import { imageModelDefaults } from '../../../media/imageCatalog.js';
 const execFileAsync = promisify(execFile);
 const IS_WIN = process.platform === 'win32';
 // Image generations in progress (each is an `sd` process that can run for
-// minutes), so the backend can stop them when it shuts down.
-const activeGenerations = new Set();
+// minutes) and the model each one draws with, so the backend can stop them
+// when it shuts down and a model can't be deleted while it is drawing.
+const activeGenerations = new Map();
 const GENERATED_DIR = runtimeGeneratedImagesPath();
 const GENERATION_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -147,9 +148,14 @@ function imageModelChoices() {
     }));
 }
 
+/** The model files pictures are being made with right now. */
+export function imageModelsInUse() {
+  return [...new Set(activeGenerations.values())];
+}
+
 /** Stop every image generation in progress (used when the backend shuts down). */
 export async function stopSdCpp({ graceMs = 3000 } = {}) {
-  const children = [...activeGenerations];
+  const children = [...activeGenerations.keys()];
   await Promise.all(children.map(child => new Promise((resolve) => {
     if (child.exitCode !== null || child.signalCode) {
       resolve();
@@ -258,7 +264,7 @@ export async function generateSdCppImage(options = {}) {
     timeout: GENERATION_TIMEOUT_MS,
     maxBuffer: 1024 * 1024 * 8,
   });
-  activeGenerations.add(running.child);
+  activeGenerations.set(running.child, modelPath);
   try {
     const result = await running;
     stderr = result.stderr || '';

@@ -13,6 +13,7 @@ import { managedTrainingPythonPath } from '../lib/trainingEngine.js';
 import { buildDataset, datasetsDir, trainingSources } from './trainingData.js';
 import { GUIDED_MODELS, guidedModel, planFor, recommendModel } from './trainingPlan.js';
 import { compareAnswers, convertAdapter, getAdapter, listAdapters, removeAdapter, setAdapterActive } from './adapters.js';
+import { modelInUse } from '../storage/modelLocks.js';
 
 const router = express.Router();
 
@@ -181,9 +182,8 @@ router.post('/adapters/:id/active', (req, res) => {
 
 router.delete('/adapters/:id', (req, res) => {
   try {
-    if (llamaStatus().adapter?.id === req.params.id) {
-      return res.status(409).json({ success: false, error: 'That adapter is loaded. Load the model without it first.' });
-    }
+    const inUse = modelInUse('adapter', req.params.id);
+    if (inUse) return res.status(409).json({ success: false, code: 'IN_USE', error: inUse });
     if (!removeAdapter(req.params.id)) return res.status(404).json({ success: false, error: 'That adapter was not found.' });
     res.json({ success: true });
   } catch (err) {

@@ -345,9 +345,13 @@ export function listAllAudioModels() {
 
 // ── Delete ─────────────────────────────────────────────────────────────────────
 
+/** The file deleteAudioModel removes (a TTS voice's .json settings go with it). */
+export function audioModelFile(filename, type) {
+  return path.join(type === 'whisper' ? WHISPER_DIR : TTS_DIR, path.basename(String(filename)));
+}
+
 export function deleteAudioModel(filename, type) {
-  const dir = type === 'whisper' ? WHISPER_DIR : TTS_DIR;
-  const filePath = path.join(dir, path.basename(filename));
+  const filePath = audioModelFile(filename, type);
   if (!fs.existsSync(filePath)) {
     throw new Error(`Audio model not found: ${filename}`);
   }

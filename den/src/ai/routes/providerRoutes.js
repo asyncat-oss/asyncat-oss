@@ -65,6 +65,7 @@ import {
 } from '../controllers/ai/mlxServerManager.js';
 import {
   listAllAudioModels,
+  audioModelFile,
   deleteAudioModel,
   deleteCustomAudioPath,
   clearCache as clearAudioCache,
@@ -72,6 +73,7 @@ import {
 import {
   listVisualModels,
   deleteVisualModel,
+  visualModelFile,
   clearCache as clearVisualCache,
 } from '../controllers/ai/visualModelManager.js';
 import {
@@ -99,6 +101,7 @@ import {
   synthesize as ttsSynthesize,
 } from '../controllers/ai/ttsServerManager.js';
 import db from '../../db/client.js';
+import { modelInUse } from '../../storage/modelLocks.js';
 import { sealSecret } from '../../lib/secretBox.js';
 import { setConfigValue } from '../../config/appConfig.js';
 import { asyncatHome, listManagedRuntimes, managedEnginesDiskUsage, planManagedRuntimeInstall, removeManagedRuntime } from '../../lib/localEngine.js';
@@ -810,10 +813,19 @@ router.get('/local-models', (req, res) => {
   }
 });
 
+// Deleting a model that is loaded, drawing a picture or still downloading is
+// refused with 409 IN_USE (storage/modelLocks.js), here as in Files.
+function refuseIfInUse(res, type, file) {
+  const reason = modelInUse(type, file);
+  if (reason) res.status(409).json({ success: false, code: 'IN_USE', error: reason });
+  return Boolean(reason);
+}
+
 // ── DELETE /local-models/:filename — delete a model file ─────────────────────
 router.delete('/local-models/:filename', (req, res) => {
   try {
     const { filename } = req.params;
+    if (refuseIfInUse(res, 'llm', path.join(MODELS_DIR, path.basename(filename)))) return;
     deleteModel(filename);
     clearGgufCache();
     res.json({ success: true, message: `Deleted ${filename}` });
@@ -1098,6 +1110,7 @@ router.delete('/visual/models/:id', (req, res) => {
     if (type !== 'vision' && type !== 'image') {
       return res.status(400).json({ success: false, error: 'type query must be "vision" or "image"' });
     }
+    if (refuseIfInUse(res, type, visualModelFile(id, type))) return;
     deleteVisualModel(id, type);
     res.json({ success: true, message: 'Visual model removed' });
   } catch (err) {
@@ -1208,6 +1221,7 @@ router.delete('/audio/models/:id', (req, res) => {
   const { type } = req.query;
   try {
     if (type) {
+      if (refuseIfInUse(res, type, audioModelFile(id, type))) return;
       deleteAudioModel(id, type);
     } else {
       // Try to delete from custom paths

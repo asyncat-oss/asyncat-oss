@@ -187,17 +187,23 @@ export function listVisualModels() {
   return cachedVisualModels;
 }
 
+/** The file deleteVisualModel removes, or null for a model added from another folder (only forgotten). */
+export function visualModelFile(id, type) {
+  if (!TYPE_CONFIG[type]) return null;
+  if (db.prepare('SELECT id FROM custom_model_paths WHERE id = ? AND type = ?').get(id, type)) return null;
+  return path.join(TYPE_CONFIG[type].dir, path.basename(String(id)));
+}
+
 export function deleteVisualModel(id, type) {
   if (!TYPE_CONFIG[type]) throw new Error('Type must be "vision" or "image"');
 
-  const external = db.prepare('SELECT id FROM custom_model_paths WHERE id = ? AND type = ?').get(id, type);
-  if (external) {
+  const filePath = visualModelFile(id, type);
+  if (!filePath) {
     db.prepare('DELETE FROM custom_model_paths WHERE id = ? AND type = ?').run(id, type);
     clearCache(type);
     return { success: true };
   }
 
-  const filePath = path.join(TYPE_CONFIG[type].dir, path.basename(id));
   if (!fs.existsSync(filePath)) throw new Error(`Visual model not found: ${id}`);
   fs.unlinkSync(filePath);
   clearCache(type);
