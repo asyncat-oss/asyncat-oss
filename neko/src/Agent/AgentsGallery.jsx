@@ -4,7 +4,7 @@ import { MessageSquare, Pencil, Plus } from 'lucide-react';
 import Button from '../components/ui/Button';
 import { useCommandCenter } from '../CommandCenter/context/CommandCenterContextEnhanced';
 import AgentAvatar from './AgentAvatar.jsx';
-import { AGENT_TEMPLATES } from './AgentEditor.jsx';
+import { AGENT_TEMPLATES } from './agentTemplates.js';
 import { useAgents } from './useAgents.js';
 
 /** The user's agents as cards, plus templates to start from. */
