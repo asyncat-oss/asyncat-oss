@@ -11,7 +11,7 @@ when_to_use: |
 # Cron Jobs
 
 For something Asyncat itself should do on a schedule ("every weekday at 8am,
-summarise my email"), use a scheduled task (`create_scheduled_task`) instead.
+summarise my email"), make a Cat (`create_cat`) instead.
 
 ## Cron Format
 ```

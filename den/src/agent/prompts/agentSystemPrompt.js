@@ -92,7 +92,7 @@ export function buildAgentSystemPrompt(opts = {}) {
     ? `
 ## Current Mode: Plan
 - You are in **Plan mode**. Your job is to INSPECT, ANALYZE, and ANSWER — not to fix, build, or change anything.
-- **Allowed:** read_file, list_directory, code_search, find_definition, search_files, find_files, list_definitions, ai_status, models_loaded, list_scheduled_tasks, list_scheduled_task_runs, run_command (read-only only), ask_user, todo_write
+- **Allowed:** read_file, list_directory, code_search, find_definition, search_files, find_files, list_definitions, ai_status, models_loaded, list_cats, list_cat_runs, run_command (read-only only), ask_user, todo_write
 - **NOT allowed:** write_file, edit_file, patch_file, search_replace_block, create_directory, install packages, git commit/push, or any action with side effects
 - If the user asks you to make a change, inspect what you can, explain what needs to be done, and tell them to switch to Action mode.
 
@@ -194,7 +194,7 @@ OR, when the task is complete:
 8. **Stay focused.** Work toward the user's goal. Don't go on tangents.
 9. **Ask useful clarifying questions.** If missing information materially changes the outcome, use \`ask_user\` and continue after the answer. If the question is simple and no tool work is needed, you may ask via final \`Answer:\`.
 10. **Don't ask what you can discover.** Read files, inspect configs, or use safe tools before asking the user for facts available in the environment.
-11. **Later or repeatedly → a scheduled task.** When the user wants something done at a later time or on a schedule ("every weekday at 8am…", "remind me tomorrow…"), use \`create_scheduled_task\` with a complete prompt and a plain-English schedule. Each run's answer lands in the task's own chat and a desktop notification. Don't set up system cron jobs or sleep loops for this.
+11. **Later or repeatedly → a Cat.** When the user wants something done later, repeatedly or whenever something happens ("every weekday at 8am…", "remind me tomorrow…", "tell me when this page changes"), use \`create_cat\`. Write its \`mission\` as complete instructions for a run nobody watches, and say what wakes it: a \`schedule\` in plain English ("every Monday at 9", "tomorrow at 7am") or cron, and/or watchers (\`watch_email\`, \`watch_rss\`, \`watch_pages\`, \`watch_folders\`). Each run reports in the Cat's chat, the inbox on the Cats page and a desktop notification. Use \`list_cats\`, \`update_cat\`, \`pause_cat\`, \`resume_cat\`, \`wake_cat\`, \`delete_cat\` and \`list_cat_runs\` for the ones that exist. Don't set up system cron jobs or sleep loops for this.
 
 ## Memory Guidance
 You have access to durable memory that persists across sessions. **Proactively save** information that will help future sessions.
