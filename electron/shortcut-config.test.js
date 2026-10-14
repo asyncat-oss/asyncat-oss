@@ -6,6 +6,8 @@ import {
   normalizeAccelerator,
   mergeShortcutConfig,
   applyShortcutUpdate,
+  shellArg,
+  quickAskCommand,
 } from './shortcut-config.js';
 
 test('accelerators are normalized to canonical Electron names', () => {
@@ -52,4 +54,21 @@ test('updates that would break things are refused with a reason', () => {
   // Clashing with a shortcut that is turned off is fine.
   const offConfig = applyShortcutUpdate(config, 'toggleWindow', { enabled: false }).config;
   assert.ok(applyShortcutUpdate(offConfig, 'quickAsk', { accelerator: 'CmdOrCtrl+Shift+A' }).config);
+});
+
+test('the Quick ask command quotes paths with spaces so a shell keeps them whole', () => {
+  assert.equal(shellArg('/opt/Asyncat/asyncat'), '/opt/Asyncat/asyncat');
+  assert.equal(shellArg('/media/My Apps/Asyncat.AppImage'), '"/media/My Apps/Asyncat.AppImage"');
+  assert.equal(shellArg('/tmp/a "b" $c`d`\\e'), '"/tmp/a \\"b\\" \\$c\\`d\\`\\\\e"');
+  assert.equal(shellArg(''), '""');
+
+  assert.equal(
+    quickAskCommand({ packaged: true, appImage: '/media/My Apps/Asyncat.AppImage', execPath: '/tmp/.mount_x/asyncat' }),
+    '"/media/My Apps/Asyncat.AppImage" --quick-ask',
+  );
+  assert.equal(quickAskCommand({ packaged: true, execPath: '/opt/Asyncat/asyncat' }), '/opt/Asyncat/asyncat --quick-ask');
+  assert.equal(
+    quickAskCommand({ packaged: false, execPath: '/src/node_modules/electron/dist/electron', appPath: '/src/my app' }),
+    '/src/node_modules/electron/dist/electron "/src/my app" --quick-ask',
+  );
 });

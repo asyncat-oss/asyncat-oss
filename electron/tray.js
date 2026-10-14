@@ -3,6 +3,7 @@ import { Tray, Menu, nativeImage } from 'electron';
 import { ICONS, IS_LINUX, IS_MAC } from './constants.js';
 import { getMainWindow } from './window.js';
 import { isBackendRunning } from './backend.js';
+import { trayMenuTemplate } from './tray-menu.js';
 
 let tray = null;
 let _callbacks = {};
@@ -13,24 +14,24 @@ let _callbacks = {};
  * @param {Function} opts.onQuit
  * @param {Function} opts.onShow — Called with an optional in-app route
  * @param {Function} opts.onRestartBackend
- * @param {Function} opts.onTrayClick — Called with (tray) on left-click
+ * @param {Function} opts.onQuickAsk — Opens Quick ask (left-click, and the Linux menu)
  */
-export function createTray({ onQuit, onShow, onRestartBackend, onTrayClick }) {
+export function createTray({ onQuit, onShow, onRestartBackend, onQuickAsk }) {
   if (tray) return tray;
 
-  _callbacks = { onQuit, onShow, onRestartBackend, onTrayClick };
+  _callbacks = { onQuit, onShow, onRestartBackend, onQuickAsk };
 
   const icon = nativeImage.createFromPath(ICONS.tray);
   const trayIcon = IS_MAC ? icon.resize({ width: 18, height: 18 }) : icon;
 
   tray = new Tray(trayIcon);
-  tray.setToolTip('Asyncat — AI Agent OS');
+  tray.setToolTip('Asyncat');
 
   // macOS: setContextMenu fires on both left AND right click — don't use it.
-  // Handle each side explicitly so left-click is always the popup.
+  // Handle each side explicitly so left-click is always Quick ask.
   tray.on('click', () => {
-    if (onTrayClick) {
-      onTrayClick(tray);
+    if (onQuickAsk) {
+      onQuickAsk();
     } else {
       const win = getMainWindow();
       if (win) { win.isVisible() ? win.focus() : win.show(); }
@@ -67,43 +68,26 @@ export function setAgentRunCount(count) {
   if (count > 0) {
     tray.setToolTip(`Asyncat — ${count} agent run${count > 1 ? 's' : ''} active`);
   } else {
-    tray.setToolTip('Asyncat — AI Agent OS');
+    tray.setToolTip('Asyncat');
   }
 }
 
 function buildContextMenu() {
-  const backendRunning = isBackendRunning();
-  const { onQuit, onShow, onRestartBackend, onTrayClick } = _callbacks;
+  const { onQuit, onShow, onRestartBackend, onQuickAsk } = _callbacks;
 
-  return Menu.buildFromTemplate([
-    {
-      label: 'Show Asyncat',
-      click: () => {
-        const win = getMainWindow();
-        if (win) { win.show(); win.focus(); }
-        else if (onShow) { onShow(); }
-      },
+  return Menu.buildFromTemplate(trayMenuTemplate({
+    backendRunning: isBackendRunning(),
+    showQuickAsk: IS_LINUX,
+    onShowWindow: () => {
+      const win = getMainWindow();
+      if (win) { win.show(); win.focus(); }
+      else if (onShow) { onShow(); }
     },
-    ...(IS_LINUX && onTrayClick ? [{ label: 'Quick chat', click: () => onTrayClick(null) }] : []),
-    {
-      label: 'Cats',
-      click: () => onShow?.('/cats'),
-    },
-    { type: 'separator' },
-    {
-      label: `Backend: ${backendRunning ? '✅ Running' : '❌ Stopped'}`,
-      enabled: false,
-    },
-    {
-      label: 'Restart Backend',
-      click: () => onRestartBackend?.(),
-    },
-    { type: 'separator' },
-    {
-      label: 'Quit Asyncat',
-      click: () => onQuit?.(),
-    },
-  ]);
+    onQuickAsk,
+    onShow,
+    onRestartBackend,
+    onQuit,
+  }));
 }
 
 /**

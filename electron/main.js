@@ -10,9 +10,13 @@ import { app, ipcMain, globalShortcut, Notification, dialog, shell, nativeImage,
 import { IS_MAC, IS_WIN, APP_NAME, WINDOWS_APP_ID, ICONS, BACKEND_PORT, NEKO_DIST, FRONTEND_PORT, USER_DATA } from './constants.js';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
-import { togglePopup, closePopup } from './popup.js';
+import {
+  initQuick, toggleQuick, showQuick, hideQuick, destroyQuick, isQuickSender, markQuickReady,
+  resizeQuick, setQuickState, setQuickBackground,
+} from './quick.js';
 import { reportBootResult, setupAutoUpdater, setupUpdaterIPC } from './updater.js';
 import { initShortcuts, registerShortcutIPC } from './shortcuts.js';
+import { quickAskCommand } from './shortcut-config.js';
 import { startBackend, stopBackend, isBackendRunning } from './backend.js';
 import { postHostEvent, registerHostHandler, startHostBridge, stopHostBridge } from './hostBridge.js';
 import { keepRunningAfterClose, noteKeptRunning, registerBackgroundIPC, setEnabledTaskCount, startsHidden } from './background.js';
@@ -46,7 +50,13 @@ const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, argv = []) => {
+    // `asyncat --quick-ask` (a desktop keyboard binding, e.g. on Wayland
+    // where global shortcuts may not reach the app) opens Quick ask.
+    if (argv.includes('--quick-ask')) {
+      toggleQuick();
+      return;
+    }
     const win = getMainWindow();
     if (win) {
       if (win.isMinimized()) win.restore();
@@ -80,8 +90,8 @@ app.on('activate', () => {
 
 // ─── IPC Handlers ─────────────────────────────────────────────────────────────
 
-// Text for a new chat in the main window (the popup, File → New Chat). A
-// window that is still loading takes it once the app has started.
+// Text for a new chat in the main window (Quick ask's Ctrl+Enter, File → New
+// Chat). A window that is still loading takes it once the app has started.
 let pendingCompose = null;
 const COMPOSE_TTL_MS = 60 * 1000;
 
@@ -98,13 +108,26 @@ function composeInApp(text = '') {
   }
 }
 
-function setupPopupIPC() {
-  ipcMain.handle('popup:status', () => ({ running: isBackendRunning() }));
+function setupQuickIPC() {
+  initQuick({ ensureFrontend });
 
-  ipcMain.on('popup:new-chat', (_e, text) => {
-    closePopup();
+  // Only the Quick ask window may use these.
+  const fromQuick = (handler) => (event, ...args) => {
+    if (isQuickSender(event.sender)) handler(...args);
+  };
+  ipcMain.on('quick:ready', fromQuick(() => markQuickReady()));
+  ipcMain.on('quick:resize', fromQuick((height) => resizeQuick(height)));
+  ipcMain.on('quick:state', fromQuick((state) => setQuickState(state)));
+  ipcMain.on('quick:background', fromQuick((color) => setQuickBackground(color)));
+  ipcMain.on('quick:hide', fromQuick(() => hideQuick()));
+  ipcMain.on('quick:open-in-app', fromQuick((route) => {
+    hideQuick();
+    bootApp(typeof route === 'string' ? route : '');
+  }));
+  ipcMain.on('quick:send-to-app', fromQuick((text) => {
+    hideQuick();
     composeInApp(typeof text === 'string' ? text : '');
-  });
+  }));
 
   // The main window asks once it has started (see AppLayout).
   ipcMain.handle('app:take-compose', () => {
@@ -113,16 +136,18 @@ function setupPopupIPC() {
     return waiting && Date.now() - waiting.at < COMPOSE_TTL_MS ? waiting : null;
   });
 
-  ipcMain.on('popup:open-app', () => {
-    closePopup();
-    const win = getMainWindow();
-    if (win) { win.show(); win.focus(); }
-    else { bootApp(); }
-  });
-
-  ipcMain.on('popup:quit', () => {
-    closePopup();
-    quitApp();
+  // For Settings: the command a desktop keyboard binding can run instead of
+  // the global shortcut (Wayland desktops may not pass those to apps).
+  ipcMain.handle('app:quick-ask-command', () => {
+    const command = quickAskCommand({
+      packaged: app.isPackaged,
+      appImage: process.env.APPIMAGE,
+      execPath: process.execPath,
+      appPath: app.getAppPath(),
+    });
+    const wayland = process.platform === 'linux'
+      && (process.env.XDG_SESSION_TYPE === 'wayland' || Boolean(process.env.WAYLAND_DISPLAY));
+    return { command, wayland };
   });
 }
 
@@ -393,6 +418,7 @@ function refreshTray() {
 // are blocked by the browser when loaded from file:// (cross-origin).
 
 let frontendServer = null;
+let frontendOrigin = null; // see ensureFrontend
 
 const MIME_TYPES = {
   '.html': 'text/html',
@@ -461,11 +487,32 @@ function startFrontendServer() {
 }
 
 function stopFrontendServer() {
+  frontendOrigin = null;
   return new Promise((resolve) => {
     if (!frontendServer) { resolve(); return; }
     frontendServer.close(() => resolve());
     frontendServer = null;
   });
+}
+
+// The app's origin: the Vite dev server when one is running, otherwise the
+// static server (started on first use). Quick ask loads from the same origin
+// as the main window, so both share the theme and other saved settings.
+function ensureFrontend() {
+  if (!frontendOrigin) {
+    frontendOrigin = (async () => {
+      // Vite binds to whatever "localhost" resolves to, which is ::1 on many Linux systems.
+      const viteRunning = await isPortListening(FRONTEND_PORT, 'localhost');
+      if (!viteRunning) {
+        console.log('[Asyncat] No Vite dev server detected, starting static frontend server...');
+        await startFrontendServer();
+      } else {
+        console.log('[Asyncat] Vite dev server detected on port', FRONTEND_PORT);
+      }
+      return `http://${viteRunning ? 'localhost' : '127.0.0.1'}:${FRONTEND_PORT}`;
+    })();
+  }
+  return frontendOrigin;
 }
 
 // ─── Boot Sequence ────────────────────────────────────────────────────────────
@@ -538,19 +585,10 @@ async function bootApp(initialRoute = '') {
     }
   }
 
-  // 3. Start the frontend server if no dev server is running on the frontend port.
-  // Vite binds to whatever "localhost" resolves to, which is ::1 on many Linux systems.
-  const viteRunning = await isPortListening(FRONTEND_PORT, 'localhost');
-  if (!viteRunning) {
-    console.log('[Asyncat] No Vite dev server detected, starting static frontend server...');
-    await startFrontendServer();
-  } else {
-    console.log('[Asyncat] Vite dev server detected on port', FRONTEND_PORT);
-  }
-
-  // 4. Load the frontend (always via HTTP to avoid file:// CORS issues)
-  const frontendHost = viteRunning ? 'localhost' : '127.0.0.1';
-  win.loadURL(`http://${frontendHost}:${FRONTEND_PORT}${route}`);
+  // 3. Start the frontend server if no dev server is running on the frontend port,
+  // then load the frontend (always via HTTP to avoid file:// CORS issues).
+  const origin = await ensureFrontend();
+  win.loadURL(`${origin}${route}`);
 
   refreshTray();
   setupHostBridge();
@@ -610,6 +648,8 @@ async function quitApp() {
 
   // Unregister global shortcuts
   globalShortcut.unregisterAll();
+  // Quick ask only hides when asked to close, which would stop the quit.
+  destroyQuick();
 
   // Stop servers gracefully
   stopHostBridge();
@@ -645,7 +685,7 @@ app.whenReady().then(async () => {
   setupTerminalIPC();
   setupBrowserHost({ getMainWindow });
   setupDesktopIPC();
-  setupPopupIPC();
+  setupQuickIPC();
   setupUpdaterIPC();
 
   // Auto-update (packaged builds only — no-op in dev)
@@ -681,13 +721,13 @@ app.whenReady().then(async () => {
       await startBackend();
       refreshTray();
     },
-    onTrayClick: (tray) => togglePopup(tray),
+    onQuickAsk: () => toggleQuick(),
   });
 
   // System-wide shortcuts (defaults Cmd/Ctrl+Shift+Space and Cmd/Ctrl+Shift+A).
   // Users can rebind or turn them off in Settings → Appearance; see shortcuts.js.
   initShortcuts({
-    quickAsk: () => togglePopup(null),
+    quickAsk: () => toggleQuick(),
     toggleWindow: () => {
       const win = getMainWindow();
       if (win) {
@@ -703,9 +743,12 @@ app.whenReady().then(async () => {
     },
   });
 
-  // Boot the app; a login item starts it in the tray without a window.
+  // Boot the app; a login item starts it in the tray without a window, and
+  // `--quick-ask` with just Quick ask.
   // A new version that came up properly keeps itself; see update-rollback.js.
-  reportBootResult(startsHidden() ? await startInBackground() : await bootApp());
+  const quickAskOnly = process.argv.includes('--quick-ask');
+  reportBootResult(startsHidden() || quickAskOnly ? await startInBackground() : await bootApp());
+  if (quickAskOnly) showQuick();
 
   // Spawn the pet overlay if the user enabled it.
   initPet();

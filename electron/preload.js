@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // A new chat, with text to send in it or none (Quick ask's Ctrl+Enter, File → New Chat).
   onCompose: (cb) => subscribe('app:compose', (_event, payload) => cb(payload)),
   takeCompose: () => ipcRenderer.invoke('app:take-compose'),
+  // `<command> --quick-ask` opens Quick ask; Settings shows it on Wayland.
+  getQuickAskCommand: () => ipcRenderer.invoke('app:quick-ask-command'),
 
   // ─── Backend Status ───────────────────────────────────────────────────
   restartBackend:   () => ipcRenderer.invoke('backend:restart'),

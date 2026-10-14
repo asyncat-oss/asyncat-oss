@@ -115,3 +115,23 @@ export function applyShortcutUpdate(config, id, patch = {}) {
 
   return { config: { ...config, [id]: next } };
 }
+
+/**
+ * One part of a command line. Desktops run key bindings through a shell, so a
+ * part with spaces or quotes goes in double quotes; plain paths stay as they are.
+ */
+export function shellArg(value) {
+  const text = String(value ?? '');
+  if (/^[\w@%+=:,./-]+$/.test(text)) return text;
+  return `"${text.replace(/["\\$`]/g, '\\$&')}"`;
+}
+
+/**
+ * The command a desktop keyboard binding can run instead of the Quick ask
+ * shortcut (Wayland desktops may not pass global shortcuts to apps): the
+ * AppImage or the app, or in development Electron and the app folder.
+ */
+export function quickAskCommand({ packaged = false, appImage = '', execPath = '', appPath = '' } = {}) {
+  const parts = packaged ? [appImage || execPath] : [execPath, appPath];
+  return [...parts.map(shellArg), '--quick-ask'].join(' ');
+}
