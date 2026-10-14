@@ -278,7 +278,16 @@ export class HeadlessBrowser {
   async #settle(state, page, before) {
     await sleep(200);
     if (page.url() !== before.url) {
-      await page.waitForFunction(() => document.readyState !== 'loading', { timeout: 10_000, polling: 100 }).catch(() => {});
+      // The wait starts again when the navigation replaces the document it was
+      // running in, so the title is read from the new page, not mid-way.
+      for (let tries = 0; tries < 3; tries += 1) {
+        try {
+          await page.waitForFunction(() => document.readyState !== 'loading', { timeout: 10_000, polling: 100 });
+          break;
+        } catch (err) {
+          if (!/context was destroyed|navigat/i.test(String(err?.message || err))) break;
+        }
+      }
       await sleep(150);
     }
     const result = { ...(await this.#info(page)), navigated: page.url() !== before.url };
