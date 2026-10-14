@@ -283,6 +283,18 @@ export async function voiceSample(voiceId, { userId = null, fetchImpl = globalTh
   return buffer;
 }
 
+// An engine plan that couldn't be made: why, and whether no download for
+// this computer exists at all (then setting up needs the engine installed
+// some other way first).
+const planError = (err) => ({ error: err.message, unavailable: err.code === 'ENGINE_UNAVAILABLE' });
+
+/** What an engine step says besides its size: the build it would get, or why it can't be had. */
+const engineStepDetails = (engine) => ({
+  capability: engine?.capability || null,
+  error: engine?.error || null,
+  unavailable: Boolean(engine?.unavailable),
+});
+
 async function enginePlan(runtimeId) {
   const cached = planCache.get(runtimeId);
   if (cached && Date.now() - cached.at < PLAN_TTL_MS) return cached.plan;
@@ -318,7 +330,7 @@ export async function planVoiceSetup({ listen = true, speak = true, whisperId = 
 
   const steps = [];
   if (listen) {
-    const engine = whisperBinary.found ? null : await enginePlan('whisper').catch((err) => ({ error: err.message }));
+    const engine = whisperBinary.found ? null : await enginePlan('whisper').catch(planError);
     steps.push({
       key: 'whisper-engine',
       type: 'engine',
@@ -327,7 +339,7 @@ export async function planVoiceSetup({ listen = true, speak = true, whisperId = 
       done: Boolean(whisperBinary.found),
       bytes: engine?.downloadBytes || null,
       estimated: Boolean(engine?.estimated),
-      error: engine?.error || null,
+      ...engineStepDetails(engine),
     });
     const target = path.join(WHISPER_DIR, whisperFile);
     steps.push({
@@ -342,7 +354,7 @@ export async function planVoiceSetup({ listen = true, speak = true, whisperId = 
     });
   }
   if (speak) {
-    const engine = piperBinary.found ? null : await enginePlan('piper').catch((err) => ({ error: err.message }));
+    const engine = piperBinary.found ? null : await enginePlan('piper').catch(planError);
     steps.push({
       key: 'piper-engine',
       type: 'engine',
@@ -351,7 +363,7 @@ export async function planVoiceSetup({ listen = true, speak = true, whisperId = 
       done: Boolean(piperBinary.found),
       bytes: engine?.downloadBytes || null,
       estimated: Boolean(engine?.estimated),
-      error: engine?.error || null,
+      ...engineStepDetails(engine),
     });
     const base = piperVoiceBase(voice.id);
     const target = path.join(VOICES_DIR, `${voice.id}.onnx`);

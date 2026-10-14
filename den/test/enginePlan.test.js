@@ -76,6 +76,28 @@ test('a Linux x86_64 build counts as 64-bit, and a 32-bit one is still refused',
   }
 });
 
+test('an engine with no build for this computer says so, apart from a check that failed', async () => {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    tag_name: 'v1.8.0',
+    assets: [{ name: 'whisper-plan9-mips.zip', size: 4_000_000 }, { name: 'SHA256SUMS', size: 300 }],
+  }), { status: 200, headers: { 'content-type': 'application/json' } });
+  try {
+    await assert.rejects(() => planManagedRuntimeInstall('whisper'), (err) => {
+      assert.equal(err.code, 'ENGINE_UNAVAILABLE');
+      assert.match(err.message, /No prebuilt .* download is available/);
+      return true;
+    });
+    globalThis.fetch = async () => new Response('rate limited', { status: 403 });
+    await assert.rejects(() => planManagedRuntimeInstall('whisper'), (err) => {
+      assert.equal(err.code, undefined, 'GitHub saying no may work later');
+      return true;
+    });
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
 test('Python engines give an estimate and ask nothing online', async () => {
   const realFetch = globalThis.fetch;
   globalThis.fetch = async () => { throw new Error('no network in this test'); };

@@ -1988,6 +1988,15 @@ async function installManagedPythonRuntime(spec, report, signal = null, beforeSw
 }
 
 /**
+ * An engine Asyncat can't download for this computer at all (no build for
+ * it, or not supported here), as opposed to a check that failed and may
+ * work later. Its `code` is ENGINE_UNAVAILABLE.
+ */
+function engineUnavailable(message) {
+  return Object.assign(new Error(message), { code: 'ENGINE_UNAVAILABLE' });
+}
+
+/**
  * The latest release of a binary runtime and the asset that suits this
  * computer: an explicit capability, else the detected GPU when the engine
  * ships GPU builds, else a portable CPU build.
@@ -2018,7 +2027,7 @@ async function resolveRuntimeRelease(spec, capability = null, signal = null) {
     ranked = rankFor('cpu_safe');
   }
   if (ranked.length === 0) {
-    throw new Error(
+    throw engineUnavailable(
       `No prebuilt ${spec.label} download is available for ${process.platform}-${process.arch}. ` +
       `Install it with your package manager or set ${spec.envKey}.`
     );
@@ -2044,7 +2053,7 @@ export async function planManagedRuntimeInstall(runtimeId, { capability = null, 
   const spec = MANAGED_RUNTIME_SPECS[runtimeId];
   if (!spec) throw new Error(`Unknown runtime: ${runtimeId}`);
   const support = runtimePlatformSupport(spec);
-  if (!support.supported) throw new Error(support.reason);
+  if (!support.supported) throw engineUnavailable(support.reason);
   if (spec.installer === 'python') {
     const bytes = estimatedPythonRuntimeBytes(spec);
     return {

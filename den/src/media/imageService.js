@@ -186,7 +186,7 @@ async function enginePlan() {
 export async function planImageSetup({ modelId = null, userId = null } = {}) {
   const model = IMAGE_MODELS.find((item) => item.id === modelId) || IMAGE_MODELS.find((item) => item.recommended);
   const engineFound = (await checkSdCpp().catch(() => ({ found: false }))).found;
-  const engine = engineFound ? null : await enginePlan().catch((err) => ({ error: err.message }));
+  const engine = engineFound ? null : await enginePlan().catch((err) => ({ error: err.message, unavailable: err.code === 'ENGINE_UNAVAILABLE' }));
   let bytes = model.bytes;
   try {
     bytes = (await hfFileSize(model.repo, model.file, { headers: huggingFaceHeaders(userId) })) ?? model.bytes;
@@ -199,7 +199,11 @@ export async function planImageSetup({ modelId = null, userId = null } = {}) {
       label: `Image engine (stable-diffusion.cpp${engine?.capabilityLabel ? `, ${engine.capabilityLabel}` : ''})`,
       done: Boolean(engineFound),
       bytes: engine?.downloadBytes || null,
+      // The build it would get, or why it can't be had (unavailable: no
+      // download for this computer at all).
+      capability: engine?.capability || null,
       error: engine?.error || null,
+      unavailable: Boolean(engine?.unavailable),
     },
     {
       key: 'image-model',
