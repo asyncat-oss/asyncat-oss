@@ -4,7 +4,7 @@ export const searchApi = {
   /**
    * Full-text search across projects, notes, conversations, and cards.
    * @param {string} query
-   * @param {{ limit?: number, types?: string[] }} opts
+   * @param {{ limit?: number, types?: string[], signal?: AbortSignal }} opts
    */
   search: async (query, opts = {}) => {
     if (!query || query.trim().length < 2) return { results: [], total: 0, query };
@@ -13,6 +13,6 @@ export const searchApi = {
     if (opts.limit) params.set('limit', String(opts.limit));
     if (opts.types?.length) params.set('types', opts.types.join(','));
 
-    return apiRequest(`${API_BASE_URL}/search?${params}`);
+    return apiRequest(`${API_BASE_URL}/search?${params}`, { signal: opts.signal });
   },
 };

@@ -147,9 +147,9 @@ export const agentApi = {
   },
 
   // ── Semantic search + embeddings status ──────────────────────────────────
-  semanticSearch: async (q, limit = 8) => {
+  semanticSearch: async (q, limit = 8, { signal } = {}) => {
     const params = new URLSearchParams({ q, limit: String(limit) });
-    return await apiRequest(`${API_BASE_URL}/agent/semantic/search?${params}`);
+    return await apiRequest(`${API_BASE_URL}/agent/semantic/search?${params}`, { signal });
   },
   getEmbeddingStatus: async () => {
     return await apiRequest(`${API_BASE_URL}/agent/embeddings/status`);

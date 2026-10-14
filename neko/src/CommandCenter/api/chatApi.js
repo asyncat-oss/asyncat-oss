@@ -131,9 +131,9 @@ export const chatApi = {
     return await apiRequest(`${ENDPOINTS.CHATS}/workspaces`);
   },
 
-  searchConversations: async (query, limit = 20) => {
+  searchConversations: async (query, limit = 20, { signal } = {}) => {
     const params = new URLSearchParams({ q: query, limit: limit.toString() });
-    return await apiRequest(`${ENDPOINTS.CHATS}/search?${params}`);
+    return await apiRequest(`${ENDPOINTS.CHATS}/search?${params}`, { signal });
   },
 
   updateConversation: async (conversationId, updates) => {

@@ -36,6 +36,7 @@ import { chatApi, agentApi } from '../CommandCenter/api';
 import { searchApi } from '../CommandCenter/api/searchApi.js';
 import SearchSnippet from '../components/SearchSnippet.jsx';
 import { chatLink, isPinned } from './chatSearch.js';
+import { latestSearch } from '../utils/latestSearch.js';
 
 // ─── Kinds of result ──────────────────────────────────────────────────────────
 
@@ -140,9 +141,12 @@ const UniversalSearch = ({ isOpen, onClose }) => {
   const [localConversations, setLocalConversations] = useState([]);
   const [serverResults, setServerResults] = useState(null); // null = not searched yet
   const [memoryResults, setMemoryResults] = useState([]);
+  const [searchedTerm, setSearchedTerm] = useState(''); // what the server last answered
   const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [searches] = useState(latestSearch);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const query = searchTerm.trim();
 
   const inputRef = useRef(null);
   const modalRef = useRef(null);
@@ -202,38 +206,38 @@ const UniversalSearch = ({ isOpen, onClose }) => {
 
   // ── Server search (debounced 220ms) ──────────────────────────────────────
 
+  // Each keystroke cancels the search before it, so only the answer for
+  // what is in the box now is ever shown.
   const doServerSearch = useCallback(async (term) => {
-    if (!term || term.trim().length < 2) {
-      setServerResults(null);
-      setMemoryResults([]);
-      return;
-    }
+    const signal = searches.start();
     setSearching(true);
-    try {
-      const [data, mem] = await Promise.all([
-        searchApi.search(term, { limit: 6 }).catch(() => null),
-        agentApi.semanticSearch(term, 5).catch(() => null),
-      ]);
-      // A note can only be opened from the chat it was written in.
-      setServerResults((data?.results || []).filter(r => r._type !== 'note' || r.conversationId));
-      setMemoryResults((mem?.results || []).map(m => ({ _type: 'memory', id: m.key, title: m.key, snippet: m.content })));
-    } catch {
-      setServerResults(null); // fall back to local
-      setMemoryResults([]);
-    } finally {
-      setSearching(false);
-    }
-  }, []);
+    const [data, mem] = await Promise.all([
+      searchApi.search(term, { limit: 6, signal }).catch(() => null),
+      agentApi.semanticSearch(term, 5, { signal }).catch(() => null),
+    ]);
+    if (signal.aborted) return;
+    // A note can only be opened from the chat it was written in. Without an
+    // answer, the local list stays.
+    setServerResults(data ? (data.results || []).filter(r => r._type !== 'note' || r.conversationId) : null);
+    setMemoryResults((mem?.results || []).map(m => ({ _type: 'memory', id: m.key, title: m.key, snippet: m.content })));
+    setSearchedTerm(term);
+    setSearching(false);
+  }, [searches]);
 
   useEffect(() => {
-    clearTimeout(debounceRef.current);
-    if (!searchTerm || searchTerm.trim().length < 2) {
+    if (query.length < 2) {
+      setSearching(false);
       setServerResults(null);
+      setMemoryResults([]);
+      setSearchedTerm('');
       return;
     }
-    debounceRef.current = setTimeout(() => doServerSearch(searchTerm), 220);
-    return () => clearTimeout(debounceRef.current);
-  }, [searchTerm, doServerSearch]);
+    debounceRef.current = setTimeout(() => doServerSearch(query), 220);
+    return () => {
+      clearTimeout(debounceRef.current);
+      searches.cancel();
+    };
+  }, [query, doServerSearch, searches]);
 
   // ── Initial data load ──────────────────────────────────────────────────────
 
@@ -339,7 +343,10 @@ const UniversalSearch = ({ isOpen, onClose }) => {
 
   if (!isOpen) return null;
 
-  const isSpinning = loading || searching;
+  // Until the server has answered for this word, only titles were checked:
+  // "Nothing found" would be premature.
+  const pending = query.length >= 2 && (searching || searchedTerm !== query);
+  const isSpinning = loading || pending;
   const isEmpty = filteredResults.length === 0;
   const activeId = filteredResults[selectedIndex] ? optionId(selectedIndex) : undefined;
 
@@ -384,11 +391,13 @@ const UniversalSearch = ({ isOpen, onClose }) => {
         </div>
 
         {/* ── Results area ────────────────────────────────────────────────── */}
-        {(!isEmpty || (isEmpty && searchTerm && !isSpinning)) && (
+        {(!isEmpty || query) && (
           <div className="border-t border-line">
-            {isEmpty && searchTerm && !searching ? (
-              <p className="px-4 py-10 text-center text-sm text-fg-muted">
-                Nothing found for &ldquo;<span className="text-fg">{searchTerm}</span>&rdquo;
+            {isEmpty ? (
+              <p role="status" className="px-4 py-10 text-center text-sm text-fg-muted">
+                {isSpinning ? 'Searching…' : (
+                  <>Nothing found for &ldquo;<span className="text-fg">{query}</span>&rdquo;</>
+                )}
               </p>
             ) : (
               <div id={LISTBOX_ID} role="listbox" aria-label="Results" className="max-h-[min(440px,60vh)] overflow-y-auto py-1.5">

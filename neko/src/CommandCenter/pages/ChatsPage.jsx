@@ -24,6 +24,7 @@ import { Input } from '../../components/ui/Field.jsx';
 import { Menu, MenuItem, MenuSeparator } from '../../components/ui/Menu.jsx';
 import SearchSnippet from '../../components/SearchSnippet.jsx';
 import { chatLink, hitMessageId, isPinned, withPinned } from '../../sidebar/chatSearch.js';
+import { latestSearch } from '../../utils/latestSearch.js';
 
 const ENGINE_FILTER_KEY = 'asyncat_chats_engine_filter';
 const ENGINE_ORDER = ['asyncat', 'claude-code', 'codex'];
@@ -125,6 +126,7 @@ const ChatsPage = () => {
   const [serverSearchResults, setServerSearchResults] = useState(null); // null = use local, array = server results
   const [serverSearching, setServerSearching] = useState(false);
   const serverSearchTimer = useRef(null);
+  const [searches] = useState(latestSearch);
   const searchInputRef = useRef(null);
   const [selectedItems, setSelectedItems] = useState({});
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -203,27 +205,35 @@ const ChatsPage = () => {
     setServerSearchResults(prev => (prev ? withPinned(prev, id, pinned) : prev));
   }), []);
 
-  // Debounced server-side FTS search — fires 400ms after user stops typing
+  // Searches titles and messages 400 ms after typing stops. Each keystroke
+  // cancels the search before it, so a slow answer for an older query never
+  // replaces the results for what is in the box now.
+  const trimmedQuery = searchQuery.trim();
   useEffect(() => {
-    clearTimeout(serverSearchTimer.current);
-    if (searchQuery.trim().length < 3) {
+    if (trimmedQuery.length < 3) {
       setServerSearchResults(null);
       setServerSearching(false);
       return;
     }
     setServerSearching(true);
     serverSearchTimer.current = setTimeout(async () => {
+      const signal = searches.start();
+      let results = null;
       try {
-        const res = await chatApi.searchConversations(searchQuery.trim(), 50);
-        setServerSearchResults(res?.conversations || []);
+        const res = await chatApi.searchConversations(trimmedQuery, 50, { signal });
+        results = res?.conversations || [];
       } catch {
-        setServerSearchResults(null);
-      } finally {
-        setServerSearching(false);
+        // Falls back to filtering the loaded list.
       }
+      if (signal.aborted) return;
+      setServerSearchResults(results);
+      setServerSearching(false);
     }, 400);
-    return () => clearTimeout(serverSearchTimer.current);
-  }, [searchQuery]);
+    return () => {
+      clearTimeout(serverSearchTimer.current);
+      searches.cancel();
+    };
+  }, [trimmedQuery, searches]);
 
   const toggleFolder = (folderId) => {
     setExpandedFolders(prev => ({ ...prev, [folderId]: !prev[folderId] }));
@@ -658,7 +668,7 @@ const ChatsPage = () => {
             onChange={(e) => setSearchQuery(e.target.value)}
             className={`h-9 w-full rounded-lg border border-line-strong bg-canvas pl-10 ${searchMode ? 'pr-24' : 'pr-4'} text-sm text-fg outline-none transition-[border-color,box-shadow] placeholder:text-fg-subtle focus:border-accent focus:ring-2 focus:ring-accent/20`}
           />
-          {searchMode && (
+          {searchMode && !serverSearching && (
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-fg-subtle">
               {filteredConversations.length} found
             </span>
@@ -730,8 +740,8 @@ const ChatsPage = () => {
           ) : filteredConversations.length === 0 && filteredActiveChatRuns.length === 0 ? (
             <div className="py-20 text-center">
               <MessageSquare className="mx-auto mb-3 h-5 w-5 text-fg-subtle" />
-              <p className="text-sm text-fg-muted">
-                {searchQuery.trim() ? 'No chats match that' : 'No conversations yet'}
+              <p role="status" className="text-sm text-fg-muted">
+                {!trimmedQuery ? 'No conversations yet' : serverSearching ? 'Searching…' : 'No chats match that'}
               </p>
             </div>
           ) : searchMode ? (
