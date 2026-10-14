@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -519,6 +520,64 @@ export function searchEntries({ rootId = 'workspace', relativePath = '.', query 
     root: publicRoot(ctx.root),
     path: ctx.relativePath,
     entries: (sort === 'relevance' && nameNeedle ? sortSearchEntries(results, effectiveNeedle) : sortEntries(results, sort, order)).slice(0, maxResults),
+  };
+}
+
+// ── Chat attachments ────────────────────────────────────────────────────────
+
+const ATTACHMENT_FOLDER = ['.asyncat', 'attachments'];
+const ATTACHMENT_NAME_LIMIT = 120;
+
+/** A plain file name from what the client sent: no folder part, no leading dot. */
+export function attachmentName(value) {
+  const base = String(value || '').split(/[\\/]/).pop() || '';
+  const cleaned = base
+    .replace(/[^\p{L}\p{N}_.\- ]+/gu, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/^[.-]+/, '');
+  return cleaned.slice(-ATTACHMENT_NAME_LIMIT) || 'attachment';
+}
+
+/**
+ * Save a file added in the chat composer to <project folder>/.asyncat/attachments.
+ * The server picks the folder and a stamp; of the client's name only the plain
+ * name is kept. Both folders must be real folders, so a link can't send the
+ * file somewhere else, and an existing file is never overwritten.
+ */
+export function writeAttachment({ rootId, name, content, userId = null, projectId = null }) {
+  if (!String(rootId || '').startsWith('project:')) {
+    throw createRouteError('Attach files to a folder of a Project', 403, 'PROJECT_FOLDER_REQUIRED');
+  }
+  const root = getProjectFolderRoot(rootId, { userId, projectId });
+  if (!root) throw createRouteError('Project folder not found or access denied', 404, 'ROOT_NOT_FOUND');
+  const rootPath = normalizeRootPath(root.path);
+  if (!existsDir(rootPath)) {
+    throw createRouteError('Attached Project folder is unavailable', 404, 'ROOT_UNAVAILABLE');
+  }
+
+  let dir = rootPath;
+  for (const part of ATTACHMENT_FOLDER) {
+    dir = path.join(dir, part);
+    try {
+      fs.mkdirSync(dir);
+    } catch (err) {
+      if (err.code !== 'EEXIST') throw err;
+    }
+    // mkdir doesn't follow a link that is already there, and lstat sees it.
+    if (!fs.lstatSync(dir).isDirectory()) {
+      throw createRouteError('The folder for attachments is a link, so nothing was saved', 403, 'OUTSIDE_ROOT');
+    }
+  }
+
+  const fileName = `${Date.now()}-${randomBytes(3).toString('hex')}-${attachmentName(name)}`;
+  fs.writeFileSync(path.join(dir, fileName), content, { flag: 'wx' });
+  return {
+    success: true,
+    rootId: root.id,
+    path: [...ATTACHMENT_FOLDER, fileName].join('/'),
+    name: fileName,
+    size: content.length,
   };
 }
 

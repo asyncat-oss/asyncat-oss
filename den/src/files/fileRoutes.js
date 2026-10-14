@@ -8,6 +8,7 @@ import {
   publicRoots,
   resolveExplorerPath,
   searchEntries,
+  writeAttachment,
 } from './fileExplorerService.js';
 
 const router = express.Router();
@@ -172,23 +173,22 @@ router.get('/raw', withWorkspaceContext, (req, res) => {
   }
 });
 
-// ── Archive operations ───────────────────────────────────────────────────────
+// ── Chat attachments ─────────────────────────────────────────────────────────
 
-// ── File upload ──────────────────────────────────────────────────────────────
+const upload = multer({ storage: multer.memoryStorage(), limits: { files: 1 } });
 
-const upload = multer({ storage: multer.memoryStorage() });
-
+// The composer's "Attach" in a project chat. The file always goes to the
+// folder's .asyncat/attachments under a name the server picks; the reply says
+// where. Older clients send a whole path, of which only the name is used.
 router.post('/upload', withWorkspaceContext, upload.single('file'), (req, res) => {
   try {
-    const { rootId = 'workspace', path: relativePath } = req.body;
-    if (!req.file || !relativePath) {
-      return res.status(400).json({ success: false, error: 'file and path are required' });
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'file is required' });
     }
-    res.json(writeFile({
-      rootId,
-      relativePath,
+    res.json(writeAttachment({
+      rootId: req.body.rootId,
+      name: req.body.name || req.file.originalname || req.body.path,
       content: req.file.buffer,
-      overwrite: req.body.overwrite === true || req.body.overwrite === 'true',
       ...projectAccess(req),
     }));
   } catch (err) {

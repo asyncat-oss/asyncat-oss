@@ -1256,16 +1256,15 @@ export const MessageInputV2 = ({
       setError('Select a Project to attach non-image files.');
       return;
     }
-    const uploadDir = ".asyncat/attachments";
     setUploadingAttachment(true);
     setError(null);
 
     try {
       const uploaded = [];
       for (const file of selected) {
-        const safeName = safeAttachmentName(file.name);
-        const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
         if (!rootId) {
+          const safeName = safeAttachmentName(file.name);
+          const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
           const dataUrl = await new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = () => resolve(String(reader.result || ''));
@@ -1284,11 +1283,10 @@ export const MessageInputV2 = ({
           });
           continue;
         }
-        const targetPath = joinRelativePath(uploadDir, `${stamp}-${safeName}`);
-        await filesApi.upload(rootId, targetPath, file, { overwrite: true });
+        const saved = await filesApi.attach(rootId, file);
         uploaded.push({
           rootId,
-          path: targetPath,
+          path: saved.path,
           name: file.name,
           ext: file.name.split(".").pop() || "",
           mime: file.type || "",

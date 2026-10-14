@@ -56,12 +56,13 @@ export const filesApi = {
     return URL.createObjectURL(blob);
   },
 
-  upload: async (rootId, filePath, file, options = {}) => {
+  // Attach a file to a chat: den saves it in the folder's .asyncat/attachments
+  // under a name it picks, and returns { path, name } relative to the folder.
+  attach: async (rootId, file, name = file.name) => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('rootId', rootId);
-    formData.append('path', filePath);
-    formData.append('overwrite', String(options.overwrite === true));
+    formData.append('name', name);
     const res = await apiClient.request(`${API_BASE_URL}/files/upload`, {
       method: 'POST',
       body: formData,
