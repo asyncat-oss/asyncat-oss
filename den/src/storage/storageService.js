@@ -1,3 +1,7 @@
+// den/src/storage/storageService.js
+// Settings → Advanced → Storage & logs, the old panel. Replaced by Files
+// (filesRoutes.js and places.js); this goes when that panel does.
+
 import fs from 'fs';
 import fsp from 'fs/promises';
 import os from 'os';

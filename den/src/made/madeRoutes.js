@@ -1,5 +1,7 @@
 // den/src/made/madeRoutes.js
 // /api/made: everything agents have made (madeIndex.js), and the files.
+// Replaced by /api/storage (storage/filesRoutes.js, place "made"); kept until
+// the last page that reads it moves to Files.
 
 import express from 'express';
 import fs from 'fs';

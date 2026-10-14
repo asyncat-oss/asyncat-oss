@@ -139,7 +139,8 @@ opens saved API keys and sign-ins. Those stay encrypted in this export and
 only open on the computer that made it.
 `;
 
-function exportFolder() {
+/** Where "Export everything" writes its zips: Downloads, or ASYNCAT_EXPORT_DIR. */
+export function exportFolder() {
   if (process.env.ASYNCAT_EXPORT_DIR) return path.resolve(process.env.ASYNCAT_EXPORT_DIR);
   const downloads = path.join(os.homedir(), 'Downloads');
   return fs.existsSync(downloads) ? downloads : os.homedir();

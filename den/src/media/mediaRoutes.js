@@ -174,6 +174,9 @@ router.get('/gallery/file/:name', (req, res) => {
   res.sendFile(file);
 });
 
+// Replaced by DELETE /api/storage/items/picture:<name> (Files), which checks
+// the picture and can move it to the Trash; kept until Models → Images moves
+// its delete to Files.
 router.delete('/gallery/:name', (req, res) => {
   try {
     if (!deleteGalleryImage(req.params.name)) return res.status(404).json({ success: false, error: 'No such picture.' });

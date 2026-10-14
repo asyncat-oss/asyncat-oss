@@ -31,6 +31,7 @@ import configRouter from './config/configRouter.js';
 
 // ─── Storage ───────────────────────────────────────────────────────────────────
 import storageRouter from './storage/storageRouter.js';
+import filesRouter from './storage/filesRoutes.js';
 
 // ─── Update ───────────────────────────────────────────────────────────────────
 import updateRouter from './update/updateRouter.js';
@@ -136,7 +137,7 @@ app.use(cors({
     'x-client-timestamp', 'x-update-type', 'x-auto-save', 'x-client-timezone',
     'Cache-Control', 'x-asyncat-host-token',
   ],
-  exposedHeaders: ['Content-Type', 'Content-Length', 'Content-Disposition', 'Cache-Control'],
+  exposedHeaders: ['Content-Type', 'Content-Length', 'Content-Disposition', 'Cache-Control', 'X-Truncated'],
 }));
 
 // Started by the desktop app, only its window may change things here.
@@ -178,6 +179,8 @@ app.use('/api/config', configRouter);
 
 // ─── Routes: Storage ─────────────────────────────────────────────────────────
 app.use('/files', storageRouter);
+// The Files page, then the old Storage & logs panel's routes until it goes.
+app.use('/api/storage', filesRouter);
 app.use('/api/storage', storageRouter);
 
 // ─── Routes: Update ───────────────────────────────────────────────────────────
@@ -219,7 +222,8 @@ app.use('/api/privacy', privacyRouter);
 // Routes: import chats and memories from ChatGPT and Claude
 app.use('/api/import', importRouter);
 
-// Routes: what agents have made
+// Routes: what agents have made. Replaced by /api/storage (Files); kept until
+// Models → Images stops using it.
 app.use('/api/made', madeRouter);
 
 // Routes: learning from chats (memories and skill suggestions)

@@ -124,16 +124,35 @@ export function listGallery({ limit = 60, offset = 0 } = {}) {
 }
 
 /**
- * Every picture, newest first, for lists that page through them themselves:
- * [{ name, modifiedAt, describe }]. describe() reads the picture's notes, so
- * a list reads them only for the page it shows.
+ * Every picture, newest first and without the 200 limit, for lists that page
+ * through them themselves: [{ name, file, bytes, modifiedAt, describe }].
+ * describe() reads the picture's notes, so a list reads them only for the
+ * page it shows.
  */
 export function galleryPictures() {
   return galleryEntries().map((entry) => ({
     name: entry.name,
+    file: entry.file,
+    bytes: entry.stat.size,
     modifiedAt: entry.stat.mtime.toISOString(),
     describe: () => describe(entry),
   }));
+}
+
+/** One picture by name, as galleryPictures lists it, or null. */
+export function galleryPicture(name) {
+  const value = String(name ?? '');
+  if (!IMAGE_FILE.test(value)) return null;
+  const found = plainFileIn(galleryDir(), value);
+  if (!found) return null;
+  const entry = { name: value, file: found.file, stat: found.stat };
+  return { name: value, file: found.file, bytes: found.stat.size, modifiedAt: found.stat.mtime.toISOString(), describe: () => describe(entry) };
+}
+
+/** A picture's notes file (its prompt and settings), when it is a regular file. */
+export function galleryNotesFile(name) {
+  const file = galleryFile(name);
+  return file ? notesFile(file) : null;
 }
 
 export function deleteGalleryImage(name) {

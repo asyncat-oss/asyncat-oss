@@ -140,6 +140,11 @@ export function getTrainingJob(id, userId = null) {
   return formatJob(row);
 }
 
+/** The runs going on now: [{ id, outputDir, datasetPath }] (Files keeps their files). */
+export function activeTrainingJobs() {
+  return [...activeJobs].map(([id, { outputDir, datasetPath }]) => ({ id, outputDir, datasetPath }));
+}
+
 export function listTrainingJobs(userId, limit = 50) {
   const rows = stmts.list.all(userId, Math.min(limit, 200));
   return rows.map(formatJob);
@@ -252,7 +257,7 @@ export function startTrainingJob({
     env: childEnv({ keep: HF_TOKEN_NAMES }),
   });
 
-  activeJobs.set(id, { proc, outputDir });
+  activeJobs.set(id, { proc, outputDir, datasetPath });
   stmts.updateStarted.run(id);
 
   // ── Capture stdout (JSON lines) ─────────────────────────────────────────

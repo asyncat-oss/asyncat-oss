@@ -34,7 +34,8 @@ const SENSITIVE_PATTERNS = [
   /eyJ[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_.+/]*/gi,
 ];
 
-function dateStamp() {
+/** Today's date as log files are named by it (local time): YYYY-MM-DD. */
+export function dateStamp() {
   const now = new Date();
   const yyyy = now.getFullYear();
   const mm = String(now.getMonth() + 1).padStart(2, '0');
