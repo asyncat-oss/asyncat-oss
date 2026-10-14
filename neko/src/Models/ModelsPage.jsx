@@ -1,9 +1,6 @@
 import { lazy, Suspense, useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import {
-  RefreshCw, TriangleAlert, X,
-  Mic, Image, MessageSquare, BarChart3, GraduationCap, Loader2
-} from 'lucide-react';
+import { RefreshCw, TriangleAlert, X, Loader2 } from 'lucide-react';
 import Button from '../components/ui/Button.jsx';
 import { Segmented, Tabs } from '../components/ui/Tabs.jsx';
 import ActiveBrainPanel from './ActiveBrainPanel.jsx';
@@ -307,22 +304,13 @@ const ModelsPage = () => {
     setRefreshCount((count) => count + 1);
   };
 
-  const audioAssetCount = audioModels.whisper.length + audioModels.tts.length;
-  const usageRequestCount = modelUsage?.totals?.request_count || 0;
-
-  const audioMeta = (() => {
-    if (!voiceState.loaded) return audioAssetCount ? String(audioAssetCount) : null;
-    if (voiceState.sttStatus === 'error' || voiceState.ttsStatus === 'error') return 'Error';
-    if (voiceState.sttStatus === 'ready' || voiceState.ttsStatus === 'ready') return 'On';
-    return audioAssetCount ? String(audioAssetCount) : null;
-  })();
-
+  // Plain words: each page says what it needs itself.
   const tabItems = [
-    { value: 'chat', label: 'Language', icon: MessageSquare },
-    { value: 'audio', label: 'Voice', icon: Mic, meta: audioMeta },
-    { value: 'image', label: 'Images', icon: Image, meta: visualModels.image.length ? String(visualModels.image.length) : null },
-    { value: 'usage', label: 'Usage', icon: BarChart3, meta: usageRequestCount ? usageRequestCount.toLocaleString() : null },
-    { value: 'training', label: 'Training', icon: GraduationCap, meta: 'Labs' },
+    { value: 'chat', label: 'Language' },
+    { value: 'audio', label: 'Voice' },
+    { value: 'image', label: 'Images' },
+    { value: 'usage', label: 'Usage' },
+    { value: 'training', label: 'Training' },
   ];
 
   const viewItems = [
