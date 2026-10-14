@@ -7,11 +7,14 @@ import { Menu, MenuItem, MenuLabel, MenuSeparator } from '../components/ui/Menu.
 import { Badge } from './modelPageShared.jsx';
 import { friendlyModelName } from '../utils/modelNames.js';
 import { ProviderLogo, LocalModelLogo } from './modelLogos.jsx';
+import { imagesSummary, listeningSummary, speakingSummary } from './media/mediaSummary.js';
+import { useMediaStatus } from './media/useMediaStatus.js';
 
 const DOT = {
   idle: 'bg-fg-subtle/50',
   loading: 'bg-amber-400 animate-pulse',
   ready: 'bg-emerald-500',
+  warning: 'bg-amber-500',
   error: 'bg-red-500',
 };
 
@@ -19,8 +22,8 @@ const Capability = ({ icon: Icon, label, value, status = 'idle' }) => (
   <span className="inline-flex min-w-0 items-center gap-1.5">
     <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${DOT[status] || DOT.idle}`} />
     <Icon className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
-    <span className="text-fg-subtle">{label}</span>
-    <span className="truncate text-fg-muted">{value}</span>
+    <span className="shrink-0 whitespace-nowrap text-fg-subtle">{label}</span>
+    <span className="truncate text-fg-muted" title={typeof value === 'string' ? value : undefined}>{value}</span>
   </span>
 );
 
@@ -33,7 +36,8 @@ Capability.propTypes = {
 
 /**
  * What powers chats right now, with a switcher for the other connected
- * providers and downloaded models.
+ * providers and downloaded models. Under it, what listens, speaks and makes
+ * images (read from Models → Voice and Images); a new `refreshKey` looks again.
  */
 const ActiveBrainPanel = ({
   activeConfig,
@@ -49,8 +53,7 @@ const ActiveBrainPanel = ({
   providerAction,
   switchingEngine,
   installingEngine,
-  voiceState,
-  visualModels,
+  refreshKey = 0,
   profiles = [],
   localModels = [],
   onStop,
@@ -61,6 +64,10 @@ const ActiveBrainPanel = ({
 }) => {
   const switcherRef = useRef(null);
   const [switcherOpen, setSwitcherOpen] = useState(false);
+  const media = useMediaStatus(refreshKey);
+  const listening = listeningSummary(media.voice);
+  const speaking = speakingSummary(media.voice);
+  const makesImages = imagesSummary(media.images);
 
   const providerIsExternal = Boolean(activeConfig?.model && activeConfig?.provider_id && activeConfig.provider_id !== 'llamacpp-builtin');
   // MLX runs downloaded models through its own server but is set up like a provider.
@@ -100,7 +107,6 @@ const ActiveBrainPanel = ({
   const runtimeLabel = engineData?.current?.capabilityLabel || '';
   const hardwareLabel = showHardwareBadge ? hardwareBadgeLabel : '';
   const supportsImageInput = Boolean(activeConfig?.capabilities?.supportsImageInput);
-  const imageCount = visualModels?.image?.length || 0;
   const busy = Boolean(providerAction) || Boolean(switchingEngine) || Boolean(installingEngine);
   const activeProfileId = activeConfig?.profile_id;
 
@@ -187,15 +193,15 @@ const ActiveBrainPanel = ({
       </div>
 
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-line px-5 py-3 text-[12px]">
-        <Capability icon={Mic} label="Voice in" status={voiceState?.sttStatus} value={voiceState?.sttModel || (voiceState?.sttStatus === 'ready' ? 'Ready' : 'Off')} />
-        <Capability icon={Volume2} label="Voice out" status={voiceState?.ttsStatus} value={voiceState?.ttsModel || (voiceState?.ttsStatus === 'ready' ? 'Ready' : 'Off')} />
+        <Capability icon={Mic} label="Listening" status={listening.tone} value={listening.value} />
+        <Capability icon={Volume2} label="Speaking" status={speaking.tone} value={speaking.value} />
         <Capability icon={Eye} label="Sees images" status={supportsImageInput ? 'ready' : 'idle'} value={supportsImageInput ? 'Yes' : 'No'} />
-        <Capability icon={Image} label="Makes images" status={imageCount ? 'ready' : 'idle'} value={imageCount ? `${imageCount} model${imageCount === 1 ? '' : 's'}` : 'Off'} />
+        <Capability icon={Image} label="Makes images" status={makesImages.tone} value={makesImages.value} />
         {(runtimeLabel || hardwareLabel || serverStatus?.ctxSize) ? (
-          <span className="inline-flex items-center gap-1.5 text-fg-subtle sm:ml-auto">
-            {runtimeLabel ? <><Gauge className="h-3.5 w-3.5" />{runtimeLabel}</> : null}
-            {hardwareLabel ? <><Cpu className="ml-2 h-3.5 w-3.5" />{hardwareLabel}</> : null}
-            {serverStatus?.ctxSize ? <span className="ml-2 tabular-nums">{Number(serverStatus.ctxSize).toLocaleString()} ctx</span> : null}
+          <span className="inline-flex flex-wrap items-center gap-x-3.5 gap-y-1 text-fg-subtle sm:ml-auto">
+            {runtimeLabel ? <span className="inline-flex items-center gap-1.5 whitespace-nowrap"><Gauge className="h-3.5 w-3.5" />{runtimeLabel}</span> : null}
+            {hardwareLabel ? <span className="inline-flex items-center gap-1.5 whitespace-nowrap"><Cpu className="h-3.5 w-3.5" />{hardwareLabel}</span> : null}
+            {serverStatus?.ctxSize ? <span className="whitespace-nowrap tabular-nums">{Number(serverStatus.ctxSize).toLocaleString()} ctx</span> : null}
           </span>
         ) : null}
       </div>
@@ -217,8 +223,7 @@ ActiveBrainPanel.propTypes = {
   providerAction: PropTypes.string,
   switchingEngine: PropTypes.oneOfType([PropTypes.string, PropTypes.bool]),
   installingEngine: PropTypes.oneOfType([PropTypes.string, PropTypes.bool, PropTypes.object]),
-  voiceState: PropTypes.object,
-  visualModels: PropTypes.object,
+  refreshKey: PropTypes.number,
   profiles: PropTypes.array,
   localModels: PropTypes.array,
   onStop: PropTypes.func,

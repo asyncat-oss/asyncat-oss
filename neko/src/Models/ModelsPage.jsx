@@ -81,12 +81,7 @@ const ModelsPage = () => {
   const isLoading = loadingStatus || loadingModels || loadingEngines || loadingCatalog || loadingProviders;
   const isBusy = Boolean(switchingEngine) || Boolean(installingEngine);
 
-  // ── Voice summary state ────────────────────────────────────────────────────
-  const [voiceState, setVoiceState] = useState({
-    sttStatus: 'idle', sttModel: null,
-    ttsStatus: 'idle', ttsModel: null,
-    loaded: false,
-  });
+  // ── Voice and image files, for the search ──────────────────────────────────
   const [audioModels, setAudioModels] = useState({ whisper: [], tts: [] });
   const [visualModels, setVisualModels] = useState({ image: [] });
   const [highlightedItem, setHighlightedItem] = useState(null);
@@ -99,23 +94,14 @@ const ModelsPage = () => {
   const [usageError, setUsageError] = useState('');
 
   const refreshVoiceData = useCallback(() => {
-    Promise.all([
-      audioApi.listModels().catch(() => ({ whisper: [], tts: [] })),
-      audioApi.whisper.getStatus().catch(() => ({ status: 'idle' })),
-      audioApi.tts.getStatus().catch(() => ({ status: 'idle' })),
-    ]).then(([modelsRes, w, t]) => {
-      setAudioModels({
-        whisper: modelsRes.whisper || [],
-        tts: modelsRes.tts || [],
-      });
-      setVoiceState({
-        sttStatus: w.status || 'idle',
-        sttModel: w.model || null,
-        ttsStatus: t.status || 'idle',
-        ttsModel: t.model || null,
-        loaded: true,
-      });
-    });
+    audioApi.listModels()
+      .then((modelsRes) => {
+        setAudioModels({
+          whisper: modelsRes.whisper || [],
+          tts: modelsRes.tts || [],
+        });
+      })
+      .catch(() => setAudioModels({ whisper: [], tts: [] }));
   }, []);
 
   const refreshVisualData = useCallback(() => {
@@ -402,8 +388,7 @@ const ModelsPage = () => {
                   providerAction={providerAction}
                   switchingEngine={switchingEngine}
                   installingEngine={installingEngine}
-                  voiceState={voiceState}
-                  visualModels={visualModels}
+                  refreshKey={refreshCount}
                   profiles={providerProfiles}
                   localModels={models}
                   onStop={handleStop}
