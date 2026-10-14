@@ -25,14 +25,22 @@ function asyncatHome() {
   return runtimeHome();
 }
 
-function binaryCandidates() {
-  const home = os.homedir();
+// The path set in settings and Asyncat's own copy: taken as they are.
+function trustedCandidates() {
   const exe = IS_WIN ? '.exe' : '';
   return [
     (process.env.IMAGEGEN_BINARY_PATH || '').trim(),
     path.join(asyncatHome(), 'stable-diffusion.cpp', 'sd-cli' + exe),
     path.join(asyncatHome(), 'stable-diffusion.cpp', 'sd' + exe),
     path.join(asyncatHome(), 'stable-diffusion.cpp', 'stable-diffusion' + exe),
+  ].filter(Boolean);
+}
+
+// Places a build someone made or installed may be: checked before use.
+function guessedCandidates() {
+  const home = os.homedir();
+  const exe = IS_WIN ? '.exe' : '';
+  return [
     path.join(home, '.local', 'bin', 'sd-cli' + exe),
     path.join(home, '.local', 'bin', 'sd' + exe),
     path.join(home, '.local', 'bin', 'stable-diffusion' + exe),
@@ -52,23 +60,63 @@ function binaryCandidates() {
   ].filter(Boolean);
 }
 
-async function commandPath(name) {
+/** Every match for a command name on PATH, in PATH order. */
+async function commandPaths(name) {
   try {
-    const { stdout } = await execFileAsync(IS_WIN ? 'where' : 'which', [name], { timeout: 3000 });
-    return stdout.trim().split('\n')[0]?.trim() || '';
+    const { stdout } = await execFileAsync(IS_WIN ? 'where' : 'which', IS_WIN ? [name] : ['-a', name], { timeout: 3000 });
+    return [...new Set(stdout.split('\n').map((line) => line.trim()).filter(Boolean))];
   } catch {
-    return '';
+    return [];
   }
 }
 
+// What stable-diffusion.cpp's --help mentions (Asyncat passes --cfg-scale
+// to every run). Another program called `sd`, like the find-and-replace
+// tool common on Linux, doesn't.
+const SD_CPP_HELP = /--cfg-scale|--sampling-method|stable-diffusion/i;
+const checkedBinaries = new Map(); // path → { stamp, ok }
+
+/**
+ * Whether a program is stable-diffusion.cpp, going by its --help. Asked once
+ * per file (again when the file changes).
+ */
+export async function isStableDiffusionCpp(binaryPath) {
+  let stamp;
+  try {
+    const stat = fs.statSync(binaryPath);
+    if (!stat.isFile()) return false;
+    stamp = `${stat.size}:${stat.mtimeMs}`;
+  } catch {
+    return false;
+  }
+  const known = checkedBinaries.get(binaryPath);
+  if (known?.stamp === stamp) return known.ok;
+  let help = '';
+  try {
+    const { stdout, stderr } = await execFileAsync(binaryPath, ['--help'], { timeout: 5000 });
+    help = `${stdout || ''}${stderr || ''}`;
+  } catch (err) {
+    // Some builds exit non-zero after printing their help.
+    help = `${err.stdout || ''}${err.stderr || ''}`;
+  }
+  const ok = SD_CPP_HELP.test(help);
+  checkedBinaries.set(binaryPath, { stamp, ok });
+  return ok;
+}
+
 async function findBinary() {
-  for (const candidate of binaryCandidates()) {
-    if (candidate && fs.existsSync(candidate)) return { found: true, path: candidate, source: 'file' };
+  for (const candidate of trustedCandidates()) {
+    if (fs.existsSync(candidate)) return { found: true, path: candidate, source: 'file' };
+  }
+
+  for (const candidate of guessedCandidates()) {
+    if (fs.existsSync(candidate) && await isStableDiffusionCpp(candidate)) return { found: true, path: candidate, source: 'file' };
   }
 
   for (const name of IS_WIN ? ['sd-cli.exe', 'sd.exe', 'stable-diffusion.exe', 'sd-cli', 'sd', 'stable-diffusion'] : ['sd-cli', 'sd', 'stable-diffusion']) {
-    const p = await commandPath(name);
-    if (p) return { found: true, path: p, source: 'PATH' };
+    for (const p of await commandPaths(name)) {
+      if (await isStableDiffusionCpp(p)) return { found: true, path: p, source: 'PATH' };
+    }
   }
 
   return { found: false, path: null, source: null };

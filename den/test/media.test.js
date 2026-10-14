@@ -177,6 +177,7 @@ const voice = await import('../src/media/voiceService.js');
 const images = await import('../src/media/imageService.js');
 const setupJobs = await import('../src/media/setupJobs.js');
 const visualModels = await import('../src/ai/controllers/ai/visualModelManager.js');
+const sdCpp = await import('../src/ai/controllers/ai/sdCppManager.js');
 const { default: mediaRouter } = await import('../src/media/mediaRoutes.js');
 const { default: providerRouter } = await import('../src/ai/routes/providerRoutes.js');
 const audioTools = await import('../src/agent/tools/audioTools.js');
@@ -685,6 +686,49 @@ test('image status carries the defaults and samplers of the engine that draws (B
   assert.deepEqual(status.defaults, { width: 1024, height: 1024 });
 
   await images.chooseImage({ provider: 'local', model: path.join(images.IMAGE_DIR, 'dreamshaper_8.safetensors') });
+});
+
+test('another program called sd is never taken for the image engine', async () => {
+  // The find-and-replace tool `sd`, first on PATH, and a stable-diffusion.cpp
+  // build also called sd further along.
+  const toolDir = path.join(scratch, 'tool-bin');
+  const buildDir = path.join(scratch, 'build-bin');
+  fs.mkdirSync(toolDir, { recursive: true });
+  fs.mkdirSync(buildDir, { recursive: true });
+  const findReplace = path.join(toolDir, 'sd');
+  fs.writeFileSync(findReplace, `#!/usr/bin/env node
+console.log('sd 1.0.0\\n\\nUsage: sd [OPTIONS] <FIND> <REPLACE_WITH> [FILES]...');
+`, { mode: 0o755 });
+  const build = path.join(buildDir, 'sd');
+  fs.writeFileSync(build, `#!/usr/bin/env node
+console.log('usage: sd [arguments]\\n  --cfg-scale SCALE\\n  --sampling-method {euler, euler_a}');
+process.exit(1);
+`, { mode: 0o755 });
+  assert.equal(await sdCpp.isStableDiffusionCpp(findReplace), false);
+  assert.equal(await sdCpp.isStableDiffusionCpp(build), true, 'even when its --help exits non-zero');
+
+  const saved = { PATH: process.env.PATH, HOME: process.env.HOME };
+  delete process.env.IMAGEGEN_BINARY_PATH;
+  process.env.HOME = path.join(scratch, 'home'); // not the real ~/.local/bin
+  try {
+    // An engine this computer has in /usr/bin or the like is still found;
+    // the other sd must change nothing.
+    const before = await images.imageStatus();
+    process.env.PATH = `${toolDir}${path.delimiter}${saved.PATH}`;
+    let status = await images.imageStatus();
+    assert.notEqual(status.enginePath, findReplace);
+    assert.equal(status.engine, before.engine);
+    assert.equal(status.enginePath, before.enginePath);
+
+    process.env.PATH = `${toolDir}${path.delimiter}${buildDir}${path.delimiter}${saved.PATH}`;
+    status = await images.imageStatus();
+    assert.equal(status.engine, true, 'the real build further along PATH is found');
+    assert.equal(status.enginePath, before.enginePath || build);
+  } finally {
+    process.env.PATH = saved.PATH;
+    process.env.HOME = saved.HOME;
+    process.env.IMAGEGEN_BINARY_PATH = fakeSd;
+  }
 });
 
 test('the chosen ComfyUI checkpoint is kept and draws (B9)', async () => {
