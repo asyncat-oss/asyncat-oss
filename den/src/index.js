@@ -32,6 +32,7 @@ import configRouter from './config/configRouter.js';
 // ─── Storage ───────────────────────────────────────────────────────────────────
 import storageRouter from './storage/storageRouter.js';
 import filesRouter from './storage/filesRoutes.js';
+import attachmentStatic from './storage/attachmentStatic.js';
 
 // ─── Update ───────────────────────────────────────────────────────────────────
 import updateRouter from './update/updateRouter.js';
@@ -178,7 +179,8 @@ app.use('/api/attachments', attachmentRoutes);
 app.use('/api/config', configRouter);
 
 // ─── Routes: Storage ─────────────────────────────────────────────────────────
-app.use('/files', storageRouter);
+// Files added to notes, at /files/<container>/… only.
+app.use('/files', attachmentStatic);
 // The Files page, then the old Storage & logs panel's routes until it goes.
 app.use('/api/storage', filesRouter);
 app.use('/api/storage', storageRouter);

@@ -1,23 +1,12 @@
-// storage/storageRouter.js
-// Static file serving for uploaded attachments.
-// Serves files from STORAGE_PATH/{container}/ at /files/{container}/*
+// den/src/storage/storageRouter.js
+// The old Storage & logs panel's routes (/api/storage/summary, /uploads,
+// /logs). Replaced by Files (filesRoutes.js, also under /api/storage); these
+// go when that panel does. Attachments are served by attachmentStatic.js.
 
 import express from 'express';
-import path from 'path';
-import fs from 'fs';
 import { clearManagedUploads, getStorageSummary, getLogsSummary, clearLogs, readLogFile } from './storageService.js';
 
 const router = express.Router();
-
-const STORAGE_ROOT = process.env.STORAGE_PATH
-  ? path.resolve(process.env.STORAGE_PATH)
-  : path.resolve('data', 'uploads');
-
-const ALLOWED_CONTAINERS = ['notes', 'kanban-attachments', 'profile-pictures'];
-
-const sanitizePath = (inputPath) => {
-  return path.normalize(inputPath).replace(/^(\.\.(\/|\\|$))+/, '');
-};
 
 router.get('/summary', async (req, res) => {
   try {
@@ -91,66 +80,6 @@ router.get('/logs/read', (req, res) => {
     console.error('Read log file error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
-});
-
-// A RegExp route works in both Express 4 and Express 5. String wildcards use
-// incompatible path-to-regexp syntaxes between those releases and can crash
-// the entire backend while routes are being registered.
-router.get(/^\/([^/]+)\/(.+)$/, (req, res) => {
-  const container = req.params[0];
-
-  if (!ALLOWED_CONTAINERS.includes(container)) {
-    return res.status(403).json({ success: false, error: 'Container not allowed' });
-  }
-
-  const relativePath = req.params[1];
-  const sanitizedRelPath = sanitizePath(relativePath);
-
-  const filePath = path.join(STORAGE_ROOT, container, sanitizedRelPath);
-
-  if (!filePath.startsWith(path.join(STORAGE_ROOT, container) + path.sep)) {
-    return res.status(403).json({ success: false, error: 'Invalid path' });
-  }
-
-  fs.stat(filePath, (err, stats) => {
-    if (err || !stats.isFile()) {
-      return res.status(404).json({ success: false, error: 'File not found' });
-    }
-
-    const ext = path.extname(filePath).toLowerCase();
-    const mimeTypes = {
-      '.jpg': 'image/jpeg',
-      '.jpeg': 'image/jpeg',
-      '.png': 'image/png',
-      '.gif': 'image/gif',
-      '.webp': 'image/webp',
-      '.svg': 'image/svg+xml',
-      '.pdf': 'application/pdf',
-      '.mp4': 'video/mp4',
-      '.webm': 'video/webm',
-      '.mov': 'video/quicktime',
-      '.mp3': 'audio/mpeg',
-      '.wav': 'audio/wav',
-      '.ogg': 'audio/ogg',
-      '.doc': 'application/msword',
-      '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    };
-
-    const contentType = mimeTypes[ext] || 'application/octet-stream';
-
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Content-Length', stats.size);
-    res.setHeader('Cache-Control', 'private, max-age=3600');
-
-    const fileStream = fs.createReadStream(filePath);
-    fileStream.on('error', (err) => {
-      console.error('File stream error:', err.message);
-      if (!res.headersSent) {
-        res.status(500).json({ success: false, error: 'Stream error' });
-      }
-    });
-    fileStream.pipe(res);
-  });
 });
 
 export default router;
