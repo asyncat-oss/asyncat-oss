@@ -222,6 +222,7 @@ export async function startImageSetup({ modelId = null, userId = null } = {}) {
   return startSetupJob({
     kind: 'images',
     title: 'Set up images',
+    options: { modelId: plan.model.id },
     steps: plan.steps.map((step) => ({
       key: step.key,
       label: step.label,

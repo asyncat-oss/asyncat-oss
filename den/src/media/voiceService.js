@@ -405,6 +405,15 @@ export async function startVoiceSetup(options = {}) {
   return startSetupJob({
     kind: 'voice',
     title: 'Set up voice',
+    // The resolved choices, in the shape POST /media/voice/setup takes.
+    options: {
+      listen: options.listen !== false,
+      speak: options.speak !== false,
+      whisper: plan.whisper.id,
+      english: plan.whisper.english,
+      voice: plan.voice.id,
+      language: options.language || 'en',
+    },
     steps,
     onComplete: async () => {
       clearAudioCache();

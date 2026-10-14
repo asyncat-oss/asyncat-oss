@@ -137,15 +137,17 @@ async function runJob(job) {
  * Start a setup. `steps`: { key, label, type: 'engine', runtimeId } or
  * { key, label, type: 'download', url, filename, subDir, bytes, headers }.
  * `onComplete(job)` runs after the last step (save the choices) and its
- * result is kept on the job.
+ * result is kept on the job. `options` are what it was started with, kept
+ * so "Try again" can start the same setup, also after a reload.
  */
-export function startSetupJob({ kind, title, steps, onComplete = null }) {
+export function startSetupJob({ kind, title, steps, onComplete = null, options = null }) {
   const running = [...jobs.values()].find((job) => job.kind === kind && job.status === 'running');
   if (running) throw Object.assign(new Error('A setup is already running.'), { status: 409, job: publicJob(running) });
   const job = {
     id: randomUUID(),
     kind,
     title,
+    options,
     status: 'running',
     error: null,
     result: null,

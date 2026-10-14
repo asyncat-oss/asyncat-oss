@@ -355,6 +355,11 @@ test('"Set up voice" downloads the models, then listening and speaking are ready
     return now.status !== 'running' ? now : null;
   });
   assert.ok(second.steps.every((step) => step.status === 'skipped'), 'a second run downloads nothing');
+  assert.deepEqual(
+    setupJobs.latestSetupJob('voice').options,
+    { listen: true, speak: true, whisper: 'base', english: true, voice: 'en_US-lessac-medium', language: 'en' },
+    'the job keeps what it was started with, so "Try again" can repeat it',
+  );
 });
 
 test('listening starts on first use and takes the mic recording without ffmpeg', async () => {
@@ -709,6 +714,18 @@ test('the chosen ComfyUI checkpoint is kept and draws (B9)', async () => {
   assert.equal(workflow['4'].inputs.ckpt_name, 'dreamshaper_8.safetensors');
 
   await images.chooseImage({ provider: 'local' });
+});
+
+test('a setup that fails keeps what it was started with, for "Try again"', async () => {
+  // The fake Hugging Face has no such model, so the download fails.
+  const job = await images.startImageSetup({ modelId: 'sd15-q8' });
+  const done = await until(() => {
+    const now = setupJobs.getSetupJob(job.id);
+    return now.status !== 'running' ? now : null;
+  });
+  assert.equal(done.status, 'error');
+  assert.equal(done.steps.find((step) => step.key === 'image-model').status, 'error');
+  assert.deepEqual(setupJobs.latestSetupJob('images').options, { modelId: 'sd15-q8' });
 });
 
 // ── Hugging Face ─────────────────────────────────────────────────────────────
