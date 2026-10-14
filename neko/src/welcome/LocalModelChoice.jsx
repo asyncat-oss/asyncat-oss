@@ -13,7 +13,7 @@ import Skeleton from '../components/ui/Skeleton.jsx';
 import StatusLine from '../components/ui/StatusLine.jsx';
 import { DownloadLine } from '../components/ui/Progress.jsx';
 import { formatBytes } from '../components/ui/progressFormat.js';
-import { FIT_TEXT, chatModelName, downloadBytes, downloadLabel, hardwareText, localSetupState } from './setupFlow.js';
+import { FIT_TEXT, chatModelName, downloadBytes, downloadLabel, hardwareText, localSetupState, pickedModel } from './setupFlow.js';
 
 function Downloading({ job, onCancel }) {
   const steps = job.steps.filter((step) => step.status !== 'skipped');
@@ -73,7 +73,7 @@ export default function LocalModelChoice({ local, brain }) {
     );
   }
 
-  const modelId = picked || plan.models.find((model) => model.recommended)?.id || plan.models[0]?.id;
+  const modelId = pickedModel(plan, job, picked);
   const state = localSetupState(job, brain);
   const jobModel = plan.models.find((model) => model.id === job?.options?.modelId);
   const jobLabel = jobModel?.label || job?.steps?.find((step) => step.key === 'model')?.label || 'The model';

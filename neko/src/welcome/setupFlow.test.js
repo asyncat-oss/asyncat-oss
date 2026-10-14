@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { NETWORK_CHOICES } from '../Settings/sandboxText.js';
 import {
   CHAT_MODE_CHOICES, FIT_TEXT, NETWORK_DESCRIPTIONS, SETUP_STEPS, chatModelName, doneText, downloadBytes, downloadLabel,
-  hardwareText, isLandingPath, laterJob, localModelName, localSetupState, nameToPrefill, networkPendingNote, sandboxSentence,
-  shouldOpenSetup, stepIndex,
+  hardwareText, isLandingPath, laterJob, localModelName, localSetupState, nameToPrefill, networkPendingNote, pickedModel,
+  sandboxSentence, shouldOpenSetup, stepIndex,
 } from './setupFlow.js';
 
 const GB = 1024 ** 3;
@@ -106,6 +106,16 @@ test('local models go by their names, not their file names', () => {
   assert.equal(chatModelName({ isBuiltin: false, model: 'gpt-5-mini', rawModel: 'gpt-5-mini' }), 'gpt-5-mini');
   assert.equal(chatModelName({ isBuiltin: true, model: '', rawModel: '' }), '');
   assert.equal(chatModelName(null), '');
+});
+
+test('the model shown picked: the one asked for last, else the suggestion', () => {
+  const plan = { models: [{ id: 'llama-3.2-3b', recommended: true }, { id: 'qwen3-1.7b', recommended: false }] };
+  assert.equal(pickedModel(plan, null), 'llama-3.2-3b');
+  assert.equal(pickedModel(plan, { status: 'cancelled', options: { modelId: 'qwen3-1.7b' } }), 'qwen3-1.7b', 'after a cancel');
+  assert.equal(pickedModel(plan, { status: 'cancelled', options: { modelId: 'qwen3-1.7b' } }, 'llama-3.2-3b'), 'llama-3.2-3b', 'a pick wins');
+  assert.equal(pickedModel(plan, { options: { modelId: 'qwen3-4b-instruct' } }), 'llama-3.2-3b', 'not offered here');
+  assert.equal(pickedModel({ models: [{ id: 'qwen3-1.7b' }] }, null), 'qwen3-1.7b');
+  assert.equal(pickedModel(null, null), null);
 });
 
 test('the last step says whether chats can start now', () => {

@@ -117,6 +117,14 @@ export function localSetupState(job, brain) {
   return 'ready';
 }
 
+/** The model to show picked: the one asked for last (after a cancel or a failure), else the suggestion. */
+export function pickedModel(plan, job, picked = null) {
+  const offered = (id) => (plan?.models || []).some((model) => model.id === id);
+  if (offered(picked)) return picked;
+  if (offered(job?.options?.modelId)) return job.options.modelId;
+  return plan?.models?.find((model) => model.recommended)?.id || plan?.models?.[0]?.id || null;
+}
+
 /** The sentence on the last step, for how chats will be answered. */
 export function doneText({ brain, localState, localName = '' }) {
   const answers = brain?.isReady || brain?.isLoadingModel;
