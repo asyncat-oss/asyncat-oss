@@ -1,3 +1,6 @@
+// The search palette (Ctrl+K): jump to a page, or find a project, a note, a
+// memory or a chat. Chats are found by title and by what was said in them;
+// a message hit opens the chat at that message.
 import {
   useState,
   useEffect,
@@ -7,6 +10,7 @@ import {
   useMemo,
   forwardRef,
 } from 'react';
+import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import {
   Search,
@@ -15,8 +19,7 @@ import {
   MessageSquare,
   FileText,
   SquareCheck,
-  Command,
-  Sparkles,
+  Brain,
   Cpu,
   Wrench,
   Settings,
@@ -24,45 +27,24 @@ import {
   CalendarPlus,
   GraduationCap,
   LayoutGrid,
+  Loader2,
+  Pin,
   Cat as CatIcon,
 } from 'lucide-react';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import { chatApi, agentApi } from '../CommandCenter/api';
 import { searchApi } from '../CommandCenter/api/searchApi.js';
+import SearchSnippet from '../components/SearchSnippet.jsx';
+import { chatLink, isPinned } from './chatSearch.js';
 
-// ─── Type config ──────────────────────────────────────────────────────────────
+// ─── Kinds of result ──────────────────────────────────────────────────────────
 
 const TYPE_CONFIG = {
-  project: {
-    icon: FolderOpen,
-    color: 'text-gray-400 dark:text-gray-500',
-    bg: 'bg-gray-100 dark:bg-white/[0.05]',
-    label: 'Projects',
-  },
-  conversation: {
-    icon: MessageSquare,
-    color: 'text-gray-400 dark:text-gray-500',
-    bg: 'bg-gray-100 dark:bg-white/[0.05]',
-    label: 'Conversations',
-  },
-  note: {
-    icon: FileText,
-    color: 'text-gray-400 dark:text-gray-500',
-    bg: 'bg-gray-100 dark:bg-white/[0.05]',
-    label: 'Notes',
-  },
-  command: {
-    icon: Command,
-    color: 'text-indigo-400 dark:text-indigo-400',
-    bg: 'bg-indigo-50 dark:bg-indigo-950/30',
-    label: 'Jump to',
-  },
-  memory: {
-    icon: Sparkles,
-    color: 'text-gray-400 dark:text-gray-500',
-    bg: 'bg-gray-100 dark:bg-white/[0.05]',
-    label: 'Memory',
-  },
+  command: { icon: MessageSquare, label: 'Jump to' },
+  project: { icon: FolderOpen, label: 'Projects' },
+  note: { icon: FileText, label: 'Notes' },
+  conversation: { icon: MessageSquare, label: 'Chats' },
+  memory: { icon: Brain, label: 'Memory' },
 };
 
 const SECTION_ORDER = ['command', 'project', 'note', 'conversation', 'memory'];
@@ -81,73 +63,75 @@ const COMMANDS = [
   { id: 'cmd-settings',  label: 'Go to Settings',       to: '/settings',     icon: Settings },
 ];
 
-// ─── Result Item ──────────────────────────────────────────────────────────────
+const LISTBOX_ID = 'universal-search-results';
+const optionId = (index) => `universal-search-option-${index}`;
+
+// ─── Result row ───────────────────────────────────────────────────────────────
 
 const SearchResultItem = memo(
-  forwardRef(({ item, isSelected, onSelect }, ref) => {
+  forwardRef(({ item, index, isSelected, onSelect, onHover }, ref) => {
     const cfg = TYPE_CONFIG[item._type] || TYPE_CONFIG.project;
     const Icon = item.icon || cfg.icon;
     const label = item.title || item.name || item.label || 'Untitled';
+    const detail = item.snippet || item.description || '';
+    const pinned = item._type === 'conversation' && (item.pinned || isPinned(item));
 
     return (
       <div
         ref={ref}
-        className={`flex items-center gap-3 px-3 py-[7px] mx-1.5 rounded-lg cursor-default transition-colors duration-75 ${
-          isSelected
-            ? 'bg-gray-200/80 dark:bg-white/[0.07] midnight:bg-white/[0.07]'
-            : 'hover:bg-gray-100 dark:hover:bg-white/[0.05] midnight:hover:bg-white/[0.05]'
+        id={optionId(index)}
+        role="option"
+        aria-selected={isSelected}
+        className={`mx-1.5 flex cursor-default items-start gap-2.5 rounded-lg px-2.5 py-2 transition-colors duration-75 ${
+          isSelected ? 'bg-selected' : 'hover:bg-hover'
         }`}
         onClick={() => onSelect(item)}
+        onMouseMove={() => { if (!isSelected) onHover(index); }}
       >
-        <span className={`flex-shrink-0 w-[26px] h-[26px] rounded-[7px] flex items-center justify-center ${
-          isSelected ? 'bg-white/[0.12] dark:bg-white/[0.10]' : cfg.bg
-        }`}>
+        <span className="mt-px flex h-[18px] w-[18px] shrink-0 items-center justify-center text-fg-subtle">
           {item._type === 'project' && item.emoji ? (
             <span className="text-sm leading-none">{item.emoji}</span>
           ) : (
-            <Icon className={`w-3.5 h-3.5 ${isSelected ? 'text-gray-600 dark:text-white/90' : cfg.color}`} />
+            <Icon className="h-4 w-4" strokeWidth={1.75} />
           )}
         </span>
 
-        <div className="flex-1 min-w-0">
-          <div className={`text-[13px] font-medium truncate leading-tight ${
-            isSelected
-              ? 'text-gray-700 dark:text-gray-200 midnight:text-gray-200'
-              : 'text-gray-800 dark:text-gray-100 midnight:text-gray-100'
-          }`}>
-            {label}
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate text-[13px] leading-[18px] text-fg">{label}</span>
+            {pinned ? <Pin aria-label="Pinned" className="h-3 w-3 shrink-0 text-fg-subtle" /> : null}
           </div>
-
-          {/* Snippet or description */}
-          {(item.snippet || item.description) && (
-            <div className={`text-[11px] truncate leading-snug mt-px ${
-              isSelected
-                ? 'text-gray-400 dark:text-gray-400 midnight:text-gray-400'
-                : 'text-gray-400 dark:text-gray-500 midnight:text-gray-500'
-            }`}>
-              {item.snippet || item.description}
-            </div>
-          )}
+          {detail ? (
+            <SearchSnippet snippet={detail} className="mt-0.5 line-clamp-2 text-xs leading-[17px] text-fg-muted" />
+          ) : null}
         </div>
-
       </div>
     );
   })
 );
 
 SearchResultItem.displayName = 'SearchResultItem';
-
-// ─── Section Header ───────────────────────────────────────────────────────────
+SearchResultItem.propTypes = {
+  item: PropTypes.object.isRequired,
+  index: PropTypes.number.isRequired,
+  isSelected: PropTypes.bool,
+  onSelect: PropTypes.func.isRequired,
+  onHover: PropTypes.func.isRequired,
+};
 
 const SectionHeader = ({ label }) => (
-  <div className="px-4 py-1.5">
-    <span className="text-[10px] font-semibold tracking-[0.1em] text-gray-400 dark:text-gray-600 midnight:text-gray-600 uppercase">
-      {label}
-    </span>
-  </div>
+  <div className="px-4 pb-1 pt-2 text-xs font-medium text-fg-subtle">{label}</div>
 );
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+SectionHeader.propTypes = { label: PropTypes.string.isRequired };
+
+const Key = ({ children }) => (
+  <kbd className="rounded border border-line bg-surface px-1 font-sans text-[10px] text-fg-muted">{children}</kbd>
+);
+
+Key.propTypes = { children: PropTypes.node };
+
+// ─── Palette ──────────────────────────────────────────────────────────────────
 
 const UniversalSearch = ({ isOpen, onClose }) => {
   const navigate = useNavigate();
@@ -156,7 +140,6 @@ const UniversalSearch = ({ isOpen, onClose }) => {
   const [localConversations, setLocalConversations] = useState([]);
   const [serverResults, setServerResults] = useState(null); // null = not searched yet
   const [memoryResults, setMemoryResults] = useState([]);
-  const [embStatus, setEmbStatus] = useState(null);
   const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -204,22 +187,18 @@ const UniversalSearch = ({ isOpen, onClose }) => {
     return cmds.filter(c => c.label.toLowerCase().includes(term));
   }, [searchTerm]);
 
-  // Commands first, then content, then semantic memory matches.
-  const filteredResults = useMemo(
-    () => [...commandResults, ...baseResults, ...memoryResults],
-    [commandResults, baseResults, memoryResults],
-  );
-
-  // Group by type for rendering
-  const groupedResults = useMemo(() => {
+  // Grouped in section order; the flat list follows the same order, so the
+  // arrow keys move down the screen.
+  const sections = useMemo(() => {
     const groups = {};
-    filteredResults.forEach(item => {
-      const t = item._type || 'project';
-      if (!groups[t]) groups[t] = [];
-      groups[t].push(item);
+    [...commandResults, ...baseResults, ...memoryResults].forEach((item) => {
+      const type = TYPE_CONFIG[item._type] ? item._type : 'project';
+      (groups[type] ||= []).push(item);
     });
-    return groups;
-  }, [filteredResults]);
+    return SECTION_ORDER.filter((type) => groups[type]?.length).map((type) => ({ type, items: groups[type] }));
+  }, [commandResults, baseResults, memoryResults]);
+
+  const filteredResults = useMemo(() => sections.flatMap((section) => section.items), [sections]);
 
   // ── Server search (debounced 220ms) ──────────────────────────────────────
 
@@ -287,9 +266,31 @@ const UniversalSearch = ({ isOpen, onClose }) => {
       setMemoryResults([]);
       setSelectedIndex(0);
       setTimeout(() => inputRef.current?.focus(), 50);
-      agentApi.getEmbeddingStatus().then(setEmbStatus).catch(() => {});
     }
   }, [isOpen, loadData]);
+
+  // ── Select handler ────────────────────────────────────────────────────────
+
+  const handleSelect = useCallback(
+    (item) => {
+      if (item._type === 'command') {
+        if (item.to) navigate(item.to);
+      } else if (item._type === 'memory') {
+        navigate('/tools?tab=memory');
+      } else if (item._type === 'project') {
+        navigate(`/projects/${item.id}`);
+      } else if (item._type === 'conversation') {
+        // A hit inside a message opens the chat at that message.
+        navigate(chatLink(item.id, item.messageId || null));
+      } else if (item._type === 'note') {
+        // Notes have no page of their own; they live as artifacts in the chat
+        // that created them. Results without a chat are filtered out above.
+        navigate(chatLink(item.conversationId));
+      }
+      onClose();
+    },
+    [navigate, onClose]
+  );
 
   // ── Keyboard navigation ───────────────────────────────────────────────────
 
@@ -317,8 +318,7 @@ const UniversalSearch = ({ isOpen, onClose }) => {
     };
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, filteredResults, selectedIndex, onClose]);
+  }, [isOpen, filteredResults, selectedIndex, onClose, handleSelect]);
 
   // ── Click outside ─────────────────────────────────────────────────────────
 
@@ -331,158 +331,107 @@ const UniversalSearch = ({ isOpen, onClose }) => {
     return () => document.removeEventListener('mousedown', handler);
   }, [isOpen, onClose]);
 
-  useEffect(() => { setSelectedIndex(0); }, [searchTerm]);
+  useEffect(() => { setSelectedIndex(0); }, [searchTerm, serverResults]);
 
   useEffect(() => {
-    itemRefs.current[selectedIndex]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    itemRefs.current[selectedIndex]?.scrollIntoView({ block: 'nearest' });
   }, [selectedIndex]);
-
-  // ── Select handler ────────────────────────────────────────────────────────
-
-  const handleSelect = useCallback(
-    (item) => {
-      if (item._type === 'command') {
-        if (item.to) navigate(item.to);
-        onClose();
-        return;
-      }
-      if (item._type === 'memory') {
-        navigate('/tools?tab=memory');
-        onClose();
-        return;
-      }
-      if (item._type === 'project') {
-        navigate(`/projects/${item.id}`);
-      } else if (item._type === 'conversation') {
-        navigate(`/conversations/${item.id}`);
-      } else if (item._type === 'note') {
-        // Notes have no page of their own; they live as artifacts in the chat
-        // that created them. Results without a chat are filtered out below.
-        navigate(`/conversations/${item.conversationId}`);
-      }
-      onClose();
-    },
-    [navigate, onClose]
-  );
 
   if (!isOpen) return null;
 
   const isSpinning = loading || searching;
   const isEmpty = filteredResults.length === 0;
-  const showServerBadge = serverResults !== null && searchTerm.trim().length >= 2;
+  const activeId = filteredResults[selectedIndex] ? optionId(selectedIndex) : undefined;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-[16vh] px-4 bg-black/25 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 px-4 pt-[14vh]">
       <div
         ref={modalRef}
-        className="w-full max-w-[620px] rounded-2xl overflow-hidden border border-black/[0.06] dark:border-white/[0.07] midnight:border-white/[0.04] bg-white/[0.9] dark:bg-gray-900/[0.97] midnight:bg-gray-950/[0.97] backdrop-blur-3xl shadow-[0_12px_40px_rgba(0,0,0,0.18)] dark:shadow-[0_12px_40px_rgba(0,0,0,0.5)] midnight:shadow-[0_12px_40px_rgba(0,0,0,0.6)]"
+        role="dialog"
+        aria-label="Search"
+        className="w-full max-w-[620px] overflow-hidden rounded-xl border border-line bg-elevated shadow-lg"
       >
         {/* ── Search input ────────────────────────────────────────────────── */}
-        <div className="flex items-center gap-3 px-4 h-[52px]">
+        <div className="flex h-[52px] items-center gap-3 px-4">
           {isSpinning
-            ? <div className="w-4 h-4 border-[1.5px] border-gray-300 dark:border-gray-600 midnight:border-gray-600 border-t-gray-600 dark:border-t-gray-300 midnight:border-t-gray-300 rounded-full animate-spin flex-shrink-0" />
-            : <Search className="w-[17px] h-[17px] text-gray-400 dark:text-gray-500 midnight:text-gray-500 flex-shrink-0" />
+            ? <Loader2 className="h-4 w-4 shrink-0 animate-spin text-fg-subtle" />
+            : <Search className="h-4 w-4 shrink-0 text-fg-subtle" />
           }
           <input
             ref={inputRef}
             type="text"
-            placeholder="Search or jump to anything…  ⌘K"
+            role="combobox"
+            aria-expanded={!isEmpty}
+            aria-controls={LISTBOX_ID}
+            aria-activedescendant={activeId}
+            aria-autocomplete="list"
+            aria-label="Search chats, projects and notes"
+            placeholder="Search chats, projects and notes"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="flex-1 bg-transparent border-none outline-none text-[15px] text-gray-900 dark:text-gray-100 midnight:text-gray-100 placeholder-gray-300 dark:placeholder-gray-600 midnight:placeholder-gray-600"
+            className="min-w-0 flex-1 border-none bg-transparent text-[15px] text-fg outline-none placeholder:text-fg-subtle"
           />
           {searchTerm && (
             <button
-              onClick={() => { setSearchTerm(''); setServerResults(null); }}
-              className="w-5 h-5 flex items-center justify-center rounded-full bg-gray-200/80 dark:bg-gray-700/80 midnight:bg-gray-700/80 hover:bg-gray-300/80 dark:hover:bg-gray-600/80 midnight:hover:bg-gray-600/80 flex-shrink-0 transition-colors"
+              type="button"
+              aria-label="Clear search"
+              onClick={() => { setSearchTerm(''); setServerResults(null); inputRef.current?.focus(); }}
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-hover hover:text-fg"
             >
-              <X className="w-2.5 h-2.5 text-gray-500 dark:text-gray-400 midnight:text-gray-400" />
+              <X className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
 
         {/* ── Results area ────────────────────────────────────────────────── */}
         {(!isEmpty || (isEmpty && searchTerm && !isSpinning)) && (
-          <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800">
+          <div className="border-t border-line">
             {isEmpty && searchTerm && !searching ? (
-              <div className="py-10 text-center">
-                <p className="text-sm text-gray-400 dark:text-gray-500 midnight:text-gray-500">
-                  No results for{' '}
-                  <span className="text-gray-600 dark:text-gray-300 midnight:text-gray-300">
-                    &quot;{searchTerm}&quot;
-                  </span>
-                </p>
-              </div>
+              <p className="px-4 py-10 text-center text-sm text-fg-muted">
+                Nothing found for &ldquo;<span className="text-fg">{searchTerm}</span>&rdquo;
+              </p>
             ) : (
-              <div className="py-2 max-h-[420px] overflow-y-auto">
-                {SECTION_ORDER.map((type) => {
-                  const items = groupedResults[type];
-                  if (!items?.length) return null;
-                  const cfg = TYPE_CONFIG[type];
-                  return (
-                    <div key={type} className="mb-1">
-                      <SectionHeader label={cfg.label} />
-                      {items.map((item) => {
-                        const gi = filteredResults.indexOf(item);
-                        return (
-                          <SearchResultItem
-                            key={`${type}-${item.id}`}
-                            ref={(el) => (itemRefs.current[gi] = el)}
-                            item={item}
-                            isSelected={selectedIndex === gi}
-                            onSelect={handleSelect}
-                          />
-                        );
-                      })}
-                    </div>
-                  );
-                })}
+              <div id={LISTBOX_ID} role="listbox" aria-label="Results" className="max-h-[min(440px,60vh)] overflow-y-auto py-1.5">
+                {sections.map(({ type, items }) => (
+                  <div key={type} role="group" aria-label={TYPE_CONFIG[type].label} className="mb-1">
+                    <SectionHeader label={TYPE_CONFIG[type].label} />
+                    {items.map((item) => {
+                      const gi = filteredResults.indexOf(item);
+                      return (
+                        <SearchResultItem
+                          key={`${type}-${item.id}`}
+                          ref={(el) => (itemRefs.current[gi] = el)}
+                          item={item}
+                          index={gi}
+                          isSelected={selectedIndex === gi}
+                          onSelect={handleSelect}
+                          onHover={setSelectedIndex}
+                        />
+                      );
+                    })}
+                  </div>
+                ))}
               </div>
             )}
           </div>
         )}
 
         {/* ── Footer ──────────────────────────────────────────────────────── */}
-        {!isEmpty && !isSpinning && (
-          <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800 px-4 py-2 flex items-center justify-between">
-            <div className="flex items-center gap-3 text-[10px] text-gray-400 dark:text-gray-600 midnight:text-gray-600">
-              <span className="flex items-center gap-1">
-                <kbd className="px-1 py-px rounded text-[9px] bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 border border-gray-200 dark:border-gray-700/60 midnight:border-gray-700/60">↑↓</kbd>
-                navigate
-              </span>
-              <span className="flex items-center gap-1">
-                <kbd className="px-1 py-px rounded text-[9px] bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 border border-gray-200 dark:border-gray-700/60 midnight:border-gray-700/60">↵</kbd>
-                open
-              </span>
-              <span className="flex items-center gap-1">
-                <kbd className="px-1 py-px rounded text-[9px] bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 border border-gray-200 dark:border-gray-700/60 midnight:border-gray-700/60">Esc</kbd>
-                dismiss
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              {embStatus && (
-                <span
-                  className="flex items-center gap-1 text-[10px] text-gray-400 dark:text-gray-600 midnight:text-gray-600"
-                  title={`Embeddings: ${embStatus.model}${embStatus.dims ? ` · ${embStatus.dims}d` : ''} · ${embStatus.cacheCount || 0} cached`}
-                >
-                  <Sparkles className="w-2.5 h-2.5" />
-                  {embStatus.mode === 'provider' ? `semantic · ${embStatus.model}` : 'offline search'}
-                </span>
-              )}
-              {showServerBadge && (
-                <span className="text-[10px] text-gray-300 dark:text-gray-700 midnight:text-gray-700">
-                  full search
-                </span>
-              )}
-              <span className="text-[10px] text-gray-300 dark:text-gray-700 midnight:text-gray-700">
-                {filteredResults.length}
-              </span>
-            </div>
+        {!isEmpty && (
+          <div className="hidden items-center gap-3 border-t border-line px-4 py-2 text-[11px] text-fg-subtle sm:flex">
+            <span className="flex items-center gap-1"><Key>↑</Key><Key>↓</Key> to move</span>
+            <span className="flex items-center gap-1"><Key>↵</Key> to open</span>
+            <span className="flex items-center gap-1"><Key>Esc</Key> to close</span>
           </div>
         )}
       </div>
     </div>
   );
+};
+
+UniversalSearch.propTypes = {
+  isOpen: PropTypes.bool,
+  onClose: PropTypes.func.isRequired,
 };
 
 export default memo(UniversalSearch);

@@ -299,93 +299,98 @@ function UserGoalEvent({ data, onEditMessage, onToggleMessageFlag, isRunning, hi
     <div
       id={data?.messageId ? `message-${data.messageId}` : undefined}
       data-message-id={data?.messageId || undefined}
-      className={`group mb-6 scroll-mt-24 rounded-2xl transition-colors duration-700 ${rise ? 'animate-fadeIn' : ''} ${
-        highlighted ? 'bg-amber-50/80 dark:bg-amber-950/20 midnight:bg-amber-950/20' : ''
-      }`}
+      className={`group mb-6 scroll-mt-24 ${rise ? 'animate-fadeIn' : ''}`}
     >
       <div className="max-w-3xl mx-auto flex flex-col items-end">
-        <div className="max-w-[80%] rounded-[22px] bg-bubble px-4 py-2.5">
-          {(data?.parentBranchId || data?.bookmarked) && (
-            <div className="mb-1 flex justify-end gap-1.5 items-center">
-              {data?.parentBranchId && (
-                <span className="inline-flex items-center gap-1 rounded-md bg-white/70 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-900/50 dark:text-gray-400 midnight:bg-slate-950/50 midnight:text-slate-400">
-                  <GitBranch className="h-3 w-3" />
-                  Branch
-                </span>
-              )}
-              {data?.bookmarked && <BookMarked className="h-3.5 w-3.5 text-amber-500" />}
-            </div>
-          )}
-          {isEditing ? (
-            <div className="space-y-2">
-              <textarea
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') submitEdit();
-                  if (e.key === 'Escape') {
-                    setIsEditing(false);
-                    setDraft(goal);
-                  }
-                }}
-                className="min-h-[96px] w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm leading-relaxed text-gray-900 outline-none focus:border-gray-300 focus:ring-2 focus:ring-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:focus:border-gray-600 dark:focus:ring-gray-800 midnight:border-slate-700 midnight:bg-slate-950 midnight:text-slate-100 midnight:focus:border-slate-600 midnight:focus:ring-slate-800"
-                autoFocus
-              />
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsEditing(false);
-                    setDraft(goal);
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:text-slate-400 midnight:hover:bg-slate-800 midnight:hover:text-slate-100"
-                >
-                  <XCircle className="h-3.5 w-3.5" />
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={submitEdit}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-gray-900 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white midnight:bg-indigo-600 midnight:text-white midnight:hover:bg-indigo-500"
-                >
-                  <GitBranch className="h-3.5 w-3.5" />
-                  Branch
-                </button>
+        {/* Opened from search: the bubble's row is shaded for a moment, like
+            an answer (the bubble is already grey, so a tint on it alone
+            hardly shows). */}
+        <div className={`flex w-full justify-end rounded-[22px] transition-[background-color,box-shadow] duration-700 ${
+          highlighted ? 'bg-selected ring-8 ring-selected' : ''
+        }`}>
+          <div className="max-w-[80%] rounded-[22px] bg-bubble px-4 py-2.5">
+            {(data?.parentBranchId || data?.bookmarked) && (
+              <div className="mb-1 flex justify-end gap-1.5 items-center">
+                {data?.parentBranchId && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-white/70 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-900/50 dark:text-gray-400 midnight:bg-slate-950/50 midnight:text-slate-400">
+                    <GitBranch className="h-3 w-3" />
+                    Branch
+                  </span>
+                )}
+                {data?.bookmarked && <BookMarked className="h-3.5 w-3.5 text-amber-500" />}
               </div>
-            </div>
-          ) : (
-            <div className={`${MESSAGE_TEXT} whitespace-pre-wrap [overflow-wrap:anywhere]`}>
-              {renderGoalWithMentions(goal, data?.fileAttachments)}
-            </div>
-          )}
-          {Array.isArray(data?.agentMentions) && data.agentMentions.length > 0 && (
-            <div className="mt-2 flex flex-wrap justify-end gap-1">
-              {data.agentMentions.map(agent => (
-                <span key={agent.id || agent.handle} className="inline-flex items-center gap-1 rounded-md bg-white/70 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-900/50 dark:text-gray-400 midnight:bg-slate-950/50 midnight:text-slate-400">
-                  <span>{agent.icon || '🤖'}</span>
-                  #{agent.handle}
-                </span>
-              ))}
-            </div>
-          )}
-          {Array.isArray(data?.fileAttachments) && data.fileAttachments.some(f => !f.inline) && (
-            <div className="mt-2 flex flex-wrap justify-end gap-2">
-              {data.fileAttachments.filter(f => !f.inline).map(file => (
-                <AttachmentChip
-                  key={file.path || file.name}
-                  file={file}
-                  onPreview={setLightbox}
+            )}
+            {isEditing ? (
+              <div className="space-y-2">
+                <textarea
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') submitEdit();
+                    if (e.key === 'Escape') {
+                      setIsEditing(false);
+                      setDraft(goal);
+                    }
+                  }}
+                  className="min-h-[96px] w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm leading-relaxed text-gray-900 outline-none focus:border-gray-300 focus:ring-2 focus:ring-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:focus:border-gray-600 dark:focus:ring-gray-800 midnight:border-slate-700 midnight:bg-slate-950 midnight:text-slate-100 midnight:focus:border-slate-600 midnight:focus:ring-slate-800"
+                  autoFocus
                 />
-              ))}
-            </div>
-          )}
-          {lightbox && (
-            <ImageLightbox
-              url={lightbox.url}
-              name={lightbox.name}
-              onClose={() => setLightbox(null)}
-            />
-          )}
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEditing(false);
+                      setDraft(goal);
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:text-slate-400 midnight:hover:bg-slate-800 midnight:hover:text-slate-100"
+                  >
+                    <XCircle className="h-3.5 w-3.5" />
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={submitEdit}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-gray-900 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white midnight:bg-indigo-600 midnight:text-white midnight:hover:bg-indigo-500"
+                  >
+                    <GitBranch className="h-3.5 w-3.5" />
+                    Branch
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className={`${MESSAGE_TEXT} whitespace-pre-wrap [overflow-wrap:anywhere]`}>
+                {renderGoalWithMentions(goal, data?.fileAttachments)}
+              </div>
+            )}
+            {Array.isArray(data?.agentMentions) && data.agentMentions.length > 0 && (
+              <div className="mt-2 flex flex-wrap justify-end gap-1">
+                {data.agentMentions.map(agent => (
+                  <span key={agent.id || agent.handle} className="inline-flex items-center gap-1 rounded-md bg-white/70 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-900/50 dark:text-gray-400 midnight:bg-slate-950/50 midnight:text-slate-400">
+                    <span>{agent.icon || '🤖'}</span>
+                    #{agent.handle}
+                  </span>
+                ))}
+              </div>
+            )}
+            {Array.isArray(data?.fileAttachments) && data.fileAttachments.some(f => !f.inline) && (
+              <div className="mt-2 flex flex-wrap justify-end gap-2">
+                {data.fileAttachments.filter(f => !f.inline).map(file => (
+                  <AttachmentChip
+                    key={file.path || file.name}
+                    file={file}
+                    onPreview={setLightbox}
+                  />
+                ))}
+              </div>
+            )}
+            {lightbox && (
+              <ImageLightbox
+                url={lightbox.url}
+                name={lightbox.name}
+                onClose={() => setLightbox(null)}
+              />
+            )}
+          </div>
         </div>
         <div className="mt-1 flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
           {canEdit && (
@@ -1407,56 +1412,59 @@ function AnswerEvent({
       {displayAnswer && <div
         id={data?.messageId ? `message-${data.messageId}` : undefined}
         data-message-id={data?.messageId || undefined}
-        className={`group mb-6 scroll-mt-24 rounded-2xl transition-colors duration-700 ${
-          highlighted ? 'bg-amber-50/80 dark:bg-amber-950/20 midnight:bg-amber-950/20' : ''
-        }`}
+        className="group mb-6 scroll-mt-24"
       >
         <div className="max-w-3xl mx-auto">
-          {!isStoppedRun && data?.bookmarked && (
-            <BookMarked className="mb-2 h-3.5 w-3.5 text-amber-500" />
-          )}
+          {/* Opened from search: the answer is shaded for a moment. */}
+          <div className={`rounded-xl transition-[background-color,box-shadow] duration-700 ${
+            highlighted ? 'bg-selected ring-8 ring-selected' : ''
+          }`}>
+            {!isStoppedRun && data?.bookmarked && (
+              <BookMarked className="mb-2 h-3.5 w-3.5 text-amber-500" />
+            )}
 
-          {/* Answer body — collapsed behind a disclosure when the run was stopped */}
-          {isStoppedRun ? (
-            <div className="mb-2">
-              <button
-                type="button"
-                onClick={() => setNotesExpanded(v => !v)}
-                className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 midnight:text-slate-500 midnight:hover:text-slate-300 transition-colors"
-              >
-                {notesExpanded
-                  ? <ChevronDown className="w-3 h-3" />
-                  : <ChevronRight className="w-3 h-3" />}
-                Agent notes
-                {data?.bookmarked && <BookMarked className="ml-0.5 h-3 w-3 text-amber-500" />}
-              </button>
-              {notesExpanded && (
-                <div className="mt-2 pl-4 border-l-2 border-line">
-                  {answerBody}
-                </div>
-              )}
-            </div>
-          ) : (
-            answerBody
-          )}
+            {/* Answer body — collapsed behind a disclosure when the run was stopped */}
+            {isStoppedRun ? (
+              <div className="mb-2">
+                <button
+                  type="button"
+                  onClick={() => setNotesExpanded(v => !v)}
+                  className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 midnight:text-slate-500 midnight:hover:text-slate-300 transition-colors"
+                >
+                  {notesExpanded
+                    ? <ChevronDown className="w-3 h-3" />
+                    : <ChevronRight className="w-3 h-3" />}
+                  Agent notes
+                  {data?.bookmarked && <BookMarked className="ml-0.5 h-3 w-3 text-amber-500" />}
+                </button>
+                {notesExpanded && (
+                  <div className="mt-2 pl-4 border-l-2 border-line">
+                    {answerBody}
+                  </div>
+                )}
+              </div>
+            ) : (
+              answerBody
+            )}
 
-          {/* Read Aloud Action */}
-          {ttsReady && displayAnswer && !isStoppedRun && (
-            <div className="mt-3 max-w-xl">
-              <InlineAudioPlayer
-                loadSrc={() => audioApi.tts.speak(displayAnswer)}
-                showInfo={true}
-                infoContent={
-                  <span className="ml-1 text-[10px] text-fg-subtle">Read aloud</span>
-                }
-              />
-            </div>
-          )}
+            {/* Read Aloud Action */}
+            {ttsReady && displayAnswer && !isStoppedRun && (
+              <div className="mt-3 max-w-xl">
+                <InlineAudioPlayer
+                  loadSrc={() => audioApi.tts.speak(displayAnswer)}
+                  showInfo={true}
+                  infoContent={
+                    <span className="ml-1 text-[10px] text-fg-subtle">Read aloud</span>
+                  }
+                />
+              </div>
+            )}
 
-          <SourcesPanel searchEvent={data?.searchEvent} />
-          {!isStoppedRun && data?.round > 1 && (
-            <p className="text-[10px] text-gray-300 dark:text-gray-700 midnight:text-slate-700 mt-2">{data.round} rounds</p>
-          )}
+            <SourcesPanel searchEvent={data?.searchEvent} />
+            {!isStoppedRun && data?.round > 1 && (
+              <p className="text-[10px] text-gray-300 dark:text-gray-700 midnight:text-slate-700 mt-2">{data.round} rounds</p>
+            )}
+          </div>
           <div className={`mt-2 flex flex-wrap items-center gap-0.5 transition-opacity group-hover:opacity-100 focus-within:opacity-100 ${isLatest && !isRunning ? 'animate-[fadeIn_240ms_ease-out] opacity-100' : 'opacity-0'}`}>
             <MessageAction label={copied ? 'Copied' : 'Copy'} onClick={copyAnswer}>
               {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}

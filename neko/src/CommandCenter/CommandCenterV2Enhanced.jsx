@@ -64,6 +64,7 @@ import Cat from "../components/ui/Cat.jsx";
 import { engineDisplayName, registerEngineNames, resumeCommand } from "../Agent/externalAgentFormat.js";
 import { ALWAYS_ALLOW_EVENT, ALWAYS_ALLOW_KEY, alwaysAllowedChatTools } from "../services/chatDefaults.js";
 import { FOLLOW_UP_EVENT } from "./components/renderers/interactiveEvents.js";
+import { linkedMessageId } from "../sidebar/chatSearch.js";
 
 import { buildConversationSourceCatalog } from "./utils/conversationUtils.js";
 import {
@@ -671,23 +672,45 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     }
   }, []);
 
-  const handleOpenSavedMessage = useCallback((messageId) => {
-    if (!messageId || !scrollContainerRef.current) return;
+  // Scrolls a message into the middle of the chat and highlights it briefly.
+  // False when it isn't on screen (yet).
+  const jumpToMessage = useCallback((messageId, { smooth = true } = {}) => {
+    const container = scrollContainerRef.current;
+    if (!messageId || !container) return false;
     const selector = typeof CSS !== 'undefined' && CSS.escape
       ? `[data-message-id="${CSS.escape(messageId)}"]`
       : `[data-message-id="${String(messageId).replace(/"/g, '\\"')}"]`;
-    const target = scrollContainerRef.current.querySelector(selector);
-    if (!target) return;
+    const findTarget = () => container.querySelector(selector);
+    const target = findTarget();
+    if (!target) return false;
 
     setHighlightedMessageId(messageId);
-    target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+    target.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'center', inline: 'nearest' });
     if (window.innerWidth < 1280) {
       setShowActivitySidebar(false);
     }
+    if (!smooth) {
+      // Pictures and code above it can still change height as they render:
+      // put it back in view once they have.
+      window.setTimeout(() => {
+        const node = findTarget();
+        if (!node) return;
+        const box = node.getBoundingClientRect();
+        const view = container.getBoundingClientRect();
+        if (box.bottom < view.top + 40 || box.top > view.bottom - 40) {
+          node.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'nearest' });
+        }
+      }, 400);
+    }
     window.setTimeout(() => {
       setHighlightedMessageId(current => (current === messageId ? null : current));
-    }, 1800);
+    }, 1500);
+    return true;
   }, []);
+
+  const handleOpenSavedMessage = useCallback((messageId) => {
+    jumpToMessage(messageId);
+  }, [jumpToMessage]);
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -2341,8 +2364,37 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     return () => window.removeEventListener('asyncat-open-preview', handler);
   }, []);
 
-  // The Cats page opened a tab in a Cat's browser profile: show the browser.
+  // A search result opens a chat at a message (/conversations/:id?message=…):
+  // once that chat's messages are on screen, scroll there, then drop the
+  // parameter so it doesn't jump again.
   const location = useLocation();
+  const linkedMessage = linkedMessageId(location.search);
+  useEffect(() => {
+    if (!linkedMessage || isConversationLoading || !currentConversationId) return undefined;
+    if (!location.pathname.endsWith(`/${currentConversationId}`)) return undefined;
+    const clearLink = () => navigate({ pathname: location.pathname, search: '' }, { replace: true, state: location.state });
+    if (!messages.some((message) => message.id === linkedMessage)) {
+      // Not in this chat any more (edited away, or on another branch).
+      if (messages.length > 0) clearLink();
+      return undefined;
+    }
+    let tries = 0;
+    let timer = null;
+    const attempt = () => {
+      if (jumpToMessage(linkedMessage, { smooth: false })) {
+        clearLink();
+        return;
+      }
+      tries += 1;
+      if (tries < 20) timer = window.setTimeout(attempt, 150);
+      else clearLink();
+    };
+    // After the chat has rendered and made its first scroll to the end.
+    timer = window.setTimeout(attempt, 250);
+    return () => window.clearTimeout(timer);
+  }, [linkedMessage, isConversationLoading, currentConversationId, messages, jumpToMessage, location.pathname, location.state, navigate]);
+
+  // The Cats page opened a tab in a Cat's browser profile: show the browser.
   useEffect(() => {
     if (!location.state?.openBrowser) return;
     setShowActivitySidebar(true);
