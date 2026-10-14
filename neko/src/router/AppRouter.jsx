@@ -1,7 +1,7 @@
 // router/AppRouter.jsx - local application routes
 import { lazy, Suspense } from 'react';
 import PropTypes from 'prop-types';
-import { createBrowserRouter, RouterProvider, Navigate, useParams } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider, Navigate, useLocation, useParams } from 'react-router-dom';
 import { UserProvider } from '../contexts/UserContext';
 import { WorkspaceProvider } from '../contexts/WorkspaceContext';
 import { UiPreferencesProvider } from '../contexts/UiPreferencesContext';
@@ -27,7 +27,7 @@ const ToolsSkillsPage = lazy(() => import('../Tools/ToolsSkillsPage'));
 const AgentPage = lazy(() => import('../Agent/AgentPage'));
 const CatsPage = lazy(() => import('../Cats/CatsPage'));
 const CatPage = lazy(() => import('../Cats/CatPage'));
-const MadePage = lazy(() => import('../made/MadePage'));
+const FilesPage = lazy(() => import('../files/FilesPage'));
 // The desktop app's Quick ask window: its own small page, outside the app's
 // layout and providers (electron/quick.js).
 const QuickAsk = lazy(() => import('../quick/QuickAsk'));
@@ -36,6 +36,12 @@ const QuickAsk = lazy(() => import('../quick/QuickAsk'));
 const LegacyProjectRedirect = () => {
   const { projectId } = useParams();
   return <Navigate to={projectId ? `/projects/${projectId}` : '/projects'} replace />;
+};
+
+// The old /made page is now Files → Made by agents; ?kind= and ?open= come along.
+const MadeRedirect = () => {
+  const { search } = useLocation();
+  return <Navigate to={`/files/made${search}`} replace />;
 };
 
 // Automations (Workflows, Schedules, Activity) became one Scheduled page,
@@ -197,8 +203,18 @@ const createRouter = () => createBrowserRouter([
         errorElement: <RouteErrorElement />
       },
       {
+        path: "files",
+        element: <FilesPage />,
+        errorElement: <RouteErrorElement />
+      },
+      {
+        path: "files/:place",
+        element: <FilesPage />,
+        errorElement: <RouteErrorElement />
+      },
+      {
         path: "made",
-        element: <MadePage />,
+        element: <MadeRedirect />,
         errorElement: <RouteErrorElement />
       },
       {
