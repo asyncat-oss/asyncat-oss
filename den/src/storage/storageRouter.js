@@ -19,9 +19,9 @@ const sanitizePath = (inputPath) => {
   return path.normalize(inputPath).replace(/^(\.\.(\/|\\|$))+/, '');
 };
 
-router.get('/summary', (req, res) => {
+router.get('/summary', async (req, res) => {
   try {
-    const summary = getStorageSummary();
+    const summary = await getStorageSummary();
     res.json(summary);
   } catch (err) {
     console.error('Storage summary error:', err);

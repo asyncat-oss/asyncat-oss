@@ -6,6 +6,7 @@ import db from '../db/client.js';
 import { getModelsDir } from '../ai/controllers/ai/modelManager.js';
 import { runtimeDbPath, runtimeHome, runtimeUploadsPath } from '../config/runtimeConfig.js';
 import { logRoot } from '../logger.js';
+import { folderUsage, forgetUsage } from './diskUsage.js';
 
 // den's logs are in logRoot(), one folder per kind. The folder above it holds
 // other .log files, such as the desktop app's backend-process.log.
@@ -20,7 +21,6 @@ function logCategoryDir(config) {
   return config.dir ? path.join(logRoot(), config.dir) : path.dirname(logRoot());
 }
 
-const DEFAULT_SCAN_LIMIT = 25000;
 const MANAGED_UPLOAD_CONTAINERS = ['notes', 'kanban-attachments'];
 
 function formatBytes(bytes) {
@@ -79,86 +79,18 @@ function getDiskInfo(targetPath) {
   }
 }
 
-function directoryUsage(rootPath, limit = DEFAULT_SCAN_LIMIT) {
-  const rootStat = safeLstat(rootPath);
-  if (!rootStat) {
-    return {
-      exists: false,
-      path: rootPath,
-      bytes: 0,
-      formatted: '0 B',
-      files: 0,
-      directories: 0,
-      truncated: false,
-    };
-  }
-
-  if (!rootStat.isDirectory()) {
-    const bytes = rootStat.size || 0;
-    return {
-      exists: true,
-      path: rootPath,
-      bytes,
-      formatted: formatBytes(bytes),
-      files: 1,
-      directories: 0,
-      truncated: false,
-    };
-  }
-
-  const stack = [rootPath];
-  let bytes = 0;
-  let files = 0;
-  let directories = 0;
-  let visited = 0;
-  let truncated = false;
-
-  while (stack.length > 0) {
-    if (visited >= limit) {
-      truncated = true;
-      break;
-    }
-
-    const current = stack.pop();
-    visited += 1;
-
-    let entries = [];
-    try {
-      entries = fs.readdirSync(current, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-
-    for (const entry of entries) {
-      if (visited >= limit) {
-        truncated = true;
-        break;
-      }
-
-      const entryPath = path.join(current, entry.name);
-      const stat = safeLstat(entryPath);
-      if (!stat || stat.isSymbolicLink()) continue;
-
-      visited += 1;
-      bytes += stat.size || 0;
-
-      if (stat.isDirectory()) {
-        directories += 1;
-        stack.push(entryPath);
-      } else {
-        files += 1;
-      }
-    }
-  }
-
+// The old Storage panel's folder sizes, from the shared scanner.
+async function directoryUsage(rootPath) {
+  const exists = Boolean(safeLstat(rootPath));
+  const usage = exists ? await folderUsage(rootPath) : { bytes: 0, files: 0, partial: false };
   return {
-    exists: true,
+    exists,
     path: rootPath,
-    bytes,
-    formatted: formatBytes(bytes),
-    files,
-    directories,
-    truncated,
+    bytes: usage.bytes,
+    formatted: formatBytes(usage.bytes),
+    files: usage.files,
+    directories: 0,
+    truncated: usage.partial,
   };
 }
 
@@ -220,7 +152,7 @@ function getDatabaseSummary() {
   };
 }
 
-function getPathSummaries() {
+async function getPathSummaries() {
   const modelsPath = getModelsDir();
   const uploadsPath = getStoragePath();
   const asyncatHome = runtimeHome();
@@ -230,25 +162,25 @@ function getPathSummaries() {
       id: 'models',
       label: 'Local AI models',
       description: 'Downloaded GGUF/bin model files used by the built-in local runtime.',
-      ...directoryUsage(modelsPath),
+      ...(await directoryUsage(modelsPath)),
     },
     {
       id: 'uploads',
       label: 'Uploads and attachments',
       description: 'Local app uploads such as kanban card attachments.',
-      ...directoryUsage(uploadsPath),
+      ...(await directoryUsage(uploadsPath)),
     },
     {
       id: 'asyncat-home',
       label: 'Managed runtime home',
       description: 'Asyncat-owned inference engines and isolated Python environments.',
-      ...directoryUsage(asyncatHome),
+      ...(await directoryUsage(asyncatHome)),
     },
   ];
 }
 
-export function getStorageSummary() {
-  const paths = getPathSummaries();
+export async function getStorageSummary() {
+  const paths = await getPathSummaries();
   const database = getDatabaseSummary();
   const appDataBytes = database.totalBytes + paths.reduce((sum, item) => sum + item.bytes, 0);
   const disk = getDiskInfo(database.path);
@@ -275,7 +207,7 @@ export function getStorageSummary() {
 
 export async function clearManagedUploads() {
   const uploadsPath = getStoragePath();
-  const before = directoryUsage(uploadsPath);
+  const before = await directoryUsage(uploadsPath);
 
   await fsp.mkdir(uploadsPath, { recursive: true });
 
@@ -288,7 +220,8 @@ export async function clearManagedUploads() {
     await fsp.mkdir(containerPath, { recursive: true });
   }
 
-  const after = directoryUsage(uploadsPath);
+  forgetUsage(uploadsPath);
+  const after = await directoryUsage(uploadsPath);
   const deletedBytes = Math.max(0, (before.bytes || 0) - (after.bytes || 0));
   const deletedFiles = Math.max(0, (before.files || 0) - (after.files || 0));
 

@@ -13,6 +13,7 @@ import { secretStatus } from '../lib/secretBox.js';
 import {
   runtimeDataPath, runtimeDataRoot, runtimeDbPath, runtimeHome, runtimeModelsPath, runtimeUploadsPath,
 } from '../config/runtimeConfig.js';
+import { folderUsage } from '../storage/diskUsage.js';
 import { RESET_MARKER } from './resetData.js';
 
 const dbPath = () => runtimeDbPath();
@@ -44,32 +45,6 @@ export function privacyOverview() {
   return { secrets: secretStatus(), locations: dataLocations() };
 }
 
-async function folderBytes(dir, { skip = () => false, budget = { entries: 100_000 } } = {}) {
-  let total = 0;
-  let files = 0;
-  const stack = [dir];
-  while (stack.length) {
-    const current = stack.pop();
-    let entries = [];
-    try {
-      entries = await fs.promises.readdir(current, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    for (const entry of entries) {
-      budget.entries -= 1;
-      if (budget.entries < 0) return { bytes: total, files, partial: true };
-      const full = path.join(current, entry.name);
-      if (skip(full, entry)) continue;
-      if (entry.isDirectory()) stack.push(full);
-      else if (entry.isFile()) {
-        try { total += (await fs.promises.stat(full)).size; files += 1; } catch { /* gone */ }
-      }
-    }
-  }
-  return { bytes: total, files, partial: false };
-}
-
 // What an export leaves out of the data folder.
 function exportSkip() {
   const models = modelsPath();
@@ -86,11 +61,11 @@ function exportSkip() {
 /** About how big an export is, and how big what it leaves out is. */
 export async function exportEstimate() {
   const dataRoot = runtimeDataRoot();
-  const data = await folderBytes(dataRoot, { skip: exportSkip() });
+  const data = await folderUsage(dataRoot, { skip: exportSkip(), key: 'export' });
   let databaseBytes = 0;
   try { databaseBytes = fs.statSync(dbPath()).size; } catch { /* none yet */ }
-  const uploads = inside(uploadsPath(), dataRoot) ? { bytes: 0, files: 0 } : await folderBytes(uploadsPath());
-  const models = await folderBytes(modelsPath());
+  const uploads = inside(uploadsPath(), dataRoot) ? { bytes: 0, files: 0 } : await folderUsage(uploadsPath());
+  const models = await folderUsage(modelsPath());
   return {
     bytes: data.bytes + databaseBytes + uploads.bytes,
     files: data.files + uploads.files + 1,
