@@ -6,6 +6,7 @@ import { randomUUID } from 'crypto';
 import db from '../db/client.js';
 import { getWorkspaceRoot } from '../files/fileExplorerService.js';
 import { childEnv } from './childEnv.js';
+import { runInSandbox } from './commandSandbox.js';
 
 const COPY_SKIP = new Set([
   '.git',
@@ -399,7 +400,12 @@ export function getSandboxJob(userId, sandboxId, jobId) {
   return publicJob(jobById(userId, sandboxId, jobId));
 }
 
-export function runSandboxCommand(userId, sandboxId, {
+/**
+ * Run a command in a copy and keep its output as a job. It runs in the
+ * command sandbox (when on) with the copy as the only project folder it may
+ * change, and without blocking the server while it runs.
+ */
+export async function runSandboxCommand(userId, sandboxId, {
   command,
   cwd = '.',
   kind = 'command',
@@ -431,19 +437,19 @@ export function runSandboxCommand(userId, sandboxId, {
   );
 
   const started = Date.now();
-  const result = spawnSync(cmd, {
+  const result = await runInSandbox(cmd, [], {
     cwd: resolvedCwd,
-    shell: true,
-    encoding: 'utf8',
+    workspaceRoot: row.sandbox_path,
     timeout: Math.min(Math.max(Number(timeoutMs) || 120_000, 1_000), 900_000),
-    maxBuffer: JOB_OUTPUT_LIMIT,
-    env: childEnv({ extra: { ASYNCAT_SANDBOX_ID: sandboxId, ASYNCAT_SANDBOX_PATH: row.sandbox_path } }),
+    maxOutput: JOB_OUTPUT_LIMIT,
+    env: { ASYNCAT_SANDBOX_ID: sandboxId, ASYNCAT_SANDBOX_PATH: row.sandbox_path },
   });
   const completed = nowIso();
   const stdout = (result.stdout || '').slice(-JOB_OUTPUT_LIMIT);
-  const stderr = (result.stderr || (result.error ? result.error.message : '') || '').slice(-JOB_OUTPUT_LIMIT);
-  const exitCode = result.status ?? (result.signal ? 128 : 1);
-  const status = exitCode === 0 ? 'succeeded' : 'failed';
+  const stderr = [result.stderr || (result.killed ? '' : result.error) || '', result.killed ? result.error : '', result.note || '']
+    .filter(Boolean).join('\n').slice(-JOB_OUTPUT_LIMIT);
+  const exitCode = result.killed ? 128 : (Number.isInteger(result.exit_code) && result.exit_code >= 0 ? result.exit_code : 1);
+  const status = result.success ? 'succeeded' : 'failed';
   const duration = Date.now() - started;
 
   db.prepare(`
@@ -455,7 +461,7 @@ export function runSandboxCommand(userId, sandboxId, {
 
   const updated = nowIso();
   db.prepare('UPDATE agent_sandboxes SET updated_at = ? WHERE user_id = ? AND id = ?').run(updated, userId, sandboxId);
-  return { success: status === 'succeeded', job: getSandboxJob(userId, sandboxId, jobId) };
+  return { success: status === 'succeeded', ...(result.sandboxed ? { sandboxed: true } : {}), job: getSandboxJob(userId, sandboxId, jobId) };
 }
 
 export function recoverSandboxJobs() {

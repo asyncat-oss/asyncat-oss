@@ -39,6 +39,7 @@ import fs from 'fs';
 import path from 'path';
 import { execFileSync, execSync } from 'child_process';
 import { childEnv } from './childEnv.js';
+import { runInSandbox } from './commandSandbox.js';
 import { lspManager } from './LspManager.js';
 
 const MAX_ROUNDS_DEFAULT = 25;
@@ -3217,42 +3218,35 @@ export class AgentRuntime {
 
         // Quick lint check (only on changed files)
         const jsFiles = codeFiles.filter(f => /\.[jt]sx?$/.test(f));
+        // The project's linter and type checker are its own code: they run in
+        // the command sandbox, like run_command.
+        const sandboxRoot = toolContext?.workspaceRoot || this.workspaceRoot || workDir;
         if (jsFiles.length > 0 && (deps.eslint || scripts.lint)) {
-          try {
-            const fileArgs = jsFiles.slice(0, 5).map(f => path.relative(workDir, f)).join(' ');
-            const cmd = deps.eslint
-              ? `npx eslint --no-error-on-unmatched-pattern --max-warnings=50 ${fileArgs}`
-              : 'npm run lint -- --max-warnings=50 2>&1 || true';
-            const result = execSync(cmd, { cwd: workDir, timeout: 15000, env: childEnv(), stdio: 'pipe', encoding: 'utf8' });
-            const output = result.trim();
+          const fileArgs = jsFiles.slice(0, 5).map(f => path.relative(workDir, f));
+          const result = deps.eslint
+            ? await runInSandbox('npx', ['eslint', '--no-error-on-unmatched-pattern', '--max-warnings=50', ...fileArgs], { cwd: workDir, timeout: 15000, workspaceRoot: sandboxRoot })
+            : await runInSandbox('npm run lint -- --max-warnings=50 2>&1 || true', [], { cwd: workDir, timeout: 15000, workspaceRoot: sandboxRoot });
+          if (result.success) {
+            const output = (result.stdout || '').trim();
             if (output && output.length > 10) {
               checks.push({ check: 'lint', status: 'warnings', output: output.slice(0, 1000) });
             } else {
               checks.push({ check: 'lint', status: 'clean' });
             }
-          } catch (err) {
-            const stderr = err.stderr?.toString() || err.stdout?.toString() || err.message;
-            checks.push({ check: 'lint', status: 'errors', output: stderr.slice(0, 1000) });
+          } else {
+            const stderr = result.stderr || result.stdout || result.error || '';
+            checks.push({ check: 'lint', status: 'errors', output: String(stderr).slice(0, 1000) });
           }
         }
 
         // TypeScript check (if tsconfig exists)
         if (fs.existsSync(path.join(workDir, 'tsconfig.json')) && jsFiles.some(f => /\.tsx?$/.test(f))) {
-          try {
-            const result = execSync('npx tsc --noEmit --pretty false 2>&1 | head -20', {
-              cwd: workDir, timeout: 20000, env: childEnv(), stdio: 'pipe', encoding: 'utf8',
-            });
-            const output = result.trim();
-            if (output && output.includes('error TS')) {
-              checks.push({ check: 'typecheck', status: 'errors', output: output.slice(0, 800) });
-            } else {
-              checks.push({ check: 'typecheck', status: 'clean' });
-            }
-          } catch (err) {
-            const stderr = err.stderr?.toString() || err.stdout?.toString() || '';
-            if (stderr.includes('error TS')) {
-              checks.push({ check: 'typecheck', status: 'errors', output: stderr.slice(0, 800) });
-            }
+          const result = await runInSandbox('npx tsc --noEmit --pretty false 2>&1 | head -20', [], { cwd: workDir, timeout: 20000, workspaceRoot: sandboxRoot });
+          const output = `${result.stdout || ''}\n${result.stderr || ''}`.trim();
+          if (output.includes('error TS')) {
+            checks.push({ check: 'typecheck', status: 'errors', output: output.slice(0, 800) });
+          } else if (result.success) {
+            checks.push({ check: 'typecheck', status: 'clean' });
           }
         }
       }
@@ -3262,8 +3256,10 @@ export class AgentRuntime {
         const pyFiles = codeFiles.filter(f => f.endsWith('.py')).slice(0, 5);
         for (const pf of pyFiles) {
           try {
-            // The file name is passed as an argument, not pasted into code.
-            execFileSync('python3', ['-c', 'import py_compile, sys; py_compile.compile(sys.argv[1], doraise=True)', pf], {
+            // The file name is passed as an argument, not pasted into code,
+            // and -I keeps the project's own modules (a py_compile.py in it)
+            // from being imported: this only compiles, outside the sandbox.
+            execFileSync('python3', ['-I', '-c', 'import py_compile, sys; py_compile.compile(sys.argv[1], doraise=True)', pf], {
               cwd: workDir, timeout: 5000, env: childEnv(), stdio: 'pipe',
             });
           } catch (err) {

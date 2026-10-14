@@ -2,9 +2,12 @@
 // ─── Language Server Protocol Client Coordinator ───────────────────────────
 // Spawns LSP processes (typescript-language-server, pyright-langserver)
 // and handles JSON-RPC framing (Content-Length) over standard input/output.
+// The servers run in the command sandbox: npx finds the project's own
+// node_modules/.bin first, and rust-analyzer runs build scripts.
 
 import { spawn } from 'child_process';
 import { childEnv } from './childEnv.js';
+import { sandboxedCommand } from './commandSandbox.js';
 import path from 'path';
 
 class LspClient {
@@ -26,9 +29,10 @@ class LspClient {
   async start() {
     console.log(`[LSP Client] Spawning ${this.executable} in ${this.workspaceRoot}`);
     try {
-      this.process = spawn(this.executable, this.args, {
+      const plan = sandboxedCommand({ file: this.executable, args: this.args, workspaceRoot: this.workspaceRoot });
+      this.process = spawn(plan.file, plan.args, {
         cwd: this.workspaceRoot,
-        env: childEnv({ extra: { ELECTRON_RUN_AS_NODE: '1' } }),
+        env: childEnv({ extra: { ...(plan.env || {}), ELECTRON_RUN_AS_NODE: '1' } }),
       });
     } catch (err) {
       throw new Error(`Failed to spawn LSP "${this.executable}": ${err.message}`);
@@ -42,6 +46,9 @@ class LspClient {
       // Don't pollute stdout, log as debug if needed
       // console.error(`[LSP ${this.language} stderr]`, data.toString('utf8'));
     });
+
+    // A server that isn't installed fails here (without the sandbox).
+    this.process.on('error', () => {});
 
     this.process.on('close', (code) => {
       console.log(`[LSP Client] ${this.language} server exited with code ${code}`);

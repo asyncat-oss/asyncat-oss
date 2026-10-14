@@ -8,6 +8,7 @@ import os from 'os';
 import { PermissionLevel } from './toolRegistry.js';
 import { IS_WIN, PLATFORM, clampInt, runFile, safePath } from './shared.js';
 import { childEnv } from '../childEnv.js';
+import { sandboxedCommand } from '../commandSandbox.js';
 
 // Run a binary with an explicit argument vector (no shell), returning stdout as
 // a string. Model-supplied values go in `argv`, so they can never be parsed as
@@ -87,7 +88,7 @@ export const processKillTool = {
 
 export const processSpawnTool = {
   name: 'process_spawn',
-  description: 'Spawn a long-running process. Returns the PID so you can manage it with process_kill later.',
+  description: 'Spawn a long-running process (a dev server, a watcher). It runs in the command sandbox when that is on, like run_command. Returns the PID so you can manage it with process_kill later.',
   category: 'system',
   permission: PermissionLevel.DANGEROUS,
   parameters: {
@@ -95,19 +96,22 @@ export const processSpawnTool = {
     properties: {
       command: { type: 'string', description: 'Shell command to run' },
       cwd: { type: 'string', description: 'Working directory (default: current)' },
-      detached: { type: 'boolean', description: 'Run detached (nohup style, default: false)' },
+      detached: { type: 'boolean', description: 'Run detached (nohup style, default: false). In the sandbox it still stops when Asyncat quits.' },
       env_vars: { type: 'object', description: 'Environment variables to set' },
     },
     required: ['command'],
   },
   execute: async (args, context) => {
     const cwd = args.cwd ? safePath(args.cwd, context.workingDir) : context.workingDir;
-    const env = childEnv({ extra: args.env_vars });
     try {
       // The command itself is meant to be a shell command (this tool is
-      // dangerous and asks first); only the way it is started changed.
+      // dangerous and asks first); only the way it is started changed. It
+      // may change files in the project only, like run_command.
       const [shell, shellArgs] = IS_WIN ? ['cmd.exe', ['/c', args.command]] : ['/bin/sh', ['-c', args.command]];
-      const proc = spawn(shell, shellArgs, {
+      const plan = sandboxedCommand({ file: shell, args: shellArgs, workspaceRoot: context.workspaceRoot || context.workingDir, cwd });
+      const env = childEnv({ extra: { ...(plan.env || {}), ...(args.env_vars || {}) } });
+      const sandboxed = plan.sandboxed ? { sandboxed: true } : {};
+      const proc = spawn(plan.file, plan.args, {
         cwd, env, shell: false, windowsHide: true,
         detached: Boolean(args.detached),
         stdio: args.detached ? 'ignore' : ['ignore', 'pipe', 'pipe'],
@@ -115,9 +119,9 @@ export const processSpawnTool = {
       proc.on('error', () => {});
       if (args.detached) {
         proc.unref();
-        return { success: true, action: 'spawned_detached', pid: proc.pid || null, command: args.command };
+        return { success: true, action: 'spawned_detached', pid: proc.pid || null, command: args.command, ...sandboxed };
       }
-      return { success: true, action: 'spawned', pid: proc.pid, command: args.command, note: 'Process is running. Use process_kill to stop it.' };
+      return { success: true, action: 'spawned', pid: proc.pid, command: args.command, ...sandboxed, note: 'Process is running. Use process_kill to stop it.' };
     } catch (err) {
       return { success: false, error: err.message };
     }

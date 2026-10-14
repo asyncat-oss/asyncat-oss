@@ -1,11 +1,14 @@
 // den/src/agent/tools/devTools.js
 // ─── Development Workflow Tools ───────────────────────────────────────────────
 // Linters (and their fixers), build runners, package managers, log readers.
+// They run the project's own scripts, so they run in the command sandbox like
+// run_command (see commandSandbox.js).
 
 import path from 'path';
 import fs from 'fs';
 import { PermissionLevel } from './toolRegistry.js';
-import { IS_WIN, clampInt, runProcess, safePath } from './shared.js';
+import { IS_WIN, clampInt, safePath } from './shared.js';
+import { runInSandbox } from '../commandSandbox.js';
 import { splitShellWords } from '../shellSafety.js';
 
 function detectPackageManager(cwd) {
@@ -72,11 +75,16 @@ export function packageManagerSteps(pm, words, { dev = false, cwd } = {}) {
   throw new Error(`Package manager "${pm}" not supported yet.`);
 }
 
+/** The folder a tool's commands may change: the project. */
+function projectRoot(context) {
+  return context.workspaceRoot || context.workingDir;
+}
+
 /** Run steps in order, stopping at the first failure. */
-async function runSteps(steps, { cwd, timeout }) {
+async function runSteps(steps, { cwd, timeout, workspaceRoot }) {
   let combined = { success: true, stdout: '', stderr: '' };
   for (const [file, argv, stepCwd] of steps) {
-    const result = await runProcess(file, argv, { cwd: stepCwd || cwd, timeout });
+    const result = await runInSandbox(file, argv, { cwd: stepCwd || cwd, timeout, workspaceRoot });
     combined = {
       ...result,
       stdout: [combined.stdout, result.stdout].filter(Boolean).join('\n'),
@@ -106,7 +114,7 @@ export const linterRunTool = {
     required: [],
   },
   execute: async (args, context) => {
-    const cwd = args.path || context.workingDir;
+    const cwd = args.path ? safePath(args.path, context.workingDir) : context.workingDir;
     const timeout = (args.timeout || 60) * 1000;
     let cmd, linter;
 
@@ -137,7 +145,7 @@ export const linterRunTool = {
       return { success: false, error: 'Could not detect package manager or linter.' };
     }
 
-    const result = await runProcess(cmd, [], { cwd, timeout });
+    const result = await runInSandbox(cmd, [], { cwd, timeout, workspaceRoot: projectRoot(context) });
     return { ...result, linter, auto_fix: args.fix || false };
   },
 };
@@ -178,7 +186,7 @@ export const packageManagerTool = {
     } catch (err) {
       return { success: false, error: err.message };
     }
-    const result = await runSteps(steps, { cwd, timeout });
+    const result = await runSteps(steps, { cwd, timeout, workspaceRoot: projectRoot(context) });
     return { ...result, package_manager: pm, command: describeSteps(steps) };
   },
 };
@@ -246,7 +254,7 @@ export const buildRunnerTool = {
       return { success: false, error: err.message };
     }
 
-    const result = await runSteps(steps, { cwd, timeout });
+    const result = await runSteps(steps, { cwd, timeout, workspaceRoot: projectRoot(context) });
     return { ...result, builder, path: cwd, command: describeSteps(steps) };
   },
 };
@@ -336,7 +344,7 @@ export const dependencyAuditTool = {
 
     // ── npm / pnpm ──
     if (pm === 'npm' || pm === 'pnpm') {
-      result = await runProcess(`${pm} audit --json 2>&1`, [], { cwd, timeout });
+      result = await runInSandbox(`${pm} audit --json 2>&1`, [], { cwd, timeout, workspaceRoot: projectRoot(context) });
       try {
         const json = JSON.parse(result.stdout.trim());
         const vulns = json.vulnerabilities || json.advisories || {};
@@ -359,7 +367,7 @@ export const dependencyAuditTool = {
 
     // ── yarn ──
     if (pm === 'yarn') {
-      result = await runProcess('yarn audit --json 2>&1', [], { cwd, timeout });
+      result = await runInSandbox('yarn audit --json 2>&1', [], { cwd, timeout, workspaceRoot: projectRoot(context) });
       const findings = [];
       for (const line of result.stdout.split('\n')) {
         try {
@@ -379,7 +387,7 @@ export const dependencyAuditTool = {
 
     // ── cargo ──
     if (pm === 'cargo') {
-      result = await runProcess('cargo audit --json 2>&1', [], { cwd, timeout });
+      result = await runInSandbox('cargo audit --json 2>&1', [], { cwd, timeout, workspaceRoot: projectRoot(context) });
       try {
         const json = JSON.parse(result.stdout.trim());
         const vulns = (json.vulnerabilities?.list || []).filter(v => sevOrder.indexOf((v.advisory?.severity || 'low').toLowerCase()) >= minIdx);
@@ -401,10 +409,10 @@ export const dependencyAuditTool = {
 
     // ── pip-audit ──
     if (pm === 'pip' || pm === 'pip (poetry)') {
-      result = await runProcess('pip-audit --format=json 2>&1', [], { cwd, timeout });
+      result = await runInSandbox('pip-audit --format=json 2>&1', [], { cwd, timeout, workspaceRoot: projectRoot(context) });
       if (result.exit_code === 127 || result.stderr?.includes('not found')) {
         // Fallback: try safety
-        result = await runProcess('safety check --json 2>&1', [], { cwd, timeout });
+        result = await runInSandbox('safety check --json 2>&1', [], { cwd, timeout, workspaceRoot: projectRoot(context) });
       }
       try {
         const json = JSON.parse(result.stdout.trim());

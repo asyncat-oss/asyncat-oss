@@ -5,7 +5,8 @@
 import fs from 'fs';
 import path from 'path';
 import { PermissionLevel } from './toolRegistry.js';
-import { clampInt, runProcess, safePath } from './shared.js';
+import { clampInt, safePath } from './shared.js';
+import { runInSandbox } from '../commandSandbox.js';
 
 // ── Framework detection ───────────────────────────────────────────────────────
 
@@ -282,7 +283,8 @@ export const runTestsTool = {
     }
 
     const timeout = clampInt(args.timeout, 120, 1, 3600) * 1000;
-    const result = await runProcess(built.file, built.argv, { cwd, timeout });
+    // Tests run the project's own code: in the command sandbox, like run_command.
+    const result = await runInSandbox(built.file, built.argv, { cwd, timeout, workspaceRoot: context.workspaceRoot || context.workingDir });
 
     // Parse structured output
     let parsed = null;
@@ -303,6 +305,8 @@ export const runTestsTool = {
         command: built.cmd,
         raw_output: rawOutput.slice(0, 6000),
         timed_out: result.killed || false,
+        ...(result.sandboxed ? { sandboxed: true } : {}),
+        ...(result.note ? { note: result.note } : {}),
       };
     }
 
@@ -314,7 +318,8 @@ export const runTestsTool = {
       raw_output: rawOutput.slice(0, 6000),
       exit_code: result.exit_code,
       timed_out: result.killed || false,
-      note: 'Structured parsing not available for this framework/output; see raw_output.',
+      ...(result.sandboxed ? { sandboxed: true } : {}),
+      note: [result.note, 'Structured parsing not available for this framework/output; see raw_output.'].filter(Boolean).join(' '),
     };
   },
 };

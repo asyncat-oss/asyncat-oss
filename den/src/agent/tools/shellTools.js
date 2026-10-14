@@ -31,10 +31,15 @@ function getSmartTimeout(command, userTimeout) {
   return DEFAULT_TIMEOUT;
 }
 
-/** Run file+args in the project sandbox (when available) and explain sandbox failures. */
+/** Run file+args in options.cwd, in the project sandbox (when available), and explain sandbox failures. */
 async function runInProject(file, args, context, options) {
-  const plan = sandboxedCommand({ file, args, workspaceRoot: context.workspaceRoot || context.workingDir });
-  const result = await runProcess(plan.file, plan.args, options);
+  let plan;
+  try {
+    plan = sandboxedCommand({ file, args, workspaceRoot: context.workspaceRoot || context.workingDir, cwd: options.cwd });
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+  const result = await runProcess(plan.file, plan.args, { ...options, env: { ...(plan.env || {}), ...(options.env || {}) } });
   const hint = plan.sandboxed ? sandboxHint(result) : null;
   return { ...result, ...(plan.sandboxed ? { sandboxed: true } : {}), ...(hint ? { note: hint } : {}) };
 }
@@ -255,7 +260,10 @@ export const shellSessionStartTool = {
     const agentSessionId = context.session?.id || 'anon';
     const name = args.name || 'default';
     const cwd = args.cwd ? path.resolve(context.workingDir, args.cwd) : context.workingDir;
-    const { id, reused } = shellSessionManager.create({ agentSessionId, name, cwd });
+    if (!isPathInside(cwd, context.workingDir)) {
+      return { success: false, error: 'Working directory must be within the workspace.' };
+    }
+    const { id, reused } = shellSessionManager.create({ agentSessionId, name, cwd, workspaceRoot: context.workspaceRoot || context.workingDir });
     return { success: true, session_name: name, reused, cwd, message: reused ? `Reused existing session "${name}".` : `Started shell session "${name}" in ${cwd}.` };
   },
 };
@@ -280,7 +288,7 @@ export const shellSessionRunTool = {
     let session = shellSessionManager.get(agentSessionId, name);
     if (!session || !session.alive) {
       // Auto-create if not started
-      shellSessionManager.create({ agentSessionId, name, cwd: context.workingDir });
+      shellSessionManager.create({ agentSessionId, name, cwd: context.workingDir, workspaceRoot: context.workspaceRoot || context.workingDir });
       session = shellSessionManager.get(agentSessionId, name);
     }
     const timeout = (args.timeout || 120) * 1000;

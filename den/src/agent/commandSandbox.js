@@ -12,7 +12,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { hasBin, runFile } from './tools/shared.js';
+import { IS_WIN, hasBin, isPathInside, runFile, runProcess } from './tools/shared.js';
 import { getConfigValue } from '../config/appConfig.js';
 
 // Folders under the home folder that build tools write caches to.
@@ -60,13 +60,23 @@ function appleString(text) {
 }
 
 /**
- * How to start `file args` sandboxed. Returns { file, args, sandboxed } —
- * unchanged when sandboxing is off or unavailable.
+ * How to start `file args` sandboxed, in `cwd` (the project when not given).
+ * Returns { file, args, sandboxed } — unchanged when sandboxing is off or
+ * unavailable. Spawn it in `cwd` too: on macOS the program starts in the
+ * folder sandbox-exec was started in.
  */
-export function sandboxedCommand({ file, args = [], workspaceRoot, platform = process.platform, home = os.homedir(), tmp = os.tmpdir(), force = null }) {
+export function sandboxedCommand({ file, args = [], workspaceRoot, cwd = null, platform = process.platform, home = os.homedir(), tmp = os.tmpdir(), force = null }) {
   const enabled = force ?? (setting() !== 'off' && sandboxAvailable(platform));
   if (!enabled || !workspaceRoot) return { file, args, sandboxed: false };
   const roots = writableRoots({ workspaceRoot, home, tmp });
+  // bwrap starts the command in the folder named here, not the one bwrap was
+  // started in, so a tool's subfolder (one package of a monorepo, say) must
+  // be passed on, or a build there builds the project root instead. Only a
+  // folder the command may change: anything else is the caller's mistake.
+  const start = path.resolve(cwd || workspaceRoot);
+  if (!roots.some((root) => isPathInside(start, root))) {
+    throw new Error(`A sandboxed command can only start in a folder it may change, and ${start} isn't one.`);
+  }
 
   if (platform === 'linux') {
     const bwrapArgs = [
@@ -75,7 +85,7 @@ export function sandboxedCommand({ file, args = [], workspaceRoot, platform = pr
       '--dev', '/dev',
       '--proc', '/proc',
       ...roots.flatMap((root) => ['--bind-try', root, root]),
-      '--chdir', workspaceRoot,
+      '--chdir', start,
       '--', file, ...args,
     ];
     return { file: 'bwrap', args: bwrapArgs, sandboxed: true };
@@ -101,5 +111,27 @@ export function sandboxedCommand({ file, args = [], workspaceRoot, platform = pr
 export function sandboxHint(result) {
   const text = `${result?.stderr || ''}\n${result?.stdout || ''}`;
   if (result?.success || !/Read-only file system|Operation not permitted|EROFS/i.test(text)) return null;
-  return 'This command ran in Asyncat\'s sandbox, which only allows writing inside the project folder, temporary folders and package caches. If it really needs to write elsewhere, tell the user; they can turn the sandbox off in Settings → Workbench or run the command themselves.';
+  return 'This command ran in Asyncat\'s sandbox, which only allows writing inside the project folder, temporary folders and package caches. If it really needs to write elsewhere, tell the user; they can turn the sandbox off in Settings → Privacy & safety or run the command themselves.';
+}
+
+/**
+ * Run a tool's program in the sandbox (when it is on), in `cwd` (the project
+ * when not given), with `workspaceRoot` as the folder it may change. Without
+ * args, cmd is a fixed shell command. Resolves like shared.js runProcess,
+ * plus `sandboxed` and a `note` when the sandbox stopped a write.
+ */
+export async function runInSandbox(cmd, args = [], { workspaceRoot, ...options } = {}) {
+  const [file, argv] = args.length > 0
+    ? [cmd, args]
+    : (IS_WIN ? ['cmd.exe', ['/c', cmd]] : ['/bin/sh', ['-c', cmd]]);
+  const cwd = options.cwd || workspaceRoot;
+  let plan;
+  try {
+    plan = sandboxedCommand({ file, args: argv, workspaceRoot, cwd });
+  } catch (err) {
+    return { success: false, exit_code: null, stdout: '', stderr: '', error: err.message };
+  }
+  const result = await runProcess(plan.file, plan.args, { ...options, cwd, env: { ...(plan.env || {}), ...(options.env || {}) } });
+  const hint = plan.sandboxed ? sandboxHint(result) : null;
+  return { ...result, ...(plan.sandboxed ? { sandboxed: true } : {}), ...(hint ? { note: hint } : {}) };
 }

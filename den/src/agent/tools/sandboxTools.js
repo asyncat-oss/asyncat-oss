@@ -98,7 +98,7 @@ export const sandboxTools = [
     name: 'sandbox_run_command',
     description: 'Run a command inside a sandbox and persist stdout/stderr as a sandbox job log.',
     category: 'workspace',
-    permission: PermissionLevel.MODERATE,
+    permission: PermissionLevel.DANGEROUS,
     parameters: {
       type: 'object',
       properties: {

@@ -1893,9 +1893,9 @@ router.get('/sandboxes/:id/jobs/:jobId', withWorkspaceContext, (req, res) => {
   }
 });
 
-router.post('/sandboxes/:id/jobs', withWorkspaceContext, (req, res) => {
+router.post('/sandboxes/:id/jobs', withWorkspaceContext, async (req, res) => {
   try {
-    res.status(201).json(runSandboxCommand(req.user.id, req.params.id, {
+    res.status(201).json(await runSandboxCommand(req.user.id, req.params.id, {
       command: req.body?.command,
       cwd: req.body?.cwd || '.',
       kind: req.body?.kind || 'command',

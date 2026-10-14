@@ -2,11 +2,42 @@
 // ─── Docker + Sandbox Tools ────────────────────────────────────────────────────
 // Run commands in Docker containers, build images, manage containers.
 
+import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { PermissionLevel } from './toolRegistry.js';
-import { clampInt, hasBin, runFile, runProcess, missingDepError, safePath } from './shared.js';
+import { clampInt, hasBin, isPathInside, runFile, runProcess, missingDepError, safePath } from './shared.js';
 
 function hasDocker() { return hasBin('docker'); }
+
+function realPath(target) {
+  try { return fs.realpathSync(target); } catch { return path.resolve(target); }
+}
+
+/**
+ * Check docker_run's volumes ("host:container[:ro]", comma-separated) and
+ * return them as -v values. A host folder must be inside the project:
+ * mounting / or the Docker socket into a container would hand it the whole
+ * computer. Named volumes ("cache:/data") and container-only paths are fine.
+ */
+export function dockerVolumes(spec, { workingDir, workspaceRoot = workingDir, home = os.homedir() }) {
+  const root = realPath(workspaceRoot);
+  const out = [];
+  for (const volume of String(spec || '').split(',').map((item) => item.trim()).filter(Boolean)) {
+    if (/docker\.sock/i.test(volume)) throw new Error(`The Docker socket can't be mounted into a container: "${volume}"`);
+    const match = /^([A-Za-z]:[\\/][^:]*|[^:]+):(.+)$/.exec(volume);
+    if (!match) { out.push(volume); continue; } // a container path only
+    const [, source] = match;
+    const isHostPath = /^([~./\\]|[A-Za-z]:[\\/])/.test(source);
+    if (!isHostPath) { out.push(volume); continue; } // a named volume
+    const expanded = source === '~' || source.startsWith('~/') ? path.join(home, source.slice(1)) : source;
+    const host = realPath(path.resolve(workingDir, expanded));
+    if (host === path.parse(host).root) throw new Error(`The whole disk can't be mounted into a container: "${volume}"`);
+    if (!isPathInside(host, root)) throw new Error(`Only folders inside the project can be mounted into a container: "${volume}"`);
+    out.push(`${host}:${match[2]}`);
+  }
+  return out;
+}
 
 /** An image or tag name; anything starting with - would be read as an option. */
 function dockerImageName(value) {
@@ -26,7 +57,7 @@ export const dockerRunTool = {
       image: { type: 'string', description: 'Docker image to use (e.g. "node:20", "python:3.11", "ubuntu:22.04")' },
       command: { type: 'string', description: 'Command to run inside the container' },
       cwd: { type: 'string', description: 'Working directory inside the container (default: /workspace)' },
-      volumes: { type: 'string', description: 'Volume mappings in Docker syntax, e.g. "/host/path:/container/path" (optional)' },
+      volumes: { type: 'string', description: 'Volume mappings in Docker syntax, e.g. "./data:/data" (optional). Host folders must be inside the project.' },
       env_vars: { type: 'object', description: 'Environment variables to set, e.g. {"KEY": "value"}' },
       timeout: { type: 'number', description: 'Timeout in seconds (default: 60)' },
       remove: { type: 'boolean', description: 'Remove container after run (default: true)' },
@@ -42,9 +73,13 @@ export const dockerRunTool = {
     const workDir = String(args.cwd || '/workspace');
     const timeout = clampInt(args.timeout, 60, 1, 3600) * 1000;
     const dockerArgs = ['run', '--rm'];
-    if (args.volumes) {
-      for (const vol of String(args.volumes).split(',').map(v => v.trim()).filter(Boolean)) dockerArgs.push('-v', vol);
+    let volumes;
+    try {
+      volumes = dockerVolumes(args.volumes, { workingDir: context.workingDir, workspaceRoot: context.workspaceRoot || context.workingDir });
+    } catch (err) {
+      return { success: false, error: err.message };
     }
+    for (const vol of volumes) dockerArgs.push('-v', vol);
     for (const [k, v] of Object.entries(args.env_vars || {})) dockerArgs.push('-e', `${k}=${v}`);
     dockerArgs.push('-w', workDir, '--', image, 'sh', '-c', String(args.command ?? ''));
 
@@ -168,7 +203,7 @@ export const dockerStopTool = {
 
 export const sandboxExecTool = {
   name: 'sandbox_exec',
-  description: 'Execute untrusted or potentially dangerous code in a sandboxed Docker container with limited resources. Use this instead of run_command when executing code from unknown sources.',
+  description: 'Execute untrusted or potentially dangerous code in a locked-down Docker container (no network, read-only, limited memory and CPU). Use this instead of run_command when executing code from unknown sources. Needs Docker.',
   category: 'shell',
   permission: PermissionLevel.DANGEROUS,
   parameters: {
@@ -182,7 +217,7 @@ export const sandboxExecTool = {
   },
   execute: async (args, context) => {
     if (!hasDocker()) {
-      return { success: false, error: 'Docker not available. Using host execution as fallback.' };
+      return { success: false, error: "Docker isn't installed or isn't running, so nothing ran. Tell the user, or use run_command if the code is safe to run." };
     }
 
     const image = dockerImageName(args.image || 'ubuntu:22.04');

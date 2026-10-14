@@ -22,9 +22,10 @@ const MAX_OUTPUT_CHARS = 40_000;
 const STREAM_INTERVAL_MS = 200;
 
 class ShellSession {
-  constructor({ id, shell, cwd }) {
+  constructor({ id, shell, cwd, workspaceRoot }) {
     this.id = id;
     this.cwd = cwd;
+    this.workspaceRoot = workspaceRoot || cwd;
     this.alive = false;
     this.pid = null;
     this.lastCommand = '';
@@ -48,12 +49,13 @@ class ShellSession {
     const [sh, initFlag] = IS_WIN
       ? ['cmd.exe', null]
       : [this._shell || '/bin/bash', '--norc'];
-    // The session's folder is the most it may write to (see commandSandbox.js).
-    const plan = sandboxedCommand({ file: sh, args: initFlag ? [initFlag] : [], workspaceRoot: this.cwd });
+    // It starts in the session's folder and may write in the whole project
+    // at most (see commandSandbox.js).
+    const plan = sandboxedCommand({ file: sh, args: initFlag ? [initFlag] : [], workspaceRoot: this.workspaceRoot, cwd: this.cwd });
     this.sandboxed = plan.sandboxed;
     this._proc = spawn(plan.file, plan.args, {
       cwd: this.cwd,
-      env: childEnv({ extra: { PS1: '', PS2: '' } }),
+      env: childEnv({ extra: { ...(plan.env || {}), PS1: '', PS2: '' } }),
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     this.alive = true;
@@ -213,7 +215,7 @@ class ShellSessionManager {
     return `${agentSessionId || 'anon'}::${name || 'default'}`;
   }
 
-  create({ agentSessionId, name = 'default', cwd, shell }) {
+  create({ agentSessionId, name = 'default', cwd, workspaceRoot, shell }) {
     const key = this._key(agentSessionId, name);
     if (this._sessions.has(key)) {
       const existing = this._sessions.get(key);
@@ -231,7 +233,7 @@ class ShellSessionManager {
         this._sessions.delete(oldest);
       }
     }
-    const session = new ShellSession({ id: key, shell, cwd: cwd || process.cwd() });
+    const session = new ShellSession({ id: key, shell, cwd: cwd || process.cwd(), workspaceRoot });
     this._sessions.set(key, session);
     return { id: key, reused: false };
   }
