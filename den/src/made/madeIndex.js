@@ -5,8 +5,9 @@
 // chats without a project use; and notes they wrote.
 //
 // Folders are named by an id ("chats", "project:<folderId>", "cat:<catId>",
-// "agent:<profileId>")
-// and resolved here, so a request never names a path itself.
+// "agent:<profileId>", "cat-gone:<catId>" for a deleted Cat's folder,
+// "engines" for where Claude Code and Codex work without a project) and
+// resolved here, so a request never names a path itself.
 
 import fs from 'fs';
 import path from 'path';
@@ -15,7 +16,8 @@ import { getArtifactsDir, getLegacyArtifactsDir } from '../agent/workspacePaths.
 import { getWorkspaceRoot } from '../files/fileExplorerService.js';
 import { defaultCatFolder } from '../cats/catStore.js';
 import { galleryPictures } from '../media/gallery.js';
-import { isRealSubdir, plainFileIn } from '../storage/safeFs.js';
+import { runtimeDataPath } from '../config/runtimeConfig.js';
+import { isPlainName, isRealSubdir, plainFileIn } from '../storage/safeFs.js';
 
 const KINDS = {
   '.md': 'document', '.markdown': 'document', '.txt': 'document', '.pdf': 'document', '.docx': 'document',
@@ -30,7 +32,25 @@ export function kindOf(name) {
   return KINDS[path.extname(String(name)).toLowerCase()] || 'code';
 }
 
-/** The folders agents work in, by id. */
+// Folders in data/cats that no Cat owns any more: deleting a Cat leaves its
+// folder, and what it made there, behind.
+function goneCatFolders() {
+  const dir = runtimeDataPath('cats');
+  let names = [];
+  try { names = fs.readdirSync(dir); } catch { return []; }
+  let known = new Set();
+  try { known = new Set(db.prepare('SELECT id FROM cats').all().map((row) => row.id)); } catch { /* no Cats yet */ }
+  return names.filter((name) => {
+    if (known.has(name) || !isPlainName(name) || !/^[\w-]{1,128}$/.test(name)) return false;
+    try { return fs.lstatSync(path.join(dir, name)).isDirectory(); } catch { return false; }
+  }).map((name) => ({ id: name, dir: path.join(dir, name) }));
+}
+
+/**
+ * The folders agents work in: [{ id, label, dir, whereId }]. whereId groups
+ * a project's folders under the project, so two projects with the same name
+ * stay apart and one project's folders stay together.
+ */
 export function madeRoots(userId) {
   // Chats without a project work where the agent's own default folder is.
   const roots = [{ id: 'chats', label: 'Chats', dir: getWorkspaceRoot() }];
@@ -38,23 +58,30 @@ export function madeRoots(userId) {
   try { agents = db.prepare("SELECT id, name, working_dir FROM agent_profiles WHERE user_id = ? AND coalesce(working_dir, '') != ''").all(userId); } catch { /* no agents yet */ }
   for (const agent of agents) roots.push({ id: `agent:${agent.id}`, label: agent.name, dir: agent.working_dir });
   const folders = db.prepare(`
-    SELECT f.id, f.path, p.name FROM project_folders f JOIN projects p ON p.id = f.project_id
+    SELECT f.id, f.path, p.id AS project_id, p.name FROM project_folders f JOIN projects p ON p.id = f.project_id
     WHERE (p.owner_id = ? OR p.created_by = ?) AND p.is_archived = 0
   `).all(userId, userId);
-  for (const folder of folders) roots.push({ id: `project:${folder.id}`, label: folder.name, dir: folder.path });
+  for (const folder of folders) {
+    roots.push({ id: `project:${folder.id}`, label: folder.name, dir: folder.path, whereId: `project:${folder.project_id}` });
+  }
   let cats = [];
   try { cats = db.prepare('SELECT id, name, folder FROM cats WHERE user_id = ?').all(userId); } catch { /* no Cats yet */ }
   for (const cat of cats) roots.push({ id: `cat:${cat.id}`, label: cat.name, dir: cat.folder || defaultCatFolder(cat.id) });
-  return roots;
+  for (const gone of goneCatFolders()) roots.push({ id: `cat-gone:${gone.id}`, label: 'Deleted Cat', dir: gone.dir, gone: true });
+  // Claude Code and Codex work here when a chat has no project.
+  roots.push({ id: 'engines', label: 'Claude Code and Codex', dir: runtimeDataPath('agent-workspace') });
+  return roots.map((root) => ({ whereId: root.id, ...root }));
 }
 
 export function madeRoot(userId, id) {
   return madeRoots(userId).find((root) => root.id === id) || null;
 }
 
-// A root's artifact folders that are really inside it: a link in place of
-// .asyncat or artifacts could point anywhere, so such a folder is skipped.
-function artifactDirs(root) {
+/**
+ * A root's artifact folders that are really inside it: a link in place of
+ * .asyncat or artifacts could point anywhere, so such a folder is skipped.
+ */
+export function artifactDirs(root) {
   return [getArtifactsDir(root.dir), getLegacyArtifactsDir(root.dir)]
     .filter((dir) => isRealSubdir(root.dir, dir));
 }
@@ -62,8 +89,10 @@ function artifactDirs(root) {
 /**
  * A root's saved artifacts: [{ name, file, stat }]. Top-level regular files
  * only: a link inside the folder is never listed or read, wherever it leads.
+ * With `links`, links are listed too, as `{ name, file, stat, link: true }`
+ * (stat is the link's own), so Files can offer to remove them.
  */
-export function artifactFiles(root) {
+export function artifactFiles(root, { links = false } = {}) {
   const seen = new Set();
   const files = [];
   for (const dir of artifactDirs(root)) {
@@ -71,13 +100,24 @@ export function artifactFiles(root) {
     try { names = fs.readdirSync(dir); } catch { continue; }
     for (const name of names) {
       if (name.startsWith('.') || seen.has(name)) continue;
-      const found = plainFileIn(dir, name);
+      const found = plainFileIn(dir, name) || (links ? linkIn(dir, name) : null);
       if (!found) continue;
       seen.add(name);
-      files.push({ name, file: found.file, stat: found.stat });
+      files.push({ name, ...found });
     }
   }
   return files;
+}
+
+function linkIn(dir, name) {
+  if (!isPlainName(name)) return null;
+  const file = path.join(dir, name);
+  try {
+    const stat = fs.lstatSync(file);
+    return stat.isSymbolicLink() ? { file, stat, link: true } : null;
+  } catch {
+    return null;
+  }
 }
 
 function fileInRoot(root, name) {
@@ -150,17 +190,21 @@ export function labelArtifactRoots(userId, result) {
 
 /**
  * Everything, newest first: [{ id, kind, title, where, createdAt, bytes, … }].
- * `kind` keeps one kind; `offset` and `limit` page through what is left.
+ * `kind` keeps one kind and `root` one folder (by root id, which leaves out
+ * pictures and notes); `offset` and `limit` page through what is left.
  * Counts are always of everything.
  */
-export function listMade(userId, { limit = 300, offset = 0, kind = null } = {}) {
+export function listMade(userId, { limit = null, offset = 0, kind = null, root: rootId = null } = {}) {
   const items = [];
   // Pictures are placed by when their file was written; their details are
   // read below, only for the ones on the page.
-  for (const picture of galleryPictures()) {
-    items.push({ id: `picture:${picture.name}`, kind: 'picture', createdAt: picture.modifiedAt, picture });
+  if (!rootId) {
+    for (const picture of galleryPictures()) {
+      items.push({ id: `picture:${picture.name}`, kind: 'picture', createdAt: picture.modifiedAt, picture });
+    }
   }
   for (const root of madeRoots(userId)) {
+    if (rootId && root.id !== rootId) continue;
     for (const { name, stat } of artifactFiles(root)) {
       items.push({
         id: `file:${root.id}:${name}`,
@@ -174,10 +218,7 @@ export function listMade(userId, { limit = 300, offset = 0, kind = null } = {}) 
       });
     }
   }
-  const notes = db.prepare(`
-    SELECT id, title, conversation_id, updatedat FROM notes
-    WHERE createdby = ? AND isarchived = 0 AND (conversation_id IS NOT NULL OR agent_session_id IS NOT NULL)
-  `).all(userId);
+  const notes = rootId ? [] : agentNotes(userId);
   for (const note of notes) {
     items.push({
       id: `note:${note.id}`,
@@ -186,7 +227,7 @@ export function listMade(userId, { limit = 300, offset = 0, kind = null } = {}) 
       where: 'Notes',
       noteId: note.id,
       conversationId: note.conversation_id || null,
-      createdAt: new Date(`${String(note.updatedat).replace(' ', 'T')}${/Z|[+-]\d\d:?\d\d$/.test(note.updatedat) ? '' : 'Z'}`).toISOString(),
+      createdAt: sqliteTime(note.updatedat),
     });
   }
   items.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
@@ -194,9 +235,24 @@ export function listMade(userId, { limit = 300, offset = 0, kind = null } = {}) 
   for (const item of items) counts[item.kind] = (counts[item.kind] || 0) + 1;
   const matching = kind ? items.filter((item) => item.kind === kind) : items;
   const start = Math.max(0, Number(offset) || 0);
-  const count = Math.max(1, Number(limit) || 300);
+  const count = Math.max(1, Number(limit) || matching.length || 1);
   const page = matching.slice(start, start + count).map((item) => (item.picture ? pictureItem(item.picture.describe()) : item));
   return { items: page, counts, total: matching.length };
+}
+
+/** Notes agents wrote (in a chat or an agent run), not the user's own. */
+export function agentNotes(userId) {
+  return db.prepare(`
+    SELECT id, title, conversation_id, updatedat FROM notes
+    WHERE createdby = ? AND isarchived = 0 AND (conversation_id IS NOT NULL OR agent_session_id IS NOT NULL)
+  `).all(userId);
+}
+
+/** A time SQLite wrote ("YYYY-MM-DD HH:MM:SS", UTC) as an ISO time, or null. */
+export function sqliteTime(value) {
+  const text = String(value || '');
+  const date = new Date(`${text.replace(' ', 'T')}${/Z|[+-]\d\d:?\d\d$/.test(text) ? '' : 'Z'}`);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 function pictureItem(picture) {
