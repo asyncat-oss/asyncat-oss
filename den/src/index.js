@@ -91,10 +91,10 @@ import { recoverTrainingJobs } from './ai/controllers/ai/trainingJobManager.js';
 try {
   const recoveredSandboxJobs = recoverSandboxJobs();
   if (recoveredSandboxJobs > 0) {
-    logger.info(`Marked ${recoveredSandboxJobs} interrupted sandbox job(s) as failed`);
+    logger.info(`Marked ${recoveredSandboxJobs} interrupted command(s) in copies as failed`);
   }
 } catch (e) {
-  logger.warn('Could not recover sandbox jobs:', e.message);
+  logger.warn('Could not recover commands in copies:', e.message);
 }
 
 try {

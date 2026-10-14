@@ -20,6 +20,7 @@ const { toolRegistry } = await import('../src/agent/tools/toolRegistry.js');
 const { AgentRuntime } = await import('../src/agent/AgentRuntime.js');
 const { ToolCallFormatter } = await import('../src/agent/ToolCallFormatter.js');
 const toolAliasesModule = await import('../src/agent/tools/toolAliases.js');
+const { copyToolAliases } = await import('../src/agent/tools/copyTools.js');
 
 await initializeAgent();
 
@@ -111,12 +112,60 @@ test('a model that calls an old name gets the new tool in a run', async () => {
 
 test('every old name points at a registered tool, and none is still a tool', () => {
   const { TOOL_ALIASES } = toolAliasesModule;
-  for (const [name, spec] of Object.entries(TOOL_ALIASES)) {
+  for (const [name, spec] of Object.entries({ ...TOOL_ALIASES, ...copyToolAliases })) {
     const to = typeof spec === 'string' ? spec : spec.to;
     assert.ok(toolRegistry.has(to), `${name} points at ${to}, which is not registered`);
     assert.equal(toolRegistry.has(name), false, `${name} is still registered as a tool`);
     assert.equal(toolRegistry.isAlias(name), true);
   }
+});
+
+// Two sets of old names live in the one registry: tools merged into others
+// (toolAliases.js) and the copy tools, once called sandbox_* (copyTools.js).
+test('merged tools and renamed copy tools keep their old names side by side', async () => {
+  const old = new Map(toolRegistry.aliases().map(({ name, to }) => [name, to]));
+  assert.equal(old.get('browse_url'), 'preview_get_text');
+  assert.equal(old.get('code_fix'), 'linter_run');
+  assert.equal(old.get('sandbox_run_command'), 'copy_run_command');
+  assert.equal(old.get('sandbox_delegate_task'), 'copy_delegate_task');
+
+  // Each resolves the same way: a merged tool's arguments are reshaped, a
+  // renamed copy tool's are passed on as they were.
+  assert.deepEqual(toolRegistry.resolve('code_fix', { path: 'src' }), { name: 'linter_run', args: { path: 'src', fix: true }, aliasOf: 'code_fix' });
+  assert.deepEqual(toolRegistry.resolve('sandbox_diff', { id: 'c1', includePatch: true }), { name: 'copy_diff', args: { id: 'c1', includePatch: true }, aliasOf: 'sandbox_diff' });
+  assert.equal(toolRegistry.getPermission('sandbox_list'), toolRegistry.getPermission('copy_list'));
+  assert.equal(toolRegistry.getPermission('glob_find'), toolRegistry.getPermission('find_files'));
+
+  // Neither kind is listed or offered to the model.
+  const listed = new Set([...toolRegistry.names(), ...toolRegistry.toOpenAIFormat().map((tool) => tool.function.name)]);
+  for (const name of ['browse_url', 'code_fix', 'sandbox_run_command', 'sandbox_list']) assert.equal(listed.has(name), false, name);
+
+  // Approvals and allow-lists saved under either kind of old name still count.
+  const runtime = new AgentRuntime({ aiClient: null, model: 'demo', workingDir: workspace(), allowedTools: ['patch_file', 'sandbox_diff'] });
+  assert.equal(runtime.allowedTools.has('edit_file'), true);
+  assert.equal(runtime.allowedTools.has('copy_diff'), true);
+  runtime.sessionApprovedTools.add('glob_find');
+  runtime.sessionApprovedTools.add('sandbox_run_command');
+  assert.equal(runtime.sessionApprovedTools.has('find_files'), true);
+  assert.equal(runtime.sessionApprovedTools.has('copy_run_command'), true);
+
+  // tool_search finds both by their old words, and never returns an old name.
+  const defs = AgentRuntime.prototype._rankToolsForGoal(toolRegistry.all(), 'try a change');
+  const search = (query) => AgentRuntime.prototype._discoverTools.call({ loadedToolNames: new Set() }, query, 5, defs).map((tool) => tool.name);
+  assert.ok(search('semantic search').includes('local_rag_search'), search('semantic search').join(', '));
+  assert.ok(search('sandbox run command').includes('copy_run_command'), search('sandbox run command').join(', '));
+  for (const name of [...search('sandbox diff'), ...search('browse url')]) assert.equal(toolRegistry.isAlias(name), false, name);
+
+  // And an old name of either kind runs the tool.
+  const userId = randomUUID();
+  db.prepare("INSERT INTO users (id, email, name) VALUES (?, ?, 'Demo')").run(userId, `${userId}@example.test`);
+  const copies = await toolRegistry.execute('sandbox_list', {}, { userId, workspaceId: null });
+  assert.equal(copies.success, true, copies.error);
+  assert.ok(Array.isArray(copies.copies));
+  const dir = workspace();
+  const found = await toolRegistry.execute('glob_find', { pattern: '*.md' }, { workingDir: dir });
+  assert.equal(found.success, true, found.error);
+  assert.match(JSON.stringify(found), /pears\.md/);
 });
 
 test('the old browser tools map onto the one browser set', () => {

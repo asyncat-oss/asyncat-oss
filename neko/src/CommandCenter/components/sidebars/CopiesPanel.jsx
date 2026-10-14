@@ -1,3 +1,6 @@
+// Code panel → Copies: copies of the project (a git worktree or a plain
+// folder copy) to try changes in, review, and bring back.
+
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, CheckSquare, ChevronRight, File, Folder, GitBranch, Loader2, Play, Plus, RefreshCw, Square, Trash2, XCircle } from 'lucide-react';
 import { filesApi, sandboxesApi } from '../../api';
@@ -61,10 +64,10 @@ function shortPath(value = '') {
 }
 
 function isMissingSandboxPathError(value = '') {
-  return /sandbox path no longer exists/i.test(String(value || ''));
+  return /sandbox path no longer exists|copy's folder no longer exists/i.test(String(value || ''));
 }
 
-export default function SandboxPanel() {
+export default function CopiesPanel() {
   const [sandboxes, setSandboxes] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [diff, setDiff] = useState(null);
@@ -104,7 +107,7 @@ export default function SandboxPanel() {
     if (selected?.id === id && selected.exists === false) {
       setDiff(null);
       setJobs([]);
-      setError('Sandbox path no longer exists.');
+      setError("This copy's folder no longer exists.");
       return;
     }
     setError('');
@@ -114,7 +117,7 @@ export default function SandboxPanel() {
     ]);
     if (diffRes.success === false) {
       setDiff(null);
-      setError(diffRes.error || 'Could not load sandbox diff');
+      setError(diffRes.error || "Couldn't load the copy's changes");
     } else {
       setDiff(diffRes);
     }
@@ -122,7 +125,7 @@ export default function SandboxPanel() {
   }
 
   useEffect(() => {
-    loadSandboxes().catch(err => setError(err.message || 'Could not load sandboxes'));
+    loadSandboxes().catch(err => setError(err.message || "Couldn't load the copies"));
   }, []);
 
   useEffect(() => {
@@ -134,7 +137,7 @@ export default function SandboxPanel() {
   }, [selectedId]);
 
   useEffect(() => {
-    loadReview(selected?.id, selectedFile).catch(err => setError(err.message || 'Could not load sandbox review'));
+    loadReview(selected?.id, selectedFile).catch(err => setError(err.message || "Couldn't load the copy's changes"));
   }, [selected?.id, selectedFile]);
 
   const sandboxRelativePath = useMemo(() => {
@@ -158,7 +161,7 @@ export default function SandboxPanel() {
   }
 
   useEffect(() => {
-    loadBrowser(browserPath).catch(err => setError(err.message || 'Could not load sandbox files'));
+    loadBrowser(browserPath).catch(err => setError(err.message || "Couldn't load the copy's files"));
   }, [sandboxRelativePath, browserPath, selected?.exists]);
 
   async function runAction(action) {
@@ -168,12 +171,12 @@ export default function SandboxPanel() {
     setNotice('');
     try {
       const res = await action(selected.id);
-      if (res?.success === false) setError(res.error || res.message || 'Sandbox action failed');
+      if (res?.success === false) setError(res.error || res.message || "That didn't work");
       else setNotice(res?.message || 'Done');
       await loadSandboxes(selected.id);
       await loadReview(selected.id, selectedFile);
     } catch (err) {
-      setError(err.message || 'Sandbox action failed');
+      setError(err.message || "That didn't work");
     } finally {
       setBusy(false);
     }
@@ -184,12 +187,12 @@ export default function SandboxPanel() {
     setError('');
     setNotice('');
     try {
-      const res = await sandboxesApi.create({ name: `Sandbox ${new Date().toLocaleTimeString()}`, strategy: 'auto' });
+      const res = await sandboxesApi.create({ name: `Copy ${new Date().toLocaleTimeString()}`, strategy: 'auto' });
       const id = res.sandbox?.id;
-      setNotice('Sandbox created');
+      setNotice('Copy made');
       await loadSandboxes(id);
     } catch (err) {
-      setError(err.message || 'Could not create sandbox');
+      setError(err.message || "Couldn't make a copy");
     } finally {
       setBusy(false);
     }
@@ -287,7 +290,7 @@ export default function SandboxPanel() {
           ))}
           {!sandboxes.length && (
             <div className="rounded-md border border-dashed border-gray-200 px-3 py-4 text-center text-xs text-gray-400 dark:border-slate-800 dark:text-slate-500">
-              No sandboxes
+              No copies yet
             </div>
           )}
         </div>
@@ -303,15 +306,15 @@ export default function SandboxPanel() {
           <div className="flex items-start gap-2">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">Sandbox path no longer exists</p>
+              <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">This copy&apos;s folder is gone</p>
               <p className="mt-0.5 text-xs text-amber-700/80 dark:text-amber-300/80">
-                This sandbox record points to a folder that was already removed. Delete it from the list to clean up the stale entry.
+                Its folder was already removed. Remove it from the list.
               </p>
               <button
                 type="button"
                 onClick={() => setModal({
-                  title: 'Remove stale sandbox',
-                  message: 'This removes the sandbox record from Asyncat. The folder is already gone.',
+                  title: 'Remove this copy from the list?',
+                  message: "Its folder is already gone; this only removes it from Asyncat's list.",
                   confirmLabel: 'Remove',
                   confirmClass: 'inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-rose-500',
                   onConfirm: () => { setModal(null); runAction(id => sandboxesApi.delete(id, { force: true })); },
@@ -320,7 +323,7 @@ export default function SandboxPanel() {
                 className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-amber-900 px-2.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-800 disabled:opacity-60 dark:bg-amber-200 dark:text-amber-950 dark:hover:bg-amber-100"
               >
                 <Trash2 className="h-3.5 w-3.5" />
-                Remove stale sandbox
+                Remove from list
               </button>
             </div>
           </div>
@@ -568,8 +571,8 @@ export default function SandboxPanel() {
               <button
                 type="button"
                 onClick={() => setModal({
-                  title: 'Delete sandbox',
-                  message: 'This sandbox and all its changes will be permanently deleted.',
+                  title: 'Delete this copy?',
+                  message: 'The copy and all its changes are deleted for good.',
                   confirmLabel: 'Delete',
                   confirmClass: 'inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-rose-500',
                   onConfirm: () => { setModal(null); runAction(id => sandboxesApi.delete(id, { force: true })); },
@@ -613,7 +616,7 @@ export default function SandboxPanel() {
         </div>
       ) : (
         <div className="flex flex-1 items-center justify-center p-6 text-center text-sm text-gray-400 dark:text-slate-500">
-          Select or create a sandbox
+          Pick a copy, or make one with New
         </div>
       )}
     </div>

@@ -333,7 +333,7 @@ export const sandboxesApi = {
     return await apiRequest(`${API_BASE_URL}/agent/sandboxes${suffix}`);
   },
 
-  create: async ({ name = 'Sandbox', sourcePath = null, strategy = 'auto', baseRef = 'HEAD' } = {}) => {
+  create: async ({ name = 'Copy', sourcePath = null, strategy = 'auto', baseRef = 'HEAD' } = {}) => {
     return await apiRequest(`${API_BASE_URL}/agent/sandboxes`, {
       method: 'POST',
       body: JSON.stringify({ name, sourcePath, strategy, baseRef }),
@@ -366,7 +366,7 @@ export const sandboxesApi = {
     });
   },
 
-  commitBranch: async (id, { message = 'Asyncat sandbox changes', filePaths = [] } = {}) => {
+  commitBranch: async (id, { message = 'Asyncat copy changes', filePaths = [] } = {}) => {
     return await apiRequest(`${API_BASE_URL}/agent/sandboxes/${encodeURIComponent(id)}/commit-branch`, {
       method: 'POST',
       body: JSON.stringify({ message, filePaths }),

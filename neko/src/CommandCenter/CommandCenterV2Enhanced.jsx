@@ -3028,7 +3028,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                           ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
                           : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
                       }`}
-                      title="Show code files, Git, and sandboxes"
+                      title="Show code files, Git and copies"
                     >
                       <Code2 className="h-3.5 w-3.5" />
                       Code

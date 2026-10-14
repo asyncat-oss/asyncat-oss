@@ -109,8 +109,9 @@ class ToolRegistry {
   names() { return [...this._tools.keys()]; }
   all() { return [...this._tools.values()]; }
 
+  /** An old name asks like the tool that replaced it. */
   getPermission(name) {
-    const tool = this._tools.get(name);
+    const tool = this.get(this.canonicalName(name));
     return tool ? tool.permission : PermissionLevel.DANGEROUS;
   }
 

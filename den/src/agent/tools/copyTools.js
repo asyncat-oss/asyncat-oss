@@ -1,3 +1,9 @@
+// den/src/agent/tools/copyTools.js
+// Copies of the project (a git worktree, or a plain folder copy) to try risky
+// changes in, then review and bring back. A copy keeps files apart, not
+// programs: its commands run in the command sandbox like any other.
+// These were once called sandboxes; the old tool names still work (aliases).
+
 import {
   applySandboxPatch,
   commitSandboxBranch,
@@ -13,42 +19,53 @@ import {
 } from '../SandboxManager.js';
 import { PermissionLevel } from './toolRegistry.js';
 
-export const sandboxTools = [
+const RENAMED_KEYS = { sandbox: 'copy', sandboxes: 'copies', sandboxPath: 'copyPath', sandboxId: 'copyId' };
+
+/** A result as the model sees it: copies, never "sandboxes". */
+export function forModel(value) {
+  if (Array.isArray(value)) return value.map(forModel);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [RENAMED_KEYS[key] || key, forModel(item)]));
+}
+
+const idParam = { id: { type: 'string', description: 'Copy id.' } };
+
+export const copyTools = [
   {
-    name: 'sandbox_create',
-    description: 'Create an isolated workspace copy for risky code changes or experiments. Uses a git worktree when possible so live dev servers are not watching the edited files.',
+    name: 'copy_create',
+    description: 'Make a copy of the project to try risky changes or experiments in. Uses a git worktree when possible, so dev servers are not watching the edited files. Review with copy_diff and bring changes back with copy_apply_patch.',
     category: 'workspace',
     permission: PermissionLevel.MODERATE,
     parameters: {
       type: 'object',
       properties: {
-        name: { type: 'string', description: 'Human-readable sandbox name.' },
-        sourcePath: { type: 'string', description: 'Source directory. Defaults to the active Project folder.' },
+        name: { type: 'string', description: 'A short name for the copy.' },
+        sourcePath: { type: 'string', description: 'Folder to copy. Defaults to the active Project folder.' },
         strategy: { type: 'string', description: 'auto, worktree, or copy. auto prefers worktree for git repositories.' },
         baseRef: { type: 'string', description: 'Git ref to branch from when using worktree. Defaults to HEAD.' },
       },
     },
-    execute: async (args, context) => createSandbox({
+    execute: async (args, context) => forModel(createSandbox({
       userId: context.userId,
       workspaceId: context.workspaceId,
-      name: args.name || 'Sandbox',
+      name: args.name || 'Copy',
       sourcePath: args.sourcePath || context.workspaceRoot || context.workingDir,
       strategy: args.strategy || 'auto',
       baseRef: args.baseRef || 'HEAD',
-    }),
+    })),
   },
   {
-    name: 'sandbox_list',
-    description: 'List isolated sandboxes for this workspace.',
+    name: 'copy_list',
+    description: 'List the copies of this workspace.',
     category: 'workspace',
     permission: PermissionLevel.SAFE,
     parameters: {
       type: 'object',
       properties: {
-        includeDeleted: { type: 'boolean', description: 'Include deleted sandbox records.' },
+        includeDeleted: { type: 'boolean', description: 'Include deleted copies.' },
       },
     },
-    execute: async (args, context) => ({
+    execute: async (args, context) => forModel({
       success: true,
       root: sandboxRoot(),
       sandboxes: listSandboxes(context.userId, {
@@ -58,171 +75,165 @@ export const sandboxTools = [
     }),
   },
   {
-    name: 'sandbox_status',
-    description: 'Get status and git summary for a sandbox.',
+    name: 'copy_status',
+    description: 'Get the status and git summary of a copy.',
     category: 'workspace',
     permission: PermissionLevel.SAFE,
-    parameters: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'Sandbox id.' },
-      },
-      required: ['id'],
-    },
+    parameters: { type: 'object', properties: idParam, required: ['id'] },
     execute: async (args, context) => {
-      const sandbox = getSandboxStatus(context.userId, args.id);
-      if (!sandbox) return { success: false, error: 'Sandbox not found.' };
-      return { success: true, sandbox };
+      const copy = getSandboxStatus(context.userId, args.id);
+      if (!copy) return { success: false, error: 'Copy not found.' };
+      return { success: true, copy: forModel(copy) };
     },
   },
   {
-    name: 'sandbox_diff',
-    description: 'Review changed files or a unified diff for a sandbox before promoting changes.',
+    name: 'copy_diff',
+    description: 'Review the changed files, or a unified diff, of a copy before bringing changes back.',
     category: 'workspace',
     permission: PermissionLevel.SAFE,
     parameters: {
       type: 'object',
       properties: {
-        id: { type: 'string', description: 'Sandbox id.' },
+        ...idParam,
         filePath: { type: 'string', description: 'Optional relative file path to show a patch for.' },
-        includePatch: { type: 'boolean', description: 'Include the full sandbox patch. Use carefully for large diffs.' },
+        includePatch: { type: 'boolean', description: 'Include the full patch. Use carefully for large diffs.' },
       },
       required: ['id'],
     },
-    execute: async (args, context) => getSandboxDiff(context.userId, args.id, {
+    execute: async (args, context) => forModel(getSandboxDiff(context.userId, args.id, {
       filePath: args.filePath || null,
       includePatch: args.includePatch === true,
-    }),
+    })),
   },
   {
-    name: 'sandbox_run_command',
-    description: 'Run a command inside a sandbox and persist stdout/stderr as a sandbox job log.',
+    name: 'copy_run_command',
+    description: 'Run a command inside a copy and keep its output as a job log. It runs in the command sandbox, with the copy as the folder it may change.',
     category: 'workspace',
     permission: PermissionLevel.DANGEROUS,
     parameters: {
       type: 'object',
       properties: {
-        id: { type: 'string', description: 'Sandbox id.' },
-        command: { type: 'string', description: 'Shell command to run inside the sandbox.' },
-        cwd: { type: 'string', description: 'Relative directory inside the sandbox. Defaults to .' },
+        ...idParam,
+        command: { type: 'string', description: 'Shell command to run inside the copy.' },
+        cwd: { type: 'string', description: 'Relative directory inside the copy. Defaults to .' },
         kind: { type: 'string', description: 'command, test, or promote.' },
         timeoutMs: { type: 'number', description: 'Timeout in milliseconds. Max 900000.' },
       },
       required: ['id', 'command'],
     },
-    execute: async (args, context) => runSandboxCommand(context.userId, args.id, {
+    execute: async (args, context) => forModel(await runSandboxCommand(context.userId, args.id, {
       command: args.command,
       cwd: args.cwd || '.',
       kind: args.kind || 'command',
       timeoutMs: args.timeoutMs,
-    }),
+    })),
   },
   {
-    name: 'sandbox_jobs',
-    description: 'List persisted command/test/promote jobs for a sandbox.',
+    name: 'copy_jobs',
+    description: 'List the command, test and promote jobs run in a copy.',
     category: 'workspace',
     permission: PermissionLevel.SAFE,
     parameters: {
       type: 'object',
       properties: {
-        id: { type: 'string', description: 'Sandbox id.' },
+        ...idParam,
         limit: { type: 'number', description: 'Maximum jobs to return.' },
       },
       required: ['id'],
     },
-    execute: async (args, context) => ({
+    execute: async (args, context) => forModel({
       success: true,
       jobs: listSandboxJobs(context.userId, args.id, { limit: args.limit }),
     }),
   },
   {
-    name: 'sandbox_create_patch',
-    description: 'Create a unified patch from sandbox changes for review or external use.',
+    name: 'copy_create_patch',
+    description: "Make a unified patch from a copy's changes, for review or use elsewhere.",
     category: 'workspace',
     permission: PermissionLevel.SAFE,
     parameters: {
       type: 'object',
       properties: {
-        id: { type: 'string', description: 'Sandbox id.' },
+        ...idParam,
         filePaths: { type: 'array', items: { type: 'string' }, description: 'Optional relative files to include.' },
       },
       required: ['id'],
     },
-    execute: async (args, context) => createSandboxPatch(context.userId, args.id, {
+    execute: async (args, context) => forModel(createSandboxPatch(context.userId, args.id, {
       filePaths: args.filePaths || [],
-    }),
+    })),
   },
   {
-    name: 'sandbox_apply_patch',
-    description: 'Apply sandbox changes back to the source workspace after review. Supports dryRun.',
+    name: 'copy_apply_patch',
+    description: "Bring a copy's changes back to the original project after review. Supports dryRun.",
     category: 'workspace',
     permission: PermissionLevel.DANGEROUS,
     parameters: {
       type: 'object',
       properties: {
-        id: { type: 'string', description: 'Sandbox id.' },
+        ...idParam,
         filePaths: { type: 'array', items: { type: 'string' }, description: 'Optional relative files to apply.' },
         dryRun: { type: 'boolean', description: 'Only check whether the patch applies cleanly.' },
       },
       required: ['id'],
     },
-    execute: async (args, context) => applySandboxPatch(context.userId, args.id, {
+    execute: async (args, context) => forModel(applySandboxPatch(context.userId, args.id, {
       filePaths: args.filePaths || [],
       dryRun: args.dryRun === true,
-    }),
+    })),
   },
   {
-    name: 'sandbox_commit_branch',
-    description: 'Commit sandbox changes onto the sandbox branch so it can be pushed or opened as a PR.',
+    name: 'copy_commit_branch',
+    description: "Commit a copy's changes onto its own branch so it can be pushed or opened as a PR.",
     category: 'workspace',
     permission: PermissionLevel.DANGEROUS,
     parameters: {
       type: 'object',
       properties: {
-        id: { type: 'string', description: 'Sandbox id.' },
+        ...idParam,
         message: { type: 'string', description: 'Commit message.' },
         filePaths: { type: 'array', items: { type: 'string' }, description: 'Optional relative files to commit.' },
       },
       required: ['id'],
     },
-    execute: async (args, context) => commitSandboxBranch(context.userId, args.id, {
-      message: args.message || 'Asyncat sandbox changes',
+    execute: async (args, context) => forModel(commitSandboxBranch(context.userId, args.id, {
+      message: args.message || 'Asyncat copy changes',
       filePaths: args.filePaths || [],
-    }),
+    })),
   },
   {
-    name: 'sandbox_delete',
-    description: 'Delete an isolated sandbox directory. This only removes paths under the Asyncat sandbox root.',
+    name: 'copy_delete',
+    description: "Delete a copy's folder. This only removes folders under Asyncat's copies folder.",
     category: 'workspace',
     permission: PermissionLevel.DANGEROUS,
     parameters: {
       type: 'object',
       properties: {
-        id: { type: 'string', description: 'Sandbox id.' },
+        ...idParam,
         force: { type: 'boolean', description: 'Force cleanup if git worktree removal fails.' },
       },
       required: ['id'],
     },
-    execute: async (args, context) => deleteSandbox(context.userId, args.id, { force: args.force === true }),
+    execute: async (args, context) => forModel(deleteSandbox(context.userId, args.id, { force: args.force === true })),
   },
   {
-    name: 'sandbox_delegate_task',
-    description: 'Run a delegated agent inside an existing sandbox. Use this for risky implementation work so file edits and commands happen in the sandbox instead of the live workspace.',
+    name: 'copy_delegate_task',
+    description: 'Run a delegated agent inside an existing copy. Use this for risky implementation work so file edits and commands happen in the copy instead of the live project.',
     category: 'workspace',
     permission: PermissionLevel.MODERATE,
     parameters: {
       type: 'object',
       properties: {
-        id: { type: 'string', description: 'Sandbox id.' },
-        task: { type: 'string', description: 'Task for the sandboxed agent.' },
-        maxRounds: { type: 'number', description: 'Maximum rounds for the sandboxed agent. Default is 15.' },
+        ...idParam,
+        task: { type: 'string', description: 'Task for the agent working in the copy.' },
+        maxRounds: { type: 'number', description: 'Maximum rounds for that agent. Default is 15.' },
       },
       required: ['id', 'task'],
     },
     execute: async (args, context) => {
-      const sandbox = getSandboxStatus(context.userId, args.id);
-      if (!sandbox || sandbox.status !== 'ready' || !sandbox.exists) {
-        return { success: false, error: 'Sandbox is not ready or no longer exists.' };
+      const copy = getSandboxStatus(context.userId, args.id);
+      if (!copy || copy.status !== 'ready' || !copy.exists) {
+        return { success: false, error: 'That copy is not ready or no longer exists.' };
       }
 
       const { AgentRuntime } = await import('../AgentRuntime.js');
@@ -235,20 +246,20 @@ export const sandboxTools = [
         supportsNativeTools: provider.supportsNativeTools,
         userId: context.userId,
         workspaceId: context.workspaceId,
-        workingDir: sandbox.sandboxPath,
-        workspaceRoot: sandbox.sandboxPath,
+        workingDir: copy.sandboxPath,
+        workspaceRoot: copy.sandboxPath,
         maxRounds: Math.min(Math.max(Number(args.maxRounds) || 15, 1), 30),
         requestPermission: context.requestPermission,
         askUser: context.askUser,
         providerInfo: provider.providerInfo,
-        usageContext: { operation: 'sandbox-agent' },
+        usageContext: { operation: 'copy-agent' },
         ephemeral: context.ephemeral === true,
       });
 
       const result = await subAgent.run(args.task);
       return {
         success: true,
-        sandbox,
+        copy: forModel(copy),
         answer: result.answer,
         sessionId: result.session?.id || null,
         rounds: result.session?.totalRounds || 0,
@@ -257,4 +268,8 @@ export const sandboxTools = [
   },
 ];
 
-export default sandboxTools;
+// The names these tools had before; stored agent and Cat tool lists may
+// still use them.
+export const copyToolAliases = Object.fromEntries(copyTools.map((tool) => [tool.name.replace(/^copy_/, 'sandbox_'), tool.name]));
+
+export default copyTools;

@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { filesApi } from '../../api';
 import GitPanel from '../git/GitPanel';
-import SandboxPanel from './SandboxPanel';
+import CopiesPanel from './CopiesPanel';
 import CodeSearchPanel from '../code/CodeSearchPanel';
 import SymbolOutlinePanel from '../code/SymbolOutlinePanel';
 
@@ -277,7 +277,7 @@ export default function CodePanel({
     { id: 'search', label: 'Search', icon: Search },
     { id: 'outline', label: 'Outline', icon: List },
     { id: 'git', label: 'Git', icon: GitBranch, count: gitState?.changedCount || 0 },
-    { id: 'sandboxes', label: 'Boxes', icon: Folder },
+    { id: 'sandboxes', label: 'Copies', icon: Folder },
   ];
 
   return (
@@ -348,7 +348,7 @@ export default function CodePanel({
             workingDir={workingDir}
           />
         )}
-        {section === 'sandboxes' && <SandboxPanel />}
+        {section === 'sandboxes' && <CopiesPanel />}
       </div>
     </div>
   );

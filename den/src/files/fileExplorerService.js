@@ -146,7 +146,7 @@ export function getFileRoots() {
   const home = os.homedir();
   const candidates = [
     { id: 'workspace', label: 'Workspace', path: getWorkspaceRoot(), kind: 'workspace' },
-    { id: 'sandboxes', label: 'Sandboxes', path: getSandboxRoot(), kind: 'sandbox' },
+    { id: 'sandboxes', label: 'Copies', path: getSandboxRoot(), kind: 'sandbox' },
     { id: 'home', label: 'Home', path: home, kind: 'home' },
     { id: 'dev', label: 'Dev', path: path.join(home, 'Dev'), kind: 'dev' },
     { id: 'desktop', label: 'Desktop', path: path.join(home, 'Desktop'), kind: 'place' },

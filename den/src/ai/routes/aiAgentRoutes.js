@@ -1808,7 +1808,7 @@ router.post('/sandboxes', withWorkspaceContext, (req, res) => {
     const result = createSandbox({
       userId: req.user.id,
       workspaceId: req.body.workspaceId || req.workspaceId || null,
-      name: req.body.name || 'Sandbox',
+      name: req.body.name || 'Copy',
       sourcePath: req.body.sourcePath || req.body.source_path || null,
       strategy: req.body.strategy || 'auto',
       baseRef: req.body.baseRef || req.body.base_ref || 'HEAD',
@@ -1822,7 +1822,7 @@ router.post('/sandboxes', withWorkspaceContext, (req, res) => {
 router.get('/sandboxes/:id', withWorkspaceContext, (req, res) => {
   try {
     const sandbox = getSandboxStatus(req.user.id, req.params.id);
-    if (!sandbox) return res.status(404).json({ success: false, error: 'Sandbox not found.' });
+    if (!sandbox) return res.status(404).json({ success: false, error: 'Copy not found.' });
     res.json({ success: true, sandbox });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -1864,7 +1864,7 @@ router.post('/sandboxes/:id/apply', withWorkspaceContext, (req, res) => {
 router.post('/sandboxes/:id/commit-branch', withWorkspaceContext, (req, res) => {
   try {
     res.json(commitSandboxBranch(req.user.id, req.params.id, {
-      message: req.body?.message || 'Asyncat sandbox changes',
+      message: req.body?.message || 'Asyncat copy changes',
       filePaths: req.body?.filePaths || req.body?.files || [],
     }));
   } catch (err) {
@@ -1886,7 +1886,7 @@ router.get('/sandboxes/:id/jobs', withWorkspaceContext, (req, res) => {
 router.get('/sandboxes/:id/jobs/:jobId', withWorkspaceContext, (req, res) => {
   try {
     const job = getSandboxJob(req.user.id, req.params.id, req.params.jobId);
-    if (!job) return res.status(404).json({ success: false, error: 'Sandbox job not found.' });
+    if (!job) return res.status(404).json({ success: false, error: 'Job not found.' });
     res.json({ success: true, job });
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });

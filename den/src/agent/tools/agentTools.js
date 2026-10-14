@@ -2,6 +2,7 @@
 import { PermissionLevel } from './toolRegistry.js';
 import { currentScheduledRun } from '../scheduledRunContext.js';
 import { createSandbox } from '../SandboxManager.js';
+import { forModel } from './copyTools.js';
 import { randomUUID } from 'crypto';
 
 function looksLikeCodingTask(task = '') {
@@ -10,7 +11,8 @@ function looksLikeCodingTask(task = '') {
 }
 
 function isolationChoice(value) {
-  return ['auto', 'sandbox', 'same_workspace'].includes(value) ? value : 'auto';
+  if (value === 'sandbox') return 'copy'; // its old name
+  return ['auto', 'copy', 'same_workspace'].includes(value) ? value : 'auto';
 }
 
 export const agentTools = [
@@ -24,7 +26,7 @@ export const agentTools = [
       properties: {
         role: { type: 'string', description: 'The role of the sub-agent, e.g. "Web Scraper", "Code Reviewer"' },
         task: { type: 'string', description: 'The specific task for the sub-agent to accomplish' },
-        isolation: { type: 'string', enum: ['auto', 'sandbox', 'same_workspace'], description: 'Where the sub-agent should work. auto creates a sandbox for coding tasks and otherwise uses the current workspace.' },
+        isolation: { type: 'string', enum: ['auto', 'copy', 'same_workspace'], description: 'Where the sub-agent should work. auto makes a copy of the project for coding tasks and otherwise uses the current workspace.' },
         read_only: { type: 'boolean', description: 'If true, the sub-agent runs in read-only mode (inspect/search/read only, no writes or side effects). Use for research and exploration.' },
         tools: { type: 'array', description: 'Optional allow-list of tool names to restrict the sub-agent to (planning and ask_user are always available).', items: { type: 'string' } },
         max_rounds: { type: 'number', description: 'Optional cap on the sub-agent\'s reasoning rounds (default 15, max 30).' },
@@ -43,12 +45,12 @@ export const agentTools = [
 
       const subagentSessionId = randomUUID();
       const isolation = isolationChoice(args.isolation);
-      const wantsSandbox = isolation === 'sandbox' || (isolation === 'auto' && looksLikeCodingTask(args.task));
-      let sandbox = null;
+      const wantsCopy = isolation === 'copy' || (isolation === 'auto' && looksLikeCodingTask(args.task));
+      let copy = null;
       let workingDir = context.workingDir;
       let workspaceRoot = context.workspaceRoot || context.workingDir;
 
-      if (wantsSandbox) {
+      if (wantsCopy) {
         try {
           const created = createSandbox({
             userId: context.userId,
@@ -58,14 +60,14 @@ export const agentTools = [
             strategy: 'auto',
             baseRef: 'HEAD',
           });
-          sandbox = created?.sandbox || null;
-          if (sandbox?.sandboxPath) {
-            workingDir = sandbox.sandboxPath;
-            workspaceRoot = sandbox.sandboxPath;
+          copy = created?.sandbox ? forModel(created.sandbox) : null;
+          if (copy?.copyPath) {
+            workingDir = copy.copyPath;
+            workspaceRoot = copy.copyPath;
           }
         } catch (err) {
-          if (isolation === 'sandbox') {
-            return { success: false, error: `Could not create sandbox for delegated task: ${err.message}` };
+          if (isolation === 'copy') {
+            return { success: false, error: `Couldn't make a copy of the project for this task: ${err.message}` };
           }
         }
       }
@@ -73,7 +75,7 @@ export const agentTools = [
       // We give the sub-agent a modified goal so it adopts its role
       const subGoal = [
         `You are a specialized sub-agent with the role: ${args.role}.`,
-        sandbox ? `You are working in an isolated sandbox at ${sandbox.sandboxPath}. Do not apply changes back to the source workspace yourself; report what changed and how to review/apply it.` : null,
+        copy ? `You are working in a copy of the project at ${copy.copyPath}. Do not apply changes back to the original project yourself; report what changed and how to review/apply it (copy_diff, copy_apply_patch).` : null,
         `Your specific task is: ${args.task}`,
         'Do not ask the user for permission or clarification, just do the task to the best of your ability and return the final answer.',
       ].filter(Boolean).join('\n\n');
@@ -87,7 +89,7 @@ export const agentTools = [
           profileIcon: '🤖',
           task: args.task,
           sessionId: subagentSessionId,
-          sandbox,
+          copy,
           readOnly: !!args.read_only,
           scopedToolCount: Array.isArray(args.tools) ? args.tools.filter(Boolean).length : null,
         },
@@ -146,7 +148,7 @@ export const agentTools = [
           },
           answer: result.answer,
           sessionId: subagentSessionId,
-          sandbox,
+          copy,
           readOnly: !!args.read_only,
           scopedToolCount: Array.isArray(args.tools) ? args.tools.filter(Boolean).length : null,
           roundsTaken: result.session.totalRounds,

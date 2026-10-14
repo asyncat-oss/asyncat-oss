@@ -1,3 +1,9 @@
+// den/src/agent/SandboxManager.js
+// Copies of the project (shown as "copies"; the code and tables still say
+// sandbox): a git worktree, or a plain folder copy, to try changes in apart
+// from the live files, with their command jobs. Their commands run in the
+// command sandbox (commandSandbox.js) like every other.
+
 import { execFileSync, spawnSync } from 'child_process';
 import fs from 'fs';
 import os from 'os';
@@ -35,13 +41,13 @@ function parseJson(value, fallback = {}) {
   }
 }
 
-function safeName(value = 'sandbox') {
-  return String(value || 'sandbox')
+function safeName(value = 'copy') {
+  return String(value || 'copy')
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9._-]+/g, '-')
     .replace(/^-+|-+$/g, '')
-    .slice(0, 48) || 'sandbox';
+    .slice(0, 48) || 'copy';
 }
 
 function publicSandbox(row) {
@@ -167,17 +173,17 @@ function jobById(userId, sandboxId, jobId) {
 
 function requireSandbox(userId, id) {
   const row = rowById(userId, id);
-  if (!row) throw new Error('Sandbox not found.');
-  if (row.status !== 'ready') throw new Error(`Sandbox is ${row.status}.`);
-  if (!fs.existsSync(row.sandbox_path)) throw new Error('Sandbox path no longer exists.');
+  if (!row) throw new Error('Copy not found.');
+  if (row.status !== 'ready') throw new Error(`This copy is ${row.status}.`);
+  if (!fs.existsSync(row.sandbox_path)) throw new Error("This copy's folder no longer exists.");
   return row;
 }
 
 function resolveSandboxCwd(row, cwd = '.') {
   const resolved = path.resolve(row.sandbox_path, cwd || '.');
-  if (!isInside(resolved, row.sandbox_path)) throw new Error('Command cwd must stay inside the sandbox.');
+  if (!isInside(resolved, row.sandbox_path)) throw new Error('Command cwd must stay inside the copy.');
   if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) {
-    throw new Error('Command cwd must be an existing directory inside the sandbox.');
+    throw new Error('Command cwd must be an existing directory inside the copy.');
   }
   return resolved;
 }
@@ -211,9 +217,9 @@ function parseGitStatus(output = '') {
 
 function filePatch(row, filePath) {
   const rel = String(filePath || '').trim();
-  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) throw new Error('filePath must be relative to the sandbox.');
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) throw new Error('filePath must be relative to the copy.');
   const abs = path.resolve(row.sandbox_path, rel);
-  if (!isInside(abs, row.sandbox_path)) throw new Error('filePath must stay inside the sandbox.');
+  if (!isInside(abs, row.sandbox_path)) throw new Error('filePath must stay inside the copy.');
 
   const status = runGitResult(['status', '--porcelain=v1', '--', rel], row.sandbox_path).stdout.trim();
   if (status.startsWith('??')) {
@@ -238,7 +244,7 @@ function createWorktreePatch(row, filePaths = []) {
 }
 
 function writeTempPatch(sandboxId, patch) {
-  const dir = path.join(os.tmpdir(), 'asyncat-sandbox-patches');
+  const dir = path.join(os.tmpdir(), 'asyncat-copy-patches');
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   const patchPath = path.join(dir, `${sandboxId}-${Date.now()}-${randomUUID().slice(0, 8)}.patch`);
   fs.writeFileSync(patchPath, patch, 'utf8');
@@ -292,7 +298,7 @@ export function getSandboxDiff(userId, id, { filePath = null, includePatch = fal
       supported: false,
       files: [],
       patch: '',
-      message: 'Diff review is currently supported for git worktree sandboxes.',
+      message: 'Reviewing changes works for copies made with git worktree.',
     };
   }
 
@@ -322,7 +328,7 @@ export function getSandboxDiff(userId, id, { filePath = null, includePatch = fal
 
 export function createSandboxPatch(userId, id, { filePaths = [] } = {}) {
   const row = requireSandbox(userId, id);
-  if (row.strategy !== 'worktree') throw new Error('Patch export is currently supported for git worktree sandboxes.');
+  if (row.strategy !== 'worktree') throw new Error('Making a patch works for copies made with git worktree.');
   const patch = createWorktreePatch(row, filePaths);
   return {
     success: true,
@@ -334,9 +340,9 @@ export function createSandboxPatch(userId, id, { filePaths = [] } = {}) {
 
 export function applySandboxPatch(userId, id, { filePaths = [], dryRun = false } = {}) {
   const row = requireSandbox(userId, id);
-  if (row.strategy !== 'worktree') throw new Error('Patch apply is currently supported for git worktree sandboxes.');
+  if (row.strategy !== 'worktree') throw new Error('Bringing changes back works for copies made with git worktree.');
   const patch = createWorktreePatch(row, filePaths);
-  if (!patch.trim()) return { success: true, dryRun, applied: false, message: 'Sandbox has no changes to apply.' };
+  if (!patch.trim()) return { success: true, dryRun, applied: false, message: 'The copy has no changes to apply.' };
 
   const patchPath = writeTempPatch(id, patch);
   try {
@@ -352,41 +358,41 @@ export function applySandboxPatch(userId, id, { filePaths = [], dryRun = false }
     }
     const now = nowIso();
     db.prepare('UPDATE agent_sandboxes SET updated_at = ? WHERE user_id = ? AND id = ?').run(now, userId, id);
-    return { success: true, dryRun: false, applied: true, message: 'Patch applied to source workspace.' };
+    return { success: true, dryRun: false, applied: true, message: 'Changes applied to the original project.' };
   } finally {
     try { fs.rmSync(patchPath, { force: true }); } catch {}
   }
 }
 
-export function commitSandboxBranch(userId, id, { message = 'Asyncat sandbox changes', filePaths = [] } = {}) {
+export function commitSandboxBranch(userId, id, { message = 'Asyncat copy changes', filePaths = [] } = {}) {
   const row = requireSandbox(userId, id);
-  if (row.strategy !== 'worktree') throw new Error('Branch promotion is currently supported for git worktree sandboxes.');
+  if (row.strategy !== 'worktree') throw new Error('Committing to a branch works for copies made with git worktree.');
   const paths = normalizePathList(filePaths);
   const addArgs = ['add'];
   if (paths.length) addArgs.push('--', ...paths);
   else addArgs.push('-A');
   const add = runGitResult(addArgs, row.sandbox_path);
-  if (add.status !== 0) throw new Error(add.stderr || add.stdout || 'Could not stage sandbox changes.');
+  if (add.status !== 0) throw new Error(add.stderr || add.stdout || "Couldn't stage the copy's changes.");
 
   const diff = runGitResult(['diff', '--cached', '--quiet'], row.sandbox_path);
   if (diff.status === 0) {
-    return { success: true, committed: false, branchName: row.branch_name, message: 'No staged sandbox changes to commit.' };
+    return { success: true, committed: false, branchName: row.branch_name, message: 'The copy has no staged changes to commit.' };
   }
 
-  const commit = runGitResult(['commit', '-m', String(message || 'Asyncat sandbox changes')], row.sandbox_path);
-  if (commit.status !== 0) throw new Error(commit.stderr || commit.stdout || 'Could not commit sandbox changes.');
+  const commit = runGitResult(['commit', '-m', String(message || 'Asyncat copy changes')], row.sandbox_path);
+  if (commit.status !== 0) throw new Error(commit.stderr || commit.stdout || "Couldn't commit the copy's changes.");
   return {
     success: true,
     committed: true,
     branchName: runGit(['branch', '--show-current'], row.sandbox_path),
     output: commit.stdout || commit.stderr,
-    message: 'Sandbox changes committed on the sandbox branch. Push this branch or open a PR from it when ready.',
+    message: "The copy's changes are committed on its branch. Push it or open a PR from it when ready.",
   };
 }
 
 export function listSandboxJobs(userId, sandboxId, { limit = 50 } = {}) {
   const row = rowById(userId, sandboxId);
-  if (!row) throw new Error('Sandbox not found.');
+  if (!row) throw new Error('Copy not found.');
   const rows = db.prepare(`
     SELECT * FROM agent_sandbox_jobs
     WHERE user_id = ? AND sandbox_id = ?
@@ -442,7 +448,7 @@ export async function runSandboxCommand(userId, sandboxId, {
     workspaceRoot: row.sandbox_path,
     timeout: Math.min(Math.max(Number(timeoutMs) || 120_000, 1_000), 900_000),
     maxOutput: JOB_OUTPUT_LIMIT,
-    env: { ASYNCAT_SANDBOX_ID: sandboxId, ASYNCAT_SANDBOX_PATH: row.sandbox_path },
+    env: { ASYNCAT_COPY_ID: sandboxId, ASYNCAT_COPY_PATH: row.sandbox_path },
   });
   const completed = nowIso();
   const stdout = (result.stdout || '').slice(-JOB_OUTPUT_LIMIT);
@@ -469,7 +475,7 @@ export function recoverSandboxJobs() {
   const info = db.prepare(`
     UPDATE agent_sandbox_jobs
     SET status = 'failed',
-        stderr = CASE WHEN stderr = '' THEN 'Backend restarted before this sandbox job completed.' ELSE stderr END,
+        stderr = CASE WHEN stderr = '' THEN 'Asyncat restarted before this command finished.' ELSE stderr END,
         completed_at = COALESCE(completed_at, ?),
         updated_at = ?
     WHERE status IN ('queued','running')
@@ -480,7 +486,7 @@ export function recoverSandboxJobs() {
 export function createSandbox({
   userId,
   workspaceId = null,
-  name = 'Sandbox',
+  name = 'Copy',
   sourcePath = null,
   strategy = 'auto',
   baseRef = 'HEAD',
@@ -490,18 +496,18 @@ export function createSandbox({
   const label = safeName(name);
   const source = path.resolve(sourcePath || getWorkspaceRoot());
   if (!fs.existsSync(source) || !fs.statSync(source).isDirectory()) {
-    throw new Error('Sandbox source must be an existing directory.');
+    throw new Error('The folder to copy must be an existing folder.');
   }
 
   const repoRoot = gitRoot(source);
   if (strategy === 'worktree' && !repoRoot) {
-    throw new Error('Worktree sandbox requires a git repository. Use strategy "copy" for non-git folders.');
+    throw new Error('A worktree copy needs a git repository. Use strategy "copy" for other folders.');
   }
   const useWorktree = strategy !== 'copy' && Boolean(repoRoot);
   const resolvedSource = useWorktree ? repoRoot : source;
   const sandboxRootPath = ensureSandboxRootFor(resolvedSource);
   const sandboxPath = sandboxPathFor(id, label, resolvedSource);
-  const branchName = useWorktree ? `asyncat-sandbox/${label}-${id.slice(0, 8)}` : null;
+  const branchName = useWorktree ? `asyncat-copy/${label}-${id.slice(0, 8)}` : null;
   const now = nowIso();
 
   try {
@@ -574,9 +580,9 @@ export function createSandbox({
 
 export function deleteSandbox(userId, id, { force = false } = {}) {
   const row = rowById(userId, id);
-  if (!row) throw new Error('Sandbox not found.');
+  if (!row) throw new Error('Copy not found.');
   if (row.status === 'deleted') return { success: true, sandbox: publicSandbox(row) };
-  if (!isInside(row.sandbox_path, sandboxRootForRow(row))) throw new Error('Refusing to delete a path outside the sandbox root.');
+  if (!isInside(row.sandbox_path, sandboxRootForRow(row))) throw new Error("Refusing to delete a folder outside Asyncat's copies folder.");
 
   if (fs.existsSync(row.sandbox_path)) {
     if (row.strategy === 'worktree') {

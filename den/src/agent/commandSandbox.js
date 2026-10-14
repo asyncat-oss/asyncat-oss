@@ -242,7 +242,8 @@ export function sandboxAvailable(platform = process.platform) {
 // also fixes (code_fix was its old name).
 export const SANDBOXED_TOOLS = new Set([
   'run_command', 'run_python', 'run_node', 'shell_session_start', 'shell_session_run', 'process_spawn',
-  'run_tests', 'package_manager', 'build_runner', 'linter_run', 'dependency_audit', 'sandbox_run_command',
+  'run_tests', 'package_manager', 'build_runner', 'linter_run', 'dependency_audit',
+  'copy_run_command', 'sandbox_run_command',
 ]);
 
 /**

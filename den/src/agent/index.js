@@ -39,7 +39,7 @@ import { apiExplorerTools } from './tools/apiExplorerTools.js';
 import { localRagTools } from './tools/localRagTools.js';
 import { testRunnerTools } from './tools/testRunnerTools.js';
 import { codebaseMetricsTools } from './tools/codebaseMetricsTools.js';
-import { sandboxTools } from './tools/sandboxTools.js';
+import { copyTools, copyToolAliases } from './tools/copyTools.js';
 import { astTools } from './tools/astTools.js';
 import { lspTools } from './tools/lspTools.js';
 import { desktopTools } from './tools/desktopTools.js';
@@ -105,7 +105,7 @@ export async function initializeAgent() {
   toolRegistry.registerAll(localRagTools);
   toolRegistry.registerAll(testRunnerTools);
   toolRegistry.registerAll(codebaseMetricsTools);
-  toolRegistry.registerAll(sandboxTools);
+  toolRegistry.registerAll(copyTools);
   toolRegistry.registerAll(astTools);
   toolRegistry.registerAll(lspTools);
   toolRegistry.registerAll(desktopTools);
@@ -113,8 +113,10 @@ export async function initializeAgent() {
   toolRegistry.registerAll(previewBrowserTools);
   toolRegistry.registerAll(knowledgeTools);
 
-  // Old names of tools that were merged into others (see tools/toolAliases.js).
+  // Old names: tools that were merged into others (tools/toolAliases.js), and
+  // the copy tools, once called sandbox_* (tools/copyTools.js).
   toolRegistry.registerAliases(TOOL_ALIASES);
+  toolRegistry.registerAliases(copyToolAliases);
 
   // Connector (MCP) tools are added as their servers connect; see
   // connectors/connectorManager.js, started with the server.
