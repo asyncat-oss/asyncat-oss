@@ -14,6 +14,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { spawn } from 'child_process';
+import { fileURLToPath } from 'url';
 import { childEnv } from '../childEnv.js';
 import { PermissionLevel } from './toolRegistry.js';
 import { IS_WIN, PLATFORM, hasBin, runFile, runPowerShell, runAppleScript, powerShellLiteral } from './shared.js';
@@ -118,10 +119,233 @@ export const revealInFinderTool = {
 };
 
 // ── app_open ──────────────────────────────────────────────────────────────────
+// app_open runs nothing in the command sandbox, so it opens apps and
+// documents only. Where it starts a program by name (Linux), that program
+// must be an installed desktop app: one with a .desktop entry that doesn't
+// open in a terminal. A command-line program given a file from the project
+// (m4, guile or uvx with a script saved as notes.txt) would otherwise run it
+// outside the sandbox. Programs that run whatever they are given (shells,
+// interpreters, terminals, launchers) are refused on every system, even with
+// a desktop entry, and so is any file or bundle that runs code when opened,
+// such as a script, a .desktop launcher or a .app.
+
+const CODE_RUNNERS = new Set([
+  // Shells, and programs that start another program.
+  'sh', 'bash', 'rbash', 'zsh', 'fish', 'dash', 'ash', 'ksh', 'mksh', 'csh', 'tcsh', 'nu', 'xonsh', 'elvish', 'busybox', 'toybox',
+  'env', 'sudo', 'doas', 'pkexec', 'su', 'runuser', 'nohup', 'setsid', 'nice', 'ionice', 'timeout', 'stdbuf', 'chroot', 'unshare',
+  'nsenter', 'bwrap', 'firejail', 'systemd-run', 'flatpak-spawn', 'flatpak', 'xargs', 'watch', 'strace', 'ltrace', 'gdb', 'script', 'expect',
+  'parallel', 'entr', 'watchexec', 'nodemon', 'at', 'batch', 'crontab', 'xdotool', 'ydotool', 'dbus-launch', 'dbus-run-session',
+  'distrobox', 'distrobox-enter', 'toolbox', 'docker', 'podman', 'nix', 'nix-shell', 'guix', 'lldb', 'valgrind', 'time', 'taskset',
+  'chrt', 'prlimit', 'proot', 'fakeroot', 'faketime',
+  // Interpreters, runtimes and build tools.
+  'python', 'pypy', 'py', 'pyw', 'ipython', 'node', 'nodejs', 'deno', 'bun', 'bunx', 'tsx', 'ts-node', 'npx', 'npm', 'pnpm', 'pnpx', 'yarn',
+  'perl', 'ruby', 'irb', 'php', 'lua', 'luajit', 'tclsh', 'wish', 'java', 'javaw', 'jshell', 'groovy', 'scala', 'kotlin', 'julia', 'r',
+  'rscript', 'swift', 'dotnet', 'mono', 'wine', 'wine64', 'osascript', 'awk', 'gawk', 'mawk', 'sed', 'make', 'gmake', 'cmake', 'ninja',
+  'cargo', 'go', 'gcc', 'cc', 'clang',
+  'm4', 'guile', 'uv', 'uvx', 'pip', 'pipx', 'poetry', 'pdm', 'hatch', 'rye', 'conda', 'mamba', 'micromamba', 'jupyter',
+  'gnuplot', 'dc', 'bc', 'escript', 'erl', 'elixir', 'iex', 'mix', 'racket', 'raco', 'octave', 'octave-cli', 'matlab',
+  'sbcl', 'clisp', 'ecl', 'ccl', 'chez', 'scheme', 'petite', 'csi', 'gsi', 'gst', 'ocaml', 'utop', 'ghc', 'ghci', 'runghc', 'runhaskell',
+  'stack', 'cabal', 'tcc', 'nim', 'crystal', 'zig', 'dart', 'kotlinc', 'scala-cli', 'jbang', 'raku', 'rakudo', 'perl6', 'love', 'luvit',
+  'fennel', 'janet', 'hy', 'sage', 'maxima', 'gp', 'gforth', 'pike', 'qjs', 'jrunscript', 'jjs', 'rhino', 'lli', 'jython', 'jruby',
+  'just', 'task', 'rake', 'gradle', 'gradlew', 'mvn', 'ant', 'meson', 'scons', 'bazel', 'bazelisk', 'tox', 'nox', 'pytest',
+  'ansible', 'ansible-playbook', 'terraform',
+  // Windows.
+  'cmd', 'powershell', 'pwsh', 'wscript', 'cscript', 'mshta', 'rundll32', 'regsvr32', 'msiexec', 'wsl', 'conhost', 'forfiles',
+  'schtasks', 'certutil', 'bitsadmin', 'installutil', 'msbuild', 'regasm', 'regsvcs', 'wt', 'powershell_ise', 'hh',
+  // Terminals, which run the file they are given.
+  'terminal', 'iterm', 'xterm', 'uxterm', 'kitty', 'kitten', 'alacritty', 'foot', 'footclient', 'wezterm', 'wezterm-gui', 'konsole',
+  'gnome-terminal', 'kgx', 'ptyxis', 'tilix', 'terminator', 'xfce4-terminal', 'lxterminal', 'mate-terminal', 'urxvt', 'rxvt', 'st',
+  'sakura', 'terminology', 'qterminal', 'ghostty', 'warp', 'hyper', 'tabby', 'cool-retro-term', 'guake', 'yakuake', 'tmux', 'screen', 'ssh',
+  'blackbox', 'contour', 'rio', 'tilda', 'deepin-terminal', 'cosmic-term', 'eterm', 'aterm', 'zellij', 'byobu',
+  'script editor', 'automator', 'python launcher',
+  // Openers: app_open already opens a file with its default app.
+  'open', 'xdg-open', 'gio', 'gtk-launch', 'kioclient', 'kde-open', 'exo-open', 'start', 'handlr', 'mimeo', 'rifle', 'run-mailcap', 'see',
+]);
+
+// Files and bundles that run code when opened with their default app.
+const RUNS_WHEN_OPENED = new Set([
+  '.sh', '.bash', '.zsh', '.fish', '.ksh', '.csh', '.command', '.tool', '.desktop', '.app', '.appimage', '.run', '.bin',
+  '.exe', '.com', '.bat', '.cmd', '.ps1', '.psm1', '.vbs', '.vbe', '.js', '.jse', '.mjs', '.cjs', '.wsf', '.wsh', '.hta',
+  '.msi', '.msp', '.msc', '.scr', '.pif', '.lnk', '.cpl', '.reg', '.jar', '.py', '.pyw', '.pyz', '.pl', '.rb', '.php', '.lua',
+  '.tcl', '.scpt', '.applescript', '.workflow', '.action', '.terminal', '.url', '.webloc', '.inetloc', '.fileloc',
+  '.deb', '.rpm', '.pkg', '.mpkg', '.dmg', '.flatpakref', '.snap',
+]);
+
+/**
+ * The names a program goes by, without folder, extension or version:
+ * "python3.12.exe" gives "python3.12.exe", "python3.12" and "python".
+ * The name as given is kept too, so "m4" stays "m4".
+ */
+function programNames(app) {
+  const base = String(app).split(/[\\/]/).pop().trim().toLowerCase();
+  const bare = base.replace(/\.(exe|com|bat|cmd|app)$/, '');
+  return [...new Set([base, bare, bare.replace(/[\d.-]+$/, '') || bare])];
+}
+
+/** The local file a target names (a path or a file: URL), or null for a web address. */
+function localPath(target, workingDir) {
+  const text = String(target || '').trim();
+  if (!text) return null;
+  if (/^file:/i.test(text)) {
+    try { return fileURLToPath(text); } catch { return null; }
+  }
+  // Windows drive letters aside, "scheme:" is an address for its own app.
+  if (/^[a-z][a-z0-9+.-]+:/i.test(text) && !/^[a-z]:[\\/]/i.test(text)) return null;
+  return path.resolve(workingDir || process.cwd(), text.replace(/^~(?=$|[\\/])/, os.homedir()));
+}
+
+function runsWhenOpened(file, platform) {
+  let stat;
+  try { stat = fs.statSync(file); } catch { return false; }
+  if (RUNS_WHEN_OPENED.has(path.extname(file).toLowerCase())) return true;
+  // A program file, which opening may start.
+  return platform !== 'win32' && stat.isFile() && (stat.mode & 0o111) !== 0;
+}
+
+// ── Desktop apps (Linux) ──
+
+/** Folders of .desktop entries: the XDG data folders, Flatpak's and Snap's. */
+function applicationDirs(env = process.env, home = os.homedir()) {
+  const dataHome = env.XDG_DATA_HOME || path.join(home, '.local', 'share');
+  const dataDirs = String(env.XDG_DATA_DIRS || '/usr/local/share:/usr/share').split(':').filter((dir) => path.isAbsolute(dir));
+  const dirs = [dataHome, ...dataDirs, path.join(home, '.local/share/flatpak/exports/share'), '/var/lib/flatpak/exports/share', '/var/lib/snapd/desktop']
+    .map((dir) => path.join(dir, 'applications'));
+  return [...new Set(dirs)];
+}
+
+/** The [Desktop Entry] keys app_open needs from a .desktop file. */
+export function parseDesktopEntry(text) {
+  const entry = {};
+  let main = false;
+  for (const raw of String(text || '').split('\n')) {
+    const line = raw.trim();
+    if (line.startsWith('[')) {
+      main = line === '[Desktop Entry]';
+      continue;
+    }
+    const eq = line.indexOf('=');
+    if (!main || eq < 1) continue;
+    const key = line.slice(0, eq).trim();
+    if (['Type', 'Name', 'Exec', 'Terminal', 'Hidden'].includes(key) && !(key in entry)) entry[key] = line.slice(eq + 1).trim();
+  }
+  return entry;
+}
+
+/**
+ * The program an Exec line starts (env and its VAR=value skipped), when it
+ * is the app itself: given only options and the file or address to open.
+ * "python3 /opt/app/main.py" or "kitty -e htop" start something else, so
+ * they don't make python3 or kitty a desktop app.
+ */
+function execProgram(exec) {
+  const words = String(exec || '').match(/"(?:[^"\\]|\\.)*"|\S+/g) || [];
+  let i = 0;
+  if (words[i] === 'env' || /\/env$/.test(words[i] || '')) i += 1;
+  while (i < words.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i])) i += 1;
+  const word = words[i];
+  if (!word || !words.slice(i + 1).every((arg) => arg.startsWith('-') || /^%[a-zA-Z]$/.test(arg))) return null;
+  return path.basename(word.replace(/^"|"$/g, '')).toLowerCase();
+}
+
+/** name → { id, terminal } for every installed desktop app, by entry name, program and shown name. */
+export function desktopAppIndex(dirs = applicationDirs()) {
+  const index = new Map();
+  const add = (name, app) => {
+    const key = String(name || '').trim().toLowerCase();
+    if (key && !index.has(key)) index.set(key, app);
+  };
+  const files = [];
+  for (const dir of dirs) {
+    let names = [];
+    try { names = fs.readdirSync(dir, { withFileTypes: true }); } catch { continue; }
+    for (const item of names) {
+      if (item.isDirectory()) {
+        // Entries can sit one folder down (kde4/, for instance).
+        try {
+          for (const inner of fs.readdirSync(path.join(dir, item.name))) {
+            if (inner.endsWith('.desktop')) files.push([`${item.name}-${inner}`, path.join(dir, item.name, inner)]);
+          }
+        } catch { /* unreadable */ }
+      } else if (item.name.endsWith('.desktop')) {
+        files.push([item.name, path.join(dir, item.name)]);
+      }
+    }
+  }
+  for (const [file, full] of files) {
+    let entry;
+    try { entry = parseDesktopEntry(fs.readFileSync(full, 'utf8')); } catch { continue; }
+    if ((entry.Type && entry.Type !== 'Application') || entry.Hidden === 'true' || !entry.Exec) continue;
+    const id = file.replace(/\.desktop$/, '');
+    const app = { id, terminal: entry.Terminal === 'true' };
+    const program = execProgram(entry.Exec);
+    add(id, app);
+    add(id.split('.').pop(), app);
+    if (program && program !== 'flatpak') add(program, app);
+    add(entry.Name, app);
+  }
+  return index;
+}
+
+let desktopApps = null;
+/** The installed desktop app called `app` ({ id, terminal }), or null. Looked up again after a minute. */
+function desktopAppFor(app) {
+  if (!desktopApps || Date.now() - desktopApps.at > 60_000) desktopApps = { index: desktopAppIndex(), at: Date.now() };
+  return desktopApps.index.get(String(app).trim().toLowerCase()) || null;
+}
+
+/** On Linux, app_open starts a program by name itself when it is on PATH; otherwise xdg-open opens the target. */
+function startsByName(app, onPath = hasBin) {
+  return !/[/\\:]/.test(app) && /^[\w.+-]+$/.test(app) && onPath(app);
+}
+
+/** The real file of the program `app` names on PATH (links followed), or null. */
+function programFile(app, searchPath = process.env.PATH) {
+  if (IS_WIN || /[/\\]/.test(String(app))) return null;
+  for (const dir of String(searchPath || '').split(path.delimiter)) {
+    if (!dir || !path.isAbsolute(dir)) continue;
+    const candidate = path.join(dir, String(app));
+    try {
+      fs.accessSync(candidate, fs.constants.X_OK);
+      if (fs.statSync(candidate).isFile()) return fs.realpathSync(candidate);
+    } catch { /* not here */ }
+  }
+  return null;
+}
+
+/** Why app_open won't open this, or null. */
+export function appOpenRefusal({
+  app, file = null, workingDir = process.cwd(), platform = PLATFORM, onPath = hasBin, findDesktopApp = desktopAppFor, realProgram = programFile,
+}) {
+  const appName = String(app).trim();
+  // The program as named, and the one that would really start ("nodejs" may be a link to node).
+  const real = realProgram(appName);
+  const names = [...programNames(appName), ...(real ? programNames(real) : [])];
+  const runner = names.find((name) => CODE_RUNNERS.has(name)) || (CODE_RUNNERS.has(appName.toLowerCase()) ? appName.toLowerCase() : null);
+  if (runner) {
+    return `app_open opens apps and documents; it doesn't start ${runner}, which runs other programs or scripts. Use run_command for that (it runs in the sandbox).`;
+  }
+  if (platform === 'linux' && startsByName(appName, onPath)) {
+    const desktopApp = findDesktopApp(appName) || (real ? findDesktopApp(path.basename(real)) : null);
+    if (!desktopApp) {
+      return `app_open starts desktop apps, and ${appName} isn't one (it has no .desktop entry), so it doesn't start it. Use run_command for command-line programs (it runs in the sandbox).`;
+    }
+    if (desktopApp.terminal) {
+      return `app_open doesn't start ${appName}: it is a terminal program. Use run_command for it (it runs in the sandbox).`;
+    }
+  }
+  const looksLikeTarget = /[/\\:]/.test(appName);
+  for (const target of [file, looksLikeTarget ? appName : null]) {
+    const local = target === null || target === undefined ? null : localPath(target, workingDir);
+    if (local && runsWhenOpened(local, platform)) {
+      return `app_open doesn't open ${path.basename(local)}: opening it would run it, outside the sandbox. Use run_command to run it, or ask the user to open it.`;
+    }
+  }
+  return null;
+}
 
 export const appOpenTool = {
   name: 'app_open',
-  description: 'Open an application by name, or open a file/URL with its default app. On macOS uses `open -a`, on Windows `Start-Process`, on Linux tries the app name directly then falls back to `xdg-open`.',
+  description: 'Open an application by name, or open a file/URL with its default app. On macOS uses `open -a`, on Windows `Start-Process`, on Linux starts an installed desktop app by name or falls back to `xdg-open`. It won\'t start shells, interpreters, terminals or other command-line programs, or open files that run when opened (scripts, launchers, programs): use run_command for those.',
   category: 'desktop',
   permission: PermissionLevel.MODERATE,
   parameters: {
@@ -132,10 +356,12 @@ export const appOpenTool = {
     },
     required: ['app'],
   },
-  async execute({ app, file }) {
+  async execute({ app, file }, context = {}) {
     const appName = String(app ?? '').trim();
     const target = file === undefined || file === null ? null : String(file);
     if (!appName) return { success: false, error: 'app is required' };
+    const refusal = appOpenRefusal({ app: appName, file: target, workingDir: context.workingDir || process.cwd() });
+    if (refusal) return { success: false, error: refusal };
     const looksLikeTarget = /[/\\:]/.test(appName);
     let res;
     if (PLATFORM === 'darwin') {
@@ -145,8 +371,8 @@ export const appOpenTool = {
     } else if (IS_WIN) {
       const argList = target ? ` -ArgumentList ${powerShellLiteral(target)}` : '';
       res = runPowerShell(`Start-Process -FilePath ${powerShellLiteral(appName)}${argList}`, { timeout: 8000 });
-    } else if (!looksLikeTarget && /^[\w.+-]+$/.test(appName) && hasBin(appName)) {
-      // Launch detached so the app outlives this request.
+    } else if (startsByName(appName)) {
+      // A desktop app (appOpenRefusal checked). Launch detached so the app outlives this request.
       const child = spawn(appName, target ? [target] : [], { env: childEnv(), detached: true, stdio: 'ignore' });
       child.on('error', () => {});
       child.unref();
