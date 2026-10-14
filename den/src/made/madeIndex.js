@@ -59,9 +59,11 @@ function artifactDirs(root) {
     .filter((dir) => isRealSubdir(root.dir, dir));
 }
 
-// Top-level regular files only: a link inside the folder is never listed or
-// read, wherever it leads.
-function artifactFiles(root) {
+/**
+ * A root's saved artifacts: [{ name, file, stat }]. Top-level regular files
+ * only: a link inside the folder is never listed or read, wherever it leads.
+ */
+export function artifactFiles(root) {
   const seen = new Set();
   const files = [];
   for (const dir of artifactDirs(root)) {
@@ -72,21 +74,78 @@ function artifactFiles(root) {
       const found = plainFileIn(dir, name);
       if (!found) continue;
       seen.add(name);
-      files.push({ name, stat: found.stat });
+      files.push({ name, file: found.file, stat: found.stat });
     }
   }
   return files;
 }
 
+function fileInRoot(root, name) {
+  for (const dir of artifactDirs(root)) {
+    const found = plainFileIn(dir, String(name ?? ''));
+    if (found) return { root, ...found };
+  }
+  return null;
+}
+
 /** A saved artifact's full path, or null (by root id and file name only). */
 export function madeFile(userId, rootId, name) {
   const root = madeRoot(userId, rootId);
-  if (!root) return null;
-  for (const dir of artifactDirs(root)) {
-    const found = plainFileIn(dir, String(name ?? ''));
-    if (found) return found.file;
+  return root ? fileInRoot(root, name)?.file || null : null;
+}
+
+function realPath(value) {
+  try {
+    return fs.realpathSync(value);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Saved artifacts by file name: [{ root, file, stat }]. With a root id it
+ * looks only there; without one (an older chat's card knows only the name)
+ * in each folder agents work in, so the caller can tell when several have a
+ * file by that name. A folder listed under two ids (an agent working in a
+ * project's folder) counts once.
+ */
+export function findMadeFiles(userId, name, rootId = null) {
+  const roots = rootId ? [madeRoot(userId, rootId)].filter(Boolean) : madeRoots(userId);
+  const seen = new Set();
+  const found = [];
+  for (const root of roots) {
+    const match = fileInRoot(root, name);
+    const real = match && realPath(match.file);
+    if (!real || seen.has(real)) continue;
+    seen.add(real);
+    found.push(match);
+  }
+  return found;
+}
+
+/** The id of the folder whose artifacts hold `file`, or null. */
+export function madeRootIdOf(userId, file) {
+  const dir = realPath(path.dirname(String(file || '')));
+  if (!dir) return null;
+  for (const root of madeRoots(userId)) {
+    if (artifactDirs(root).some((each) => realPath(each) === dir)) return root.id;
   }
   return null;
+}
+
+/**
+ * Adds `root`, the folder's id, to the artifacts a tool's result names, so
+ * the chat's card asks for its file in that folder and never shows another
+ * folder's file with the same name.
+ */
+export function labelArtifactRoots(userId, result) {
+  const related = Array.isArray(result?.relatedArtifacts) ? result.relatedArtifacts : [];
+  for (const artifact of [result?.artifact, ...related]) {
+    if (!artifact?.absolutePath || artifact.root) continue;
+    const root = madeRootIdOf(userId, artifact.absolutePath);
+    if (root) artifact.root = root;
+  }
+  return result;
 }
 
 /**

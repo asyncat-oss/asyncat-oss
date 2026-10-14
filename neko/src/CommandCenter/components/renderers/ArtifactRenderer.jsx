@@ -196,20 +196,20 @@ function HtmlPreview({ content, title, fullHeight = false, allowFullscreen = tru
 }
 
 // ── Video player ─────────────────────────────────────────────────────────────
-function VideoPreview({ filename, fullHeight = false }) {
+function VideoPreview({ filename, root = null, fullHeight = false }) {
   const [src, setSrc] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     let objectUrl = null;
-    agentApi.downloadArtifact(filename)
+    agentApi.downloadArtifact(filename, root)
       .then(({ blob }) => {
         objectUrl = URL.createObjectURL(blob);
         setSrc(objectUrl);
       })
       .catch(err => setError(err.message));
     return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [filename]);
+  }, [filename, root]);
 
   if (error) return <p className="py-2 text-[11px] text-red-500">{error}</p>;
   if (!src) return (
@@ -223,20 +223,20 @@ function VideoPreview({ filename, fullHeight = false }) {
 }
 
 // ── Audio player ─────────────────────────────────────────────────────────────
-function AudioPreview({ filename }) {
+function AudioPreview({ filename, root = null }) {
   const [src, setSrc] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     let objectUrl = null;
-    agentApi.downloadArtifact(filename)
+    agentApi.downloadArtifact(filename, root)
       .then(({ blob }) => {
         objectUrl = URL.createObjectURL(blob);
         setSrc(objectUrl);
       })
       .catch(err => setError(err.message));
     return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [filename]);
+  }, [filename, root]);
 
   if (error) return <p className="py-2 text-[11px] text-red-500">{error}</p>;
   if (!src) return (
@@ -250,20 +250,20 @@ function AudioPreview({ filename }) {
 }
 
 // ── Image preview ─────────────────────────────────────────────────────────────
-function ImagePreview({ filename, fullHeight = false }) {
+function ImagePreview({ filename, root = null, fullHeight = false }) {
   const [src, setSrc] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     let objectUrl = null;
-    agentApi.downloadArtifact(filename)
+    agentApi.downloadArtifact(filename, root)
       .then(({ blob }) => {
         objectUrl = URL.createObjectURL(blob);
         setSrc(objectUrl);
       })
       .catch(err => setError(err.message));
     return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [filename]);
+  }, [filename, root]);
 
   if (error) return <p className="py-2 text-[11px] text-red-500">{error}</p>;
   if (!src) return (
@@ -296,13 +296,13 @@ function ArtifactFullscreenOverlay({ artifact, content, type, title, onClose }) 
       case 'image':
         return (
           <div className="flex h-full items-center justify-center bg-gray-950">
-            <ImagePreview filename={artifact.filename} fullHeight />
+            <ImagePreview filename={artifact.filename} root={artifact.root} fullHeight />
           </div>
         );
       case 'video':
         return (
           <div className="flex h-full items-center justify-center bg-black">
-            <VideoPreview filename={artifact.filename} fullHeight />
+            <VideoPreview filename={artifact.filename} root={artifact.root} fullHeight />
           </div>
         );
       case 'audio':
@@ -310,7 +310,7 @@ function ArtifactFullscreenOverlay({ artifact, content, type, title, onClose }) 
           <div className="flex h-full items-center justify-center bg-gray-900 p-8">
             <div className="w-full max-w-lg">
               <p className="mb-4 text-center text-sm font-medium text-gray-300">{title}</p>
-              <AudioPreview filename={artifact.filename} />
+              <AudioPreview filename={artifact.filename} root={artifact.root} />
             </div>
           </div>
         );
@@ -393,6 +393,7 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
   const title = artifactData.title || artifactData.filename || 'Untitled';
   const size = formatSize(artifactData.size || artifactData.sizeBytes);
   const filename = artifactData.filename || '';
+  const root = artifactData.root || null;
   const artifactPath = artifactData.path || '';
   const downloadOnly = type === 'zip' || type === 'pdf';
   const canFullscreen = !downloadOnly;
@@ -415,7 +416,7 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
           return nextContent;
         }
       } else if (filename) {
-        const data = await agentApi.getArtifact(filename);
+        const data = await agentApi.getArtifact(filename, root);
         if (data.success) {
           setContent(data.content);
           return data.content;
@@ -461,7 +462,7 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
     try {
       setDownloading(true);
       if (filename) {
-        const { blob } = await agentApi.downloadArtifact(filename);
+        const { blob } = await agentApi.downloadArtifact(filename, root);
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -532,9 +533,9 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
         </div>
       );
     }
-    if (type === 'image') return <ImagePreview filename={filename} fullHeight={fullHeight} />;
-    if (type === 'video') return <VideoPreview filename={filename} fullHeight={fullHeight} />;
-    if (type === 'audio') return <AudioPreview filename={filename} />;
+    if (type === 'image') return <ImagePreview filename={filename} root={root} fullHeight={fullHeight} />;
+    if (type === 'video') return <VideoPreview filename={filename} root={root} fullHeight={fullHeight} />;
+    if (type === 'audio') return <AudioPreview filename={filename} root={root} />;
     if (!content) {
       return (
         <div className="py-3 text-center">

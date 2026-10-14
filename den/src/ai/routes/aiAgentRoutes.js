@@ -47,7 +47,7 @@ import { createHash, randomUUID } from 'crypto';
 import path from 'path';
 import fs from 'fs';
 import { execSync } from 'child_process';
-import { getArtifactsDir, getLegacyArtifactsDir } from '../../agent/workspacePaths.js';
+import { artifactFiles, findMadeFiles, madeRoot } from '../../made/madeIndex.js';
 import { shellSessionManager } from '../../agent/ShellSessionManager.js';
 import { decideExternalApproval, detectExternalEngines, isAcpEngine, isExternalEngine, openExternalApprovals, runExternalAgent, scratchWorkspace } from '../../agent/externalAgents.js';
 import { ACP_CATALOG, acpNameFromEngine, checkAcpAgent, getAcpAgent, listAcpAgents, removeAcpAgent, saveAcpAgent } from '../../agent/acp/acpAgents.js';
@@ -2479,53 +2479,53 @@ router.delete('/profiles/:id', withWorkspaceContext, (req, res) => {
 // ── Checkpoints ──────────────────────────────────────────────────────────────
 
 // ─── Artifact Routes ────────────────────────────────────────────────────────
+// A chat's artifact cards fetch what an agent saved by file name and the id
+// of its folder (?root=chats, project:<folderId>, cat:<id> or agent:<id>),
+// which the agent's run adds to the tool's result. The file is looked up in
+// the folders agents work in (madeIndex.js); nothing in the request names a
+// path. An older card without a root id gets the file only when one folder
+// has a file by that name, never a guess between several.
 
-function findArtifactFile(workingDir, filename) {
-  const roots = [getArtifactsDir(workingDir), getLegacyArtifactsDir(workingDir)];
-  for (const root of roots) {
-    const filePath = path.join(root, filename);
-    if (filePath.startsWith(root) && fs.existsSync(filePath)) {
-      return { artifactsDir: root, filePath };
-    }
-  }
-  return null;
+const ARTIFACT_TYPES = {
+  '.md': 'markdown', '.markdown': 'markdown',
+  '.html': 'html', '.htm': 'html',
+  '.svg': 'svg', '.csv': 'csv', '.json': 'json', '.txt': 'text',
+  '.pdf': 'pdf', '.zip': 'zip',
+  '.js': 'code', '.ts': 'code', '.py': 'code', '.jsx': 'code', '.tsx': 'code',
+};
+const ARTIFACT_MIME = {
+  '.md': 'text/markdown', '.html': 'text/html', '.htm': 'text/html',
+  '.svg': 'image/svg+xml', '.csv': 'text/csv', '.json': 'application/json',
+  '.txt': 'text/plain', '.js': 'text/javascript', '.ts': 'text/plain',
+  '.py': 'text/plain', '.css': 'text/css',
+  '.pdf': 'application/pdf', '.zip': 'application/zip',
+};
+// What a download is sent as. Pages and drawings may carry scripts, so they
+// go out as plain bytes; pictures, sound and video keep their types for the
+// card's players.
+const ARTIFACT_DOWNLOAD_TYPES = {
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif',
+  '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg',
+  '.mp4': 'video/mp4', '.webm': 'video/webm',
+  '.pdf': 'application/pdf', '.zip': 'application/zip',
+};
+
+function artifactRootId(req) {
+  return req.query.root ? String(req.query.root) : null;
 }
 
-/** List all artifacts in the workspace. */
+/** List the artifacts in one folder (?root=, Chats when left out). */
 router.get('/artifacts', (req, res) => {
   try {
-    const workingDir = req.headers['x-workspace-root'] || defaultAgentWorkingDir();
-    const artifactsDir = getArtifactsDir(workingDir);
-    const legacyArtifactsDir = getLegacyArtifactsDir(workingDir);
-
-    if (!fs.existsSync(artifactsDir) && !fs.existsSync(legacyArtifactsDir)) {
-      return res.json({ success: true, count: 0, artifacts: [] });
-    }
-
-    const seen = new Set();
-    const artifacts = [artifactsDir, legacyArtifactsDir]
-      .filter(dir => fs.existsSync(dir))
-      .flatMap(dir => fs.readdirSync(dir)
-        .filter(f => !f.startsWith('.') && !seen.has(f))
-        .map(f => {
-      seen.add(f);
-      const filePath = path.join(dir, f);
-      const stat = fs.statSync(filePath);
-      const ext = path.extname(f).toLowerCase();
-      const typeMap = {
-        '.md': 'markdown', '.markdown': 'markdown',
-        '.html': 'html', '.htm': 'html',
-        '.svg': 'svg', '.csv': 'csv', '.json': 'json', '.txt': 'text',
-        '.pdf': 'pdf', '.zip': 'zip',
-        '.js': 'code', '.ts': 'code', '.py': 'code', '.jsx': 'code', '.tsx': 'code',
-      };
-      return {
-        filename: f,
-        path: path.relative(workingDir, filePath),
-        type: typeMap[ext] || 'text',
-        size: stat.size,
-        modified: stat.mtime.toISOString(),
-      };
+    const root = madeRoot(req.user.id, artifactRootId(req) || 'chats');
+    if (!root) return res.status(404).json({ success: false, error: 'Folder not found' });
+    const artifacts = artifactFiles(root).map(({ name, file, stat }) => ({
+      filename: name,
+      root: root.id,
+      path: path.relative(root.dir, file),
+      type: ARTIFACT_TYPES[path.extname(name).toLowerCase()] || 'text',
+      size: stat.size,
+      modified: stat.mtime.toISOString(),
     })).sort((a, b) => b.modified.localeCompare(a.modified));
 
     res.json({ success: true, count: artifacts.length, artifacts });
@@ -2537,60 +2537,56 @@ router.get('/artifacts', (req, res) => {
 /** Get artifact content or raw download. */
 router.get('/artifacts/:filename', (req, res) => {
   try {
-    const workingDir = req.headers['x-workspace-root'] || defaultAgentWorkingDir();
-    const filename = path.basename(req.params.filename);
-    const found = findArtifactFile(workingDir, filename);
-
-    if (!found) {
+    const matches = findMadeFiles(req.user.id, req.params.filename, artifactRootId(req));
+    if (!matches.length) {
       return res.status(404).json({ success: false, error: 'Artifact not found' });
     }
-    const { filePath } = found;
-
+    if (matches.length > 1) {
+      return res.status(409).json({
+        success: false,
+        code: 'AMBIGUOUS',
+        error: 'More than one folder has a file with this name. Open it from Files.',
+        roots: matches.map((match) => match.root.id),
+      });
+    }
+    const [found] = matches;
+    const filename = path.basename(found.file);
     const ext = path.extname(filename).toLowerCase();
-    const mimeMap = {
-      '.md': 'text/markdown', '.html': 'text/html', '.htm': 'text/html',
-      '.svg': 'image/svg+xml', '.csv': 'text/csv', '.json': 'application/json',
-      '.txt': 'text/plain', '.js': 'text/javascript', '.ts': 'text/plain',
-      '.py': 'text/plain', '.css': 'text/css',
-      '.pdf': 'application/pdf', '.zip': 'application/zip',
-    };
-    const contentType = mimeMap[ext] || 'application/octet-stream';
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', 'sandbox');
 
     if (req.query.download === '1') {
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-      res.setHeader('Content-Type', contentType);
-      return res.sendFile(filePath);
+      res.setHeader('Content-Disposition', `attachment; filename="${filename.replace(/["\\\r\n]/g, '')}"`);
+      res.setHeader('Content-Type', ARTIFACT_DOWNLOAD_TYPES[ext] || 'application/octet-stream');
+      res.setHeader('Content-Length', String(found.stat.size));
+      return fs.createReadStream(found.file).pipe(res);
     }
 
-    const content = fs.readFileSync(filePath, 'utf8');
-    const stat = fs.statSync(filePath);
     res.json({
       success: true,
       filename,
-      type: contentType,
-      size: stat.size,
-      modified: stat.mtime.toISOString(),
-      content,
+      root: found.root.id,
+      type: ARTIFACT_MIME[ext] || 'application/octet-stream',
+      size: found.stat.size,
+      modified: found.stat.mtime.toISOString(),
+      content: fs.readFileSync(found.file, 'utf8'),
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-/** Delete an artifact. */
+/** Delete an artifact (?root= says which folder; it is never guessed). */
 router.delete('/artifacts/:filename', (req, res) => {
   try {
-    const workingDir = req.headers['x-workspace-root'] || defaultAgentWorkingDir();
-    const filename = path.basename(req.params.filename);
-    const found = findArtifactFile(workingDir, filename);
-
+    const rootId = artifactRootId(req);
+    if (!rootId) return res.status(400).json({ success: false, error: 'Say which folder the artifact is in' });
+    const [found] = findMadeFiles(req.user.id, req.params.filename, rootId);
     if (!found) {
       return res.status(404).json({ success: false, error: 'Artifact not found' });
     }
-    const { filePath } = found;
-
-    fs.unlinkSync(filePath);
-    res.json({ success: true, deleted: filename });
+    fs.unlinkSync(found.file);
+    res.json({ success: true, deleted: path.basename(found.file) });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

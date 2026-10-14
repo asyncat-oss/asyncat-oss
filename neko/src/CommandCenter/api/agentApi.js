@@ -1,6 +1,15 @@
 import { API_BASE_URL, apiRequest, addWorkspaceToUrl, getCurrentWorkspaceId, handleResponse } from './client.js';
 import apiClient from '../../services/apiClient.js';
 
+// A saved artifact's address: its name, and the folder's id when known.
+export function artifactUrl(filename, root = null, download = false) {
+  const query = new URLSearchParams();
+  if (download) query.set('download', '1');
+  if (root) query.set('root', root);
+  const search = query.toString();
+  return `${API_BASE_URL}/agent/artifacts/${encodeURIComponent(filename)}${search ? `?${search}` : ''}`;
+}
+
 export const agentApi = {
   // Agent CLIs installed on this computer (Claude Code, Codex) and whether
   // they are signed in.
@@ -288,17 +297,20 @@ export const agentApi = {
     return await apiRequest(`${API_BASE_URL}/agent/artifacts`);
   },
 
-  getArtifact: async (filename) => {
-    return await apiRequest(`${API_BASE_URL}/agent/artifacts/${encodeURIComponent(filename)}`);
+  // root: the id of the folder the file is in ("chats", "project:<id>", …),
+  // from the tool's result. Without it den answers only when one folder has
+  // a file by that name.
+  getArtifact: async (filename, root = null) => {
+    return await apiRequest(artifactUrl(filename, root));
   },
 
-  getArtifactDownloadUrl: (filename) => {
-    return `${API_BASE_URL}/agent/artifacts/${encodeURIComponent(filename)}?download=1`;
+  getArtifactDownloadUrl: (filename, root = null) => {
+    return artifactUrl(filename, root, true);
   },
 
-  downloadArtifact: async (filename) => {
+  downloadArtifact: async (filename, root = null) => {
     const workspaceId = getCurrentWorkspaceId();
-    const url = `${API_BASE_URL}/agent/artifacts/${encodeURIComponent(filename)}?download=1`;
+    const url = artifactUrl(filename, root, true);
     const response = await apiClient.request(
       workspaceId ? addWorkspaceToUrl(url, workspaceId) : url,
       { method: 'GET' }
@@ -318,8 +330,9 @@ export const agentApi = {
     };
   },
 
-  deleteArtifact: async (filename) => {
-    return await apiRequest(`${API_BASE_URL}/agent/artifacts/${encodeURIComponent(filename)}`, {
+  // root: the folder's id from a listing ("chats", "project:<id>", …).
+  deleteArtifact: async (filename, root) => {
+    return await apiRequest(artifactUrl(filename, root), {
       method: 'DELETE',
     });
   },

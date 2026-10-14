@@ -33,6 +33,7 @@ import { getProviderPreset } from '../ai/controllers/ai/providerCatalog.js';
 import { embedText } from '../ai/embeddings/embeddingService.js';
 import { normalizeUsage, recordModelUsage } from '../ai/controllers/ai/modelUsageService.js';
 import { getSnapshotsDir } from './workspacePaths.js';
+import { labelArtifactRoots } from '../made/madeIndex.js';
 import db from '../db/client.js';
 import { randomUUID } from 'crypto';
 import fs from 'fs';
@@ -1221,6 +1222,10 @@ export class AgentRuntime {
           const item = permitted[i];
           const tc = item.toolCall;
           let result = execResults[i];
+          // The chat's card asks for a saved file by name and folder id.
+          if (result?.artifact) {
+            try { labelArtifactRoots(this.userId, result); } catch { /* the card falls back to the name */ }
+          }
 
           this.session.recordToolCall(tc.tool_name, tc.arguments, result, {
             permissionLevel: item.permission,
