@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { Archive, Copy, FolderOpen, Globe, KeyRound, ListChecks, Loader2, ShieldCheck, X } from 'lucide-react';
 import Button from '../components/ui/Button.jsx';
 import { Segmented } from '../components/ui/Tabs.jsx';
+import { RowGroup, SettingsRow, SettingsSection } from '../components/ui/Rows.jsx';
 import { useConfirm } from '../components/confirmContext.js';
 import { errorDetail, useToast } from '../components/toastContext.js';
 import { Switch } from '../Cats/CatParts.jsx';
@@ -19,32 +20,6 @@ import { configApi } from './settingApi.js';
 import privacyApi from '../services/privacyApi.js';
 import { alwaysAllowedChatTools, newChatMode, setAlwaysAllowedChatTools, setNewChatMode } from '../services/chatDefaults.js';
 import { ExportEverything, DeleteEverything, ImportChats } from './PrivacyDataParts.jsx';
-
-export function Section({ icon: Icon, title, hint, children }) {
-  return (
-    <section>
-      <h2 className="mb-1 flex items-center gap-2 text-[14px] font-semibold text-fg"><Icon className="h-4 w-4 text-fg-subtle" /> {title}</h2>
-      {hint ? <p className="mb-3 text-[12px] leading-5 text-fg-subtle">{hint}</p> : null}
-      {children}
-    </section>
-  );
-}
-
-Section.propTypes = { icon: PropTypes.elementType.isRequired, title: PropTypes.string.isRequired, hint: PropTypes.node, children: PropTypes.node };
-
-export function Row({ label, hint, children }) {
-  return (
-    <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-      <div className="min-w-0">
-        <p className="text-[13px] font-medium text-fg">{label}</p>
-        {hint ? <div className="mt-0.5 text-[12px] leading-5 text-fg-muted">{hint}</div> : null}
-      </div>
-      {children ? <div className="shrink-0 sm:pt-0.5">{children}</div> : null}
-    </div>
-  );
-}
-
-Row.propTypes = { label: PropTypes.node.isRequired, hint: PropTypes.node, children: PropTypes.node };
 
 const MODE_HINTS = {
   last: 'Each new chat starts in the mode you used last.',
@@ -115,9 +90,9 @@ function AlwaysAllowed() {
   const nothing = !chatTools.length && !agentRows.length && !catRows.length;
 
   return (
-    <div className="divide-y divide-line rounded-xl border border-line" data-always-allowed>
+    <RowGroup data-always-allowed>
       {chatTools.length ? (
-        <Row
+        <SettingsRow
           label="In chats"
           hint={(
             <>
@@ -127,20 +102,20 @@ function AlwaysAllowed() {
           )}
         >
           {chatTools.length > 1 ? <Button size="sm" variant="ghost" onClick={() => saveChatTools([])}>Revoke all</Button> : null}
-        </Row>
+        </SettingsRow>
       ) : null}
       {agentRows.map((agent) => (
-        <Row key={agent.id} label={`Agent: ${agent.name}`} hint={<ToolChips tools={agent.always_allowed_tools} onRevoke={(tool) => revokeAgent(agent, tool)} />} />
+        <SettingsRow key={agent.id} label={`Agent: ${agent.name}`} hint={<ToolChips tools={agent.always_allowed_tools} onRevoke={(tool) => revokeAgent(agent, tool)} />} />
       ))}
       {catRows.map((cat) => (
-        <Row key={cat.id} label={`Cat: ${cat.name}`} hint={<ToolChips tools={cat.allowedTools} onRevoke={(tool) => revokeCat(cat, tool)} />} />
+        <SettingsRow key={cat.id} label={`Cat: ${cat.name}`} hint={<ToolChips tools={cat.allowedTools} onRevoke={(tool) => revokeCat(cat, tool)} />} />
       ))}
       {nothing ? (
         <p className="px-4 py-3 text-[13px] text-fg-muted">
           {loading ? 'Loading…' : 'None. Every risky step asks you first.'}
         </p>
       ) : null}
-    </div>
+    </RowGroup>
   );
 }
 
@@ -171,12 +146,12 @@ function CommandSandbox() {
   };
 
   if (platform === 'win32') {
-    return <Row label="Sandbox the agent's commands" hint="Not available on Windows: commands the agent runs can change any file your account can, so they ask first." />;
+    return <SettingsRow label="Sandbox the agent's commands" hint="Not available on Windows: commands the agent runs can change any file your account can, so they ask first." />;
   }
   return (
-    <Row label="Sandbox the agent's commands" hint="Commands the agent runs can read your files but only change files in the project folder, temporary folders and package caches.">
+    <SettingsRow label="Sandbox the agent's commands" hint="Commands the agent runs can read your files but only change files in the project folder, temporary folders and package caches." stack={false}>
       <Switch checked={on} onChange={change} label="Sandbox the agent's commands" />
-    </Row>
+    </SettingsRow>
   );
 }
 
@@ -283,39 +258,39 @@ export default function PrivacySection() {
 
   return (
     <div className="space-y-8" data-privacy>
-      <Section icon={ShieldCheck} title="What agents may do" hint="Plan and Action can be switched in the composer at any time; this is only where new chats start.">
-        <div className="divide-y divide-line rounded-xl border border-line">
-          <Row label="New chats start in" hint={MODE_HINTS[mode]}>
+      <SettingsSection icon={ShieldCheck} title="What agents may do" hint="Plan and Action can be switched in the composer at any time; this is only where new chats start.">
+        <RowGroup>
+          <SettingsRow label="New chats start in" hint={MODE_HINTS[mode]}>
             <Segmented
               value={mode}
               onChange={changeMode}
               items={[{ value: 'last', label: 'Last used' }, { value: 'plan', label: 'Plan' }, { value: 'action', label: 'Action' }]}
               label="New chats start in"
             />
-          </Row>
+          </SettingsRow>
           <CommandSandbox />
-        </div>
-      </Section>
+        </RowGroup>
+      </SettingsSection>
 
-      <Section icon={ListChecks} title="Always allowed" hint="Tools that run without asking. Remove one and it asks again next time.">
+      <SettingsSection icon={ListChecks} title="Always allowed" hint="Tools that run without asking. Remove one and it asks again next time.">
         <AlwaysAllowed />
-      </Section>
+      </SettingsSection>
 
-      <Section icon={Globe} title="Browsing">
+      <SettingsSection icon={Globe} title="Browsing">
         {overview && !overview.error ? <BrowserRules blockedSites={overview.blockedSites || []} onChange={saveBlockedSites} /> : <Loading error={overview?.error} />}
-      </Section>
+      </SettingsSection>
 
-      <Section icon={KeyRound} title="Saved keys">
+      <SettingsSection icon={KeyRound} title="Saved keys">
         {overview && !overview.error ? (
           <p className="rounded-xl border border-line px-4 py-3 text-[13px] leading-5 text-fg-muted" data-key-source={overview.secrets?.keySource || 'none'}>{keyText(overview.secrets)}</p>
         ) : <Loading error={overview?.error} />}
-      </Section>
+      </SettingsSection>
 
-      <Section icon={FolderOpen} title="Where your things are kept" hint="Everything stays on this computer, except what you send to an online model or service.">
+      <SettingsSection icon={FolderOpen} title="Where your things are kept" hint="Everything stays on this computer, except what you send to an online model or service.">
         {overview && !overview.error ? <Locations locations={overview.locations || []} /> : <Loading error={overview?.error} />}
-      </Section>
+      </SettingsSection>
 
-      <Section icon={Archive} title="Your data">
+      <SettingsSection icon={Archive} title="Your data">
         {overview && !overview.error ? (
           <div className="space-y-4">
             <ImportChats />
@@ -323,7 +298,7 @@ export default function PrivacySection() {
             <DeleteEverything pending={overview.pendingReset || null} onChanged={load} />
           </div>
         ) : <Loading error={overview?.error} />}
-      </Section>
+      </SettingsSection>
     </div>
   );
 }

@@ -3,11 +3,11 @@
 // Telegram or email lives in Connections → Services.
 
 import { useEffect, useState } from 'react';
-import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Loader2, Moon } from 'lucide-react';
 import Button from '../components/ui/Button.jsx';
 import { Input } from '../components/ui/Field.jsx';
+import { RowGroup, SettingsRow, SettingsSection } from '../components/ui/Rows.jsx';
 import { errorDetail, useToast } from '../components/toastContext.js';
 import { Switch } from '../Cats/CatParts.jsx';
 import { notifyStatus, saveNotifyPrefs, testNotification } from '../services/notifyPrefs.js';
@@ -18,20 +18,6 @@ const EVENTS = [
   { id: 'question', label: 'An agent asks you something', hint: 'A question it needs answered to carry on.' },
   { id: 'failed', label: 'A Cat run failed', hint: 'It stopped on an error or hit a daily limit.' },
 ];
-
-function Row({ label, hint, children }) {
-  return (
-    <div className="flex items-start justify-between gap-4 px-4 py-3">
-      <div className="min-w-0">
-        <p className="text-[13px] font-medium text-fg">{label}</p>
-        {hint ? <p className="mt-0.5 text-[12px] leading-5 text-fg-muted">{hint}</p> : null}
-      </div>
-      <div className="shrink-0 pt-0.5">{children}</div>
-    </div>
-  );
-}
-
-Row.propTypes = { label: PropTypes.string.isRequired, hint: PropTypes.string, children: PropTypes.node };
 
 export default function NotificationsSection() {
   const toast = useToast();
@@ -72,35 +58,31 @@ export default function NotificationsSection() {
 
   return (
     <div className="space-y-6" data-notifications>
-      <section>
-        <h2 className="mb-1 flex items-center gap-2 text-[14px] font-semibold text-fg"><Bell className="h-4 w-4 text-fg-subtle" /> Show a notification when</h2>
-        <p className="mb-3 text-[12px] text-fg-subtle">Chats notify only when Asyncat&apos;s window isn&apos;t in front. Clicking one opens what it is about.</p>
-        <div className="divide-y divide-line rounded-xl border border-line">
+      <SettingsSection icon={Bell} title="Show a notification when" hint="Chats notify only when Asyncat's window isn't in front. Clicking one opens what it is about.">
+        <RowGroup>
           {EVENTS.map((event) => (
-            <Row key={event.id} label={event.label} hint={event.hint}>
+            <SettingsRow key={event.id} label={event.label} hint={event.hint} stack={false}>
               <Switch checked={prefs[event.id] !== false} onChange={(value) => save({ [event.id]: value })} label={event.label} />
-            </Row>
+            </SettingsRow>
           ))}
-        </div>
-      </section>
+        </RowGroup>
+      </SettingsSection>
 
-      <section>
-        <h2 className="mb-1 flex items-center gap-2 text-[14px] font-semibold text-fg"><Moon className="h-4 w-4 text-fg-subtle" /> Quiet hours</h2>
-        <p className="mb-3 text-[12px] text-fg-subtle">Nothing pops up between these times. Nothing is lost: questions and results still wait in the Cats inbox and in their chats.</p>
-        <div className="rounded-xl border border-line">
-          <Row label="Use quiet hours" hint={prefs.quietHours.enabled && state.quietNow ? "It's quiet hours now." : null}>
+      <SettingsSection icon={Moon} title="Quiet hours" hint="Nothing pops up between these times. Nothing is lost: questions and results still wait in the Cats inbox and in their chats.">
+        <RowGroup>
+          <SettingsRow label="Use quiet hours" hint={prefs.quietHours.enabled && state.quietNow ? "It's quiet hours now." : null} stack={false}>
             <Switch checked={prefs.quietHours.enabled} onChange={(value) => save({ quietHours: { enabled: value } })} label="Use quiet hours" />
-          </Row>
+          </SettingsRow>
           {prefs.quietHours.enabled ? (
-            <div className="flex flex-wrap items-center gap-2 border-t border-line px-4 py-3 text-[13px] text-fg-muted">
+            <div className="flex flex-wrap items-center gap-2 px-4 py-3 text-[13px] text-fg-muted">
               From
               <Input type="time" className="w-32" value={prefs.quietHours.start} onChange={(event) => save({ quietHours: { start: event.target.value } })} aria-label="Quiet from" />
               until
               <Input type="time" className="w-32" value={prefs.quietHours.end} onChange={(event) => save({ quietHours: { end: event.target.value } })} aria-label="Quiet until" />
             </div>
           ) : null}
-        </div>
-      </section>
+        </RowGroup>
+      </SettingsSection>
 
       <div className="flex flex-wrap items-center gap-3">
         <Button icon={Bell} loading={testing} onClick={test} disabled={!state.desktop}>Send a test notification</Button>
