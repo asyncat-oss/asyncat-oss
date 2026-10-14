@@ -1,4 +1,5 @@
 import { execFileSync } from 'child_process';
+import { childEnv } from './childEnv.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -9,6 +10,7 @@ function runGit(args, cwd, timeout = 30000) {
   try {
     const output = execFileSync('git', args, {
       cwd,
+      env: childEnv(),
       encoding: 'utf8',
       timeout,
       maxBuffer: MAX_OUTPUT,

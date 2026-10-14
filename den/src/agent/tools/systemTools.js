@@ -5,6 +5,7 @@
 
 import os from 'os';
 import { execFile, execSync } from 'child_process';
+import { childEnv, isSecretEnvName } from '../childEnv.js';
 import { promisify } from 'util';
 import { IS_WIN, PLATFORM, appleScriptLiteral, clampInt, powerShellLiteral, runFile } from './shared.js';
 import { PermissionLevel } from './toolRegistry.js';
@@ -29,7 +30,7 @@ export const sysInfoTool = {
       // Disk usage via df (available on Linux/macOS)
       let disk = null;
       try {
-        const dfOut = execSync('df -h / 2>/dev/null', { encoding: 'utf8', timeout: 3000 });
+        const dfOut = execSync('df -h / 2>/dev/null', { encoding: 'utf8', timeout: 3000, env: childEnv() });
         const lines = dfOut.trim().split('\n');
         if (lines[1]) {
           const parts = lines[1].split(/\s+/);
@@ -122,7 +123,7 @@ export const psListTool = {
 // ── env_get ───────────────────────────────────────────────────────────────────
 export const envGetTool = {
   name: 'env_get',
-  description: 'Read environment variables. Sensitive values (keys containing PASSWORD, SECRET, TOKEN, KEY) are masked. Use to check configuration, API keys availability, or runtime environment.',
+  description: 'Read environment variables. Sensitive values (saved API keys, passwords, tokens, webhooks, and names containing PASSWORD, SECRET, TOKEN, KEY) are masked. Use to check configuration, API keys availability, or runtime environment.',
   category: 'system',
   permission: PermissionLevel.SAFE,
   parameters: {
@@ -137,8 +138,8 @@ export const envGetTool = {
     required: [],
   },
   execute: async (args) => {
-    const SENSITIVE = /password|secret|token|key|auth|credential|private|api_key/i;
-    const mask = (k, v) => SENSITIVE.test(k) ? `[MASKED — ${v?.length || 0} chars]` : v;
+    const SENSITIVE = /password|secret|token|key|auth|credential|private|api_key|webhook/i;
+    const mask = (k, v) => (SENSITIVE.test(k) || isSecretEnvName(k)) ? `[MASKED — ${v?.length || 0} chars]` : v;
 
     if (args.keys && args.keys.length > 0) {
       const result = {};
@@ -207,9 +208,9 @@ export const notifyTool = {
       const [file, argv, timeout] = notificationCommand({ title, message, urgency });
       if (PLATFORM === 'linux') {
         // No notification daemon is not an error worth reporting.
-        await execFileAsync(file, argv, { timeout }).catch(() => {});
+        await execFileAsync(file, argv, { timeout, env: childEnv() }).catch(() => {});
       } else {
-        await execFileAsync(file, argv, { timeout });
+        await execFileAsync(file, argv, { timeout, env: childEnv() });
       }
       return { success: true, title, message, platform: PLATFORM };
     } catch (err) {

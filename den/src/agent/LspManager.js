@@ -4,6 +4,7 @@
 // and handles JSON-RPC framing (Content-Length) over standard input/output.
 
 import { spawn } from 'child_process';
+import { childEnv } from './childEnv.js';
 import path from 'path';
 
 class LspClient {
@@ -27,7 +28,7 @@ class LspClient {
     try {
       this.process = spawn(this.executable, this.args, {
         cwd: this.workspaceRoot,
-        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }
+        env: childEnv({ extra: { ELECTRON_RUN_AS_NODE: '1' } }),
       });
     } catch (err) {
       throw new Error(`Failed to spawn LSP "${this.executable}": ${err.message}`);

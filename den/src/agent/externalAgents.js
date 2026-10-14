@@ -19,6 +19,7 @@ import { promisify } from 'util';
 import { runtimeDataPath } from '../config/runtimeConfig.js';
 import { approvalAllows, approvalCoversRun } from './approvalDecisions.js';
 import { claudeUsageFromEvent, recordUsage } from './externalUsage.js';
+import { childEnv } from './childEnv.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -64,12 +65,31 @@ export function agentPath() {
   return [...current, ...extra.filter((dir) => !current.includes(dir))].join(path.delimiter);
 }
 
-export function agentEnv() {
-  const env = { ...process.env, PATH: agentPath(), NO_COLOR: '1' };
+// The coding agents get den's environment without Asyncat's saved secrets,
+// like every program the agent starts (childEnv.js), but each keeps the keys
+// it signs in with: they are full agents that call their own provider, and
+// filter keys out of the commands they run themselves (Codex leaves out
+// *KEY*, *SECRET* and *TOKEN* by default; Claude Code asks before commands).
+// An OpenAI key saved in Asyncat's settings is in den's environment too
+// (db/client.js copies saved settings there), so Codex gets that one as well,
+// as it always has. ACP agents get only the variables saved for them.
+const ENGINE_KEYS = {
+  'claude-code': ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN'],
+  codex: ['OPENAI_API_KEY', 'CODEX_API_KEY'],
+};
+// Claude Code on Amazon Bedrock signs in with the usual AWS variables.
+const BEDROCK_KEYS = ['AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN', 'AWS_BEARER_TOKEN_BEDROCK'];
+
+export function engineKeys(engine, source = process.env) {
+  const keys = [...(ENGINE_KEYS[engine] || [])];
+  if (engine === 'claude-code' && /^(1|true)$/i.test(String(source.CLAUDE_CODE_USE_BEDROCK || ''))) keys.push(...BEDROCK_KEYS);
+  return keys;
+}
+
+export function agentEnv(engine = null, source = process.env) {
   // A FORCE_COLOR inherited from a dev runner would override NO_COLOR and put
   // colour codes into command output.
-  delete env.FORCE_COLOR;
-  return env;
+  return childEnv({ source, keep: engineKeys(engine, source), extra: { PATH: agentPath(), NO_COLOR: '1', FORCE_COLOR: null } });
 }
 
 export function findBinary(command) {
@@ -86,8 +106,8 @@ export function findBinary(command) {
   return null;
 }
 
-async function run(binary, args, timeout = 8000) {
-  const { stdout, stderr } = await execFileAsync(binary, args, { timeout, env: agentEnv(), windowsHide: true });
+async function run(binary, args, timeout = 8000, engine = null) {
+  const { stdout, stderr } = await execFileAsync(binary, args, { timeout, env: agentEnv(engine), windowsHide: true });
   return `${stdout || ''}${stderr || ''}`.trim();
 }
 
@@ -109,15 +129,15 @@ export async function detectExternalEngines() {
       continue;
     }
     try {
-      info.version = (await run(binary, ['--version'])).split('\n')[0];
+      info.version = (await run(binary, ['--version'], 8000, engine.id)).split('\n')[0];
     } catch { /* version is informational */ }
     try {
       if (engine.id === 'claude-code') {
-        const status = JSON.parse(await run(binary, ['auth', 'status', '--json']));
+        const status = JSON.parse(await run(binary, ['auth', 'status', '--json'], 8000, engine.id));
         info.signedIn = Boolean(status.loggedIn);
         info.account = status.email || null;
       } else {
-        const text = await run(binary, ['login', 'status']);
+        const text = await run(binary, ['login', 'status'], 8000, engine.id);
         info.signedIn = /logged in/i.test(text) && !/not logged in/i.test(text);
         info.account = /chatgpt/i.test(text) ? 'ChatGPT account' : /api key/i.test(text) ? 'API key' : null;
       }
@@ -278,7 +298,7 @@ export function runExternalAgent({ engine, goal, workingDir, externalSessionId =
     const { args } = buildCommand(engine, { goal, workingDir, externalSessionId, agentMode, autoApprove, model, approvalConfigPath });
     // Approvals wait on a person, so give the approval tool longer than
     // Claude Code's default MCP tool timeout.
-    const env = approvalConfigPath ? { ...agentEnv(), MCP_TOOL_TIMEOUT: String(10 * 60 * 1000) } : agentEnv();
+    const env = approvalConfigPath ? { ...agentEnv(engine), MCP_TOOL_TIMEOUT: String(10 * 60 * 1000) } : agentEnv(engine);
     const child = spawn(binary, args, { cwd: workingDir, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
 
     let sessionId = externalSessionId;

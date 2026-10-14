@@ -14,6 +14,7 @@ import { PermissionLevel } from './toolRegistry.js';
 import { getTmpDir } from '../workspacePaths.js';
 import { shellSessionManager } from '../ShellSessionManager.js';
 import { sandboxedCommand, sandboxHint } from '../commandSandbox.js';
+import { childEnv } from '../childEnv.js';
 const DEFAULT_TIMEOUT = parseInt(process.env.AGENT_CMD_TIMEOUT ?? '120000', 10); // 120s (was 30s — too short for npm install/build)
 const MAX_OUTPUT = 32000; // chars (was 16000 — too small for test/build output)
 const STREAM_INTERVAL_MS = 250; // how often to flush streaming progress
@@ -57,7 +58,7 @@ function runProcess(cmd, args, options = {}) {
       // relies on Node's quoting for it, so Windows keeps it, unless the
       // caller runs a program directly (ssh).
       shell: options.shell ?? IS_WIN,
-      env: { ...process.env, ...(options.env || {}) },
+      env: childEnv({ extra: options.env }),
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 

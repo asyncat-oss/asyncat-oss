@@ -6,6 +6,7 @@
 import fs from 'fs';
 import path from 'path';
 import { execFileSync } from 'child_process';
+import { childEnv } from '../childEnv.js';
 import { PermissionLevel } from './toolRegistry.js';
 import { safePath, truncate, hasBin, IS_WIN } from './shared.js';
 import { fallbackRegexOutline } from './astTools.js';
@@ -102,7 +103,7 @@ function findCodeRoot(workingDir) {
 function runSearchCommand(file, args, { maxLines, ...options }) {
   let output;
   try {
-    output = execFileSync(file, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], ...options });
+    output = execFileSync(file, args, { encoding: 'utf8', env: childEnv(), stdio: ['ignore', 'pipe', 'ignore'], ...options });
   } catch (err) {
     output = typeof err.stdout === 'string' ? err.stdout : '';
   }
@@ -589,7 +590,7 @@ export const findReferencesTool = {
         // Pass the root explicitly: with no path and a piped stdin, rg searches stdin.
         rgArgs.push('-e', symbol, rootDir);
         const out = execFileSync('rg', rgArgs, {
-          cwd: rootDir, encoding: 'utf8', timeout: 15000, maxBuffer: 4 * 1024 * 1024,
+          cwd: rootDir, encoding: 'utf8', timeout: 15000, maxBuffer: 4 * 1024 * 1024, env: childEnv(),
           stdio: ['ignore', 'pipe', 'ignore'],
         });
         const results = out.trim().split('\n')

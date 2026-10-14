@@ -38,6 +38,7 @@ import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { execFileSync, execSync } from 'child_process';
+import { childEnv } from './childEnv.js';
 import { lspManager } from './LspManager.js';
 
 const MAX_ROUNDS_DEFAULT = 25;
@@ -2403,9 +2404,9 @@ export class AgentRuntime {
       let checkpoint;
       try {
         if (forceSnapshot) throw new Error('snapshot requested');
-        execSync('git rev-parse --is-inside-work-tree', { cwd: workspace, stdio: 'ignore', timeout: 3000 });
-        execFileSync('git', ['stash', 'push', '--include-untracked', '-m', message], { cwd: workspace, stdio: 'ignore', timeout: 15000 });
-        const list = execSync('git stash list', { cwd: workspace, encoding: 'utf8', timeout: 3000 });
+        execSync('git rev-parse --is-inside-work-tree', { cwd: workspace, env: childEnv(), stdio: 'ignore', timeout: 3000 });
+        execFileSync('git', ['stash', 'push', '--include-untracked', '-m', message], { cwd: workspace, env: childEnv(), stdio: 'ignore', timeout: 15000 });
+        const list = execSync('git stash list', { cwd: workspace, env: childEnv(), encoding: 'utf8', timeout: 3000 });
         const first = list.split('\n').find(line => line.includes(message));
         checkpoint = {
           id,
@@ -3222,7 +3223,7 @@ export class AgentRuntime {
             const cmd = deps.eslint
               ? `npx eslint --no-error-on-unmatched-pattern --max-warnings=50 ${fileArgs}`
               : 'npm run lint -- --max-warnings=50 2>&1 || true';
-            const result = execSync(cmd, { cwd: workDir, timeout: 15000, stdio: 'pipe', encoding: 'utf8' });
+            const result = execSync(cmd, { cwd: workDir, timeout: 15000, env: childEnv(), stdio: 'pipe', encoding: 'utf8' });
             const output = result.trim();
             if (output && output.length > 10) {
               checks.push({ check: 'lint', status: 'warnings', output: output.slice(0, 1000) });
@@ -3239,7 +3240,7 @@ export class AgentRuntime {
         if (fs.existsSync(path.join(workDir, 'tsconfig.json')) && jsFiles.some(f => /\.tsx?$/.test(f))) {
           try {
             const result = execSync('npx tsc --noEmit --pretty false 2>&1 | head -20', {
-              cwd: workDir, timeout: 20000, stdio: 'pipe', encoding: 'utf8',
+              cwd: workDir, timeout: 20000, env: childEnv(), stdio: 'pipe', encoding: 'utf8',
             });
             const output = result.trim();
             if (output && output.includes('error TS')) {
@@ -3263,7 +3264,7 @@ export class AgentRuntime {
           try {
             // The file name is passed as an argument, not pasted into code.
             execFileSync('python3', ['-c', 'import py_compile, sys; py_compile.compile(sys.argv[1], doraise=True)', pf], {
-              cwd: workDir, timeout: 5000, stdio: 'pipe',
+              cwd: workDir, timeout: 5000, env: childEnv(), stdio: 'pipe',
             });
           } catch (err) {
             checks.push({ check: 'python_syntax', status: 'error', file: path.basename(pf), output: (err.stderr?.toString() || err.message).slice(0, 500) });
@@ -3317,7 +3318,7 @@ export function deleteCheckpoint(checkpoint) {
         fs.rmSync(cp.dir, { recursive: true, force: true });
       }
     } else if (cp.kind === 'git_stash' && /^stash@\{\d+\}$/.test(cp.ref)) {
-      try { execFileSync('git', ['stash', 'drop', cp.ref], { cwd: cp.workspace, stdio: 'ignore', timeout: 15000 }); } catch {}
+      try { execFileSync('git', ['stash', 'drop', cp.ref], { cwd: cp.workspace, env: childEnv(), stdio: 'ignore', timeout: 15000 }); } catch {}
     }
     CHECKPOINTS.delete(cp.id);
     _deletePersistedCheckpoint(cp.id);
@@ -3334,7 +3335,7 @@ export function restoreCheckpoint(id) {
   if (!cp) return { success: false, error: 'No checkpoint found' };
   try {
     if (cp.kind === 'git_stash') {
-      execFileSync('git', ['stash', 'apply', cp.ref], { cwd: cp.workspace, stdio: 'pipe', timeout: 30000 });
+      execFileSync('git', ['stash', 'apply', cp.ref], { cwd: cp.workspace, env: childEnv(), stdio: 'pipe', timeout: 30000 });
     } else if (cp.kind === 'dir_snapshot') {
       if (!cp.dir || !fs.existsSync(cp.dir)) {
         return { success: false, error: 'Checkpoint snapshot is missing', checkpoint: cp };

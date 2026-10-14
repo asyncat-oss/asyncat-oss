@@ -8,6 +8,7 @@ import JSZip from 'jszip';
 import { randomUUID } from 'crypto';
 import { PermissionLevel } from './toolRegistry.js';
 import { formatSize, isPathInside } from './shared.js';
+import { childEnv } from '../childEnv.js';
 import { getArtifactsDir, getLegacyArtifactsDir } from '../workspacePaths.js';
 
 const SKIP_DIRS = new Set([
@@ -1442,7 +1443,7 @@ export const renderVideoTool = {
 
     // Verify ffmpeg is available
     try {
-      await execFileAsync('ffmpeg', ['-version'], { timeout: 5000 });
+      await execFileAsync('ffmpeg', ['-version'], { timeout: 5000, env: childEnv() });
     } catch {
       return {
         success: false,
@@ -1509,7 +1510,7 @@ export const renderVideoTool = {
       }
 
       try {
-        await execFileAsync('ffmpeg', ffArgs, { timeout: 300000 });
+        await execFileAsync('ffmpeg', ffArgs, { timeout: 300000, env: childEnv() });
       } finally {
         if (tmpList) { try { fs.unlinkSync(tmpList); } catch {} }
       }

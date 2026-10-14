@@ -7,6 +7,7 @@ import net from 'net';
 import os from 'os';
 import { PermissionLevel } from './toolRegistry.js';
 import { IS_WIN, PLATFORM, clampInt, runFile, safePath } from './shared.js';
+import { childEnv } from '../childEnv.js';
 
 // Run a binary with an explicit argument vector (no shell), returning stdout as
 // a string. Model-supplied values go in `argv`, so they can never be parsed as
@@ -14,7 +15,7 @@ import { IS_WIN, PLATFORM, clampInt, runFile, safePath } from './shared.js';
 // old `… || true` behaviour.
 function captureArgv(file, argv, timeout = 8000) {
   try {
-    return execFileSync(file, argv, { encoding: 'utf8', timeout, stdio: ['ignore', 'pipe', 'ignore'] });
+    return execFileSync(file, argv, { encoding: 'utf8', timeout, env: childEnv(), stdio: ['ignore', 'pipe', 'ignore'] });
   } catch (err) {
     return (err.stdout || '').toString();
   }
@@ -24,7 +25,7 @@ const execAsync = (cmd, cwd, timeout = 10000) => {
   return new Promise((resolve) => {
     let stdout = '', stderr = '';
     const [sh, flag] = IS_WIN ? ['cmd.exe', '/c'] : ['/bin/sh', '-c'];
-    const proc = spawn(sh, [flag, cmd], { cwd, shell: false });
+    const proc = spawn(sh, [flag, cmd], { cwd, env: childEnv(), shell: false });
     const timer = setTimeout(() => { proc.kill(); resolve({ success: false, error: `Timed out after ${timeout / 1000}s`, stdout, stderr }); }, timeout);
     proc.stdout?.on('data', d => { stdout += d.toString(); });
     proc.stderr?.on('data', d => { stderr += d.toString(); });
@@ -101,7 +102,7 @@ export const processSpawnTool = {
   },
   execute: async (args, context) => {
     const cwd = args.cwd ? safePath(args.cwd, context.workingDir) : context.workingDir;
-    const env = { ...process.env, ...(args.env_vars || {}) };
+    const env = childEnv({ extra: args.env_vars });
     try {
       // The command itself is meant to be a shell command (this tool is
       // dangerous and asks first); only the way it is started changed.
@@ -240,13 +241,13 @@ export const memoryDetailTool = {
 
       if (IS_WIN) {
         // wmic gives WorkingSetSize in bytes
-        const raw = execSync(`powershell -NoProfile -Command "Get-Process | Sort-Object WorkingSet64 -Descending | Select-Object -First ${top} | ForEach-Object { $_.Id.ToString() + '\\t' + [math]::Round($_.WorkingSet64/1MB,1).ToString() + '\\t' + $_.ProcessName }"`, { encoding: 'utf8', timeout: 8000 });
+        const raw = execSync(`powershell -NoProfile -Command "Get-Process | Sort-Object WorkingSet64 -Descending | Select-Object -First ${top} | ForEach-Object { $_.Id.ToString() + '\\t' + [math]::Round($_.WorkingSet64/1MB,1).ToString() + '\\t' + $_.ProcessName }"`, { encoding: 'utf8', timeout: 8000, env: childEnv() });
         topProcs = raw.trim().split('\n').filter(Boolean).map(line => {
           const [pid, memMb, cmd] = line.split('\t');
           return { pid: parseInt(pid), mem_percent: 0, rss_kb: parseFloat(memMb) * 1024, command: cmd?.trim() };
         });
       } else if (PLATFORM === 'linux') {
-        const memInfo = execSync('free -b 2>/dev/null', { encoding: 'utf8', timeout: 5000 });
+        const memInfo = execSync('free -b 2>/dev/null', { encoding: 'utf8', timeout: 5000, env: childEnv() });
         const lines = memInfo.trim().split('\n');
         const values = (lines[1] || '').split(/\s+/);
         const total = parseInt(values[1] || '0');
@@ -259,7 +260,7 @@ export const memoryDetailTool = {
         memData = { total, used, free, available, swap: { total: swapTotal, used: swapUsed, free: swapTotal - swapUsed } };
       } else if (PLATFORM === 'darwin') {
         try {
-          const vmRaw = execSync('vm_stat 2>/dev/null', { encoding: 'utf8', timeout: 5000 });
+          const vmRaw = execSync('vm_stat 2>/dev/null', { encoding: 'utf8', timeout: 5000, env: childEnv() });
           const pageSize = 4096;
           const extract = (label) => {
             const line = vmRaw.split('\n').find(l => l.includes(label));
@@ -275,7 +276,7 @@ export const memoryDetailTool = {
         try {
           const procOut = execSync(
             `ps aux 2>/dev/null | tail -n +2 | awk '{printf "%s\\t%s\\t%s\\t%s\\n", $2, $4, $6, $11}' | sort -k3 -rn | head -${top}`,
-            { encoding: 'utf8', timeout: 5000 }
+            { encoding: 'utf8', timeout: 5000, env: childEnv() }
           );
           topProcs = procOut.trim().split('\n').filter(Boolean).map(line => {
             const [pid, memPct, rssKb, cmd] = line.split('\t');

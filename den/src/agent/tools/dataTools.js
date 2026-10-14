@@ -4,6 +4,7 @@
 // inspect_attachment (images, audio, PDFs and text in one tool)
 
 import { execFileSync, spawn } from 'child_process';
+import { childEnv } from '../childEnv.js';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -51,7 +52,7 @@ function fileKind(filePath) {
 function runProc(file, argv, opts = {}) {
   return new Promise((resolve) => {
     let stdout = '', stderr = '';
-    const proc = spawn(file, argv.map(String), { cwd: opts.cwd || process.cwd(), shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const proc = spawn(file, argv.map(String), { cwd: opts.cwd || process.cwd(), env: childEnv(), shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
     const timer = setTimeout(() => { proc.kill(); resolve({ success: false, error: `Timed out after ${(opts.timeout || 30000) / 1000}s`, stdout, stderr }); }, opts.timeout || 30000);
     proc.stdout?.on('data', d => { stdout += d.toString(); });
     proc.stderr?.on('data', d => { stderr += d.toString(); });
@@ -344,7 +345,7 @@ export const jsonQueryTool = {
         // so the query is handed to jq verbatim instead of to /bin/sh.
         let out;
         try {
-          out = execFileSync('jq', [String(args.query), tmpIn], { encoding: 'utf8', timeout: 10000, stdio: ['ignore', 'pipe', 'pipe'] });
+          out = execFileSync('jq', [String(args.query), tmpIn], { encoding: 'utf8', timeout: 10000, env: childEnv(), stdio: ['ignore', 'pipe', 'pipe'] });
         } finally {
           try { fs.unlinkSync(tmpIn); } catch {}
         }

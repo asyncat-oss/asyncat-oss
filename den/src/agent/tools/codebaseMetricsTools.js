@@ -5,6 +5,7 @@
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
+import { childEnv } from '../childEnv.js';
 import { PermissionLevel } from './toolRegistry.js';
 
 const SKIP_DIRS = new Set([
@@ -139,7 +140,7 @@ function parseDependencyCounts(cwd) {
 
 function gitMetrics(cwd) {
   const run = (cmd) => {
-    try { return execSync(cmd, { cwd, encoding: 'utf8', timeout: 15000, stdio: ['ignore', 'pipe', 'ignore'] }).trim(); }
+    try { return execSync(cmd, { cwd, encoding: 'utf8', timeout: 15000, env: childEnv(), stdio: ['ignore', 'pipe', 'ignore'] }).trim(); }
     catch { return null; }
   };
 

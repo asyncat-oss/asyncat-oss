@@ -4,6 +4,7 @@
 import os from 'os';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { childEnv } from '../childEnv.js';
 import { PermissionLevel } from './toolRegistry.js';
 
 const execFileAsync = promisify(execFile);
@@ -69,7 +70,7 @@ async function detectNvidiaGpu() {
     const { stdout } = await execFileAsync('nvidia-smi', [
       '--query-gpu=name,memory.total,memory.free',
       '--format=csv,noheader,nounits',
-    ], { timeout: 5000 });
+    ], { timeout: 5000, env: childEnv() });
 
     const gpus = stdout.trim().split('\n').filter(Boolean).map(line => {
       const parts = line.split(',').map(s => s.trim());
@@ -90,7 +91,7 @@ async function detectNvidiaGpu() {
 
 async function detectAmdGpu() {
   try {
-    const { stdout } = await execFileAsync('rocm-smi', ['--showmeminfo', 'vram', '--json'], { timeout: 5000 });
+    const { stdout } = await execFileAsync('rocm-smi', ['--showmeminfo', 'vram', '--json'], { timeout: 5000, env: childEnv() });
     const data = JSON.parse(stdout);
     const gpus = Object.entries(data).map(([key, vals]) => {
       const total = parseInt(vals['VRAM Total Memory (B)'] || vals['vram_total'] || 0);
@@ -111,7 +112,7 @@ async function detectAmdGpu() {
 async function detectAppleGpu() {
   if (process.platform !== 'darwin') return null;
   try {
-    const { stdout } = await execFileAsync('system_profiler', ['SPHardwareDataType', '-json'], { timeout: 6000 });
+    const { stdout } = await execFileAsync('system_profiler', ['SPHardwareDataType', '-json'], { timeout: 6000, env: childEnv() });
     const data = JSON.parse(stdout);
     const hw = data?.SPHardwareDataType?.[0] || {};
     const chip = hw.chip_type || hw.cpu_type || '';
@@ -135,7 +136,7 @@ async function detectAppleGpu() {
   } catch {
     // Fallback: just check if we're on Apple Silicon via arch
     try {
-      const { stdout } = await execFileAsync('uname', ['-m'], { timeout: 2000 });
+      const { stdout } = await execFileAsync('uname', ['-m'], { timeout: 2000, env: childEnv() });
       if (stdout.trim() === 'arm64') {
         const totalGb = parseFloat((os.totalmem() / 1073741824).toFixed(2));
         return [{

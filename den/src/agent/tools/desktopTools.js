@@ -14,6 +14,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { spawn } from 'child_process';
+import { childEnv } from '../childEnv.js';
 import { PermissionLevel } from './toolRegistry.js';
 import { IS_WIN, PLATFORM, hasBin, runFile, runPowerShell, runAppleScript, powerShellLiteral } from './shared.js';
 
@@ -72,7 +73,7 @@ export const clipboardWriteTool = {
       res = runPowerShell(`Set-Clipboard -Value ${powerShellLiteral(input)}`, { timeout: 5000 });
     } else if (isWayland() && hasBin('wl-copy')) {
       // wl-copy stays running to serve the clipboard, so don't wait for it.
-      const child = spawn('wl-copy', [], { stdio: ['pipe', 'ignore', 'ignore'], detached: true });
+      const child = spawn('wl-copy', [], { env: childEnv(), stdio: ['pipe', 'ignore', 'ignore'], detached: true });
       child.stdin.end(input);
       child.unref();
       return { success: true };
@@ -146,7 +147,7 @@ export const appOpenTool = {
       res = runPowerShell(`Start-Process -FilePath ${powerShellLiteral(appName)}${argList}`, { timeout: 8000 });
     } else if (!looksLikeTarget && /^[\w.+-]+$/.test(appName) && hasBin(appName)) {
       // Launch detached so the app outlives this request.
-      const child = spawn(appName, target ? [target] : [], { detached: true, stdio: 'ignore' });
+      const child = spawn(appName, target ? [target] : [], { env: childEnv(), detached: true, stdio: 'ignore' });
       child.on('error', () => {});
       child.unref();
       return { success: true };

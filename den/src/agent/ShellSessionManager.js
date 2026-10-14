@@ -11,6 +11,7 @@
 
 import { spawn } from 'child_process';
 import { sandboxedCommand } from './commandSandbox.js';
+import { childEnv } from './childEnv.js';
 import { IS_WIN } from './tools/shared.js';
 
 const SENTINEL_PREFIX = '__ASYNCAT_DONE__';
@@ -52,7 +53,7 @@ class ShellSession {
     this.sandboxed = plan.sandboxed;
     this._proc = spawn(plan.file, plan.args, {
       cwd: this.cwd,
-      env: { ...process.env, PS1: '', PS2: '' },
+      env: childEnv({ extra: { PS1: '', PS2: '' } }),
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     this.alive = true;

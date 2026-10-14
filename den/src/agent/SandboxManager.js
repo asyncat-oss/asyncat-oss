@@ -5,6 +5,7 @@ import path from 'path';
 import { randomUUID } from 'crypto';
 import db from '../db/client.js';
 import { getWorkspaceRoot } from '../files/fileExplorerService.js';
+import { childEnv } from './childEnv.js';
 
 const COPY_SKIP = new Set([
   '.git',
@@ -84,6 +85,7 @@ function publicJob(row) {
 function runGit(args, cwd) {
   return execFileSync('git', args, {
     cwd,
+    env: childEnv(),
     encoding: 'utf8',
     timeout: 60_000,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -93,6 +95,7 @@ function runGit(args, cwd) {
 function runGitResult(args, cwd) {
   const result = spawnSync('git', args, {
     cwd,
+    env: childEnv(),
     encoding: 'utf8',
     timeout: 60_000,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -434,7 +437,7 @@ export function runSandboxCommand(userId, sandboxId, {
     encoding: 'utf8',
     timeout: Math.min(Math.max(Number(timeoutMs) || 120_000, 1_000), 900_000),
     maxBuffer: JOB_OUTPUT_LIMIT,
-    env: { ...process.env, ASYNCAT_SANDBOX_ID: sandboxId, ASYNCAT_SANDBOX_PATH: row.sandbox_path },
+    env: childEnv({ extra: { ASYNCAT_SANDBOX_ID: sandboxId, ASYNCAT_SANDBOX_PATH: row.sandbox_path } }),
   });
   const completed = nowIso();
   const stdout = (result.stdout || '').slice(-JOB_OUTPUT_LIMIT);

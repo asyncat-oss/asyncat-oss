@@ -3,6 +3,7 @@
 // Git operations for the agent: clone, pull, commit, push, branch, log, diff, status.
 
 import { spawn } from 'child_process';
+import { childEnv } from '../childEnv.js';
 import path from 'path';
 import { PermissionLevel } from './toolRegistry.js';
 import { branchGit, commitGit, getGitDiff, getGitState, pullGit, pushGit, stashGit } from '../gitService.js';
@@ -19,7 +20,7 @@ function runGit(argv, cwd, timeout = 30000) {
 function runGitStream(argv, cwd, timeout = 30000) {
   return new Promise((resolve) => {
     let stdout = '', stderr = '';
-    const proc = spawn('git', argv, { cwd, shell: false, windowsHide: true });
+    const proc = spawn('git', argv, { cwd, env: childEnv(), shell: false, windowsHide: true });
     const timer = setTimeout(() => { proc.kill(); resolve({ success: false, error: `Timed out after ${timeout / 1000}s`, stdout, stderr }); }, timeout);
     proc.stdout?.on('data', d => { stdout += d.toString(); });
     proc.stderr?.on('data', d => { stderr += d.toString(); });

@@ -10,6 +10,7 @@
 // user needs the desktop app (nobody can see this browser).
 
 import { launchBrowser } from '../lib/browserLauncher.js';
+import { childEnv } from './childEnv.js';
 import { checkAgentUrl, guardPuppeteerPage } from './tools/urlPolicy.js';
 import { currentScheduledRun, runInScheduledContext } from './scheduledRunContext.js';
 import {
@@ -98,7 +99,8 @@ export class HeadlessBrowser {
       this.launching = (async () => {
         let browser;
         try {
-          browser = await this.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] });
+          // Like every program the agent starts, it gets den's environment without saved keys.
+          browser = await this.launch({ headless: true, env: childEnv(), args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] });
         } catch (err) {
           throw new Error(`${NO_HEADLESS_BROWSER} (${err?.message || err})`);
         }

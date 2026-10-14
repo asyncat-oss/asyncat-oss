@@ -5,6 +5,7 @@
 import { spawn, spawnSync } from 'child_process';
 import path from 'path';
 import os from 'os';
+import { childEnv } from '../childEnv.js';
 
 export const IS_WIN = os.platform() === 'win32';
 export const PLATFORM = os.platform();
@@ -50,7 +51,7 @@ export function runFile(file, argv = [], { cwd, timeout = DEFAULT_TIMEOUT, input
     return { ok: false, status: null, stdout: '', stderr: '', error: err.message };
   }
   const res = spawnSync(plan.file, plan.args, {
-    cwd, env, input, timeout, maxBuffer, encoding: 'utf8', windowsHide: true, shell: plan.shell,
+    cwd, env: env || childEnv(), input, timeout, maxBuffer, encoding: 'utf8', windowsHide: true, shell: plan.shell,
   });
   const stdout = res.stdout || '';
   const stderr = res.stderr || '';
@@ -131,7 +132,7 @@ export function runProcess(cmd, args = [], options = {}) {
       windowsHide: true,
       cwd: options.cwd || process.cwd(),
       shell: plan.shell,
-      env: { ...process.env, ...(options.env || {}) },
+      env: childEnv({ extra: options.env }),
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
