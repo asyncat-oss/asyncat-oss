@@ -1,10 +1,14 @@
+// All chats (/all-chats): every conversation and running agent, grouped by
+// the folder they worked in, with pinned chats first. Searching looks in
+// titles and in what was said, and a hit opens the chat at that message.
 import { useCallback, useEffect, useRef, useState } from 'react';
+import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import eventBus from '../../utils/eventBus.js';
 import { chatApi, chatFoldersApi } from '../api';
 import { useCommandCenter } from '../context/CommandCenterContextEnhanced';
-import { MessageSquare, CheckSquare, Clock, Search, Folder, FolderOpen, Plus, Pencil, Square, Trash2, Wrench, X, BookMarked, Loader2 } from 'lucide-react';
+import { MessageSquare, CheckSquare, Clock, Search, Folder, FolderOpen, MoreHorizontal, Plus, Pencil, Pin, PinOff, Square, Trash2, Wrench, X, BookMarked, Loader2 } from 'lucide-react';
 
 import { getRelativeTime, parseConversationDate } from '../utils/conversationUtils.js';
 import { useConfirm } from '../../components/confirmContext.js';
@@ -14,6 +18,12 @@ import { ProviderGlyph } from '../../Models/modelLogos.jsx';
 import AsyncatMark from '../../components/ui/AsyncatMark.jsx';
 import { useAgents } from '../../Agent/useAgents.js';
 import { conversationEngine, engineDisplayName } from '../../Agent/externalAgentFormat.js';
+import Button from '../../components/ui/Button.jsx';
+import Dialog from '../../components/ui/Dialog.jsx';
+import { Input } from '../../components/ui/Field.jsx';
+import { Menu, MenuItem, MenuSeparator } from '../../components/ui/Menu.jsx';
+import SearchSnippet from '../../components/SearchSnippet.jsx';
+import { chatLink, hitMessageId, isPinned, withPinned } from '../../sidebar/chatSearch.js';
 
 const ENGINE_FILTER_KEY = 'asyncat_chats_engine_filter';
 const ENGINE_ORDER = ['asyncat', 'claude-code', 'codex'];
@@ -50,6 +60,46 @@ function getItemUpdatedMs(item) {
   return value ? new Date(value).getTime() || 0 : 0;
 }
 
+// A chat's ⋯ menu: pin, rename, delete.
+function ChatRowMenu({ chatId, title, pinned, hidden, onTogglePin, onRename, onDelete }) {
+  const buttonRef = useRef(null);
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={() => setOpen(value => !value)}
+        aria-label={`Options for ${title}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        data-chat-options={chatId}
+        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-fg-subtle outline-none transition-[opacity,background-color,color] hover:bg-selected hover:text-fg focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-accent/40 ${
+          hidden ? 'pointer-events-none opacity-0' : open ? 'opacity-100' : 'opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
+        }`}
+      >
+        <MoreHorizontal className="h-4 w-4" />
+      </button>
+      <Menu anchorRef={buttonRef} open={open} onClose={() => setOpen(false)} placement="bottom-end" width={176} label="Chat options">
+        <MenuItem icon={pinned ? PinOff : Pin} label={pinned ? 'Unpin' : 'Pin'} onSelect={onTogglePin} />
+        <MenuItem icon={Pencil} label="Rename" onSelect={onRename} />
+        <MenuSeparator />
+        <MenuItem icon={Trash2} label="Delete" danger onSelect={onDelete} />
+      </Menu>
+    </>
+  );
+}
+
+ChatRowMenu.propTypes = {
+  chatId: PropTypes.string.isRequired,
+  title: PropTypes.string.isRequired,
+  pinned: PropTypes.bool,
+  hidden: PropTypes.bool,
+  onTogglePin: PropTypes.func.isRequired,
+  onRename: PropTypes.func.isRequired,
+  onDelete: PropTypes.func.isRequired,
+};
+
 const ChatsPage = () => {
   const navigate = useNavigate();
   const confirm = useConfirm();
@@ -75,6 +125,7 @@ const ChatsPage = () => {
   const [serverSearchResults, setServerSearchResults] = useState(null); // null = use local, array = server results
   const [serverSearching, setServerSearching] = useState(false);
   const serverSearchTimer = useRef(null);
+  const searchInputRef = useRef(null);
   const [selectedItems, setSelectedItems] = useState({});
   const [bulkDeleting, setBulkDeleting] = useState(false);
   // Which engine's chats to show: 'all', 'asyncat', 'claude-code', 'codex'…
@@ -90,18 +141,13 @@ const ChatsPage = () => {
 
   const [actionModal, setActionModal] = useState(null);
   const [actionModalTitle, setActionModalTitle] = useState('');
-  const actionInputRef = useRef(null);
-  const didFocusRef = useRef(false);
+  const renameInputRef = useRef(null);
 
+  // The dialog focuses its first control; the name is what you came to edit.
   useEffect(() => {
-    if (actionModal && actionInputRef.current && !didFocusRef.current) {
-      actionInputRef.current.focus();
-      actionInputRef.current.select();
-      didFocusRef.current = true;
-    }
-    if (!actionModal) {
-      didFocusRef.current = false;
-    }
+    if (!actionModal) return;
+    renameInputRef.current?.focus();
+    renameInputRef.current?.select();
   }, [actionModal]);
 
   const loadAll = useCallback(async () => {
@@ -150,6 +196,13 @@ const ChatsPage = () => {
     return () => unsub();
   }, [loadAll]);
 
+  // Pinned or unpinned in the sidebar.
+  useEffect(() => eventBus.on('conversationPinned', ({ id, pinned } = {}) => {
+    if (!id) return;
+    setConversations(prev => withPinned(prev, id, pinned));
+    setServerSearchResults(prev => (prev ? withPinned(prev, id, pinned) : prev));
+  }), []);
+
   // Debounced server-side FTS search — fires 400ms after user stops typing
   useEffect(() => {
     clearTimeout(serverSearchTimer.current);
@@ -189,10 +242,9 @@ const ChatsPage = () => {
     });
   };
 
-  const openActionModal = (e, item) => {
-    e.stopPropagation();
-    setActionModal({ id: item.id, type: item.type || 'chat', title: item.title || '' });
-    setActionModalTitle(item.title || '');
+  const openRename = (chat) => {
+    setActionModal({ id: chat.id, title: chat.title || '' });
+    setActionModalTitle(chat.title || '');
   };
 
   const saveRename = async () => {
@@ -201,7 +253,9 @@ const ChatsPage = () => {
     if (!newTitle || newTitle === actionModal.title) { setActionModal(null); return; }
     try {
       await chatApi.updateConversation(itemId, { title: newTitle });
-      setConversations(prev => prev.map(c => c.id === itemId ? { ...c, title: newTitle } : c));
+      const rename = (list) => list.map(c => c.id === itemId ? { ...c, title: newTitle } : c);
+      setConversations(rename);
+      setServerSearchResults(prev => (prev ? rename(prev) : prev));
       setActionModal(null);
     } catch (err) {
       console.error('Failed to rename item:', err);
@@ -209,12 +263,50 @@ const ChatsPage = () => {
     }
   };
 
-  const confirmDelete = async () => {
-    const itemId = actionModal.id;
-    setActionModal(null);
-    setConversations(prev => prev.filter(c => c.id !== itemId));
+  // Pinning moves a chat in or out of Pinned, where its row is a new
+  // element. Done from the keyboard, focus follows the chat to its options
+  // button (or to the search box, if it went into a closed folder).
+  const chatListRef = useRef(null);
+  const refocusChatRef = useRef(null);
+  useEffect(() => {
+    const id = refocusChatRef.current;
+    refocusChatRef.current = null;
+    if (!id || (document.activeElement && document.activeElement !== document.body)) return;
+    const target = chatListRef.current?.querySelector(`[data-chat-options="${CSS.escape(id)}"]`)
+      || searchInputRef.current;
+    target?.focus();
+  }, [conversations, serverSearchResults]);
+
+  const togglePin = async (chat) => {
+    const pinned = !isPinned(chat);
+    if (document.activeElement?.matches?.(':focus-visible')) refocusChatRef.current = String(chat.id);
+    const apply = (value) => {
+      setConversations(prev => withPinned(prev, chat.id, value));
+      setServerSearchResults(prev => (prev ? withPinned(prev, chat.id, value) : prev));
+      eventBus.emit('conversationPinned', { id: chat.id, pinned: value });
+    };
+    apply(pinned);
     try {
-      await chatApi.deleteConversation(itemId);
+      await chatApi.updateConversation(chat.id, { is_pinned: pinned });
+    } catch (err) {
+      apply(!pinned);
+      toast.error(pinned ? "Couldn't pin the chat" : "Couldn't unpin the chat", { detail: errorDetail(err) });
+    }
+  };
+
+  const deleteChat = async (chat) => {
+    const ok = await confirm({
+      title: 'Delete chat?',
+      message: `"${chat.title || 'Untitled conversation'}" will be moved to Trash, where you can restore it.`,
+      confirmLabel: 'Move to Trash',
+      destructive: true,
+    });
+    if (!ok) return;
+    const others = (list) => list.filter(c => c.id !== chat.id);
+    setConversations(others);
+    setServerSearchResults(prev => (prev ? others(prev) : prev));
+    try {
+      await chatApi.deleteConversation(chat.id);
     } catch (err) {
       console.error('Failed to delete item:', err);
       toast.error("Couldn't delete the chat", { detail: errorDetail(err) });
@@ -262,6 +354,12 @@ const ChatsPage = () => {
     .filter(run => !run.conversationId || !filteredConversations.some(c => c.id === run.conversationId))
     .filter(run => !q || (run.title || '').toLowerCase().includes(q) || (run.preview || '').toLowerCase().includes(q));
 
+  // Search results keep the server's order (title matches, then the best
+  // message matches). Otherwise pinned chats come first, the rest grouped.
+  const searchMode = conversationPool !== null;
+  const pinnedChats = searchMode ? [] : filteredConversations.filter(isPinned);
+  const groupedConversations = searchMode ? [] : filteredConversations.filter(c => !isPinned(c));
+
   const workedFolderGroupMap = new Map();
   const addWorkedFolderItem = (item) => {
     const context = getWorkingContext(item);
@@ -285,7 +383,7 @@ const ChatsPage = () => {
     return true;
   };
 
-  [...filteredActiveChatRuns, ...filteredConversations].forEach(addWorkedFolderItem);
+  if (!searchMode) [...filteredActiveChatRuns, ...groupedConversations].forEach(addWorkedFolderItem);
 
   const workedFolderGroups = [...workedFolderGroupMap.values()]
     .map(group => ({
@@ -294,8 +392,8 @@ const ChatsPage = () => {
     }))
     .sort((a, b) => b.updatedAtMs - a.updatedAtMs || a.label.localeCompare(b.label));
 
-  const conversationsWithoutWorkedFolder = filteredConversations.filter(c => !getWorkingContextFilterKey(getWorkingContext(c)));
-  const activeRunsWithoutWorkedFolder = filteredActiveChatRuns.filter(run => !getWorkingContextFilterKey(getWorkingContext(run)));
+  const conversationsWithoutWorkedFolder = groupedConversations.filter(c => !getWorkingContextFilterKey(getWorkingContext(c)));
+  const activeRunsWithoutWorkedFolder = searchMode ? [] : filteredActiveChatRuns.filter(run => !getWorkingContextFilterKey(getWorkingContext(run)));
 
   const folderMap = {};
   folders.forEach(f => { folderMap[f.id] = []; });
@@ -375,6 +473,14 @@ const ChatsPage = () => {
     }
   };
 
+  const openChat = (chat, messageId = null) => {
+    if (chat.type === 'active-run') {
+      navigate(chat.conversationId ? chatLink(chat.conversationId) : '/home');
+    } else {
+      navigate(chatLink(chat.id, messageId));
+    }
+  };
+
   const renderChatItem = (chat) => {
     const isActiveRun = chat.type === 'active-run';
     const messages = Array.isArray(chat.messages) ? chat.messages : [];
@@ -389,103 +495,110 @@ const ChatsPage = () => {
     const isSelected = Boolean(selectedItems[getSelectionKey(selectionItem)]);
     const hasSelection = selectedCount > 0;
     const canSelect = !isActiveRun;
+    const pinned = !isActiveRun && isPinned(chat);
     const workingContext = getWorkingContext(chat);
     const workingContextLabel = formatWorkingContextLabel(workingContext);
     const bookmarkCount = Array.isArray(chat.metadata?.highlights?.bookmarkedMessages)
       ? chat.metadata.highlights.bookmarkedMessages.length
       : messages.filter(msg => msg.bookmarked).length;
+    // A search hit inside a message: show where, and open the chat there
+    // (even when its name matched too).
+    const hit = Array.isArray(chat.hits) ? chat.hits[0] : null;
+    const matchCount = hit ? chat.hit_count || 1 : 0;
+    const preview = chat.preview || lastAssistant?.content;
 
     return (
       <div
         key={`${chat.type}-${chat.id}`}
-        onClick={(e) => {
-          if (hasSelection && canSelect) {
-            toggleSelection(e, selectionItem);
-          } else {
-            navigate(isActiveRun
-              ? (chat.conversationId ? `/conversations/${chat.conversationId}` : '/home')
-              : `/conversations/${chat.id}`);
-          }
-        }}
-        className={`flex items-center gap-2 px-3 py-2.5 border-b transition-colors group cursor-pointer ${
-          isSelected
-            ? 'rounded-lg bg-gray-100/80 dark:bg-gray-800/50 midnight:bg-slate-900/60 border-transparent'
-            : 'rounded-lg border-transparent hover:bg-gray-100/70 dark:hover:bg-gray-800/35 midnight:hover:bg-slate-900/45'
+        className={`group flex items-center gap-1 rounded-lg pl-1 pr-2 transition-colors ${
+          isSelected ? 'bg-selected' : 'hover:bg-hover'
         }`}
       >
-        {canSelect && (
-        <button
-          onClick={e => toggleSelection(e, selectionItem)}
-          title={isSelected ? 'Deselect' : 'Select'}
-          className={`p-1 rounded-md transition-colors flex-shrink-0 ${
-            isSelected || hasSelection
-              ? 'opacity-100 text-gray-700 dark:text-gray-200'
-              : 'opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-          }`}
-        >
-          {isSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
-        </button>
-        )}
-        {!isActiveRun && <ConversationBadge conversation={chat} agentsById={agentsById} className="self-start pt-[3px]" />}
-        <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 midnight:text-gray-100 truncate">
-            {itemTitle}
-          </h3>
-          <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-400 mt-0.5">
-            <Clock className="w-3 h-3 flex-shrink-0" />
-            <span className="flex-shrink-0">{getRelativeTime(updatedAt)}</span>
-            {toolsUsed && (
-              <>
-                <span>•</span>
-                <span className={`inline-flex items-center gap-0.5 flex-shrink-0 ${
-                  running
-                    ? 'text-gray-700 dark:text-gray-200 midnight:text-slate-200'
-                    : 'text-gray-500 dark:text-gray-400 midnight:text-slate-400'
-                }`}>
-                  <Wrench className="w-3 h-3" />
-                  {running ? 'Generating' : actionModeUsed ? 'Action' : 'Plan'}
-                </span>
-              </>
-            )}
-            {workingContextLabel && (
-              <>
-                <span>•</span>
-                <span
-                  className="inline-flex min-w-0 items-center gap-0.5 truncate text-gray-500 dark:text-gray-400 midnight:text-slate-400"
-                  title={workingContext?.workingDir || ''}
-                >
-                  <FolderOpen className="h-3 w-3 flex-shrink-0" />
-                  <span className="truncate">Worked in {workingContextLabel}</span>
-                </span>
-              </>
-            )}
-            {bookmarkCount > 0 && (
-              <>
-                <span>•</span>
-                <span className="inline-flex items-center gap-0.5 flex-shrink-0 text-amber-500">
-                  <BookMarked className="h-3 w-3" />
-                  {bookmarkCount}
-                </span>
-              </>
-            )}
-            {(chat.preview || lastAssistant?.content) && (
-              <>
-                <span>•</span>
-                <span className="truncate">{chat.preview || lastAssistant?.content}</span>
-              </>
-            )}
-          </div>
-        </div>
-        {!isActiveRun && (
-        <div className={`flex items-center gap-0.5 transition-opacity flex-shrink-0 ${hasSelection ? 'opacity-0 pointer-events-none' : 'opacity-0 group-hover:opacity-100'}`}>
+        {canSelect ? (
           <button
-            onClick={e => openActionModal(e, { id: chat.id, type: chat.type, title: itemTitle })}
-            title="Edit"
-            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            type="button"
+            onClick={e => toggleSelection(e, selectionItem)}
+            aria-label={isSelected ? `Deselect ${itemTitle}` : `Select ${itemTitle}`}
+            aria-pressed={isSelected}
+            className={`h-7 w-7 shrink-0 items-center justify-center rounded-md outline-none transition-opacity focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-accent/40 ${
+              isSelected || hasSelection ? 'flex text-fg opacity-100' : 'hidden text-fg-subtle opacity-0 hover:text-fg group-hover:opacity-100 sm:flex'
+            }`}
           >
-            <Pencil className="w-3.5 h-3.5" />
+            {isSelected ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
           </button>
-        </div>
+        ) : <span className="hidden w-7 shrink-0 sm:block" />}
+        <button
+          type="button"
+          onClick={(e) => {
+            if (hasSelection && canSelect) toggleSelection(e, selectionItem);
+            else openChat(chat, hitMessageId(chat));
+          }}
+          className="flex min-w-0 flex-1 items-start gap-2 rounded-md py-2.5 pl-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-accent/40 sm:pl-1"
+        >
+          {!isActiveRun && <ConversationBadge conversation={chat} agentsById={agentsById} className="mt-[3px]" />}
+          <span className="min-w-0 flex-1">
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span className="truncate text-sm font-medium text-fg">{itemTitle}</span>
+              {pinned && searchMode ? <Pin aria-label="Pinned" className="h-3 w-3 shrink-0 text-fg-subtle" /> : null}
+            </span>
+            {hit ? (
+              <SearchSnippet snippet={hit.snippet} className="mt-0.5 line-clamp-2 text-xs leading-[17px] text-fg-muted" />
+            ) : null}
+            <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-fg-muted">
+              <Clock className="h-3 w-3 shrink-0" />
+              <span className="shrink-0">{getRelativeTime(updatedAt)}</span>
+              {matchCount > 1 && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span className="shrink-0">{matchCount} matches</span>
+                </>
+              )}
+              {toolsUsed && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span className={`inline-flex shrink-0 items-center gap-0.5 ${running ? 'text-fg' : ''}`}>
+                    <Wrench className="h-3 w-3" />
+                    {running ? 'Generating' : actionModeUsed ? 'Action' : 'Plan'}
+                  </span>
+                </>
+              )}
+              {workingContextLabel && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span className="inline-flex min-w-0 items-center gap-0.5 truncate" title={workingContext?.workingDir || ''}>
+                    <FolderOpen className="h-3 w-3 shrink-0" />
+                    <span className="truncate">Worked in {workingContextLabel}</span>
+                  </span>
+                </>
+              )}
+              {bookmarkCount > 0 && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span className="inline-flex shrink-0 items-center gap-0.5 text-amber-600 dark:text-amber-400">
+                    <BookMarked className="h-3 w-3" />
+                    {bookmarkCount}
+                  </span>
+                </>
+              )}
+              {!hit && preview && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span className="truncate">{preview}</span>
+                </>
+              )}
+            </span>
+          </span>
+        </button>
+        {!isActiveRun && (
+          <ChatRowMenu
+            chatId={String(chat.id)}
+            title={itemTitle}
+            pinned={pinned}
+            hidden={hasSelection}
+            onTogglePin={() => togglePin(chat)}
+            onRename={() => openRename(chat)}
+            onDelete={() => deleteChat(chat)}
+          />
         )}
       </div>
     );
@@ -494,11 +607,16 @@ const ChatsPage = () => {
   const renderChatList = (chats) => {
     if (chats.length === 0) return null;
     return (
-      <div className="space-y-2">
+      <div className="space-y-px">
         {chats.map(chat => renderChatItem(chat))}
       </div>
     );
   };
+
+  // The Pinned and Recents headings and the folders line up with the chats'
+  // icons (past the select box, which phones don't show).
+  const groupHeaderClass = 'mb-1 flex min-h-8 w-full max-w-full items-center gap-2 rounded-lg pl-2.5 pr-2 text-left text-[13px] font-medium text-fg-muted outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/40 sm:pl-10';
+  const sectionHeadingClass = 'mb-1 pl-2.5 text-xs font-medium text-fg-subtle sm:pl-10';
 
   return (
     <div data-command-center className="flex flex-col h-full bg-transparent overflow-hidden">
@@ -515,39 +633,33 @@ const ChatsPage = () => {
           </div>
           <div className="flex items-center gap-2">
             {selectableItems.length > 0 && (
-              <button
-                onClick={selectAllVisible}
-                className="flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:border-slate-800 midnight:text-slate-300 midnight:hover:bg-slate-900"
-              >
-                {allVisibleSelected ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
+              <Button variant="secondary" size="sm" icon={allVisibleSelected ? CheckSquare : Square} onClick={selectAllVisible}>
                 {allVisibleSelected ? 'Deselect all' : 'Select'}
-              </button>
+              </Button>
             )}
-            <button
-              onClick={handleNewChat}
-              className="flex h-8 items-center gap-1.5 rounded-lg bg-gray-900 px-2.5 text-xs font-medium text-white transition-colors hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-slate-100 midnight:text-slate-900 midnight:hover:bg-slate-200"
-            >
-              <Plus className="w-3.5 h-3.5" />
+            <Button variant="primary" size="sm" icon={Plus} onClick={handleNewChat}>
               New
-            </button>
+            </Button>
           </div>
         </div>
 
         {/* Search */}
         <div className="relative mb-5 flex-shrink-0">
           {serverSearching
-            ? <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-400 animate-spin" />
-            : <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+            ? <Loader2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-fg-subtle" />
+            : <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-subtle" />
           }
           <input
+            ref={searchInputRef}
             type="text"
-            placeholder="Search conversations..."
+            aria-label="Search chats"
+            placeholder="Search titles and messages"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-lg border border-gray-200 bg-white/40 py-2 pl-10 pr-4 text-sm text-gray-900 transition-all placeholder:text-gray-400 focus:border-gray-300 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-800 dark:bg-gray-900/30 dark:text-gray-100 dark:focus:border-gray-700 dark:focus:ring-gray-700 midnight:border-slate-800 midnight:bg-slate-950/30 midnight:text-slate-100"
+            className={`h-9 w-full rounded-lg border border-line-strong bg-canvas pl-10 ${searchMode ? 'pr-24' : 'pr-4'} text-sm text-fg outline-none transition-[border-color,box-shadow] placeholder:text-fg-subtle focus:border-accent focus:ring-2 focus:ring-accent/20`}
           />
-          {serverSearchResults !== null && (
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
+          {searchMode && (
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-fg-subtle">
               {filteredConversations.length} found
             </span>
           )}
@@ -581,52 +693,62 @@ const ChatsPage = () => {
         )}
 
         {selectedCount > 0 && (
-          <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 flex-shrink-0 dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
-            <div className="text-xs font-medium text-gray-700 dark:text-gray-200">
+          <div className="mb-4 flex flex-shrink-0 items-center justify-between gap-3 rounded-lg border border-line bg-surface px-3 py-2">
+            <div className="text-xs font-medium text-fg">
               {selectedCount} selected
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={deleteSelected}
-                disabled={bulkDeleting}
-                className="flex h-7 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-950/30"
-              >
-                <Trash2 className="w-4 h-4" />
+            <div className="flex items-center gap-1">
+              <Button variant="danger" size="xs" icon={Trash2} loading={bulkDeleting} onClick={deleteSelected}>
                 {bulkDeleting ? 'Deleting' : 'Delete'}
-              </button>
+              </Button>
               <button
+                type="button"
                 onClick={clearSelection}
-                className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
+                aria-label="Clear selection"
                 title="Clear selection"
+                className="flex h-7 w-7 items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-hover hover:text-fg"
               >
-                <X className="w-4 h-4" />
+                <X className="h-4 w-4" />
               </button>
             </div>
           </div>
         )}
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
+        <div ref={chatListRef} className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
           {loading ? (
             <div className="space-y-4">
               {[...Array(5)].map((_, i) => (
-                <div key={i} className="animate-pulse flex flex-col p-4 border-b border-gray-100 dark:border-gray-800/50">
-                  <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-2" />
-                  <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/4" />
+                <div key={i} className="flex animate-pulse flex-col px-3 py-2.5">
+                  <div className="mb-2 h-4 w-1/3 rounded bg-hover" />
+                  <div className="h-3 w-1/4 rounded bg-hover" />
                 </div>
               ))}
             </div>
           ) : error ? (
-            <div className="text-red-500 text-center py-10 font-medium">{error}</div>
+            <div className="py-10 text-center text-sm font-medium text-red-600 dark:text-red-400">{error}</div>
           ) : filteredConversations.length === 0 && filteredActiveChatRuns.length === 0 ? (
-            <div className="text-center py-20">
-              <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-400 dark:border-gray-800 dark:text-gray-500 midnight:border-slate-800 midnight:text-slate-500">
-                <MessageSquare className="w-4 h-4" />
-              </div>
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">No conversations found</p>
+            <div className="py-20 text-center">
+              <MessageSquare className="mx-auto mb-3 h-5 w-5 text-fg-subtle" />
+              <p className="text-sm text-fg-muted">
+                {searchQuery.trim() ? 'No chats match that' : 'No conversations yet'}
+              </p>
+            </div>
+          ) : searchMode ? (
+            <div className="text-left">
+              {renderChatList([...filteredActiveChatRuns, ...filteredConversations])}
             </div>
           ) : (
-            <div className="space-y-2 text-left">
+            <div className="space-y-px text-left">
+              {pinnedChats.length > 0 && (
+                <section aria-label="Pinned chats" className="mb-4">
+                  <h2 className={sectionHeadingClass}>Pinned</h2>
+                  {renderChatList(pinnedChats)}
+                </section>
+              )}
+              {pinnedChats.length > 0 && topLevelItems.length > 0 && (
+                <h2 className={sectionHeadingClass}>Recents</h2>
+              )}
               {topLevelItems.map(item => {
                 if (item.kind === 'worked-folder') {
                   const group = item.data;
@@ -636,12 +758,13 @@ const ChatsPage = () => {
                       <button
                         type="button"
                         onClick={() => toggleFolder(group.expandedKey)}
-                        className="mb-1.5 flex min-h-8 w-full max-w-full items-center gap-2 rounded-lg px-2 text-left text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100/70 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800/35 dark:hover:text-white midnight:text-slate-300 midnight:hover:bg-slate-900/45"
+                        aria-expanded={isExpanded}
+                        className={groupHeaderClass}
                         title={group.title}
                       >
                         {isExpanded
-                          ? <FolderOpen className="h-4 w-4 flex-shrink-0 text-gray-500" />
-                          : <Folder className="h-4 w-4 flex-shrink-0 text-gray-500" />
+                          ? <FolderOpen className="h-4 w-4 shrink-0 text-fg-subtle" />
+                          : <Folder className="h-4 w-4 shrink-0 text-fg-subtle" />
                         }
                         <span className="truncate">{group.label}</span>
                       </button>
@@ -657,14 +780,15 @@ const ChatsPage = () => {
                       <button
                         type="button"
                         onClick={() => toggleFolder(folder.id)}
-                        className="mb-1.5 flex min-h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100/70 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800/35 dark:hover:text-white midnight:text-slate-300 midnight:hover:bg-slate-900/45"
+                        aria-expanded={Boolean(isExpanded)}
+                        className={groupHeaderClass}
                       >
                         {isExpanded
-                          ? <FolderOpen className="h-4 w-4 text-gray-500" />
-                          : <Folder className="h-4 w-4 text-gray-500" />
+                          ? <FolderOpen className="h-4 w-4 shrink-0 text-fg-subtle" />
+                          : <Folder className="h-4 w-4 shrink-0 text-fg-subtle" />
                         }
-                        {folder.name}
-                        <span className="text-xs font-normal text-gray-400">({chats.length})</span>
+                        <span className="truncate">{folder.name}</span>
+                        <span className="text-xs font-normal text-fg-subtle">{chats.length}</span>
                       </button>
                       {isExpanded && renderChatList(chats)}
                     </div>
@@ -677,59 +801,32 @@ const ChatsPage = () => {
         </div>
       </div>
 
-      {/* Action Modal (rename + delete) */}
-      {actionModal && (
-        <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-          onClick={() => setActionModal(null)}
-        >
-          <div
-            className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-6 shadow-2xl dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950"
-            onClick={e => e.stopPropagation()}
-          >
-            <h3 className="mb-4 text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">
-              Edit conversation
-            </h3>
-            <input
-              ref={actionInputRef}
-              value={actionModalTitle}
-              onChange={e => setActionModalTitle(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  saveRename();
-                }
-                if (e.key === 'Escape') setActionModal(null);
-              }}
-              placeholder="Conversation title"
-              className="mb-6 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-gray-300 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:focus:ring-gray-700 midnight:border-slate-700 midnight:bg-slate-900"
-            />
-            <div className="flex items-center justify-between border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800 pt-4">
-              <button
-                onClick={confirmDelete}
-                className="flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
-              >
-                <Trash2 className="w-4 h-4" />
-                Delete
-              </button>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setActionModal(null)}
-                  className="h-8 rounded-lg px-3 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-900"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={saveRename}
-                  className="h-8 rounded-lg bg-gray-900 px-3 text-xs font-medium text-white transition-colors hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
-                >
-                  Save
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <Dialog
+        open={Boolean(actionModal)}
+        title="Rename chat"
+        size="sm"
+        as="form"
+        onSubmit={(e) => { e.preventDefault(); saveRename(); }}
+        onClose={() => setActionModal(null)}
+        footer={(
+          <>
+            <Button variant="ghost" size="sm" onClick={() => setActionModal(null)}>
+              Cancel
+            </Button>
+            <Button variant="primary" size="sm" type="submit">
+              Save
+            </Button>
+          </>
+        )}
+      >
+        <Input
+          ref={renameInputRef}
+          value={actionModalTitle}
+          onChange={e => setActionModalTitle(e.target.value)}
+          aria-label="Chat name"
+          placeholder="Chat name"
+        />
+      </Dialog>
     </div>
   );
 };

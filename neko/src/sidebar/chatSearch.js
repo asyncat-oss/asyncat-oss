@@ -78,3 +78,12 @@ export function withPinned(conversations, conversationId, pinned) {
     conversation.id === conversationId ? { ...conversation, is_pinned: pinned } : conversation
   ));
 }
+
+/**
+ * The message a search result on All chats opens at: its best hit, the one
+ * its snippet shows, even when its name matched too. A chat found only by
+ * its name has none and opens as usual.
+ */
+export function hitMessageId(chat) {
+  return (Array.isArray(chat?.hits) && chat.hits[0]?.message_id) || null;
+}

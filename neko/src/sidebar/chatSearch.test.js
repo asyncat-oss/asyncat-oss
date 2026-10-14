@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   MARK_START, MARK_END, snippetParts, plainSnippet, chatLink, linkedMessageId,
-  isPinned, sidebarChatLists, withPinned,
+  isPinned, sidebarChatLists, withPinned, hitMessageId,
 } from './chatSearch.js';
 
 const marked = (word) => `${MARK_START}${word}${MARK_END}`;
@@ -53,4 +53,14 @@ test('the sidebar shows each chat once: pinned, else in its project, else in rec
   assert.ok(!isPinned({ is_pinned: 'false' }));
   assert.deepEqual(withPinned(chats, 'a', true)[0], { id: 'a', is_pinned: true });
   assert.equal(withPinned(chats, 'a', true)[1], chats[1], 'others are left alone');
+});
+
+test('a search result opens at the message it shows; one found only by its name opens as usual', () => {
+  const hits = [{ message_id: 'm2' }, { message_id: 'm1' }];
+  assert.equal(hitMessageId({ title_match: false, hits }), 'm2');
+  assert.equal(hitMessageId({ title_match: true, hits }), 'm2', 'its name matched too, but the row shows m2');
+  assert.equal(hitMessageId({ title_match: true, hits: [] }), null);
+  assert.equal(hitMessageId({ title_match: false, hits: [] }), null);
+  assert.equal(hitMessageId({ id: 'c1' }), null, 'a plain chat from the list');
+  assert.equal(hitMessageId(null), null);
 });
