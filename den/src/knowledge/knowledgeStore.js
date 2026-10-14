@@ -13,6 +13,7 @@ import path from 'path';
 import db from '../db/client.js';
 import { runtimeDataPath } from '../config/runtimeConfig.js';
 import { extractKnowledgeText } from './extractText.js';
+import { plainFileIn, realInside } from '../storage/safeFs.js';
 
 export const MAX_FILE_BYTES = 25 * 1024 * 1024;
 export const MAX_FILES_PER_OWNER = 200;
@@ -158,8 +159,19 @@ export function deleteKnowledgeFile(ownerType, ownerId, fileId) {
     db.prepare('DELETE FROM knowledge_chunks WHERE file_id = ?').run(row.id);
     db.prepare('DELETE FROM knowledge_files WHERE id = ?').run(row.id);
   })();
-  fs.rmSync(runtimeDataPath('knowledge', row.storage_path), { force: true });
+  const file = knowledgeFilePath(row.storage_path);
+  if (file) fs.rmSync(file, { force: true });
   return true;
+}
+
+/**
+ * Where a knowledge file is kept, from its row's storage_path: only a regular
+ * file inside data/knowledge, so a row can't name a file anywhere else.
+ */
+export function knowledgeFilePath(storagePath) {
+  const root = runtimeDataPath('knowledge');
+  const file = path.resolve(root, String(storagePath || ''));
+  return plainFileIn(path.dirname(file), path.basename(file)) && realInside(root, file) ? file : null;
 }
 
 /** Remove everything an owner had, e.g. when a project is deleted. */

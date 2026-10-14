@@ -14,6 +14,7 @@ import path from 'path';
 import { spawn, spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { runtimeDataPath } from '../config/runtimeConfig.js';
+import { plainFileIn } from '../storage/safeFs.js';
 
 const SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'ai', 'controllers', 'ai', 'scripts', 'lora_to_gguf.py');
 
@@ -63,11 +64,26 @@ export function setAdapterActive(id, active) {
   return list.find((item) => item.id === id);
 }
 
+/** The adapter's file when it is a regular file in the adapters folder, else null. */
+export function adapterFile(adapter) {
+  const file = path.resolve(String(adapter?.file || ''));
+  if (path.dirname(file) !== path.resolve(adaptersDir())) return null;
+  return plainFileIn(adaptersDir(), path.basename(file))?.file || null;
+}
+
 export function removeAdapter(id) {
-  const list = listAdapters();
-  const target = list.find((item) => item.id === id);
+  const target = getAdapter(id);
   if (!target) return false;
-  fs.rmSync(target.file, { force: true });
+  // Only a file in the adapters folder: adapters.json can't name one elsewhere.
+  const file = adapterFile(target);
+  if (file) fs.rmSync(file, { force: true });
+  return forgetAdapter(id);
+}
+
+/** Drop an adapter from the list (its file is removed by the caller). */
+export function forgetAdapter(id) {
+  const list = listAdapters();
+  if (!list.some((item) => item.id === id)) return false;
   saveAdapters(list.filter((item) => item.id !== id));
   return true;
 }
