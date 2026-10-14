@@ -902,6 +902,9 @@ export const audioApi = {
       if (language) url.searchParams.append('language', language);
       const res = await apiClient.request(url.toString(), {
         method: 'POST',
+        // Sent as audio: labelled JSON (the client's default), den's JSON
+        // parser rejects the recording before it reaches the route.
+        headers: { 'Content-Type': audioBlob?.type || 'audio/wav' },
         body: audioBlob,
       });
       if (!res.ok) {
