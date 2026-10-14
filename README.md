@@ -42,8 +42,9 @@ It is not a chatbot wrapper. It controls your screen, writes and runs code, mana
 | **Connectors (MCP)** | Give agents and Cats tools from other apps: pick one from the catalog (GitHub, Notion, Linear, Sentry, Supabase, Stripe, …), add a remote server with OAuth sign-in or a key, or run a program on this computer. Commands that download first (`npx`, `uvx`, `docker`) show the size and wait for your OK. Tools that only read run without asking; others ask first. Each agent and Cat can be limited to the connectors it needs. **Settings → Connections → Connectors**; saved in `data/mcp.json`, the format other MCP apps use |
 | **Persistent memory** | SQLite-backed memory with types: `user`, `feedback`, `project`, `reference`, `fact`, `preference`, `context`, `task_state`. Memories made in a project stay in it; ones about you apply everywhere; a Cat's stay its own. **Tools & Skills → Memory** shows whose each memory is, filters by project, agent or Cat, and lets you edit or add memories |
 | **Notes** | The agent writes notes as documents in the chat; open one to edit it (rich text, tables, line, bar, area, pie, donut and scatter charts, export to DOCX/PDF). `Cmd/Ctrl+K` finds them |
-| **System tray** | Left-click for quick chat; the menu shows Asyncat, opens Cats, restarts the backend, or quits. Closing the window leaves Asyncat in the tray while a Cat is on (**Settings → Background**), and it can start at login, hidden in the tray |
-| **Global shortcuts** | `Cmd/Ctrl+Shift+A` summons Asyncat from any app; `Cmd/Ctrl+Shift+Space` opens quick chat. Change or turn off either one in **Settings → Appearance** |
+| **System tray** | Left-click for Quick ask (on Linux it's in the menu); the menu shows Asyncat, opens Cats, restarts the backend, or quits. Closing the window leaves Asyncat in the tray while a Cat is on (**Settings → Background**), and it can start at login, hidden in the tray |
+| **Global shortcuts** | `Cmd/Ctrl+Shift+A` summons Asyncat from any app; `Cmd/Ctrl+Shift+Space` opens Quick ask. Change or turn off either one in **Settings → Appearance** |
+| **Quick ask** | A small window over any app: ask, and the answer streams in right there, saved as a normal chat. `Cmd/Ctrl+Enter` opens it in Asyncat, `Esc` hides it. On Wayland, where global shortcuts may not reach apps, bind Asyncat with `--quick-ask` in your desktop's keyboard settings (**Settings → Appearance** shows the exact command) |
 | **Training (Labs)** | **Customize → Models → Training** teaches a small local model your style in four steps: pick data (answers you rated 👍, notes, project files), see which model fits your GPU and roughly how long it takes, train, then load the adapter into llama.cpp and compare answers with it off and on. Works on NVIDIA GPUs with 6 GB or more for models up to about 3B. New, and so far only tested with stand-ins for the GPU parts |
 | **Voice and pictures** | **Models → Voice** and **Models → Images** set up speech to text, reading answers aloud and making pictures, on this computer (with the size shown before anything downloads) or through a provider. The mic is hands-free in voice mode. Everything agents make, pictures, documents, pages and data, is in the **Gallery** |
 | **Interactive answers** | Tables in answers sort, filter and copy as CSV; an answer can end with follow-up buttons; an agent's question can come as a small form. Rate answers 👍 or 👎 |
@@ -79,7 +80,7 @@ It is not a chatbot wrapper. It controls your screen, writes and runs code, mana
 Moving from a web app to a native desktop app unlocks things that aren't possible in a browser:
 
 - **Global keyboard shortcut** — `Cmd/Ctrl+Shift+A` brings Asyncat up from anywhere on your machine, whether you're in a code editor, a terminal, or a browser. No alt-tabbing to find the right tab. If it clashes with a shortcut you use, pick another combination or turn it off in **Settings → Appearance**.
-- **System tray** — Quick chat is one click away in your menu bar. While a Cat is on, closing the window leaves Asyncat running in the tray so the Cat still works; otherwise closing the window quits it (on macOS it stays in the Dock as usual). **Settings → Background** changes this to always keep running or always quit, and can start Asyncat at login, hidden in the tray.
+- **System tray** — Quick ask is one click away in your menu bar. While a Cat is on, closing the window leaves Asyncat running in the tray so the Cat still works; otherwise closing the window quits it (on macOS it stays in the Dock as usual). **Settings → Background** changes this to always keep running or always quit, and can start Asyncat at login, hidden in the tray.
 - **Native notifications** — When a chat or Cat finishes, asks you something, or needs approval, you get a real OS notification, not a browser popup that requires a permission grant.
 - **No browser security sandbox** — Screen capture, keyboard control, OCR, and desktop automation tools run without the restrictions that a browser tab imposes.
 - **Single instance** — One Asyncat, always. The OS prevents you from accidentally opening duplicates.
@@ -235,7 +236,7 @@ chmod +x Asyncat-*.AppImage
 | Shortcut | Action |
 |---|---|
 | `Cmd/Ctrl+Shift+A` | Summon or hide Asyncat (global — works in any app) |
-| `Cmd/Ctrl+Shift+Space` | Quick chat popup (global) |
+| `Cmd/Ctrl+Shift+Space` | Quick ask (global; or run Asyncat with `--quick-ask`) |
 | `Cmd/Ctrl+K` | Command palette: jump to a page or search |
 | `Cmd/Ctrl+N` | New chat |
 | `Cmd/Ctrl+,` | Settings |
@@ -298,7 +299,7 @@ asyncat-oss/
 │   ├── window.js    #   BrowserWindow creation and loading screen
 │   ├── tray.js      #   System tray icon and menu
 │   ├── background.js #  Keep running in the tray for Cats, start at login
-│   ├── popup.js     #   Quick-chat popup
+│   ├── quick.js     #   Quick ask window (shows the app's /quick page)
 │   ├── pet.js       #   Optional desktop companion that shows agent status
 │   ├── updater.js   #   Update checks, download, checksum and install (update-install.js)
 │   ├── menu.js      #   Native OS menu bar

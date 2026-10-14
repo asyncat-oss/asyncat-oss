@@ -9,7 +9,7 @@ This directory contains the Electron main-process code that wraps the asyncat de
 | `shortcut-config.js`, `shortcut-config.test.js` | Defaults and validation for those shortcuts, and their tests |
 | `backend.js` | Spawns `den/src/index.js` with the bundled Node.js (packaged) or the system Node.js (dev), using `den/` or the user-data folder as its working directory. Polls `/health`, auto-restarts after crashes, writes `logs/backend-process.log`. With `--external-backend` (used by `npm run electron:dev`) it waits for the watch-mode dev backend instead |
 | `window.js` | Creates the `BrowserWindow` and the loading screen shown while the backend starts |
-| `tray.js` | System tray icon. Left-click opens quick chat; the menu has Show, Cats, Restart Backend and Quit (on Linux the menu is always attached, since most desktops don't pass clicks on) |
+| `tray.js`, `tray-menu.js` (with tests) | System tray icon. Left-click opens Quick ask; the menu has Show, Cats, Restart Backend and Quit, plus Quick ask on Linux (where the menu is always attached, since most desktops don't pass clicks on) |
 | `background.js` | Whether closing the window quits or leaves Asyncat in the tray for Cats (`userData/background.json`, Settings → Background), the one-time "still running" notice, and starting at login hidden in the tray (`--hidden`; on Linux `~/.config/autostart/asyncat.desktop`) |
 | `background-config.js`, `background-config.test.js` | The rules and file formats behind `background.js`, and their tests |
 | `hostBridge.js` | Long-polls the backend for notifications and requests only the desktop app can serve (see `den/src/lib/hostBridge.js`); the backend also reports how many Cats are on |
@@ -18,7 +18,9 @@ This directory contains the Electron main-process code that wraps the asyncat de
 | `browserTabsStore.js`, `browserTabsStore.test.js` | Saves the user's Standard tabs and reopens them asleep at the next start (never Incognito, agent or Cat tabs), and their tests |
 | `browserCdp.js`, `browserSnapshot.js` (with tests) | How agents read and use a page: the DevTools protocol, and the page outline with element references |
 | `secretKey.js` | The key that encrypts saved API keys and tokens, locked by the system keychain (handed to the backend at start) |
-| `popup.js`, `popup.html`, `popup-preload.js` | Quick-chat popup (tray left-click or the quick-ask shortcut, `Cmd/Ctrl+Shift+Space` by default) |
+| `quick.js`, `quick-preload.js` | Quick ask: a frameless window showing the app's `/quick` page (`neko/src/quick/`), made on first use and then hidden and shown. Opens from the tray, the quick-ask shortcut (`Cmd/Ctrl+Shift+Space` by default) or `--quick-ask` (for Wayland desktops, where global shortcuts may not reach apps); answers stream in it and are saved as chats |
+| `quick-geometry.js`, `quick-geometry.test.js` | Its size, position and show/hide rules, and their tests |
+| `navigation.js`, `navigation.test.js` | Keeps the main and Quick ask windows on the app's pages; other links open in the system browser |
 | `pet.js`, `pet.html`, `pet-preload.js` | Optional always-on-top desktop companion that shows agent status |
 | `menu.js` | Native OS menu bar with keyboard shortcuts |
 | `preload.js` | Context-isolated bridge between the renderer and main process |
@@ -29,6 +31,29 @@ This directory contains the Electron main-process code that wraps the asyncat de
 | `update-check.js`, `update-check.test.js` | Cached release checks (ETag, saved in `update-check.json`) so checks don't use up GitHub's hourly limit, and their tests |
 | `icon.js` | Lets users pick or upload the running app icon (Dock, window, tray) |
 | `constants.js` | Shared paths, ports, and platform flags |
+
+## Quick ask on Wayland
+
+Wayland doesn't let an app place its own windows, so the desktop decides
+where Quick ask goes. Global shortcuts may not reach the app either: bind the
+command that **Settings → Appearance** shows (it ends in `--quick-ask`) in
+the desktop's keyboard settings instead.
+
+On Hyprland the window floats (it has a fixed size), but Hyprland keeps a
+floating window centred when it changes size, so the input moves up as an
+answer comes in and back down after `Ctrl+N`. This is a known limitation: no
+window rule can pin the top edge, and a resizable window doesn't help
+(Hyprland then ignores the size the app asks for and tiles the window). A
+rule still keeps it on every workspace without a border. With a Lua config
+(`hyprland.lua`):
+
+```lua
+hl.window_rule({ match = { title = "^(Asyncat Quick ask)$" }, float = true, pin = true, decorate = false })
+hl.bind("SUPER + SHIFT + Space", hl.dsp.exec_cmd("/path/to/Asyncat.AppImage --quick-ask"))
+```
+
+With a `hyprland.conf`, write the same rule (match the title, float, pin, no
+decorations) and binding in your version's syntax.
 
 ## Testing updates by hand
 
