@@ -3,6 +3,7 @@
 // Standardized process execution, binary detection, path safety, and timeouts.
 
 import { spawn, spawnSync } from 'child_process';
+import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { childEnv } from '../childEnv.js';
@@ -92,10 +93,52 @@ export function clampInt(value, fallback, min, max) {
 
 // ── Path safety ────────────────────────────────────────────────────────────
 
+/**
+ * The real path of `target`, links followed, also for a path that doesn't
+ * exist yet: the real path of the nearest folder that does, plus the rest.
+ * A link whose target is missing is followed too, since writing through it
+ * would create its target. Throws when links go round in circles.
+ */
+export function realPathOf(target, hops = 0) {
+  if (hops > 40) throw new Error(`Too many links in ${target}`);
+  const resolved = path.resolve(target);
+  const rest = [];
+  let current = resolved;
+  for (;;) {
+    try {
+      return path.join(fs.realpathSync(current), ...rest);
+    } catch { /* missing, or a link to something missing */ }
+    let link = null;
+    try {
+      if (fs.lstatSync(current).isSymbolicLink()) link = fs.readlinkSync(current);
+    } catch { /* missing */ }
+    if (link !== null) return realPathOf(path.resolve(path.dirname(current), link, ...rest), hops + 1);
+    const parent = path.dirname(current);
+    if (parent === current) return resolved;
+    rest.unshift(path.basename(current));
+    current = parent;
+  }
+}
+
+/**
+ * `filePath` resolved in `workingDir`, which it must stay inside. Links are
+ * followed for the check: den's file tools run outside the command sandbox,
+ * so a link in the project (one a sandboxed command made, say) must not lead
+ * them to ~/.ssh or ~/.bashrc.
+ */
 export function safePath(filePath, workingDir) {
   const resolved = path.resolve(workingDir, filePath);
   if (!isPathInside(resolved, workingDir)) {
     throw new Error(`Path "${filePath}" is outside the working directory`);
+  }
+  let real;
+  try {
+    real = realPathOf(resolved);
+  } catch {
+    throw new Error(`Path "${filePath}" goes through too many links`);
+  }
+  if (!isPathInside(real, realPathOf(workingDir))) {
+    throw new Error(`Path "${filePath}" is a link to somewhere outside the working directory`);
   }
   return resolved;
 }
