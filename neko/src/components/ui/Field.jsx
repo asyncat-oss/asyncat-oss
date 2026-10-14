@@ -1,7 +1,8 @@
 import { forwardRef } from 'react';
 import PropTypes from 'prop-types';
 
-const CONTROL = 'w-full rounded-lg border border-line-strong bg-canvas px-3 text-[13px] text-fg outline-none transition-[border-color,box-shadow] placeholder:text-fg-subtle focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:opacity-60';
+/** The look of a text field, for controls that can't use Input itself. */
+export const CONTROL_CLASS = 'w-full rounded-lg border border-line-strong bg-canvas px-3 text-[13px] text-fg outline-none transition-[border-color,box-shadow] placeholder:text-fg-subtle focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:opacity-60';
 
 /** A labelled form row: label on top, the control, then an optional hint. */
 export function Field({ label, hint, error, htmlFor, action = null, className = '', children }) {
@@ -31,14 +32,14 @@ Field.propTypes = {
 };
 
 export const Input = forwardRef(function Input({ className = '', ...rest }, ref) {
-  return <input ref={ref} className={`h-9 ${CONTROL} ${className}`} {...rest} />;
+  return <input ref={ref} className={`h-9 ${CONTROL_CLASS} ${className}`} {...rest} />;
 });
 
 Input.propTypes = { className: PropTypes.string };
 
 export const Select = forwardRef(function Select({ className = '', children, ...rest }, ref) {
   return (
-    <select ref={ref} className={`h-9 ${CONTROL} pr-8 ${className}`} {...rest}>
+    <select ref={ref} className={`h-9 ${CONTROL_CLASS} pr-8 ${className}`} {...rest}>
       {children}
     </select>
   );
