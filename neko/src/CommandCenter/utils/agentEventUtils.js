@@ -1,3 +1,5 @@
+import { currentToolName } from './toolNames.js';
+
 function normalizeAgentToolRows(rows = []) {
   return rows.map(row => ({
     tool: row.tool_name || row.tool,
@@ -312,14 +314,16 @@ function buildSearchEvent(events = []) {
       }
     }
 
-    if ((tool === 'fetch_url' || tool === 'http_get' || tool === 'browse_url') && result?.success) {
+    // Pages the agent read: fetch_url, or the browser when it opened a URL.
+    const readTool = currentToolName(tool);
+    if ((readTool === 'fetch_url' || (readTool === 'preview_get_text' && ev.data?.args?.url)) && result?.success) {
       const url = result.url || result.finalUrl || ev.data?.args?.url;
       if (url && !seenUrls.has(url)) {
         seenUrls.add(url);
         sources.push({
           title: result.title || url,
           url,
-          snippet: result.content ? String(result.content).slice(0, 200) : '',
+          snippet: result.content || result.text ? String(result.content || result.text).slice(0, 200) : '',
           query: null,
           tool,
         });

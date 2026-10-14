@@ -65,6 +65,7 @@ import { ALWAYS_ALLOW_EVENT, ALWAYS_ALLOW_KEY, alwaysAllowedChatTools } from "..
 import { FOLLOW_UP_EVENT } from "./components/renderers/interactiveEvents.js";
 import { linkedMessageId } from "../sidebar/chatSearch.js";
 import { TEMPORARY_CHAT, engineForChat } from "./utils/temporaryChat.js";
+import { currentToolName } from "./utils/toolNames.js";
 
 import { buildConversationSourceCatalog } from "./utils/conversationUtils.js";
 import {
@@ -1439,7 +1440,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
           const resultTool = event.data?.tool || '';
           if (
             resultTool.startsWith('git_') ||
-            ['write_file', 'create_file', 'edit_file', 'create_directory', 'file_delete', 'delete_file', 'file_copy', 'copy_file', 'file_move', 'move_file', 'run_command', 'run_python', 'run_node'].includes(resultTool)
+            ['write_file', 'create_file', 'edit_file', 'apply_patch', 'create_directory', 'file_delete', 'delete_file', 'file_copy', 'copy_file', 'file_move', 'move_file', 'run_command', 'run_python', 'run_node'].includes(currentToolName(resultTool))
           ) {
             refreshGitState();
           }

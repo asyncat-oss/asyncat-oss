@@ -7,9 +7,10 @@ import {
 import { agentApi, gitApi } from '../../api';
 import Portal from '../../../components/Portal';
 import UnifiedDiffViewer from '../code/UnifiedDiffViewer';
+import { currentToolName, editedPaths } from '../../utils/toolNames.js';
 
 const FILE_WRITE_TOOLS  = new Set(['write_file', 'create_file']);
-const FILE_EDIT_TOOLS   = new Set(['edit_file']);
+const FILE_EDIT_TOOLS   = new Set(['edit_file', 'apply_patch']);
 const FILE_DELETE_TOOLS = new Set(['file_delete', 'delete_file']);
 const FILE_CREATE_TOOLS = new Set(['create_directory']);
 const FILE_COPY_TOOLS   = new Set(['file_copy', 'copy_file']);
@@ -57,7 +58,7 @@ export function extractChanges(events) {
 
   for (const ev of events) {
     if (ev.type !== 'tool_start') continue;
-    const tool = ev.data?.tool;
+    const tool = currentToolName(ev.data?.tool);
     const args = ev.data?.args || {};
     const succeeded = ev.result !== undefined && !ev.result?.error && ev.result?.success !== false;
 
@@ -70,8 +71,10 @@ export function extractChanges(events) {
 
     if (FILE_WRITE_TOOLS.has(tool) && args.path) {
       seen.set(args.path, { ...base, type: ev.result?.action === 'created' ? 'created' : 'written', path: args.path });
-    } else if (FILE_EDIT_TOOLS.has(tool) && args.path) {
-      if (!seen.has(args.path)) seen.set(args.path, { ...base, type: 'edited', path: args.path });
+    } else if (FILE_EDIT_TOOLS.has(tool)) {
+      for (const filePath of editedPaths(tool, args, ev.result)) {
+        if (!seen.has(filePath)) seen.set(filePath, { ...base, type: 'edited', path: filePath });
+      }
     } else if (FILE_DELETE_TOOLS.has(tool) && args.path) {
       seen.set(args.path, { ...base, type: 'deleted', path: args.path });
     } else if (FILE_CREATE_TOOLS.has(tool) && args.path) {

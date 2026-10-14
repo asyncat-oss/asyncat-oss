@@ -5,7 +5,8 @@ import {
   Search, Pencil, Trash2, List, Zap, FilePlus, FileDown,
   FileText, LayoutList, ShieldAlert, MessageCircle, Send, GitBranch,
   ShieldOff, Brain, RotateCcw, Link2, Image, ExternalLink, Copy, Volume2, Square, Loader2 as Spinner, Download, Mic, SkipBack, SkipForward,
-  AlertTriangle, RefreshCw, TimerOff, AlertCircle, Palette, Bell, Eye, Lock, Wrench, Check, ChevronLeft, Plug
+  AlertTriangle, RefreshCw, TimerOff, AlertCircle, Palette, Bell, Eye, Lock, Wrench, Check, ChevronLeft, Plug,
+  MousePointerClick, Keyboard, AppWindow, Hand, Code2,
 } from 'lucide-react';
 import { audioApi } from '../../../Settings/settingApi.js';
 import { filesApi, agentApi } from '../../api';
@@ -23,6 +24,7 @@ import AskUserForm from './AskUserForm.jsx';
 import SkillSuggestionCard from './SkillSuggestionCard.jsx';
 import useSkillSuggestions from '../../hooks/useSkillSuggestions.js';
 import { placeSkillSuggestions } from '../../utils/skillSuggestions.js';
+import { currentToolName } from '../../utils/toolNames.js';
 
 // ── Inline @mention rendering ─────────────────────────────────────────────────
 function renderGoalWithMentions(goal = "", fileAttachments = []) {
@@ -60,7 +62,10 @@ const TOOL_META = {
   list_directory:    { icon: FolderOpen,  label: 'List directory' },
   search_files:      { icon: Search,      label: 'Search files' },
   find_files:        { icon: Search,      label: 'Find files' },
-  glob_find:         { icon: Search,      label: 'Find files' },
+  apply_patch:       { icon: Pencil,      label: 'Edit files' },
+  list_definitions:  { icon: List,        label: 'List definitions' },
+  find_definition:   { icon: Search,      label: 'Find definition' },
+  code_search:       { icon: Search,      label: 'Search code' },
   file_diff:         { icon: FileText,    label: 'File diff' },
   move_file:         { icon: File,        label: 'Move file' },
   copy_file:         { icon: File,        label: 'Copy file' },
@@ -89,12 +94,31 @@ const TOOL_META = {
   delegate_task:      { icon: Brain,       label: 'Delegate task' },
   web_search:        { icon: Globe,       label: 'Web search' },
   browse_website:    { icon: Globe,       label: 'Browse URL' },
+  fetch_url:         { icon: Globe,       label: 'Read web page' },
   search_images:     { icon: Image,       label: 'Search images' },
   inspect_attachment:{ icon: File,        label: 'Inspect attachment' },
-  image_describe:    { icon: Image,       label: 'Inspect image' },
   generate_image:    { icon: Image,       label: 'Generated image' },
   edit_image:        { icon: Image,       label: 'Edited image' },
-  screenshot_page:   { icon: Image,       label: 'Screenshot page' },
+  // Browser
+  preview_navigate:  { icon: Globe,       label: 'Open page' },
+  preview_go_back:   { icon: Globe,       label: 'Go back' },
+  preview_snapshot:  { icon: Eye,         label: 'Read page' },
+  preview_get_text:  { icon: FileText,    label: 'Read page text' },
+  preview_screenshot:{ icon: Image,       label: 'Screenshot page' },
+  preview_click:     { icon: MousePointerClick, label: 'Click' },
+  preview_hover:     { icon: MousePointerClick, label: 'Hover' },
+  preview_type:      { icon: Keyboard,    label: 'Type' },
+  preview_fill:      { icon: Keyboard,    label: 'Fill form' },
+  preview_press_key: { icon: Keyboard,    label: 'Press key' },
+  preview_select_option: { icon: List,    label: 'Choose option' },
+  preview_scroll:    { icon: Globe,       label: 'Scroll' },
+  preview_evaluate:  { icon: Code2,       label: 'Run script in page' },
+  preview_wait_for_reload: { icon: RefreshCw, label: 'Wait for reload' },
+  preview_list_tabs: { icon: AppWindow,   label: 'List tabs' },
+  preview_open_tab:  { icon: AppWindow,   label: 'Open tab' },
+  preview_switch_tab:{ icon: AppWindow,   label: 'Switch tab' },
+  preview_close_tab: { icon: AppWindow,   label: 'Close tab' },
+  preview_ask_user:  { icon: Hand,        label: 'Hand page to you' },
   remember:          { icon: BookMarked,  label: 'Remember' },
   save_memory:       { icon: BookMarked,  label: 'Save memory' },
   recall_memory:     { icon: BookMarked,  label: 'Recall memory' },
@@ -135,7 +159,8 @@ function connectorToolMeta(toolName) {
 }
 
 function getToolMeta(toolName) {
-  return TOOL_META[toolName] || connectorToolMeta(toolName) || { icon: Zap, label: toolName };
+  // Old chats name merged tools by their old names (see utils/toolNames.js).
+  return TOOL_META[toolName] || TOOL_META[currentToolName(toolName)] || connectorToolMeta(toolName) || { icon: Zap, label: toolName };
 }
 
 function truncateArgs(args) {
@@ -158,6 +183,7 @@ function formatCountdown(ms) {
 function getToolIntent(data) {
   const args = data?.args || {};
   const { label } = getToolMeta(data?.tool);
+  const tool = currentToolName(data?.tool);
 
   if (data?.tool === 'todo_write' && Array.isArray(args.todos)) {
     const complete = args.todos.filter(item => item?.status === 'completed').length;
@@ -178,18 +204,37 @@ function getToolIntent(data) {
     return { label: data?.tool === 'run_python' ? 'Run this Python' : 'Run this code', value: args.code.trim(), kind: 'code' };
   }
   if (typeof args.path === 'string' && args.path.trim()) {
-    const verb = data?.tool === 'write_file' ? 'Write this file'
-      : data?.tool === 'edit_file' ? 'Edit this file'
-        : data?.tool === 'file_delete' || data?.tool === 'delete_file' ? 'Delete this file'
+    const verb = tool === 'write_file' ? 'Write this file'
+      : tool === 'edit_file' ? 'Edit this file'
+        : tool === 'file_delete' || tool === 'delete_file' ? 'Delete this file'
           : label;
     return { label: verb, value: args.path.trim(), kind: 'path' };
+  }
+  if (tool === 'apply_patch') {
+    const files = Array.isArray(args.edits) ? [...new Set(args.edits.map(edit => edit?.path).filter(Boolean))] : [];
+    return { label: 'Edit these files', value: files.length ? files.join(', ') : 'A patch', kind: 'description' };
+  }
+  if (typeof args.url === 'string' && args.url.trim()) {
+    return { label, value: args.url.trim(), kind: 'url' };
+  }
+  if (tool === 'preview_fill' && Array.isArray(args.fields)) {
+    return { label, value: `${args.fields.length} ${args.fields.length === 1 ? 'field' : 'fields'}`, kind: 'description' };
+  }
+  if (tool === 'preview_press_key' && typeof args.key === 'string') {
+    return { label, value: args.key, kind: 'description' };
+  }
+  if (tool.startsWith('preview_') && (args.ref || args.selector)) {
+    return { label, value: args.selector || `Element ${args.ref}`, kind: 'description' };
   }
   if (typeof args.query === 'string' && args.query.trim()) {
     return { label: 'Search for this', value: args.query.trim(), kind: 'query' };
   }
-  if (typeof data?.description === 'string' && data.description.trim()) {
-    return { label, value: data.description.trim(), kind: 'description' };
+  // "Execute tool … with args: {}" is the backend's fallback; the label says it better.
+  const description = typeof data?.description === 'string' ? data.description.trim() : '';
+  if (description && !description.startsWith('Execute tool "')) {
+    return { label, value: description, kind: 'description' };
   }
+  if (!Object.keys(args).length) return { label, value: '', kind: 'tool' };
 
   return { label, value: truncateArgs(args) || `Use ${data?.tool || 'tool'}`, kind: 'tool' };
 }
@@ -447,7 +492,7 @@ function ThinkingEvent({ data }) {
   );
 }
 
-const FILE_WRITE_TOOLS = new Set(['write_file', 'edit_file', 'create_file', 'search_replace', 'apply_search_replace']);
+const FILE_WRITE_TOOLS = new Set(['write_file', 'edit_file', 'create_file']);
 
 function ToolEvent({ data, result, onRetryTool, framed = true, progress = '' }) {
   const [expanded, setExpanded] = useState(false);
@@ -461,7 +506,7 @@ function ToolEvent({ data, result, onRetryTool, framed = true, progress = '' }) 
   const canReveal = window.electronAPI?.shellShowInFolder
     && !isPending && !isError
     && intent.kind === 'path' && intent.value
-    && FILE_WRITE_TOOLS.has(data?.tool);
+    && FILE_WRITE_TOOLS.has(currentToolName(data?.tool));
 
   const content = (
     <div className="group rounded-md px-2 py-2 transition-colors hover:bg-hover">
@@ -487,7 +532,7 @@ function ToolEvent({ data, result, onRetryTool, framed = true, progress = '' }) 
             )}
           </button>
 
-          <div className="mt-0.5 flex items-center gap-2 pl-5">
+          {intent.value && <div className="mt-0.5 flex items-center gap-2 pl-5">
             <p className="min-w-0 truncate text-[11px] text-fg-subtle">
               {intent.value}
             </p>
@@ -502,7 +547,7 @@ function ToolEvent({ data, result, onRetryTool, framed = true, progress = '' }) 
                 Show
               </button>
             )}
-          </div>
+          </div>}
 
           {/* Streaming progress output (shown while running) */}
           {isPending && progress && (
@@ -896,40 +941,40 @@ function ImageResultCard({ result }) {
 }
 
 function ScreenshotResultCard({ result }) {
-  const src = result?.image;
+  const [open, setOpen] = useState(false);
+  const src = result?.image || result?.dataUrl;
   const url = result?.url;
   if (!result?.success || !src) return null;
+  const extension = /^data:image\/jpeg/.test(src) ? 'jpg' : 'png';
 
   return (
     <div className="mt-1.5 mb-3 ml-7 max-w-xl">
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900/50 midnight:border-slate-700 midnight:bg-slate-900/50">
-        <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-3 py-2 dark:border-gray-800 midnight:border-slate-800">
+      <div className="overflow-hidden rounded-lg border border-line bg-surface">
+        <div className="flex items-center justify-between gap-3 border-b border-line px-3 py-2">
           <div className="min-w-0">
-            <div className="truncate text-xs font-semibold text-gray-700 dark:text-gray-200 midnight:text-slate-200">
-              Screenshot
-            </div>
-            {url && (
-              <div className="mt-0.5 text-[10px] text-fg-subtle truncate">{url}</div>
-            )}
+            <div className="truncate text-xs font-medium text-fg">Screenshot</div>
+            {url && <div className="mt-0.5 truncate text-[11px] text-fg-subtle">{url}</div>}
           </div>
           <a
             href={src}
-            download="screenshot.png"
-            className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
+            download={`screenshot.${extension}`}
+            className="inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-hover hover:text-fg"
             title="Download screenshot"
+            aria-label="Download screenshot"
           >
             <Download className="h-4 w-4" />
           </a>
         </div>
         <button
           type="button"
-          onClick={() => window.open(src, '_blank', 'noopener,noreferrer')}
-          className="block w-full bg-gray-50 p-2 dark:bg-gray-950/60 midnight:bg-slate-950/60"
+          onClick={() => setOpen(true)}
+          className="block w-full bg-canvas p-2"
           title="Open screenshot"
         >
-          <img src={src} alt="Page screenshot" className="max-h-96 w-full rounded-lg object-contain" />
+          <img src={src} alt="Page screenshot" className="max-h-96 w-full rounded-md object-contain" />
         </button>
       </div>
+      {open && <ImageLightbox url={src} name="Screenshot" onClose={() => setOpen(false)} />}
     </div>
   );
 }
@@ -1126,7 +1171,7 @@ function ToolsSection({ events, onPermissionDecision, onRetryTool }) {
               if (ev.type === 'tool_start') {
                 const hasAudioResult = ev.data?.tool === 'speak_text' && ev.result?.success && ev.result?.path;
                 const hasImageResult = (ev.data?.tool === 'generate_image' || ev.data?.tool === 'edit_image') && ev.result?.success && (ev.result?.media || ev.result?.image);
-                const hasScreenshotResult = (ev.data?.tool === 'screenshot_page' || ev.data?.tool === 'take_screenshot') && ev.result?.success && ev.result?.image;
+                const hasScreenshotResult = ['preview_screenshot', 'take_screenshot'].includes(currentToolName(ev.data?.tool)) && ev.result?.success && (ev.result?.image || ev.result?.dataUrl);
                 return (
                   <div key={i}>
                     <ToolEvent data={ev.data} result={ev.result} onRetryTool={onRetryTool} framed={false} progress={ev.progress} />

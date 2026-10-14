@@ -39,13 +39,11 @@ const ALL_OS = ['mac', 'linux', 'win'];
 const TOOL_OS_INFO = {
   // macOS + Linux only — no Windows implementation
   screen_key:         { platforms: ['mac', 'linux'], deps: { mac: 'osascript (built-in)', linux: 'xdotool (apt install xdotool)' } },
-  key_sequence:       { platforms: ['mac', 'linux'], deps: { mac: 'osascript (built-in)', linux: 'xdotool (apt install xdotool)' } },
   // All platforms — needs external tool on some
   take_screenshot:    { platforms: ALL_OS, deps: { mac: 'screencapture (built-in)', linux: 'scrot or gnome-screenshot', win: 'PowerShell (built-in)' } },
   screen_read:        { platforms: ALL_OS, deps: { mac: 'Tesseract (brew install tesseract)', linux: 'Tesseract (apt install tesseract-ocr)', win: 'Tesseract (installer)' } },
   screen_click:       { platforms: ALL_OS, deps: { mac: 'cliclick (brew install cliclick)', linux: 'xdotool (apt install xdotool)', win: 'PowerShell (built-in)' } },
   screen_type:        { platforms: ALL_OS, deps: { mac: 'cliclick (brew install cliclick)', linux: 'xdotool (apt install xdotool)', win: 'PowerShell (built-in)' } },
-  screen_find_window: { platforms: ALL_OS, deps: { mac: 'osascript (built-in)', linux: 'xdotool (apt install xdotool)', win: 'PowerShell (built-in)' } },
   window_list:        { platforms: ALL_OS, deps: { mac: 'osascript (built-in)', linux: 'xdotool (apt install xdotool)', win: 'PowerShell (built-in)' } },
   window_focus:       { platforms: ALL_OS, deps: { mac: 'osascript (built-in)', linux: 'xdotool (apt install xdotool)', win: 'PowerShell (built-in)' } },
   active_app:         { platforms: ALL_OS, deps: { mac: 'osascript (built-in)', linux: 'xdotool (apt install xdotool)', win: 'PowerShell (built-in)' } },
