@@ -100,6 +100,8 @@ export async function voiceStatus() {
     stt = {
       provider: 'local',
       engine: Boolean(whisperBinary.found),
+      // Where the engine was found: Asyncat's copy, a set path, or on PATH.
+      enginePath: whisperBinary.found ? whisperBinary.path || null : null,
       model: model ? { path: model, name: whisperLabel(model) } : null,
       ready: Boolean(whisperBinary.found && model),
       reason: !whisperBinary.found ? 'needs_engine' : !model ? 'needs_model' : null,
@@ -126,6 +128,7 @@ export async function voiceStatus() {
     speak = {
       provider: 'local',
       engine: Boolean(piperBinary.found),
+      enginePath: piperBinary.found ? piperBinary.path || null : null,
       voice: voice ? { path: voice, id: catalogVoiceId(voice), name: voiceLabel(voice) } : null,
       ready: Boolean(piperBinary.found && voice),
       reason: !piperBinary.found ? 'needs_engine' : !voice ? 'needs_voice' : null,

@@ -88,6 +88,8 @@ export async function imageStatus() {
     return {
       provider,
       engine: Boolean(engine.found),
+      // Where stable-diffusion.cpp was found: Asyncat's copy, a set path, or on PATH.
+      enginePath: engine.found ? engine.binaryPath || null : null,
       model: model ? { path: model, name: modelLabel(model) } : null,
       ready: Boolean(local || comfy.found),
       reason: comfy.found ? null : !engine.found ? 'needs_engine' : !model ? 'needs_model' : null,

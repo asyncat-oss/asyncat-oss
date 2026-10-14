@@ -455,6 +455,8 @@ test('status says whether each local engine has its model loaded (B4)', async ()
   let status = await voice.voiceStatus();
   assert.equal(status.stt.running, 'ready');
   assert.equal(status.tts.running, 'ready');
+  assert.equal(status.stt.enginePath, fakeWhisper, 'and where each engine was found');
+  assert.equal(status.tts.enginePath, fakePiper);
   await tts.stopTts();
   status = await voice.voiceStatus();
   assert.equal(status.tts.running, 'idle', 'freed, and still chosen');
@@ -664,6 +666,7 @@ test('trying an image takes its options and says what it made (B1)', async () =>
 test('image status carries the defaults and samplers of the engine that draws (B7)', async () => {
   let status = await images.imageStatus();
   assert.equal(status.model.name, 'dreamshaper_8.safetensors');
+  assert.equal(status.enginePath, fakeSd);
   assert.deepEqual(status.defaults, { width: 512, height: 512, steps: 24, cfg: 7 });
   assert.ok(status.samplers.includes('euler_a'));
   assert.deepEqual(status.schedulers, [], 'stable-diffusion.cpp has no scheduler to pick');
