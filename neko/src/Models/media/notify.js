@@ -3,7 +3,9 @@
 // a reload. Call these after every choice, finished setup, delete, add and
 // finished download.
 
-export const VOICE_EVENTS = ['asyncat-voice-changed', 'asyncat-audio-models-updated', 'asyncat-model-runtime-updated'];
+/** The engines (whisper.cpp, Piper, stable-diffusion.cpp) changed: their rows look again. */
+export const ENGINES_EVENT = 'asyncat-model-runtime-updated';
+export const VOICE_EVENTS = ['asyncat-voice-changed', 'asyncat-audio-models-updated', ENGINES_EVENT];
 export const IMAGE_EVENTS = ['asyncat-visual-models-updated'];
 /** A download started somewhere on the page (a Hugging Face file, say). */
 export const DOWNLOADS_EVENT = 'asyncat-model-downloads-updated';
@@ -19,6 +21,10 @@ export function notifyVoiceChanged() {
 
 export function notifyImagesChanged() {
   dispatch(IMAGE_EVENTS);
+}
+
+export function notifyEnginesChanged() {
+  dispatch([ENGINES_EVENT]);
 }
 
 export function notifyDownloadsChanged() {

@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { notifyDownloadsChanged, notifyForSubDir, notifyImagesChanged, notifyVoiceChanged, onEvents } from './notify.js';
+import {
+  notifyDownloadsChanged, notifyEnginesChanged, notifyForSubDir, notifyImagesChanged, notifyVoiceChanged, onEvents,
+} from './notify.js';
 
 function fakeWindow() {
   const target = new EventTarget();
@@ -24,7 +26,8 @@ test('voice and image changes reach every screen that listens', (t) => {
   seen.length = 0;
   notifyImagesChanged();
   notifyDownloadsChanged();
-  assert.deepEqual(seen, ['asyncat-visual-models-updated', 'asyncat-model-downloads-updated']);
+  notifyEnginesChanged();
+  assert.deepEqual(seen, ['asyncat-visual-models-updated', 'asyncat-model-downloads-updated', 'asyncat-model-runtime-updated']);
   seen.length = 0;
   notifyForSubDir('audio/tts');
   notifyForSubDir('image');

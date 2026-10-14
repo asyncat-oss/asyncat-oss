@@ -20,7 +20,7 @@ import { FirstRunAction, FirstRunIntro, OfflineNotice, StatusLines } from './Set
 import VoiceGroup from './VoiceGroup.jsx';
 import { mediaApi } from './mediaApi.js';
 import { baseName, userLanguage } from './mediaFormat.js';
-import { notifyVoiceChanged, onEvents } from './notify.js';
+import { notifyEnginesChanged, notifyVoiceChanged, onEvents } from './notify.js';
 import { useDownloads } from './useDownloads.js';
 import { useMediaSetup } from './useMediaSetup.js';
 import { useModelFiles } from './useModelFiles.js';
@@ -43,7 +43,7 @@ function groupSteps(rows, kind) {
   return steps.engine || steps.file ? steps : null;
 }
 
-function VoiceSettings({ highlight }) {
+function VoiceSettings({ highlight, refreshKey }) {
   const toast = useToast();
   const scope = useContext(ChooserScopeContext);
   const { online } = useNetworkStatus();
@@ -213,6 +213,13 @@ function VoiceSettings({ highlight }) {
     await Promise.all([reload(), reloadFiles()]);
   }, [reload, reloadFiles]);
 
+  // The page's Refresh: settings, files and engines again.
+  useEffect(() => {
+    if (!refreshKey) return;
+    changed();
+    notifyEnginesChanged();
+  }, [refreshKey, changed]);
+
   const group = (kind) => (
     <VoiceGroup
       kind={kind}
@@ -297,19 +304,20 @@ function VoiceSettings({ highlight }) {
   );
 }
 
-VoiceSettings.propTypes = { highlight: PropTypes.object };
+VoiceSettings.propTypes = { highlight: PropTypes.object, refreshKey: PropTypes.number };
 
 /**
- *   <VoicePage highlight={{ id: 'voice-file-whisper-…', at: Date.now() }} />
+ *   <VoicePage highlight={{ id: 'voice-file-whisper-…', at: Date.now() }} refreshKey={count} />
  *
- * `highlight` flashes a row of Model files, for a search that jumps here.
+ * `highlight` flashes a row of Model files, for a search that jumps here; a
+ * new `refreshKey` (the page's Refresh) loads everything again.
  */
-export default function VoicePage({ highlight = null }) {
+export default function VoicePage({ highlight = null, refreshKey = 0 }) {
   return (
     <ChooserScope>
-      <VoiceSettings highlight={highlight} />
+      <VoiceSettings highlight={highlight} refreshKey={refreshKey} />
     </ChooserScope>
   );
 }
 
-VoicePage.propTypes = { highlight: PropTypes.object };
+VoicePage.propTypes = { highlight: PropTypes.object, refreshKey: PropTypes.number };

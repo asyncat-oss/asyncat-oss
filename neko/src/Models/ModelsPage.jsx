@@ -99,6 +99,7 @@ const ModelsPage = () => {
   const [visualModels, setVisualModels] = useState({ image: [] });
   const [highlightedItem, setHighlightedItem] = useState(null);
   const [voiceHighlight, setVoiceHighlight] = useState(null);
+  const [refreshCount, setRefreshCount] = useState(0);
   const [galleryKey, setGalleryKey] = useState(0);
   const [usageRange, setUsageRange] = useState('30d');
   const [modelUsage, setModelUsage] = useState(null);
@@ -305,6 +306,7 @@ const ModelsPage = () => {
     loadEngineData({ clearActions: true });
     loadEngineCatalog(true);
     loadProviderData();
+    setRefreshCount((count) => count + 1);
   };
 
   const audioAssetCount = audioModels.whisper.length + audioModels.tts.length;
@@ -488,7 +490,7 @@ const ModelsPage = () => {
               </>
             )}
 
-            {activeTab === 'audio' && <VoicePage highlight={voiceHighlight} />}
+            {activeTab === 'audio' && <VoicePage highlight={voiceHighlight} refreshKey={refreshCount} />}
 
             {activeTab === 'image' && (
               <>
