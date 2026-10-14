@@ -1,10 +1,13 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import PropTypes from 'prop-types';
 import { X } from 'lucide-react';
+import { backdropCloses, isTopLayer, useLayer } from './floating.js';
 
 /**
- * A centred modal dialog. Escape and a click on the backdrop close it.
+ * A centred modal dialog. Escape and a click on the backdrop close it, unless
+ * something is open on top of it: with a Select open in it, or dialogs
+ * stacked, they close only the top one.
  *
  *   <Dialog open title="Connect OpenAI" description="…" onClose={close}
  *     footer={<Button variant="primary">Save</Button>}>
@@ -26,6 +29,11 @@ export default function Dialog({
   children,
 }) {
   const panelRef = useRef(null);
+  const layerRef = useLayer(open, panelRef);
+  const onCloseRef = useRef(onClose);
+  useLayoutEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -33,9 +41,9 @@ export default function Dialog({
     const target = panelRef.current?.querySelector('[autofocus], input:not([type="hidden"]), select, textarea, button');
     target?.focus({ preventScroll: true });
     const onKeyDown = (event) => {
-      if (event.key === 'Escape') {
+      if (event.key === 'Escape' && isTopLayer(layerRef.current)) {
         event.stopPropagation();
-        onClose?.();
+        onCloseRef.current?.();
       }
     };
     document.addEventListener('keydown', onKeyDown);
@@ -43,9 +51,8 @@ export default function Dialog({
       document.removeEventListener('keydown', onKeyDown);
       previous?.focus?.({ preventScroll: true });
     };
-    // Focus once per opening; onClose changes identity on every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+    // Focus once per opening.
+  }, [layerRef, open]);
 
   if (!open) return null;
 
@@ -54,8 +61,10 @@ export default function Dialog({
   return createPortal(
     <div
       className="fixed inset-0 z-[200] flex items-center justify-center bg-black/45 p-4 animate-[fadeIn_120ms_ease-out]"
+      // React runs this before useDismiss's document listener, so a list open
+      // in the dialog is still the top layer here and only it closes.
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose?.();
+        if (backdropCloses(event, layerRef.current)) onClose?.();
       }}
     >
       <Panel
