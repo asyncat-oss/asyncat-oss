@@ -49,7 +49,7 @@ function uriToRelativePath(uri, workspaceRoot) {
 
 export const lspFindDefinitionTool = {
   name: 'lsp_find_definition',
-  description: 'Find the compiler-accurate definition location of a symbol (function, class, variable, import) at a specific line and character position. Uses running language servers.',
+  description: 'Go from a usage to its definition with a language server, given the file, line and column where the name is used. Exact: it follows imports, aliases and overloads. To find a definition by name across the project, use find_definition; to read a function or class in a known file, ast_get_node.',
   category: 'code',
   permission: PermissionLevel.SAFE,
   parameters: {
@@ -120,7 +120,7 @@ export const lspFindDefinitionTool = {
 
 export const lspFindReferencesTool = {
   name: 'lsp_find_references',
-  description: 'Find all compiler-accurate usages and references of a symbol (function, class, variable, method) across the codebase. Uses language servers to avoid false positives.',
+  description: 'Find every usage of a symbol with a language server, given the file, line and column of the symbol. Exact (no same-named lookalikes). To search for a name without a position, use find_references.',
   category: 'code',
   permission: PermissionLevel.SAFE,
   parameters: {

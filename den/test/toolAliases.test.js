@@ -210,3 +210,23 @@ test('the old editing tools map onto edit_file and apply_patch', async () => {
   assert.equal(applied.success, true, applied.error);
   assert.match(fs.readFileSync(path.join(dir, 'plums.md'), 'utf8'), /Damsons and gages/);
 });
+
+test('a file outline is list_definitions; the definition tools say when to use which', async () => {
+  const dir = workspace();
+  fs.writeFileSync(path.join(dir, 'garden.js'), 'export function water(plants) {\n  return plants.length;\n}\nexport class Shed {}\n');
+  const resolved = toolRegistry.resolve('ast_view_outline', { path: 'garden.js' });
+  assert.deepEqual(resolved, { name: 'list_definitions', args: { path: 'garden.js' }, aliasOf: 'ast_view_outline' });
+  const outline = await toolRegistry.execute('ast_view_outline', { path: 'garden.js' }, { workingDir: dir });
+  assert.equal(outline.success, true, outline.error);
+  assert.ok(outline.definitions.functions.some((item) => item.name === 'water'));
+
+  const description = (name) => toolRegistry.get(name).description;
+  const lookups = ['find_definition', 'lsp_find_definition', 'ast_get_node'];
+  for (const name of lookups) {
+    const others = lookups.filter((other) => other !== name);
+    assert.ok(others.every((other) => description(name).includes(other)), `${name} should say when to use ${others.join(' or ')}`);
+  }
+  assert.match(description('find_references'), /lsp_find_references/);
+  assert.match(description('lsp_find_references'), /find_references/);
+  assert.match(description('code_search'), /find_definition/);
+});

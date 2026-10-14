@@ -8,6 +8,7 @@ import path from 'path';
 import { execFileSync } from 'child_process';
 import { PermissionLevel } from './toolRegistry.js';
 import { safePath, truncate, hasBin, IS_WIN } from './shared.js';
+import { fallbackRegexOutline } from './astTools.js';
 
 // ── Language-aware patterns ────────────────────────────────────────────────
 
@@ -185,9 +186,9 @@ function findReferences(rootDir, symbol, extensions, maxResults = 30) {
 export const codeSearchTool = {
   name: 'code_search',
   description:
-    'Search for code structures: function/class/method definitions, import/export statements, ' +
-    'interface/type definitions, and symbol references. More structured than grep — ' +
-    'understands programming language patterns.',
+    'Everything about a name in one call: where it is defined, imported, exported and used across the project, ' +
+    'with a text search as fallback. Narrow it with kind. For just the definition use find_definition, ' +
+    'for just the usages find_references, for plain text search_files.',
   category: 'file',
   permission: PermissionLevel.SAFE,
   parameters: {
@@ -362,8 +363,8 @@ export const codeSearchTool = {
 export const listDefinitionsTool = {
   name: 'list_definitions',
   description:
-    'List all definitions (functions, classes, interfaces, types) in a specific file. ' +
-    'Useful for understanding a file before editing it.',
+    'List the functions, classes, interfaces, types and imports in one file, with their line numbers. ' +
+    'Use it to find your way around a file before reading or editing it; then read_file just those lines, or ast_get_node for one function.',
   category: 'file',
   permission: PermissionLevel.SAFE,
   parameters: {
@@ -384,8 +385,20 @@ export const listDefinitionsTool = {
 
     const lang = detectLang(filePath);
     if (!lang || !LANG_PATTERNS[lang]) {
-      const ext = path.extname(filePath);
-      return { success: false, error: `Unsupported language for extension: ${ext}. Supported: ${Object.keys(LANG_PATTERNS).join(', ')}` };
+      // Ruby, C/C++ and other files: a simpler outline of classes and functions.
+      const ext = path.extname(filePath).toLowerCase();
+      const outline = fallbackRegexOutline(fs.readFileSync(filePath, 'utf8'), ext);
+      if (!outline.length) {
+        return { success: false, error: `Unsupported language for extension: ${ext}. Supported: ${Object.keys(LANG_PATTERNS).join(', ')}, ruby, c, c++` };
+      }
+      const pick = (types) => outline.filter(item => types.includes(item.type)).map(item => ({ name: item.name, line: item.start, preview: item.name }));
+      return {
+        success: true,
+        file: args.path,
+        language: ext.slice(1),
+        total: outline.length,
+        definitions: { functions: pick(['function', 'method']), classes: pick(['class']), interfaces: [], types: [], imports: [], exports: [], other: [] },
+      };
     }
 
     const config = LANG_PATTERNS[lang];
@@ -430,9 +443,9 @@ export const listDefinitionsTool = {
 export const findDefinitionTool = {
   name: 'find_definition',
   description:
-    'Quickly find where a function, class, variable, or type is defined. ' +
-    'More targeted than code_search — generates language-aware regex patterns. ' +
-    'Use when you know the symbol name but not which file it is in.',
+    'Find where a function, class, variable or type is defined, by name, across the whole project. ' +
+    'Use it when you know the name but not the file. From a usage (file, line and column) lsp_find_definition is exact; ' +
+    'to read the code of a function or class in a file you know, use ast_get_node.',
   category: 'file',
   permission: PermissionLevel.SAFE,
   parameters: {
@@ -550,7 +563,7 @@ export const findDefinitionTool = {
 
 export const findReferencesTool = {
   name: 'find_references',
-  description: 'Find all usages of a symbol (function, variable, class, constant) across the codebase. Returns file paths, line numbers, and context lines.',
+  description: 'Find the usages of a name (function, variable, class, constant) across the project by word match, with file paths, line numbers and context lines. From a known position (file, line, column) lsp_find_references is exact.',
   category: 'code',
   permission: PermissionLevel.SAFE,
   parameters: {

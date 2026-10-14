@@ -51,6 +51,9 @@ export const TOOL_ALIASES = {
     args: (old) => defined({ patch: text(old.patch_content), patch_path: text(old.patch_file), strip: old.strip, dry_run: old.dry_run }),
   },
 
+  // ── A file's outline: list_definitions answers what ast_view_outline did ──
+  ast_view_outline: { to: 'list_definitions', args: (old) => defined({ path: text(old.path) }) },
+
   // ── semantic_search was local_rag_search plus recall_memory ──
   semantic_search: {
     to: 'local_rag_search',

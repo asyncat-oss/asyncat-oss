@@ -1,7 +1,8 @@
 // den/src/agent/tools/astTools.js
 // ─── AST Code Analysis Tools ────────────────────────────────────────────────
-// JS/TS AST parsing via @babel/parser, Python AST parsing via Python standard lib,
-// and fallback regex parsers for other languages (Go, Rust, Ruby, Java, C++).
+// ast_get_node reads one function or class by name: JS/TS AST parsing via
+// @babel/parser, Python AST parsing via Python standard lib, and fallback
+// regex parsers for other languages (Go, Rust, Ruby, Java, C++).
 
 import fs from 'fs';
 import path from 'path';
@@ -89,7 +90,7 @@ except Exception as e:
 `;
 
 // Helper: Fallback Regex Outline for unsupported languages
-function fallbackRegexOutline(code, ext) {
+export function fallbackRegexOutline(code, ext) {
   const lines = code.split('\n');
   const outline = [];
   
@@ -172,104 +173,9 @@ function runPythonAst(filePath) {
   return res.stdout;
 }
 
-export const astViewOutlineTool = {
-  name: 'ast_view_outline',
-  description: 'Parse a source file (JavaScript, TypeScript, Python, Rust, Go, Java, Ruby, C++) to extract its structural outline (classes, methods, functions) with line ranges. Low-token alternative to reading the whole file.',
-  category: 'code',
-  permission: PermissionLevel.SAFE,
-  parameters: {
-    type: 'object',
-    properties: {
-      path: { type: 'string', description: 'File path relative to working directory' },
-    },
-    required: ['path'],
-  },
-  execute: async (args, context) => {
-    const filePath = safePath(args.path, context.workingDir);
-    if (!fs.existsSync(filePath)) {
-      return { success: false, error: `File not found: ${args.path}` };
-    }
-
-    const ext = path.extname(filePath).toLowerCase();
-    const code = fs.readFileSync(filePath, 'utf8');
-
-    // JS/TS parsing via Babel
-    if (['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs'].includes(ext)) {
-      try {
-        const ast = parseCode(code);
-        const outline = [];
-        traverse(ast, {
-          ClassDeclaration(node) {
-            outline.push({ type: 'class', name: node.id ? node.id.name : 'AnonymousClass', start: node.loc.start.line, end: node.loc.end.line });
-          },
-          FunctionDeclaration(node) {
-            if (node.id) outline.push({ type: 'function', name: node.id.name, start: node.loc.start.line, end: node.loc.end.line });
-          },
-          ClassMethod(node) {
-            outline.push({ type: 'method', name: node.key.name || node.key.value || 'anonymous', start: node.loc.start.line, end: node.loc.end.line });
-          },
-          VariableDeclarator(node) {
-            if (node.init && (node.init.type === 'ArrowFunctionExpression' || node.init.type === 'FunctionExpression') && node.id.type === 'Identifier') {
-              outline.push({ type: 'function_var', name: node.id.name, start: node.loc.start.line, end: node.loc.end.line });
-            }
-          },
-        });
-        outline.sort((a, b) => a.start - b.start);
-        
-        let classStack = [];
-        const formatted = outline.map(item => {
-          classStack = classStack.filter(c => c.end >= item.start);
-          if (item.type === 'class') {
-            classStack.push(item);
-            return `Class ${item.name} (Lines ${item.start}-${item.end})`;
-          }
-          if (item.type === 'method') {
-            return `${'  '.repeat(classStack.length)}Method ${item.name}() (Lines ${item.start}-${item.end})`;
-          }
-          return `Function ${item.name}() (Lines ${item.start}-${item.end})`;
-        });
-        return { success: true, path: args.path, total_lines: code.split('\n').length, outline: formatted.join('\n') };
-      } catch (err) {
-        return { success: false, error: err.message };
-      }
-    }
-
-    // Python parsing via stdlib AST
-    if (ext === '.py') {
-      try {
-        const resultStr = runPythonAst(filePath);
-        const result = JSON.parse(resultStr);
-        if (!result.success) return { success: false, error: result.error };
-
-        const formatted = result.outline.map(item => {
-          if (item.type === 'class') return `Class ${item.name} (Lines ${item.start}-${item.end})`;
-          if (item.type === 'method') return `  Method ${item.name}() (Lines ${item.start}-${item.end})`;
-          return `Function ${item.name}() (Lines ${item.start}-${item.end})`;
-        });
-        return { success: true, path: args.path, total_lines: code.split('\n').length, outline: formatted.join('\n') };
-      } catch (err) {
-        return { success: false, error: `Python parsing failed: ${err.message}` };
-      }
-    }
-
-    // Fallback Regex Outline for Go, Rust, Java, C++, Ruby
-    const outline = fallbackRegexOutline(code, ext);
-    if (outline.length > 0) {
-      const formatted = outline.map(item => {
-        if (item.type === 'class') return `Class ${item.name} (Line ${item.start})`;
-        if (item.type === 'method') return `  Method ${item.name}() (Line ${item.start})`;
-        return `Function ${item.name}() (Line ${item.start})`;
-      });
-      return { success: true, path: args.path, total_lines: code.split('\n').length, outline: formatted.join('\n'), mode: 'regex_fallback' };
-    }
-
-    return { success: false, error: `AST outline not supported for extension: ${ext}` };
-  },
-};
-
 export const astGetNodeTool = {
   name: 'ast_get_node',
-  description: 'Retrieve the exact lines of code for a specific class, method, or function by name. Works for JS, TS, Python, Rust, Go, Java, Ruby, C++.',
+  description: 'Read the code of one function, class or method in a file you know, by name, with its line range (JS, TS, Python, Rust, Go, Java, Ruby, C++). To find which file defines a name, use find_definition (or lsp_find_definition from a usage); to see everything a file defines, list_definitions.',
   category: 'code',
   permission: PermissionLevel.SAFE,
   parameters: {
@@ -362,5 +268,5 @@ export const astGetNodeTool = {
   },
 };
 
-export const astTools = [astViewOutlineTool, astGetNodeTool];
+export const astTools = [astGetNodeTool];
 export default astTools;
