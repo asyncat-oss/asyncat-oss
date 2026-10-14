@@ -17,12 +17,15 @@ import { openingStatements, sealStoredSecrets } from './sealSecrets.js';
 import { secretStatus } from '../lib/secretBox.js';
 import { ensureMessageIndex } from '../search/messageIndex.js';
 import { runtimeDbPath } from '../config/runtimeConfig.js';
+import { protectFile } from '../storage/safeFs.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Default: data/asyncat.db in the data folder.
 // Override with DB_PATH in .env.
 const DB_PATH = runtimeDbPath();
+// Files never removes the database den has open (storage/safeFs.js).
+protectFile(DB_PATH);
 
 // Ensure parent directory exists
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
