@@ -1,5 +1,5 @@
 // CommandCenterContextEnhanced.jsx
-// Manages conversation metadata, message state, ghost mode, and agent mode.
+// Manages conversation metadata, message state, temporary chats, and agent mode.
 // Streaming is handled directly in CommandCenterV2Enhanced via agentApi.runStream.
 
 import { createContext, useState, useContext, useReducer, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -10,6 +10,7 @@ import { CLIENT_ID, subscribeAppEvent } from '../../services/appEvents.js';
 import { mergeStaleMessages } from '../utils/messageMerge.js';
 import { buildEventsFromMessages } from '../utils/agentEventUtils.js';
 import { newChatToolsEnabled } from '../../services/chatDefaults.js';
+import { TEMPORARY_CHAT, withConversationId } from '../utils/temporaryChat.js';
 
 const ActionTypes = {
   SET_MESSAGES: 'SET_MESSAGES',
@@ -27,7 +28,7 @@ const ActionTypes = {
   SET_JUST_LOADED: 'SET_JUST_LOADED',
   CLEAR_JUST_LOADED: 'CLEAR_JUST_LOADED',
   SET_CURRENT_WORKSPACE: 'SET_CURRENT_WORKSPACE',
-  SET_GHOST_MODE: 'SET_GHOST_MODE',
+  SET_TEMPORARY_CHAT: 'SET_TEMPORARY_CHAT',
   SET_CONVERSATION_SUMMARIES: 'SET_CONVERSATION_SUMMARIES',
   SET_WORKING_CONTEXT: 'SET_WORKING_CONTEXT',
   SET_CONVERSATION_METADATA: 'SET_CONVERSATION_METADATA',
@@ -45,7 +46,7 @@ const initialState = {
   conversationTitle: null,
   justLoadedConversation: false,
   currentWorkspace: null,
-  isGhostMode: false,
+  isTemporaryChat: false,
   conversationSummaries: [],
   workingContext: null,
   conversationMetadata: {},
@@ -117,12 +118,12 @@ function commandCenterReducer(state, action) {
       return {
         ...initialState,
         currentWorkspace: state.currentWorkspace,
-        isGhostMode: action.payload?.keepMode ? state.isGhostMode : false,
+        isTemporaryChat: action.payload?.keepMode ? state.isTemporaryChat : false,
       };
     case ActionTypes.SET_PENDING_SEND:
       return { ...state, pendingSend: action.payload || null };
     case ActionTypes.SET_CURRENT_CONVERSATION_ID:
-      return { ...state, currentConversationId: action.payload };
+      return withConversationId(state, action.payload);
     case ActionTypes.SET_CONVERSATION_TITLE:
       return { ...state, conversationTitle: action.payload };
     case ActionTypes.SET_JUST_LOADED:
@@ -131,11 +132,11 @@ function commandCenterReducer(state, action) {
       return { ...state, justLoadedConversation: false };
     case ActionTypes.SET_CURRENT_WORKSPACE:
       return { ...state, currentWorkspace: action.payload };
-    case ActionTypes.SET_GHOST_MODE:
+    case ActionTypes.SET_TEMPORARY_CHAT:
       if (action.payload === true) {
-        return { ...state, isGhostMode: true, currentConversationId: null, conversationTitle: '👻 Ghost Chat' };
+        return { ...state, isTemporaryChat: true, currentConversationId: null, conversationTitle: TEMPORARY_CHAT.title };
       }
-      return { ...state, isGhostMode: false, messages: [], conversationHistory: [], currentConversationId: null, conversationTitle: null };
+      return { ...state, isTemporaryChat: false, messages: [], conversationHistory: [], currentConversationId: null, conversationTitle: null };
     case ActionTypes.SET_CONVERSATION_SUMMARIES:
       return { ...state, conversationSummaries: action.payload };
     case ActionTypes.SET_WORKING_CONTEXT:
@@ -297,7 +298,7 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     }
   }, []);
 
-  const shouldSaveConversations = useCallback(() => !state.isGhostMode, [state.isGhostMode]);
+  const shouldSaveConversations = useCallback(() => !state.isTemporaryChat, [state.isTemporaryChat]);
 
   // Low-level dispatchers exposed to V2Enhanced for streaming updates
   const addMessage = useCallback((message) => {
@@ -326,7 +327,7 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
 
   // Save conversation — accepts optional explicit messages to save
   const saveCurrentConversation = useCallback(async (options = {}) => {
-    if (!shouldSaveConversations() || state.isGhostMode) return null;
+    if (!shouldSaveConversations() || state.isTemporaryChat) return null;
     const messagesToSave = options.messages || state.messages;
     const targetConversationId = options.conversationId !== undefined ? options.conversationId : state.currentConversationId;
     const currentConversationIdNow = currentConversationIdRef.current;
@@ -392,7 +393,7 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     } finally {
       savingConversationIdsRef.current.delete(savingKey);
     }
-  }, [state.messages, state.currentConversationId, state.conversationTitle, state.isGhostMode, state.workingContext, state.conversationMetadata, currentWorkspace?.id, triggerConversationRefresh, location.pathname, navigate, shouldSaveConversations, rememberMessageIds]);
+  }, [state.messages, state.currentConversationId, state.conversationTitle, state.isTemporaryChat, state.workingContext, state.conversationMetadata, currentWorkspace?.id, triggerConversationRefresh, location.pathname, navigate, shouldSaveConversations, rememberMessageIds]);
 
   // Helper for V2Enhanced to set conversation id and title after a new save
   const setCurrentConversationId = useCallback((id) => {
@@ -427,8 +428,24 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     if (preset !== null) setToolsEnabled(preset);
   }, []);
 
+  // Leaving a temporary chat discards it: a run still going in it stops, and
+  // its steps don't show up in the next chat (its run has no chat id to be
+  // kept under).
+  const discardTemporaryRun = useCallback(() => {
+    if (!stateRef.current.isTemporaryChat) return;
+    agentAbortControllersRef.current.get('__draft__')?.abort();
+    agentAbortControllersRef.current.delete('__draft__');
+    setChatRuns(prev => {
+      if (!prev.__draft__) return prev;
+      const next = { ...prev };
+      delete next.__draft__;
+      return next;
+    });
+  }, []);
+
   const handleNewConversation = useCallback(async (options = {}) => {
     loadConversationRequestRef.current += 1;
+    discardTemporaryRun();
     dispatch({ type: ActionTypes.RESET_STATE, payload: { keepMode: true } });
     applyNewChatMode();
     const nextWorkingContext = normalizeWorkingContext(options.workingContext || null);
@@ -451,7 +468,7 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     if (initialMessage) {
       dispatch({ type: ActionTypes.SET_PENDING_SEND, payload: { text: initialMessage, at: Date.now() } });
     }
-  }, [applyNewChatMode]);
+  }, [applyNewChatMode, discardTemporaryRun]);
 
   const clearPendingSend = useCallback(() => {
     dispatch({ type: ActionTypes.SET_PENDING_SEND, payload: null });
@@ -460,6 +477,11 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
   const loadConversation = useCallback(async (conversationId) => {
     const requestId = loadConversationRequestRef.current + 1;
     loadConversationRequestRef.current = requestId;
+    // Opening a saved chat ends a temporary one (see withConversationId).
+    if (stateRef.current.isTemporaryChat) {
+      discardTemporaryRun();
+      dispatch({ type: ActionTypes.SET_TEMPORARY_CHAT, payload: false });
+    }
     try {
       dispatch({ type: ActionTypes.SET_CONVERSATION_LOADING, payload: true });
       dispatch({ type: ActionTypes.SET_JUST_LOADED });
@@ -529,13 +551,13 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
         dispatch({ type: ActionTypes.SET_CONVERSATION_LOADING, payload: false });
       }
     }
-  }, [currentWorkspace?.id, rememberMessageIds]);
+  }, [currentWorkspace?.id, rememberMessageIds, discardTemporaryRun]);
 
   // Show what the server added to the open chat (a scheduled run's result, a
   // Cat's report) without reloading the screen or losing anything unsaved.
   const refreshConversationFromServer = useCallback(async (conversationId) => {
     if (!conversationId || conversationId !== currentConversationIdRef.current) return;
-    if (stateRef.current.isGhostMode) return;
+    if (stateRef.current.isTemporaryChat) return;
     if (chatRunsRef.current?.[conversationId]?.running) {
       pendingRefreshRef.current.add(conversationId);
       return;
@@ -631,9 +653,10 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
 
   const handleClearConversation = useCallback(() => {
     loadConversationRequestRef.current += 1;
+    discardTemporaryRun();
     dispatch({ type: ActionTypes.RESET_STATE, payload: { keepMode: true } });
     applyNewChatMode();
-  }, [applyNewChatMode]);
+  }, [applyNewChatMode, discardTemporaryRun]);
 
   const setSelectedProjects = useCallback((projectIds) => {
     dispatch({ type: ActionTypes.SET_SELECTED_PROJECTS, payload: projectIds || [] });
@@ -645,7 +668,7 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     const projectIds = normalized?.projectId ? [normalized.projectId] : [];
     dispatch({ type: ActionTypes.SET_SELECTED_PROJECTS, payload: projectIds });
 
-    if (!state.currentConversationId || state.isGhostMode || !currentWorkspace?.id) return;
+    if (!state.currentConversationId || state.isTemporaryChat || !currentWorkspace?.id) return;
     const nextMetadata = {
       ...(state.conversationMetadata || {}),
       workspaceId: currentWorkspace.id,
@@ -659,15 +682,17 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     })
       .then(() => triggerConversationRefresh())
       .catch((error) => console.error('Failed to persist working context:', error));
-  }, [currentWorkspace?.id, state.conversationMetadata, state.currentConversationId, state.isGhostMode, triggerConversationRefresh]);
+  }, [currentWorkspace?.id, state.conversationMetadata, state.currentConversationId, state.isTemporaryChat, triggerConversationRefresh]);
 
-  const toggleGhostMode = useCallback(() => {
-    dispatch({ type: ActionTypes.SET_GHOST_MODE, payload: !state.isGhostMode });
-  }, [state.isGhostMode]);
+  const toggleTemporaryChat = useCallback(() => {
+    discardTemporaryRun();
+    dispatch({ type: ActionTypes.SET_TEMPORARY_CHAT, payload: !state.isTemporaryChat });
+  }, [state.isTemporaryChat, discardTemporaryRun]);
 
-  const setGhostMode = useCallback((enabled) => {
-    dispatch({ type: ActionTypes.SET_GHOST_MODE, payload: enabled });
-  }, []);
+  const setTemporaryChat = useCallback((enabled) => {
+    if (!enabled) discardTemporaryRun();
+    dispatch({ type: ActionTypes.SET_TEMPORARY_CHAT, payload: enabled });
+  }, [discardTemporaryRun]);
 
   const contextValue = {
     // State
@@ -680,7 +705,7 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     currentConversationId: state.currentConversationId,
     conversationTitle: state.conversationTitle,
     currentWorkspace: state.currentWorkspace,
-    isGhostMode: state.isGhostMode,
+    isTemporaryChat: state.isTemporaryChat,
     conversationSummaries: state.conversationSummaries,
     workingContext: state.workingContext,
     conversationMetadata: state.conversationMetadata,
@@ -715,8 +740,8 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     saveCurrentConversation,
     setConversationListRefresh,
     triggerConversationRefresh,
-    toggleGhostMode,
-    setGhostMode,
+    toggleTemporaryChat,
+    setTemporaryChat,
     setToolsEnabled: handleSetToolsEnabled,
     chatRuns,
     setChatRuns,

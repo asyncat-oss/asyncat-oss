@@ -63,6 +63,8 @@ export const agentApi = {
         externalSessionId: opts.externalSessionId || null,
         externalCwd: opts.externalCwd || null,
         engineModel: opts.engineModel || null,
+        // A temporary chat: the server keeps nothing from this run.
+        ephemeral: opts.ephemeral === true,
       })
     });
 

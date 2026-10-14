@@ -42,7 +42,7 @@ import {
   Edit2,
   Trash2,
   X,
-  Ghost,
+  MessageCircleDashed,
   Download,
   PanelRightOpen,
   GitBranch,
@@ -65,6 +65,7 @@ import { engineDisplayName, registerEngineNames, resumeCommand } from "../Agent/
 import { ALWAYS_ALLOW_EVENT, ALWAYS_ALLOW_KEY, alwaysAllowedChatTools } from "../services/chatDefaults.js";
 import { FOLLOW_UP_EVENT } from "./components/renderers/interactiveEvents.js";
 import { linkedMessageId } from "../sidebar/chatSearch.js";
+import { TEMPORARY_CHAT, engineForChat } from "./utils/temporaryChat.js";
 
 import { buildConversationSourceCatalog } from "./utils/conversationUtils.js";
 import {
@@ -253,8 +254,8 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     conversationTitle = "",
     triggerConversationRefresh = () => {},
     setConversationTitle = () => {},
-    isGhostMode = false,
-    toggleGhostMode = () => {},
+    isTemporaryChat = false,
+    toggleTemporaryChat = () => {},
     conversationHistory = [],
     setMessages,
     setConversationHistory,
@@ -464,6 +465,9 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
   const agentEvents = currentRun.events || EMPTY_AGENT_EVENTS;
   const agentCurrentGoal = currentRun.goal || '';
   const agentCurrentSessionId = currentRun.sessionId || null;
+  // A temporary chat's run is never saved, so the server has no changes,
+  // plan or undo to show for it.
+  const savedSessionId = isTemporaryChat ? null : agentCurrentSessionId;
   const agentCurrentSession = currentRun.session || null;
   const agentConversationHistory = currentRun.conversationHistory || [];
   const agentStreamingText = currentRun.streamingText || '';
@@ -1013,7 +1017,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
       running: false,
     }));
 
-    if (!isGhostMode && currentConversationId) {
+    if (!isTemporaryChat && currentConversationId) {
       await saveCurrentConversation({
         messages: nextMessages,
         conversationId: currentConversationId,
@@ -1022,7 +1026,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     }
   }, [
     currentConversationId,
-    isGhostMode,
+    isTemporaryChat,
     saveCurrentConversation,
     setConversationHistory,
     setConversationMetadata,
@@ -1079,7 +1083,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     setConversationMetadata(nextMetadata);
     setEditingBranchId(null);
     setBranchNameDraft('');
-    if (!isGhostMode && currentConversationId) {
+    if (!isTemporaryChat && currentConversationId) {
       await saveCurrentConversation({
         messages,
         conversationId: currentConversationId,
@@ -1091,7 +1095,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     conversationBranches,
     conversationMetadata,
     currentConversationId,
-    isGhostMode,
+    isTemporaryChat,
     messages,
     saveCurrentConversation,
     setConversationMetadata,
@@ -1186,7 +1190,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     }
     const runExperienceMode = runOptions.experienceMode || experienceMode;
     // A conversation keeps the engine it started with; new ones use the picker.
-    const runEngine = runOptions.engine || conversationMetadata?.engine || (messages.length > 0 ? 'asyncat' : selectedEngine);
+    const runEngine = engineForChat(runOptions.engine || conversationMetadata?.engine || (messages.length > 0 ? 'asyncat' : selectedEngine), isTemporaryChat);
     const isExternalEngine = runEngine !== 'asyncat';
     const isDirectChat = runExperienceMode === 'chat' && !isExternalEngine;
     const agentMentions = isDirectChat ? [] : (Array.isArray(messageObj?.agentMentions) ? messageObj.agentMentions : []);
@@ -1292,7 +1296,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
       setConversationMetadata({ ...(conversationMetadata || {}), engine: runEngine });
     }
 
-    if (!isGhostMode) {
+    if (!isTemporaryChat) {
       try {
         const saveResult = await saveCurrentConversation({
           messages: optimisticMessages,
@@ -1398,6 +1402,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
         // A chat opened from a Claude Code or Codex session keeps working in that session's folder.
         externalCwd: isExternalEngine ? (runMetadata?.externalCwd || null) : null,
         engineModel: isExternalEngine ? (engineModels[runEngine] || null) : null,
+        ephemeral: isTemporaryChat,
       });
       for await (const event of eventStream) {
         if (controller.signal.aborted) break;
@@ -1672,7 +1677,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
           conversationHistory: nextHistory,
         }));
 
-        if (!isGhostMode) {
+        if (!isTemporaryChat) {
           await saveCurrentConversation({
             messages: finalMessages,
             conversationId: runConversationId,
@@ -1685,7 +1690,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
         }
 
         // Generate an AI title after the first exchange of a new conversation
-        if (isFirstExchangeOfNewConversation && runConversationId && !isGhostMode) {
+        if (isFirstExchangeOfNewConversation && runConversationId && !isTemporaryChat) {
           chatApi.generateTitle(submittedGoal, capturedFinalAnswer)
             .then(res => {
               if (res?.title) {
@@ -1752,7 +1757,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     conversationMetadata,
     currentConversationId,
     messages,
-    isGhostMode,
+    isTemporaryChat,
     setError,
     setConversationHistory,
     setMessages,
@@ -1915,7 +1920,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
       events: buildEventsFromMessages(nextMessages),
       conversationHistory: buildConversationHistoryFromMessages(nextMessages),
     }));
-    if (!isGhostMode && currentConversationId) {
+    if (!isTemporaryChat && currentConversationId) {
       await saveCurrentConversation({
         messages: nextMessages,
         conversationId: currentConversationId,
@@ -1925,7 +1930,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
   }, [
     conversationMetadata,
     currentConversationId,
-    isGhostMode,
+    isTemporaryChat,
     saveCurrentConversation,
     setConversationHistory,
     setCurrentChatRun,
@@ -2634,7 +2639,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
   }
 
   const getGreeting = () => {
-    if (isGhostMode) return 'Ghost Mode — this conversation stays off the record';
+    if (isTemporaryChat) return TEMPORARY_CHAT.title;
     return "What's on your mind today?";
   };
   // A picked agent's own conversation starters replace the general ones.
@@ -2649,7 +2654,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     { icon: Globe, label: 'Research a topic', text: 'Research the current state of WebGPU support and write me a short summary.' },
   ];
   const hasConversationContent = messages.length > 0 || persistedAgentEvents.length > 0 || agentRunning;
-  const conversationEngine = conversationMetadata?.engine || (hasConversationContent ? 'asyncat' : selectedEngine);
+  const conversationEngine = engineForChat(conversationMetadata?.engine || (hasConversationContent ? 'asyncat' : selectedEngine), isTemporaryChat);
   const conversationEngineName = engineDisplayName(conversationEngine);
   const externalSessionId = conversationEngine !== 'asyncat' ? conversationMetadata?.externalSessions?.[conversationEngine] : null;
   const terminalCommand = externalSessionId
@@ -2684,7 +2689,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     !hasConversationContent ? (
       <div className="relative flex min-h-0 flex-1 flex-col overflow-y-auto">
         <div className="absolute right-4 top-4 z-10 flex items-center gap-1">
-          {!isGhostMode && workingContext?.workingDir && (
+          {!isTemporaryChat && workingContext?.workingDir && (
             <button
               type="button"
               onClick={() => toggleSidePanelTab('code')}
@@ -2706,7 +2711,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
               )}
             </button>
           )}
-          {!isGhostMode && (
+          {!isTemporaryChat && (
             <button
               type="button"
               onClick={() => toggleSidePanelTab('preview')}
@@ -2720,7 +2725,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
               <Globe className="w-4 h-4" />
             </button>
           )}
-          {!isGhostMode && workingContext?.workingDir && (
+          {!isTemporaryChat && workingContext?.workingDir && (
             <button
               type="button"
               onClick={() => toggleSidePanelTab('terminal')}
@@ -2737,24 +2742,26 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
           <button
             type="button"
             onClick={() => {
-              if (isGhostMode) {
+              if (isTemporaryChat) {
                 setCurrentChatRun({ events: [], running: false, streamingText: '', streamingReasoning: '', goal: '' });
               }
-              toggleGhostMode();
+              toggleTemporaryChat();
             }}
-            className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 transition-colors text-sm font-medium ${
-              isGhostMode
-                ? 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 midnight:bg-slate-800 midnight:text-slate-300'
-                : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300 midnight:hover:bg-slate-800'
+            aria-pressed={isTemporaryChat}
+            aria-label={isTemporaryChat ? TEMPORARY_CHAT.end : TEMPORARY_CHAT.start}
+            className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium transition-colors ${
+              isTemporaryChat
+                ? 'bg-selected text-fg'
+                : 'text-fg-subtle hover:bg-hover hover:text-fg'
             }`}
-            title={isGhostMode ? 'Exit Ghost Mode — history saving will resume' : 'Ghost Mode — chat without saving history'}
+            title={isTemporaryChat ? TEMPORARY_CHAT.end : TEMPORARY_CHAT.start}
           >
-            <Ghost className="w-4 h-4" />
+            <MessageCircleDashed className="w-4 h-4" />
           </button>
         </div>
         <div className="flex flex-col items-center justify-center flex-1 px-6 py-8">
           <div className="max-w-3xl w-full">
-            {selectedAgent && !isGhostMode ? (
+            {selectedAgent && !isTemporaryChat ? (
               <div className="mb-7 flex flex-col items-center text-center">
                 <AgentAvatar agent={selectedAgent} size="lg" />
                 <h1 className="mt-4 text-[28px] font-semibold tracking-[-0.025em] text-fg">{selectedAgent.name}</h1>
@@ -2764,22 +2771,13 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
               </div>
             ) : (
               <div className="mb-7 flex flex-col items-center text-center">
-                <Cat pose={isGhostMode ? 'sleep' : 'sit'} className={isGhostMode ? 'w-24' : 'w-12'} outline={7} />
+                <Cat pose={isTemporaryChat ? 'sleep' : 'sit'} className={isTemporaryChat ? 'w-24' : 'w-12'} outline={7} />
                 <h1 className="mt-4 text-[28px] font-semibold tracking-[-0.025em] text-fg">
                   {getGreeting()}
                 </h1>
                 <p className="mt-2 max-w-lg text-[13px] leading-5 text-fg-subtle">
-                  Ask anything. Open a project when you want Asyncat to work with your files.
+                  {isTemporaryChat ? TEMPORARY_CHAT.note : 'Ask anything. Open a project when you want Asyncat to work with your files.'}
                 </p>
-              </div>
-            )}
-
-            {isGhostMode && (
-              <div className="flex justify-center mb-4">
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 text-gray-600 dark:text-gray-300 rounded-full text-sm font-medium">
-                  <Ghost className="w-3 h-3" />
-                  Ghost Active — No history saved
-                </div>
               </div>
             )}
 
@@ -2793,7 +2791,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
               onToolsPreferenceChange={setToolsPreference}
               engine={conversationEngine}
               engines={engines}
-              onEngineChange={hasConversationContent ? undefined : setSelectedEngine}
+              onEngineChange={hasConversationContent || isTemporaryChat ? undefined : setSelectedEngine}
               selectedAgentId={conversationMetadata?.agentProfileId}
               onAgentChange={setSelectedAgent}
               engineModel={engineModels[conversationEngine] || null}
@@ -2810,8 +2808,8 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
               placeholder={
                 agentRunning
                   ? "Agent is working..."
-                  : isGhostMode
-                  ? "👻 Ghost Mode — messages won't be saved..."
+                  : isTemporaryChat
+                  ? TEMPORARY_CHAT.placeholder
                   : getVoicePlaceholder(
                       sttReady,
                       ttsReady,
@@ -2841,7 +2839,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                 runtimePanelOpen={showActivitySidebar && sidePanelTab === 'runtime'}
               />
 
-            {!isGhostMode && (
+            {!isTemporaryChat && (
               <div className="mx-auto mt-2 flex max-w-3xl flex-wrap justify-center gap-2 px-4 sm:px-6">
                 {(agentStarters || starterPrompts).map(({ icon: PromptIcon, label, text }) => (
                   <button
@@ -2904,11 +2902,8 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                         {conversationTitle || "Untitled Chat"}
                       </h1>
                     )}
-                    {isGhostMode && (
-                      <div className="flex items-center gap-1 px-2 py-0.5 bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 text-gray-600 dark:text-gray-300 midnight:text-gray-300 rounded text-xs font-medium shrink-0">
-                        <Ghost className="w-3 h-3" />
-                        Ghost
-                      </div>
+                    {isTemporaryChat && (
+                      <span className="hidden shrink-0 text-xs text-fg-subtle sm:inline">Not saved</span>
                     )}
                   </div>
 
@@ -2925,7 +2920,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                         <span className="hidden lg:inline">Continue in terminal</span>
                       </button>
                     )}
-                    {!isGhostMode && (
+                    {!isTemporaryChat && (
                       <button
                         type="button"
                         onClick={() => toggleSidePanelTab('preview')}
@@ -2941,7 +2936,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                       </button>
                     )}
 
-                    {!isGhostMode && hasConversationBranches && (
+                    {!isTemporaryChat && hasConversationBranches && (
                       <div ref={branchMenuRef} className="relative">
                         <button
                           type="button"
@@ -3048,17 +3043,19 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                       </div>
                     )}
 
-                    {isGhostMode && (
+                    {isTemporaryChat && (
                       <button
                         type="button"
                         onClick={() => {
                           setCurrentChatRun({ events: [], running: false, streamingText: '', streamingReasoning: '', goal: '' });
-                          toggleGhostMode();
+                          toggleTemporaryChat();
                         }}
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-gray-100/50 dark:hover:bg-gray-800/50 midnight:hover:bg-gray-800/50"
-                        title="Exit Ghost Mode"
+                        aria-pressed="true"
+                        aria-label={TEMPORARY_CHAT.end}
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-selected text-fg transition-colors hover:bg-hover"
+                        title={TEMPORARY_CHAT.end}
                       >
-                        <Ghost className="w-5 h-5 text-gray-600 dark:text-gray-400 midnight:text-gray-400" />
+                        <MessageCircleDashed className="h-4 w-4" />
                       </button>
                     )}
 
@@ -3225,7 +3222,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                     streamingText={agentStreamingText}
                     streamingReasoning={agentStreamingReasoning}
                     runStartedAt={runStartedAtRef.current}
-                    sessionId={agentCurrentSessionId}
+                    sessionId={savedSessionId}
                     session={agentCurrentSession}
                     onViewArtifactInPanel={handleViewArtifactInPanel}
                     onPermissionDecision={handleAgentPermission}
@@ -3257,7 +3254,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                   <CurrentPlanPanel
                     data={currentPlanEvent.data}
                     isRunning={agentRunning}
-                    sessionId={agentCurrentSessionId}
+                    sessionId={savedSessionId}
                   />
                 </div>
               )}
@@ -3271,7 +3268,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                 onToolsPreferenceChange={setToolsPreference}
                 engine={conversationEngine}
                 engines={engines}
-                onEngineChange={hasConversationContent ? undefined : setSelectedEngine}
+                onEngineChange={hasConversationContent || isTemporaryChat ? undefined : setSelectedEngine}
                 selectedAgentId={conversationMetadata?.agentProfileId}
                 onAgentChange={setSelectedAgent}
                 engineModel={engineModels[conversationEngine] || null}
@@ -3289,8 +3286,8 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                 placeholder={
                   agentRunning
                     ? 'Working…'
-                    : isGhostMode
-                    ? "👻 Ghost Mode - Messages won't be saved..."
+                    : isTemporaryChat
+                    ? TEMPORARY_CHAT.placeholder
                     : getVoicePlaceholder(sttReady, ttsReady, "Ask anything...")
                 }
                 hasMessages={hasConversationContent}
