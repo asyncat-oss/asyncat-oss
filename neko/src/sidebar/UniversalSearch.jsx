@@ -35,7 +35,7 @@ import { useWorkspace } from '../contexts/WorkspaceContext';
 import { chatApi, agentApi } from '../CommandCenter/api';
 import { searchApi } from '../CommandCenter/api/searchApi.js';
 import SearchSnippet from '../components/SearchSnippet.jsx';
-import { chatLink, isPinned } from './chatSearch.js';
+import { chatLink, isPinned, markTitle } from './chatSearch.js';
 import { latestSearch } from '../utils/latestSearch.js';
 
 // ─── Kinds of result ──────────────────────────────────────────────────────────
@@ -70,12 +70,16 @@ const optionId = (index) => `universal-search-option-${index}`;
 // ─── Result row ───────────────────────────────────────────────────────────────
 
 const SearchResultItem = memo(
-  forwardRef(({ item, index, isSelected, onSelect, onHover }, ref) => {
+  forwardRef(({ item, index, isSelected, onSelect, onHover, searched = '' }, ref) => {
     const cfg = TYPE_CONFIG[item._type] || TYPE_CONFIG.project;
     const Icon = item.icon || cfg.icon;
     const label = item.title || item.name || item.label || 'Untitled';
     const detail = item.snippet || item.description || '';
     const pinned = item._type === 'conversation' && (item.pinned || isPinned(item));
+    // A chat found by its name shows the words that matched in it.
+    const markedLabel = item._type === 'conversation' && item.titleMatch && searched
+      ? markTitle(label, searched)
+      : null;
 
     return (
       <div
@@ -99,7 +103,9 @@ const SearchResultItem = memo(
 
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1.5">
-            <span className="truncate text-[13px] leading-[18px] text-fg">{label}</span>
+            {markedLabel
+              ? <SearchSnippet snippet={markedLabel} className="truncate text-[13px] leading-[18px] text-fg" />
+              : <span className="truncate text-[13px] leading-[18px] text-fg">{label}</span>}
             {pinned ? <Pin aria-label="Pinned" className="h-3 w-3 shrink-0 text-fg-subtle" /> : null}
           </div>
           {detail ? (
@@ -118,6 +124,7 @@ SearchResultItem.propTypes = {
   isSelected: PropTypes.bool,
   onSelect: PropTypes.func.isRequired,
   onHover: PropTypes.func.isRequired,
+  searched: PropTypes.string,
 };
 
 const SectionHeader = ({ label }) => (
@@ -423,6 +430,7 @@ const UniversalSearch = ({ isOpen, onClose }) => {
                           isSelected={selectedIndex === gi}
                           onSelect={handleSelect}
                           onHover={setSelectedIndex}
+                          searched={searchedTerm}
                         />
                       );
                     })}

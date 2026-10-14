@@ -23,7 +23,7 @@ import Dialog from '../../components/ui/Dialog.jsx';
 import { Input } from '../../components/ui/Field.jsx';
 import { Menu, MenuItem, MenuSeparator } from '../../components/ui/Menu.jsx';
 import SearchSnippet from '../../components/SearchSnippet.jsx';
-import { chatLink, hitMessageId, isPinned, withPinned } from '../../sidebar/chatSearch.js';
+import { chatLink, hitMessageId, isPinned, markTitle, withPinned } from '../../sidebar/chatSearch.js';
 import { latestSearch } from '../../utils/latestSearch.js';
 
 const ENGINE_FILTER_KEY = 'asyncat_chats_engine_filter';
@@ -125,6 +125,7 @@ const ChatsPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [serverSearchResults, setServerSearchResults] = useState(null); // null = use local, array = server results
   const [serverSearching, setServerSearching] = useState(false);
+  const [searchedQuery, setSearchedQuery] = useState(''); // what the results answer
   const [serverIndexing, setServerIndexing] = useState(false); // older chats not searchable yet
   const serverSearchTimer = useRef(null);
   const [searches] = useState(latestSearch);
@@ -233,6 +234,7 @@ const ChatsPage = () => {
       }
       if (signal.aborted || (again && results === null)) return;
       setServerSearchResults(results);
+      setSearchedQuery(trimmedQuery);
       setServerIndexing(indexing);
       setServerSearching(false);
       if (indexing) serverSearchTimer.current = setTimeout(() => run(true), 3000);
@@ -557,7 +559,10 @@ const ChatsPage = () => {
           {!isActiveRun && <ConversationBadge conversation={chat} agentsById={agentsById} className="mt-[3px]" />}
           <span className="min-w-0 flex-1">
             <span className="flex min-w-0 items-center gap-1.5">
-              <span className="truncate text-sm font-medium text-fg">{itemTitle}</span>
+              {/* Found by its name: the words that matched are marked. */}
+              {searchMode && chat.title_match
+                ? <SearchSnippet snippet={markTitle(itemTitle, searchedQuery)} className="truncate text-sm font-medium text-fg" />
+                : <span className="truncate text-sm font-medium text-fg">{itemTitle}</span>}
               {pinned && searchMode ? <Pin aria-label="Pinned" className="h-3 w-3 shrink-0 text-fg-subtle" /> : null}
             </span>
             {hit ? (

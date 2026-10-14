@@ -29,6 +29,73 @@ export function plainSnippet(snippet) {
   return snippetParts(snippet).map((part) => part.text).join('');
 }
 
+// Words as the server's search reads them: runs of letters and digits.
+const WORD = /[\p{L}\p{N}\p{M}]+/gu;
+// Scripts written without spaces, where a match may start inside a run.
+const UNSPACED = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]/u;
+
+const fold = (text) => text.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase();
+
+/**
+ * A chat's name with what was typed marked like a snippet's matches, for a
+ * chat found by its name. Words match where they start, ignoring case and
+ * accents, as the server matched them (den/src/search/messageIndex.js); a
+ * word of one letter only as a whole word, unless it ends what was typed.
+ */
+export function markTitle(title, query) {
+  // eslint-disable-next-line no-control-regex
+  const text = String(title || '').replace(/[\u0002\u0003]/g, '');
+  const parts = String(query || '').normalize('NFKC').trim().split(/\s+/);
+  // The title folded, and where each of its characters came from.
+  let folded = '';
+  const from = [];
+  for (let index = 0; index < text.length;) {
+    const char = String.fromCodePoint(text.codePointAt(index));
+    const piece = fold(char);
+    for (let k = 0; k < piece.length; k += 1) from.push(index);
+    folded += piece;
+    index += char.length;
+  }
+  from.push(text.length);
+
+  const ranges = [];
+  parts.forEach((part, partIndex) => {
+    const tokens = part.match(WORD) || [];
+    tokens.forEach((token, tokenIndex) => {
+      const word = fold(token);
+      if (!word) return;
+      const typing = partIndex === parts.length - 1 && tokenIndex === tokens.length - 1 && part.endsWith(token);
+      const whole = [...word].length === 1 && !typing;
+      const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const pattern = UNSPACED.test(word)
+        ? new RegExp(escaped, 'gu')
+        : new RegExp(`(?<![\\p{L}\\p{N}])${escaped}${whole ? '(?![\\p{L}\\p{N}])' : ''}`, 'gu');
+      for (const match of folded.matchAll(pattern)) {
+        // A match that ends inside a character folded into several (ﬁ is
+        // "fi") takes in the whole character.
+        let end = match.index + match[0].length;
+        while (end < folded.length && from[end] === from[end - 1]) end += 1;
+        ranges.push([from[match.index], from[end]]);
+      }
+    });
+  });
+  // Overlapping or touching matches are marked as one.
+  ranges.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const merged = [];
+  for (const [start, end] of ranges) {
+    const last = merged[merged.length - 1];
+    if (last && start <= last[1]) last[1] = Math.max(last[1], end);
+    else merged.push([start, end]);
+  }
+  let marked = '';
+  let at = 0;
+  for (const [start, end] of merged) {
+    marked += text.slice(at, start) + MARK_START + text.slice(start, end) + MARK_END;
+    at = end;
+  }
+  return marked + text.slice(at);
+}
+
 /** Opens a chat; with a message id, scrolled to that message. */
 export function chatLink(conversationId, messageId = null) {
   const path = `/conversations/${encodeURIComponent(conversationId)}`;

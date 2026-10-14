@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  MARK_START, MARK_END, snippetParts, plainSnippet, chatLink, linkedMessageId,
+  MARK_START, MARK_END, snippetParts, plainSnippet, markTitle, chatLink, linkedMessageId,
   isPinned, sidebarChatLists, withPinned, hitMessageId,
 } from './chatSearch.js';
 
@@ -18,6 +18,22 @@ test('a snippet splits into plain text and matches, never HTML', () => {
   assert.deepEqual(snippetParts(''), []);
   assert.deepEqual(snippetParts(null), []);
   assert.equal(plainSnippet(`one ${marked('two')} three`), 'one two three');
+});
+
+test("a chat found by its name has the typed words marked in it, where they start", () => {
+  assert.equal(markTitle('Rosemary cuttings', 'rosemary'), `${marked('Rosemary')} cuttings`);
+  assert.equal(markTitle('Plan my week', 'week pl'), `${marked('Pl')}an my ${marked('week')}`);
+  assert.equal(markTitle('Explanation of plans', 'plan'), `Explanation of ${marked('plan')}s`, 'not inside a word');
+  assert.equal(markTitle('Café plans', 'cafe'), `${marked('Café')} plans`, 'accents and case do not count');
+  assert.equal(markTitle("Don't panic", "don't"), `${marked('Don')}'${marked('t')} panic`);
+  assert.equal(markTitle('C++ and Coastal walks', 'c++'), `${marked('C')}++ and Coastal walks`, 'one letter is a whole word');
+  assert.equal(markTitle('Vitamin cocktails', 'vitamin c'), `${marked('Vitamin')} ${marked('c')}ocktails`, 'unless it is still being typed');
+  assert.equal(markTitle('東京タワー', 'タワー'), `東京${marked('タワー')}`);
+  assert.equal(markTitle('ﬁsh pie', 'f'), `${marked('ﬁ')}sh pie`, 'a character folded into several is marked whole');
+  assert.equal(markTitle('Garden', 'zz'), 'Garden');
+  assert.equal(markTitle('Garden', ''), 'Garden');
+  assert.equal(markTitle(`odd${MARK_START}title`, 'odd'), `${marked('odd')}title`, 'no stray markers');
+  assert.deepEqual(snippetParts(markTitle('<b>Plans</b>', 'plans')).map((p) => p.text), ['<b>', 'Plans', '</b>'], 'text, never HTML');
 });
 
 test('links open a chat at a message, and read back', () => {
