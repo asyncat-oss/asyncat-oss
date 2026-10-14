@@ -6,6 +6,7 @@ import Cat from '../components/ui/Cat.jsx';
 import { Menu, MenuItem, MenuLabel, MenuSeparator } from '../components/ui/Menu.jsx';
 import { Badge } from './modelPageShared.jsx';
 import { friendlyModelName } from '../utils/modelNames.js';
+import { localModelName, sameLocalFile } from '../CommandCenter/utils/chatModel.js';
 import { ProviderLogo, LocalModelLogo } from './modelLogos.jsx';
 import { imagesSummary, listeningSummary, speakingSummary } from './media/mediaSummary.js';
 import { useMediaStatus } from './media/useMediaStatus.js';
@@ -35,9 +36,13 @@ Capability.propTypes = {
 };
 
 /**
- * What powers chats right now, with a switcher for the other connected
- * providers and downloaded models. Under it, what listens, speaks and makes
- * images (read from Models → Voice and Images); a new `refreshKey` looks again.
+ * The default model: what new chats, Quick ask and Cats without a model of
+ * their own run on (each chat can pick its own in the composer), with a
+ * switcher for the other connected providers and downloaded models. A
+ * downloaded model picked there loads when a chat first uses it. When the
+ * built-in engine holds another model (a chat's own), a row says which.
+ * Under it, what listens, speaks and makes images (read from Models → Voice
+ * and Images); a new `refreshKey` looks again.
  */
 const ActiveBrainPanel = ({
   activeConfig,
@@ -59,7 +64,7 @@ const ActiveBrainPanel = ({
   onStop,
   onDeactivateProvider,
   onActivateProfile,
-  onLoadLocalModel,
+  onMakeLocalDefault,
   onBrowseProviders,
 }) => {
   const switcherRef = useRef(null);
@@ -72,13 +77,23 @@ const ActiveBrainPanel = ({
   const providerIsExternal = Boolean(activeConfig?.model && activeConfig?.provider_id && activeConfig.provider_id !== 'llamacpp-builtin');
   // MLX runs downloaded models through its own server but is set up like a provider.
   const isMlx = activeConfig?.provider_id === 'mlx-builtin';
-  const localReady = !providerIsExternal && isReady && serverStatus?.model;
-  const hasActive = providerIsExternal || localReady;
+  // A downloaded model as the default: it loads when a chat uses it, and the
+  // engine may hold another chat's model meanwhile.
+  const localDefault = !providerIsExternal && activeConfig?.provider_id === 'llamacpp-builtin' ? activeConfig?.model || '' : '';
+  const loadedFile = serverStatus?.modelPath || serverStatus?.model || '';
+  const engineHasDefault = !localDefault || sameLocalFile(loadedFile, localDefault);
+  // The engine's model isn't the default: a chat's own, or any local model
+  // while a provider is the default (MLX reports its own).
+  const aboutOther = Boolean(serverStatus?.model) && (providerIsExternal ? !isMlx : !engineHasDefault);
+  const engineHoldsOther = isRunning && aboutOther;
+  const otherName = aboutOther ? localModelName(loadedFile) : '';
+  const localReady = !providerIsExternal && isReady && serverStatus?.model && engineHasDefault;
+  const hasActive = providerIsExternal || localReady || Boolean(localDefault);
   const rawModel = activeConfig?.settings?.model_name || activeConfig?.model || '';
   const displayModel = rawModel === 'openrouter/auto' ? 'Auto (OpenRouter picks)' : friendlyModelName(rawModel);
   const isLocalProvider = activeConfig?.provider_type === 'local';
 
-  let title = 'No model selected';
+  let title = 'No default model';
   let subtitle = 'Choose a connected provider or load a downloaded model to start chatting.';
   let status = 'idle';
   let statusText = 'Not set up';
@@ -88,18 +103,23 @@ const ActiveBrainPanel = ({
       ? 'Downloaded model · MLX engine'
       : `${activeProviderName} · ${isLocalProvider ? 'runs on your computer' : 'cloud provider'}`;
     status = 'ready';
-    statusText = 'In use';
+    statusText = 'Default for new chats';
+  } else if (!engineHasDefault) {
+    title = localModelName(localDefault);
+    subtitle = 'Downloaded model · loads when a chat uses it';
+    statusText = 'Default for new chats';
   } else if (serverStatus?.status === 'loading') {
-    title = friendlyModelName(serverStatus.model) || 'Loading model…';
+    title = serverStatus.model ? localModelName(loadedFile) : 'Loading model…';
     subtitle = 'Loading into memory with the built-in engine';
     status = 'loading';
     statusText = statusLabel;
   } else if (localReady) {
-    title = friendlyModelName(serverStatus.model);
+    title = localModelName(loadedFile);
     subtitle = 'Downloaded model · built-in engine';
     status = 'ready';
-    statusText = 'In use';
+    statusText = 'Default for new chats';
   } else if (serverStatus?.status === 'error') {
+    if (localDefault) title = localModelName(localDefault);
     status = 'error';
     statusText = 'Error';
   }
@@ -109,6 +129,7 @@ const ActiveBrainPanel = ({
   const supportsImageInput = Boolean(activeConfig?.capabilities?.supportsImageInput);
   const busy = Boolean(providerAction) || Boolean(switchingEngine) || Boolean(installingEngine);
   const activeProfileId = activeConfig?.profile_id;
+  const ctxSize = serverStatus?.ctxSize ? Number(serverStatus.ctxSize).toLocaleString() : '';
 
   return (
     <section className="rounded-2xl border border-line bg-surface">
@@ -118,8 +139,8 @@ const ActiveBrainPanel = ({
             <ProviderLogo providerId={activeConfig.provider_id} name={activeProviderName} size="lg" />
           ) : isMlx ? (
             <LocalModelLogo modelName={displayModel} modelFile={rawModel} size="lg" />
-          ) : serverStatus?.model ? (
-            <LocalModelLogo modelName={serverStatus.model} modelFile={serverStatus.model} size="lg" />
+          ) : localDefault || serverStatus?.model ? (
+            <LocalModelLogo modelName={localDefault || serverStatus.model} modelFile={localDefault || serverStatus.model} size="lg" />
           ) : (
             <span className="flex h-12 w-12 shrink-0 items-end justify-center overflow-hidden rounded-xl bg-hover pt-1.5">
               <Cat pose="head" className="w-10" outline={6} />
@@ -133,7 +154,11 @@ const ActiveBrainPanel = ({
             </div>
             <h2 className="mt-0.5 truncate text-[17px] font-semibold tracking-[-0.015em] text-fg" title={title}>{title}</h2>
             <p className="truncate text-[13px] text-fg-muted">{subtitle}</p>
-            {serverStatus?.error ? <p className="mt-1 text-[12px] text-red-600 dark:text-red-400">{serverStatus.error}</p> : null}
+            {serverStatus?.error ? (
+              <p className="mt-1 text-[12px] text-red-600 dark:text-red-400">
+                {aboutOther ? `${otherName}: ` : ''}{serverStatus.error}
+              </p>
+            ) : null}
           </div>
         </div>
 
@@ -141,7 +166,7 @@ const ActiveBrainPanel = ({
           {providerIsExternal ? (
             <Button variant="ghost" size="sm" icon={Power} onClick={onDeactivateProvider} disabled={busy}>{isMlx ? 'Unload' : 'Disconnect'}</Button>
           ) : null}
-          {isRunning ? (
+          {isRunning && !engineHoldsOther ? (
             <Button variant="danger" size="sm" icon={Square} onClick={onStop} loading={stopping} disabled={busy}>Stop</Button>
           ) : null}
           <Button
@@ -153,9 +178,9 @@ const ActiveBrainPanel = ({
             aria-haspopup="menu"
             aria-expanded={switcherOpen}
           >
-            {hasActive ? 'Switch model' : 'Choose a model'}
+            {hasActive ? 'Change default' : 'Choose a model'}
           </Button>
-          <Menu anchorRef={switcherRef} open={switcherOpen} onClose={() => setSwitcherOpen(false)} placement="bottom-end" width={300} label="Switch model">
+          <Menu anchorRef={switcherRef} open={switcherOpen} onClose={() => setSwitcherOpen(false)} placement="bottom-end" width={300} label="Default model">
             {profiles.length ? (
               <>
                 <MenuLabel>Providers</MenuLabel>
@@ -180,8 +205,10 @@ const ActiveBrainPanel = ({
                     icon={() => <LocalModelLogo modelName={model.name || ''} modelFile={model.filename || ''} size="xs" />}
                     label={model.name || model.filename}
                     hint={model.sizeFormatted}
-                    checked={!providerIsExternal && serverStatus?.model && (serverStatus.model === model.filename || serverStatus.model === model.name)}
-                    onSelect={() => onLoadLocalModel(model)}
+                    checked={!providerIsExternal && Boolean(localDefault
+                      ? sameLocalFile(localDefault, model.path || model.filename)
+                      : serverStatus?.model && (serverStatus.model === model.filename || serverStatus.model === model.name))}
+                    onSelect={() => onMakeLocalDefault(model)}
                   />
                 ))}
               </>
@@ -197,14 +224,38 @@ const ActiveBrainPanel = ({
         <Capability icon={Volume2} label="Speaking" status={speaking.tone} value={speaking.value} />
         <Capability icon={Eye} label="Sees images" status={supportsImageInput ? 'ready' : 'idle'} value={supportsImageInput ? 'Yes' : 'No'} />
         <Capability icon={Image} label="Makes images" status={makesImages.tone} value={makesImages.value} />
-        {(runtimeLabel || hardwareLabel || serverStatus?.ctxSize) ? (
+        {(runtimeLabel || hardwareLabel || (ctxSize && !engineHoldsOther)) ? (
           <span className="inline-flex flex-wrap items-center gap-x-3.5 gap-y-1 text-fg-subtle sm:ml-auto">
             {runtimeLabel ? <span className="inline-flex items-center gap-1.5 whitespace-nowrap"><Gauge className="h-3.5 w-3.5" />{runtimeLabel}</span> : null}
             {hardwareLabel ? <span className="inline-flex items-center gap-1.5 whitespace-nowrap"><Cpu className="h-3.5 w-3.5" />{hardwareLabel}</span> : null}
-            {serverStatus?.ctxSize ? <span className="whitespace-nowrap tabular-nums">{Number(serverStatus.ctxSize).toLocaleString()} ctx</span> : null}
+            {ctxSize && !engineHoldsOther ? <span className="whitespace-nowrap tabular-nums">{ctxSize} ctx</span> : null}
           </span>
         ) : null}
       </div>
+
+      {engineHoldsOther ? (
+        <div className="flex items-center gap-3 border-t border-line py-2 pl-5 pr-3 text-[12px]">
+          <span className="flex min-w-0 flex-1 items-center gap-1.5">
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${DOT[serverStatus.status === 'loading' ? 'loading' : 'ready']}`} />
+            <span className="shrink-0 text-fg-subtle">{serverStatus.status === 'loading' ? 'Loading now' : 'Loaded now'}</span>
+            {/* One line, so a narrow card cuts the context size before the name. */}
+            <span className="truncate text-fg-muted" title={otherName}>
+              {otherName}
+              {ctxSize ? <span className="tabular-nums text-fg-subtle"> · {ctxSize} ctx</span> : null}
+            </span>
+          </span>
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={onStop}
+            loading={stopping}
+            disabled={busy}
+            title={`Frees the memory ${otherName} uses. A chat answering with it stops.`}
+          >
+            Unload
+          </Button>
+        </div>
+      ) : null}
     </section>
   );
 };
@@ -229,7 +280,7 @@ ActiveBrainPanel.propTypes = {
   onStop: PropTypes.func,
   onDeactivateProvider: PropTypes.func,
   onActivateProfile: PropTypes.func.isRequired,
-  onLoadLocalModel: PropTypes.func.isRequired,
+  onMakeLocalDefault: PropTypes.func.isRequired,
   onBrowseProviders: PropTypes.func.isRequired,
 };
 

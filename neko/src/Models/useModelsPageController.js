@@ -421,6 +421,22 @@ export const useModelsPageController = ({ runtimeOnly = false } = {}) => {
     }
   };
 
+  // Makes a downloaded model the default for new chats without loading it:
+  // it loads when a chat first uses it, so a reply another chat is writing
+  // with the loaded model isn't cut off. A model's own Load loads it at once.
+  const handleMakeLocalDefault = async (file) => {
+    setProviderAction('default');
+    try {
+      await aiProviderApi.setDefaultModel({ kind: 'local', file });
+      await loadProviderData();
+      notifyModelRuntimeUpdated();
+    } catch (err) {
+      toast.error("Couldn't change the default model", { detail: errorDetail(err) });
+    } finally {
+      setProviderAction(null);
+    }
+  };
+
   const handleProviderDeactivate = async () => {
     setProviderAction('deactivate');
     setProviderError('');
@@ -745,6 +761,7 @@ export const useModelsPageController = ({ runtimeOnly = false } = {}) => {
     handleProviderTest,
     handleProviderActivate,
     handleProviderDeactivate,
+    handleMakeLocalDefault,
     handleLoadProviderModels,
     handleStart,
     handleStop,

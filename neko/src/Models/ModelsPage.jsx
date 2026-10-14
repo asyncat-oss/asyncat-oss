@@ -14,7 +14,7 @@ import VoicePage from './media/VoicePage.jsx';
 import ImagesPage from './media/ImagesPage.jsx';
 import { onEvents } from './media/notify.js';
 import {
-  STATUS_META, conciseHardwareSummary, getModelContextLimit,
+  STATUS_META, conciseHardwareSummary,
   providerLabel
 } from './modelPageShared.jsx';
 import { useModelsPageController } from './useModelsPageController.js';
@@ -54,7 +54,7 @@ const ModelsPage = () => {
     updateModelLoadCtxSize, commitModelLoadCtxSize,
     loadStatus, loadModelList, loadEngineData, loadEngineCatalog, loadProviderData,
     handleProviderSave, handleProviderDelete, handleProviderTest,
-    handleProviderActivate, handleProviderDeactivate, handleLoadProviderModels,
+    handleProviderActivate, handleProviderDeactivate, handleMakeLocalDefault, handleLoadProviderModels,
     handleStart, handleStop, handleDelete, confirmDelete,
     handleAddPath,
   } = controller;
@@ -305,14 +305,14 @@ const ModelsPage = () => {
     { value: 'local', label: 'Local models', meta: models.length ? String(models.length) : null },
   ];
 
-  const loadLocalModel = (model) => {
+  const makeLocalDefault = (model) => {
     if (model.engineType === 'mlx') {
       // MLX models start from their card, which handles the separate server.
       setHighlightedItem({ type: 'model', id: model.id || model.filename });
       setActiveView('local');
       return;
     }
-    handleStart(model.path || model.filename, getModelContextLimit(model));
+    handleMakeLocalDefault(model.path || model.filename);
   };
 
   const downloadHub = (
@@ -392,7 +392,7 @@ const ModelsPage = () => {
                   onStop={handleStop}
                   onDeactivateProvider={handleProviderDeactivate}
                   onActivateProfile={(profile) => handleProviderActivate(profile.id, false)}
-                  onLoadLocalModel={loadLocalModel}
+                  onMakeLocalDefault={makeLocalDefault}
                   onBrowseProviders={() => setActiveView('add')}
                 />
 

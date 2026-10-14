@@ -80,7 +80,7 @@ const ModelCard = ({
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2">
             <span className="truncate text-[14px] font-medium text-fg" title={m.name || m.filename}>{m.name || m.filename}</span>
-            {isLoaded ? <Badge color="blue">In use</Badge> : null}
+            {isLoaded ? <Badge color="blue">Loaded</Badge> : null}
             {m.source === 'huggingface-cache'
               ? <Badge color="gray" title={m.repoId}>Hugging Face cache</Badge>
               : m.isExternal ? <Badge color="gray">Linked file</Badge> : null}
@@ -207,7 +207,7 @@ const LocalModelsPane = ({
       <div className="space-y-3">
         <SectionHeader
           title="Your downloaded models"
-          description="Models on this computer, including ones in your Hugging Face cache. Loading one makes it the model chats and agents use."
+          description="Models on this computer, including ones in your Hugging Face cache. Loading one also makes it the default for new chats."
           action={models.length ? <Badge color="gray">{models.length} model{models.length === 1 ? '' : 's'}</Badge> : null}
         />
 

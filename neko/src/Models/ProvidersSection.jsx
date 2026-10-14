@@ -42,7 +42,7 @@ function ProfileRow({ profile, catalog, isActive, busy, highlighted, onUse, onCh
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
           <span className="truncate text-[14px] font-medium text-fg">{profile.name}</span>
-          {isActive ? <Badge color="blue">In use</Badge> : null}
+          {isActive ? <Badge color="blue">Default</Badge> : null}
         </div>
         <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12px] text-fg-muted">
           <span className="truncate font-mono text-[11.5px]">{modelDisplayName(profile)}</span>
@@ -63,7 +63,7 @@ function ProfileRow({ profile, catalog, isActive, busy, highlighted, onUse, onCh
       </div>
       <div className="flex shrink-0 items-center gap-1">
         {busy ? <RefreshCw className="mr-1 h-3.5 w-3.5 animate-spin text-fg-subtle" /> : null}
-        {!isActive ? <Button size="sm" variant="secondary" icon={Zap} onClick={onUse} disabled={busy}>Use</Button> : null}
+        {!isActive ? <Button size="sm" variant="secondary" icon={Zap} onClick={onUse} disabled={busy} title="New chats start on this model">Make default</Button> : null}
         <Button size="sm" variant="ghost" onClick={onChangeModel} disabled={busy} className="hidden md:inline-flex">Change model</Button>
         <Button
           ref={menuRef}
@@ -380,7 +380,7 @@ const ProvidersSection = ({
       ) : (
         <SectionHeader
           title="Your providers"
-          description="Pick which one Asyncat uses. Chats and agents use the provider marked In use."
+          description="New chats start on the one marked Default. Each chat can switch to another in the composer."
           action={(
             <div className="flex items-center gap-1">
               <Button size="sm" variant="ghost" icon={RefreshCw} onClick={onRefresh} loading={loading}>Refresh</Button>
@@ -431,7 +431,7 @@ const ProvidersSection = ({
         <Dialog
           size="sm"
           title="A local model is still loaded"
-          description={`Switch to ${pendingActivate.name}. ${serverStatus?.model || 'The local model'} can stay in memory or be stopped to free it up.`}
+          description={`Make ${pendingActivate.name} the default. ${serverStatus?.model || 'The local model'} can stay in memory or be stopped to free it up.`}
           onClose={() => setPendingActivate(null)}
           footer={(
             <>
