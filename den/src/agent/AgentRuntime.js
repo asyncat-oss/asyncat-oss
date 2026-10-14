@@ -277,6 +277,16 @@ function normalizeNativeToolCalls(toolCalls) {
   return normalized.length ? normalized : null;
 }
 
+/**
+ * A set of tool names that files old names under the tools that replaced
+ * them, so an approval or allow-list saved before a merge still matches.
+ */
+class ToolNameSet extends Set {
+  add(name) { return super.add(toolRegistry.canonicalName(name)); }
+  has(name) { return super.has(toolRegistry.canonicalName(name)); }
+  delete(name) { return super.delete(toolRegistry.canonicalName(name)); }
+}
+
 function isAutoPlan(plan) {
   return Array.isArray(plan) && plan.length > 0 && plan.every(item => AUTO_PLAN_IDS.has(item.id));
 }
@@ -318,7 +328,7 @@ export class AgentRuntime {
     this.autoApprove = opts.autoApprove === true || opts.autoApprove === 'all';
     this.requestPermission = opts.requestPermission || null;
     this.askUser = opts.askUser || null;
-    this.sessionApprovedTools = new Set();
+    this.sessionApprovedTools = new ToolNameSet();
     this.session = null;
     // A temporary chat: the session, tool audit and checkpoint live only in
     // memory for the run, and nothing is learned from it (no memories,
@@ -344,7 +354,7 @@ export class AgentRuntime {
     // focused toolset). Planning + ask_user are always kept available so the
     // sub-agent can still organise itself and request clarification.
     this.allowedTools = Array.isArray(opts.allowedTools) && opts.allowedTools.length
-      ? new Set(opts.allowedTools.filter(Boolean).map(String))
+      ? new ToolNameSet(opts.allowedTools.filter(Boolean).map(String))
       : null;
     // Which connectors (MCP servers) this run may use; null means all.
     this.allowedConnectors = Array.isArray(opts.allowedConnectors)
@@ -875,6 +885,15 @@ export class AgentRuntime {
 
       // Parse for tool calls (handles all model formats)
       const toolCalls = ToolCallFormatter.parseToolCalls(responseText, apiToolCalls, knownTools);
+      // A tool's old name (from a skill, an old chat or habit) runs the tool
+      // that replaced it; called_as keeps the name the model used.
+      for (const tc of toolCalls) {
+        const resolved = toolRegistry.resolve(tc.tool_name, tc.arguments);
+        if (!resolved.aliasOf) continue;
+        tc.called_as = resolved.aliasOf;
+        tc.tool_name = resolved.name;
+        tc.arguments = resolved.args;
+      }
 
       // Extract thinking/answer from text
       const { thinking, finalAnswer } = this._parseResponse(responseText, streamedReasoning);
@@ -2504,7 +2523,7 @@ export class AgentRuntime {
         return {
           role: 'tool',
           tool_call_id: toolCall.call_id,
-          name: toolCall.tool_name,
+          name: toolCall.called_as || toolCall.tool_name,
           content: [
             { type: 'text', text: typeof textResult === 'string' ? textResult : JSON.stringify(textResult) },
             { type: 'image_url', image_url: { url: dataUrl } },
@@ -2515,7 +2534,7 @@ export class AgentRuntime {
       return {
         role: 'tool',
         tool_call_id: toolCall.call_id,
-        name: toolCall.tool_name,
+        name: toolCall.called_as || toolCall.tool_name,
         content,
       };
     }

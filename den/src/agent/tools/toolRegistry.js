@@ -1,6 +1,13 @@
 // den/src/agent/tools/toolRegistry.js
 // ─── Dynamic Tool Registry ──────────────────────────────────────────────────
 // Central registry for all agent tools.
+//
+// Old names of tools that were merged into others are kept as aliases: saved
+// agent profiles, Cats and chat approvals list tools by name, old chats and
+// skills mention them, and models repeat what they have seen. An alias sends
+// the old name to the tool that replaced it, reshaping the arguments where
+// they differ. Aliases are not tools: all(), names() and tool_search never
+// show them.
 
 export const PermissionLevel = {
   SAFE: 'safe',
@@ -8,9 +15,49 @@ export const PermissionLevel = {
   DANGEROUS: 'dangerous',
 };
 
+const plainObject = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? value : {});
+
 class ToolRegistry {
   constructor() {
     this._tools = new Map();
+    this._aliases = new Map(); // old name → { to, args }
+  }
+
+  /**
+   * Keep an old tool name working. `to` is the tool that replaced it;
+   * `args(old)` turns the old arguments into the new tool's, when the shapes
+   * differ.
+   */
+  registerAlias(oldName, { to, args = null } = {}) {
+    if (!oldName || !to) throw new Error('An alias needs an old name and a tool to point to');
+    if (args !== null && typeof args !== 'function') throw new Error(`Alias "${oldName}" has an argument adapter that is not a function`);
+    this._aliases.set(oldName, { to, args });
+  }
+
+  registerAliases(map) {
+    for (const [oldName, spec] of Object.entries(map)) {
+      this.registerAlias(oldName, typeof spec === 'string' ? { to: spec } : spec);
+    }
+  }
+
+  isAlias(name) { return this._aliases.has(name) && !this._tools.has(name); }
+  aliases() { return [...this._aliases.entries()].map(([name, spec]) => ({ name, to: spec.to })); }
+
+  /** The current name for a tool name that may be an old one. */
+  canonicalName(name) {
+    if (typeof name !== 'string' || this._tools.has(name)) return name;
+    return this._aliases.get(name)?.to || name;
+  }
+
+  /**
+   * A tool call as the current tools take it: { name, args, aliasOf }, where
+   * aliasOf is the old name when one was used (null otherwise).
+   */
+  resolve(name, args) {
+    if (this._tools.has(name) || !this._aliases.has(name)) return { name, args, aliasOf: null };
+    const spec = this._aliases.get(name);
+    const adapted = spec.args ? spec.args(plainObject(args)) : args;
+    return { name: spec.to, args: adapted, aliasOf: name };
   }
 
   register(tool) {
@@ -114,9 +161,10 @@ class ToolRegistry {
     }));
   }
 
-  async execute(name, args, context) {
+  async execute(calledName, calledArgs, context) {
+    const { name, args } = this.resolve(calledName, calledArgs);
     const tool = this._tools.get(name);
-    if (!tool) return { success: false, error: `Unknown tool: "${name}"` };
+    if (!tool) return { success: false, error: `Unknown tool: "${calledName}"` };
     const validation = this.validateArgs(name, args);
     if (!validation.valid) {
       return {
