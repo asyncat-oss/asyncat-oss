@@ -72,6 +72,11 @@ export const agentApi = {
         externalSessionId: opts.externalSessionId || null,
         externalCwd: opts.externalCwd || null,
         engineModel: opts.engineModel || null,
+        // Asyncat's own model for this chat; without one the server uses the
+        // one the chat remembers, else the default (chatModel.js). ctxSize is
+        // for a local model that has to load.
+        ...(opts.model ? { model: opts.model } : {}),
+        ...(opts.ctxSize ? { ctxSize: opts.ctxSize } : {}),
         // A temporary chat: the server keeps nothing from this run.
         ephemeral: opts.ephemeral === true,
       })

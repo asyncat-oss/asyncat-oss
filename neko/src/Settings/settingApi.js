@@ -203,6 +203,19 @@ export const aiProviderApi = {
     });
   },
 
+  // The default model: what new chats, Quick ask and Cats without a model of
+  // their own use. { model: { kind: 'profile', profileId } | { kind: 'local', file } | null, name }
+  getDefaultModel: async () => {
+    return apiCall(`${AI_API_BASE}/default-model`);
+  },
+
+  setDefaultModel: async (model) => {
+    return apiCall(`${AI_API_BASE}/default-model`, {
+      method: 'PUT',
+      body: JSON.stringify({ model }),
+    });
+  },
+
   activateProfile: async (id, { stopLocal = false } = {}) => {
     return apiCall(`${AI_API_BASE}/profiles/${encodeURIComponent(id)}/activate`, {
       method: 'POST',

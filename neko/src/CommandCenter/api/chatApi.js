@@ -26,6 +26,12 @@ export const chatApi = {
         fileAttachments: Array.isArray(opts.fileAttachments) ? opts.fileAttachments : [],
         projectId: opts.projectId || null,
         profileId: opts.profileId || null,
+        // The chat runs on its own model (den/src/ai/controllers/ai/chatModel.js);
+        // without a chat (Quick ask), on the default model.
+        conversationId: opts.conversationId || null,
+        ...(opts.model ? { model: opts.model } : {}),
+        ...(opts.ctxSize ? { ctxSize: opts.ctxSize } : {}),
+        ephemeral: opts.ephemeral === true,
       }),
     });
 
@@ -134,6 +140,15 @@ export const chatApi = {
   searchConversations: async (query, limit = 20, { signal } = {}) => {
     const params = new URLSearchParams({ q: query, limit: limit.toString() });
     return await apiRequest(`${ENDPOINTS.CHATS}/search?${params}`, { signal });
+  },
+
+  // The model this chat runs on. It also becomes the default for new chats
+  // unless makeDefault is false; null makes the chat follow the default.
+  setChatModel: async (conversationId, model, { makeDefault = true } = {}) => {
+    return await apiRequest(`${ENDPOINTS.CHATS}/${conversationId}/model`, {
+      method: 'PUT',
+      body: JSON.stringify({ model, makeDefault }),
+    });
   },
 
   updateConversation: async (conversationId, updates) => {

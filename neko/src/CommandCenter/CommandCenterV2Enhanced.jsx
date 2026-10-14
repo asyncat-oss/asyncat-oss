@@ -1331,6 +1331,8 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
             fileAttachments,
             projectId: workingContext?.projectId || null,
             profileId: effectiveProfileId || null,
+            conversationId: isTemporaryChat ? null : runConversationId,
+            ephemeral: isTemporaryChat,
           })
         // maxRounds is left to the agent (or the default); it used to be
         // fixed at 25 here, which overrode every agent's own setting.
