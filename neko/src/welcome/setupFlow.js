@@ -82,20 +82,38 @@ export function downloadLabel(bytes) {
   return bytes > 0 ? `Download ${formatBytes(bytes)}` : 'Use this model';
 }
 
+const fileName = (value) => String(value || '').split(/[\\/]/).filter(Boolean).pop() || '';
+
+/** "Llama 3.2 3B Instruct" for ".../Llama-3.2-3B-Instruct-Q4_K_M.gguf". */
+export function localModelName(value) {
+  const file = fileName(value).replace(/\.gguf$/i, '');
+  const name = file.replace(/[-_.](?:I?Q\d(?:_[A-Z0-9]+)*|BF16|F16|F32)$/i, '');
+  return name.replace(/[-_]+/g, ' ').trim() || file;
+}
+
+/** The model that answers chats now, by the name people know it by. */
+export function chatModelName(brain) {
+  if (!brain?.model) return '';
+  return brain.isBuiltin ? localModelName(brain.rawModel || brain.model) : brain.model;
+}
+
 /**
  * Where a local model setup is: 'idle' (none, or cancelled), 'running',
  * 'loading' (downloaded, the model is loading), 'ready', 'kept' (downloaded,
- * but another model answers chats) or 'error'. `brain` is
- * useActiveBrainStatus().
+ * but something else answers chats) or 'error'. `brain` is
+ * useActiveBrainStatus(); until it names the downloaded model it is still
+ * catching up, so the model counts as loading rather than ready.
  */
 export function localSetupState(job, brain) {
   if (!job || job.status === 'cancelled') return 'idle';
   if (job.status === 'running') return 'running';
   if (job.status === 'error' || job.result?.error) return 'error';
+  const file = fileName(job.result?.path);
+  const current = fileName(brain?.rawModel);
   // Kept for later: something else answered chats when it finished, or since.
-  if (job.result?.reason === 'in_use' || (brain && brain.isBuiltin === false)) return 'kept';
-  if (brain?.isLoadingModel) return 'loading';
+  if (job.result?.reason === 'in_use' || brain?.isBuiltin === false || (file && current && current !== file)) return 'kept';
   if (brain?.status === 'error') return 'error';
+  if (!current || brain?.isLoadingModel) return 'loading';
   return 'ready';
 }
 

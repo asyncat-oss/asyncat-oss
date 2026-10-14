@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { NETWORK_CHOICES } from '../Settings/sandboxText.js';
 import {
-  CHAT_MODE_CHOICES, FIT_TEXT, NETWORK_DESCRIPTIONS, SETUP_STEPS, doneText, downloadBytes, downloadLabel,
-  hardwareText, isLandingPath, laterJob, localSetupState, nameToPrefill, networkPendingNote, sandboxSentence,
+  CHAT_MODE_CHOICES, FIT_TEXT, NETWORK_DESCRIPTIONS, SETUP_STEPS, chatModelName, doneText, downloadBytes, downloadLabel,
+  hardwareText, isLandingPath, laterJob, localModelName, localSetupState, nameToPrefill, networkPendingNote, sandboxSentence,
   shouldOpenSetup, stepIndex,
 } from './setupFlow.js';
 
@@ -76,16 +76,36 @@ test('the download button says how much it fetches: the model unless it is here,
 });
 
 test('where a local model setup is', () => {
+  const FILE = 'Qwen3-1.7B-Q4_K_M.gguf';
+  const loaded = { status: 'complete', result: { loaded: true, path: `/data/models/${FILE}` } };
+  const engine = (status, rawModel = FILE) => ({ isBuiltin: true, status, rawModel, isLoadingModel: status === 'loading', isReady: status === 'ready' });
   assert.equal(localSetupState(null, {}), 'idle');
   assert.equal(localSetupState({ status: 'cancelled' }, {}), 'idle');
   assert.equal(localSetupState({ status: 'running' }, {}), 'running');
   assert.equal(localSetupState({ status: 'error', error: 'HTTP 404' }, {}), 'error');
   assert.equal(localSetupState({ status: 'complete', result: { loaded: false, error: 'llama-server not found' } }, {}), 'error');
   assert.equal(localSetupState({ status: 'complete', result: { loaded: false, reason: 'in_use' } }, {}), 'kept');
-  assert.equal(localSetupState({ status: 'complete', result: { loaded: true } }, { isLoadingModel: true }), 'loading');
-  assert.equal(localSetupState({ status: 'complete', result: { loaded: true } }, { status: 'error' }), 'error');
-  assert.equal(localSetupState({ status: 'complete', result: { loaded: true } }, { isReady: true, status: 'ready', isBuiltin: true }), 'ready');
-  assert.equal(localSetupState({ status: 'complete', result: { loaded: true } }, { isReady: true, status: 'ready', isBuiltin: false }), 'kept', 'a provider connected since');
+  assert.equal(localSetupState(loaded, engine('loading')), 'loading');
+  assert.equal(localSetupState(loaded, engine('error')), 'error');
+  assert.equal(localSetupState(loaded, engine('ready')), 'ready');
+  assert.equal(localSetupState(loaded, engine('ready', `/data/models/${FILE}`)), 'ready', 'the engine may report the whole path');
+  assert.equal(localSetupState(loaded, engine('idle', '')), 'loading', 'the status has not caught up with the download yet');
+  assert.equal(localSetupState(loaded, null), 'loading');
+  assert.equal(localSetupState(loaded, engine('ready', 'Llama-3.2-3B-Instruct-Q4_K_M.gguf')), 'kept', 'another model was loaded since');
+  assert.equal(localSetupState(loaded, { isBuiltin: false, isReady: true, status: 'ready', rawModel: 'gpt-5' }), 'kept', 'a provider connected since');
+});
+
+test('local models go by their names, not their file names', () => {
+  assert.equal(localModelName('/data/models/Llama-3.2-3B-Instruct-Q4_K_M.gguf'), 'Llama 3.2 3B Instruct');
+  assert.equal(localModelName('Qwen3-1.7B-Q4_K_M.gguf'), 'Qwen3 1.7B');
+  assert.equal(localModelName('C:\\models\\gemma-3-4b-it-Q8_0.gguf'), 'gemma 3 4b it');
+  assert.equal(localModelName('phi-4-mini-IQ3_XS.gguf'), 'phi 4 mini');
+  assert.equal(localModelName('tiny.F16.gguf'), 'tiny');
+  assert.equal(localModelName(''), '');
+  assert.equal(chatModelName({ isBuiltin: true, model: 'Llama-3.2-3B-Instruct-Q4_K_M', rawModel: 'Llama-3.2-3B-Instruct-Q4_K_M.gguf' }), 'Llama 3.2 3B Instruct');
+  assert.equal(chatModelName({ isBuiltin: false, model: 'gpt-5-mini', rawModel: 'gpt-5-mini' }), 'gpt-5-mini');
+  assert.equal(chatModelName({ isBuiltin: true, model: '', rawModel: '' }), '');
+  assert.equal(chatModelName(null), '');
 });
 
 test('the last step says whether chats can start now', () => {

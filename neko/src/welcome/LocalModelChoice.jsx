@@ -13,7 +13,7 @@ import Skeleton from '../components/ui/Skeleton.jsx';
 import StatusLine from '../components/ui/StatusLine.jsx';
 import { DownloadLine } from '../components/ui/Progress.jsx';
 import { formatBytes } from '../components/ui/progressFormat.js';
-import { FIT_TEXT, downloadBytes, downloadLabel, hardwareText, localSetupState } from './setupFlow.js';
+import { FIT_TEXT, chatModelName, downloadBytes, downloadLabel, hardwareText, localSetupState } from './setupFlow.js';
 
 function Downloading({ job, onCancel }) {
   const steps = job.steps.filter((step) => step.status !== 'skipped');
@@ -89,7 +89,7 @@ export default function LocalModelChoice({ local, brain }) {
       <StatusLine
         tone="ok"
         text={`${jobLabel} is downloaded`}
-        detail={brain?.model ? `Chats still use ${brain.model}; switch in Models.` : 'Load it in Models.'}
+        detail={chatModelName(brain) ? `Chats still use ${chatModelName(brain)}; switch in Models.` : 'Load it in Models.'}
       />
     );
   }

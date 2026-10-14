@@ -17,7 +17,7 @@ import { ProviderLogo } from '../Models/modelLogos.jsx';
 import ProviderConnectDialog from '../Models/ProviderConnectDialog.jsx';
 import { buildDirectory, matchesDirectoryFilter } from '../Models/providerDirectory.js';
 import LocalModelChoice from './LocalModelChoice.jsx';
-import { localSetupState } from './setupFlow.js';
+import { chatModelName, localSetupState } from './setupFlow.js';
 
 // The services most people have a key for, then any OpenAI-compatible one.
 const FEATURED = ['openai', 'anthropic', 'gemini', 'openrouter', 'custom'];
@@ -147,10 +147,11 @@ function OnlineModels() {
 
 /** What answers chats now, when something does. */
 function InUse({ brain }) {
-  if (!brain?.model) return null;
-  if (brain.isLoadingModel) return <StatusLine tone="progress" text={`Loading ${brain.model}…`} detail={brain.providerName} />;
+  const name = chatModelName(brain);
+  if (!name) return null;
+  if (brain.isLoadingModel) return <StatusLine tone="progress" text={`Loading ${name}…`} detail={brain.providerName} />;
   if (!brain.isReady) return null;
-  return <StatusLine tone="ok" text={`Chats use ${brain.model}`} detail={brain.isLocal ? 'On this computer' : brain.providerName} />;
+  return <StatusLine tone="ok" text={`Chats use ${name}`} detail={brain.isLocal ? 'On this computer' : brain.providerName} />;
 }
 
 InUse.propTypes = { brain: PropTypes.object };
