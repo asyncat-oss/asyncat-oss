@@ -7,7 +7,7 @@ import { Globe2 } from 'lucide-react';
 // browser. This card lets people rebind or turn them off. Desktop app only.
 
 const SHORTCUTS = [
-  { id: 'quickAsk', label: 'Quick ask', description: 'Open the quick-ask popup from any app.' },
+  { id: 'quickAsk', label: 'Quick ask', description: 'Open Quick ask from any app.' },
   { id: 'toggleWindow', label: 'Show or hide Asyncat', description: 'Bring the Asyncat window forward, or hide it.' },
 ];
 
@@ -89,11 +89,15 @@ export default function GlobalShortcutsSection() {
   const [isMac, setIsMac] = useState(false);
   const [recording, setRecording] = useState(null);
   const [error, setError] = useState('');
+  // Wayland desktops may never pass a global shortcut on (it can still show
+  // as active), so Quick ask also opens with `<command> --quick-ask`.
+  const [quickAskCommand, setQuickAskCommand] = useState(null);
 
   useEffect(() => {
     if (!available) return;
     api.getGlobalShortcuts().then(setShortcuts).catch(() => setError('Could not read the shortcut settings.'));
     api.getPlatform?.().then(platform => setIsMac(platform === 'darwin')).catch(() => {});
+    api.getQuickAskCommand?.().then((info) => setQuickAskCommand(info?.wayland ? info.command : null)).catch(() => {});
   }, [api, available]);
 
   const update = useCallback(async (id, patch) => {
@@ -158,38 +162,45 @@ export default function GlobalShortcutsSection() {
           const status = STATUS[entry?.status] || STATUS.off;
           const isRecording = recording === id;
           return (
-            <div key={id} className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200/50 py-3 last:border-0 dark:border-gray-700/50">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-gray-800 dark:text-gray-200 midnight:text-slate-200">{label}</span>
-                  {entry && <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${status.className}`}>{status.label}</span>}
+            <div key={id} className="border-b border-gray-200/50 py-3 last:border-0 dark:border-gray-700/50">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-800 dark:text-gray-200 midnight:text-slate-200">{label}</span>
+                    {entry && <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${status.className}`}>{status.label}</span>}
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{description}</p>
                 </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">{description}</p>
+                <div className="flex items-center gap-3">
+                  {entry && (isRecording
+                    ? <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400">Press a key combination… (Esc to cancel)</span>
+                    : <Keys accelerator={entry.accelerator} isMac={isMac} />)}
+                  <button
+                    type="button"
+                    onClick={() => setRecording(isRecording ? null : id)}
+                    disabled={!entry}
+                    className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                  >
+                    {isRecording ? 'Cancel' : 'Change'}
+                  </button>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={Boolean(entry?.enabled)}
+                    aria-label={`${label} shortcut`}
+                    onClick={() => entry && update(id, { enabled: !entry.enabled })}
+                    disabled={!entry}
+                    className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${entry?.enabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-700'}`}
+                  >
+                    <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${entry?.enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-3">
-                {entry && (isRecording
-                  ? <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400">Press a key combination… (Esc to cancel)</span>
-                  : <Keys accelerator={entry.accelerator} isMac={isMac} />)}
-                <button
-                  type="button"
-                  onClick={() => setRecording(isRecording ? null : id)}
-                  disabled={!entry}
-                  className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-                >
-                  {isRecording ? 'Cancel' : 'Change'}
-                </button>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={Boolean(entry?.enabled)}
-                  aria-label={`${label} shortcut`}
-                  onClick={() => entry && update(id, { enabled: !entry.enabled })}
-                  disabled={!entry}
-                  className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${entry?.enabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-700'}`}
-                >
-                  <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${entry?.enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
-                </button>
-              </div>
+              {id === 'quickAsk' && quickAskCommand && entry?.enabled && (
+                <p className="mt-2 text-xs text-fg-muted">
+                  On Wayland, bind <code className="select-all break-all rounded bg-hover px-1 py-0.5 font-mono text-[11px] text-fg">{quickAskCommand}</code> in your desktop&apos;s keyboard settings.
+                </p>
+              )}
             </div>
           );
         })}
