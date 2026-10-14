@@ -556,6 +556,47 @@ async function main() {
     await noCrash();
   });
 
+  await check("a chat whose model was removed offers to pick another", async () => {
+    const third = await api('POST', '/api/ai/providers/profiles', {
+      name: 'Smoke model three', provider_id: 'custom', provider_type: 'custom',
+      base_url: `http://127.0.0.1:${modelPort}/v1`, model: 'smoke-model-3', api_key: 'smoke-key', supports_tools: false,
+    });
+    const shownModel = () => page.evaluate(() => document.querySelector('[data-chat-model]')?.getAttribute('data-chat-model'));
+    const showsModel = (name) => waitFor(async () => (await shownModel()) === name, { timeout: 15000, what: `"${name}" in the composer` });
+    const ask = async (text) => {
+      const composer = await page.waitForSelector('textarea');
+      await composer.click();
+      await page.keyboard.type(text);
+      await page.keyboard.press('Enter');
+    };
+
+    await clickText('aside button', 'New chat');
+    await waitFor(() => page.evaluate(() => location.pathname === '/home'), { timeout: 10000, what: 'a new chat' });
+    await page.click('[data-chat-model]');
+    await clickText('[role="menuitem"]', 'smoke-model-3');
+    await showsModel('smoke-model-3');
+    await ask('Which model are you, chat C?');
+    await textAppears('Answer from smoke-model-3.');
+
+    // The model goes away (the default goes back to the first one first).
+    await api('PUT', '/api/ai/providers/default-model', { model: { kind: 'profile', profileId: created.profile.id } });
+    await api('DELETE', `/api/ai/providers/profiles/${third.profile.id}`);
+    await ask('Which model are you after that?');
+    await textAppears('was removed from your models');
+    await clickText('button', 'Pick another model');
+    await waitFor(() => page.evaluate(() => Boolean(document.querySelector('[role="menu"] [role="menuitem"]'))), { timeout: 10000, what: "the composer's model menu" });
+    await waitFor(() => page.evaluate(() => {
+      const first = [...document.querySelectorAll('[role="menu"] [role="menuitem"]')]
+        .find((node) => /^smoke-model(?!-)/.test(node.textContent.trim()));
+      first?.click();
+      return Boolean(first);
+    }), { timeout: 10000, what: 'the first model in the menu' });
+    await showsModel('smoke-model');
+    await ask('Which model are you now, chat C?');
+    await textAppears('Answer from smoke-model.');
+    await noCrash();
+  });
+
   await check('Models → Voice shows Listening and Speaking', async () => {
     await page.goto(`${app}/models?tab=audio`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('[data-voice-page] [data-voice-group="stt"] [data-runs-on="stt"]', { timeout: 20000 });

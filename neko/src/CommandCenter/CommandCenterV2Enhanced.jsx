@@ -63,7 +63,7 @@ import { useAgents } from "../Agent/useAgents.js";
 import Cat from "../components/ui/Cat.jsx";
 import { engineDisplayName, registerEngineNames, resumeCommand } from "../Agent/externalAgentFormat.js";
 import { ALWAYS_ALLOW_EVENT, ALWAYS_ALLOW_KEY, alwaysAllowedChatTools } from "../services/chatDefaults.js";
-import { FOLLOW_UP_EVENT } from "./components/renderers/interactiveEvents.js";
+import { FOLLOW_UP_EVENT, MODEL_ACTION_EVENT } from "./components/renderers/interactiveEvents.js";
 import { linkedMessageId } from "../sidebar/chatSearch.js";
 import { TEMPORARY_CHAT, engineForChat } from "./utils/temporaryChat.js";
 import { currentToolName } from "./utils/toolNames.js";
@@ -1848,6 +1848,19 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     return () => document.removeEventListener(FOLLOW_UP_EVENT, onFollowUp);
   }, [agentRunning, enabledIntegrationTools, handleComposerSubmit]);
 
+  // The buttons under a model error in this chat: "Pick another model" opens
+  // the composer's model menu, "Open Models" the Models page.
+  const [modelMenuRequest, setModelMenuRequest] = useState(0);
+  useEffect(() => {
+    const onModelAction = (event) => {
+      if (!scrollContainerRef.current?.contains(event.target)) return;
+      if (event.detail?.action === 'models') navigate('/models');
+      else setModelMenuRequest((count) => count + 1);
+    };
+    document.addEventListener(MODEL_ACTION_EVENT, onModelAction);
+    return () => document.removeEventListener(MODEL_ACTION_EVENT, onModelAction);
+  }, [navigate]);
+
   const handleEditConversationTurn = useCallback(async (messageId, nextContent) => {
     const messageIndex = messages.findIndex(msg => msg.id === messageId);
     const original = messages[messageIndex];
@@ -2871,6 +2884,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                 modelBusy={savingChatModel}
                 onChatModelChange={handleChatModelChange}
                 onModelMenuOpen={refreshModelOptions}
+                modelMenuRequest={modelMenuRequest}
                 temporaryChat={isTemporaryChat}
               />
 
@@ -3356,6 +3370,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                 modelBusy={savingChatModel}
                 onChatModelChange={handleChatModelChange}
                 onModelMenuOpen={refreshModelOptions}
+                modelMenuRequest={modelMenuRequest}
                 temporaryChat={isTemporaryChat}
               />
             </div>

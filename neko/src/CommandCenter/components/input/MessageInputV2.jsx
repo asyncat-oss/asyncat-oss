@@ -825,6 +825,8 @@ export const MessageInputV2 = ({
   modelBusy = false,
   onChatModelChange,
   onModelMenuOpen,
+  // Goes up by one each time the model menu should open by itself.
+  modelMenuRequest = 0,
   temporaryChat = false,
 }) => {
   const navigate = useNavigate();
@@ -2017,6 +2019,7 @@ export const MessageInputV2 = ({
                     busy={modelBusy}
                     disabled={disabled || !onChatModelChange}
                     temporary={temporaryChat}
+                    openRequest={modelMenuRequest}
                     onChange={onChatModelChange}
                     onOpen={onModelMenuOpen}
                     onManage={() => navigate("/models")}

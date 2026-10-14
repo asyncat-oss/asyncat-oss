@@ -6,7 +6,7 @@ import {
   FileText, LayoutList, ShieldAlert, MessageCircle, Send, GitBranch,
   ShieldOff, Brain, RotateCcw, Link2, Image, ExternalLink, Copy, Volume2, Square, Loader2 as Spinner, Download, Mic, SkipBack, SkipForward,
   AlertTriangle, RefreshCw, TimerOff, AlertCircle, Palette, Bell, Eye, Lock, Wrench, Check, ChevronLeft, Plug,
-  MousePointerClick, Keyboard, AppWindow, Hand, Code2,
+  MousePointerClick, Keyboard, AppWindow, Hand, Code2, ArrowLeftRight, SlidersHorizontal,
 } from 'lucide-react';
 import { audioApi } from '../../../Settings/settingApi.js';
 import { filesApi, agentApi } from '../../api';
@@ -20,6 +20,8 @@ import { openWebLink } from '../../../utils/openWebLink.js';
 import { extractLocalhostUrl } from '../../utils/localhostUrl.js';
 import { connectorToolLabel } from '../../../Connectors/connectorFormat.js';
 import Tooltip from '../../../components/ui/Tooltip.jsx';
+import Button from '../../../components/ui/Button.jsx';
+import { MODEL_ACTION_EVENT } from '../renderers/interactiveEvents.js';
 import AskUserForm from './AskUserForm.jsx';
 import SkillSuggestionCard from './SkillSuggestionCard.jsx';
 import useSkillSuggestions from '../../hooks/useSkillSuggestions.js';
@@ -1589,6 +1591,12 @@ function AnswerEvent({
   );
 }
 
+// A model that can't be used (removed, no key, won't load) offers another:
+// the chat page opens the composer's model menu, or Models.
+function sendModelAction(event, action) {
+  event.currentTarget.dispatchEvent(new CustomEvent(MODEL_ACTION_EVENT, { bubbles: true, detail: { action } }));
+}
+
 function ErrorEvent({ data, onRetryGoal, onRunWithAction }) {
   return (
     <FeedFrame className="mb-3">
@@ -1598,6 +1606,16 @@ function ErrorEvent({ data, onRetryGoal, onRunWithAction }) {
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-xs text-gray-700 dark:text-gray-200 leading-relaxed">{data?.message || 'Agent encountered an error.'}</p>
+          {data?.code === 'model_unavailable' && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <Button variant="secondary" size="xs" icon={ArrowLeftRight} onClick={(event) => sendModelAction(event, 'pick')}>
+                Pick another model
+              </Button>
+              <Button variant="ghost" size="xs" icon={SlidersHorizontal} onClick={(event) => sendModelAction(event, 'models')}>
+                Open Models
+              </Button>
+            </div>
+          )}
           {data?.goal && (
             <div className="mt-2 flex flex-wrap gap-1.5">
               <button

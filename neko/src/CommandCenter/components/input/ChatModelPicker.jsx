@@ -1,7 +1,7 @@
 // ChatModelPicker.jsx — the composer's model button and menu: the model this
 // chat runs on, and the others it can switch to. Picking one changes this chat
 // only, and new chats start with it (see utils/chatModel.js).
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import PropTypes from "prop-types";
 import { ChevronDown, Cloud, Cpu, Loader2, SlidersHorizontal, TriangleAlert } from "lucide-react";
 import { Menu, MenuItem, MenuLabel, MenuSeparator } from "../../../components/ui/Menu.jsx";
@@ -18,9 +18,19 @@ function OptionLabel({ label, detail }) {
 
 OptionLabel.propTypes = { label: PropTypes.string.isRequired, detail: PropTypes.string };
 
-export default function ChatModelPicker({ model, options = [], agentModel = null, loading = null, busy = false, disabled = false, temporary = false, onChange, onOpen, onManage }) {
+export default function ChatModelPicker({ model, options = [], agentModel = null, loading = null, busy = false, disabled = false, temporary = false, openRequest = 0, onChange, onOpen, onManage }) {
   const buttonRef = useRef(null);
   const [open, setOpen] = useState(false);
+  // Opened from elsewhere: each new `openRequest` (a model error's "Pick
+  // another model") opens the menu once.
+  const handledRequest = useRef(openRequest);
+  useEffect(() => {
+    if (openRequest === handledRequest.current) return;
+    handledRequest.current = openRequest;
+    if (disabled) return;
+    onOpen?.();
+    setOpen(true);
+  }, [disabled, onOpen, openRequest]);
   // An agent with a model of its own answers with it, whatever the chat's is.
   const answering = agentModel || model;
   const working = Boolean(loading) || busy;
@@ -122,6 +132,7 @@ ChatModelPicker.propTypes = {
   busy: PropTypes.bool,
   disabled: PropTypes.bool,
   temporary: PropTypes.bool,
+  openRequest: PropTypes.number,
   onChange: PropTypes.func,
   onOpen: PropTypes.func,
   onManage: PropTypes.func,
