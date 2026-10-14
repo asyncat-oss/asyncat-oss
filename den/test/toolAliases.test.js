@@ -18,6 +18,7 @@ const { default: db } = await import('../src/db/client.js');
 const { initializeAgent } = await import('../src/agent/index.js');
 const { toolRegistry } = await import('../src/agent/tools/toolRegistry.js');
 const { AgentRuntime } = await import('../src/agent/AgentRuntime.js');
+const toolAliasesModule = await import('../src/agent/tools/toolAliases.js');
 
 await initializeAgent();
 
@@ -105,4 +106,33 @@ test('a model that calls an old name gets the new tool in a run', async () => {
   const result = events.find((event) => event.type === 'tool_result')?.data.result;
   assert.equal(result?.success, true);
   assert.match(JSON.stringify(result), /pears\.md/);
+});
+
+test('every old name points at a registered tool, and none is still a tool', () => {
+  const { TOOL_ALIASES } = toolAliasesModule;
+  for (const [name, spec] of Object.entries(TOOL_ALIASES)) {
+    assert.ok(toolRegistry.has(spec.to), `${name} points at ${spec.to}, which is not registered`);
+    assert.equal(toolRegistry.has(name), false, `${name} is still registered as a tool`);
+    assert.equal(toolRegistry.isAlias(name), true);
+  }
+});
+
+test('the old browser tools map onto the one browser set', () => {
+  const check = (name, args, expected) => {
+    const resolved = toolRegistry.resolve(name, args);
+    assert.deepEqual({ name: resolved.name, args: resolved.args }, expected, name);
+    assert.equal(toolRegistry.validateArgs(resolved.name, resolved.args).valid, true, `${name} → ${resolved.name} args are valid`);
+  };
+  check('browse_url', { url: 'https://example.com', wait_for: '#app', timeout: 20 }, { name: 'preview_get_text', args: { url: 'https://example.com' } });
+  check('screenshot_page', { url: 'https://example.com', full_page: true }, { name: 'preview_screenshot', args: { url: 'https://example.com', full_page: true } });
+  check('browser_navigate', { url: 'https://example.com' }, { name: 'preview_navigate', args: { url: 'https://example.com' } });
+  check('browser_click', { selector: '#buy', wait: 500 }, { name: 'preview_click', args: { selector: '#buy' } });
+  check('browser_type', { selector: '#q', text: 'pears', press_enter: true }, { name: 'preview_type', args: { selector: '#q', text: 'pears', submit: true } });
+  check('browser_fill', { fields: { '#name': 'Ann', '#city': 'Leeds' }, submit_selector: 'button[type=submit]' }, {
+    name: 'preview_fill',
+    args: { fields: [{ selector: '#name', value: 'Ann' }, { selector: '#city', value: 'Leeds' }], submit: 'button[type=submit]' },
+  });
+  check('browser_extract', { selector: '.price' }, { name: 'preview_get_text', args: { selector: '.price' } });
+  check('browser_extract', { structure: { title: 'h1', price: '.price' } }, { name: 'preview_get_text', args: { selector: 'h1, .price' } });
+  check('browser_extract', { selector: 'a.download', attribute: 'href', multiple: true }, { name: 'preview_get_text', args: { selector: 'a.download', attribute: 'href' } });
 });

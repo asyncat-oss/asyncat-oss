@@ -487,7 +487,7 @@ async function askQuestion(cat, entry, request) {
   return { success: false, error: 'Nobody answered in time. Carry on with your best judgement and say what you assumed.' };
 }
 
-const PAGE_ARG = { preview_navigate: 'url', preview_open_tab: 'url', browse: 'url', fetch_url: 'url', browser_navigate: 'url', http_request: 'url', read_url: 'url' };
+const PAGE_ARG = { preview_navigate: 'url', preview_open_tab: 'url', preview_get_text: 'url', preview_screenshot: 'url', fetch_url: 'url', http_request: 'url' };
 
 /** A timeline step for a tool call: { kind, title }. */
 export function describeToolStep(tool, args = {}) {

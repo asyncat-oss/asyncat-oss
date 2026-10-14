@@ -14,7 +14,7 @@
 
 import dns from 'dns/promises';
 import net from 'net';
-import { currentScheduledRun } from '../scheduledRunContext.js';
+import { currentScheduledRun, runInScheduledContext } from '../scheduledRunContext.js';
 import { describeSites, siteAllowed } from '../../cats/catSites.js';
 import { siteBlocked } from '../../privacy/blockedSites.js';
 
@@ -147,9 +147,12 @@ export async function agentFetch(rawUrl, init = {}, { maxRedirects = 5 } = {}) {
 
 /**
  * Make a Puppeteer page refuse every request (page loads, redirects,
- * images, fetches) that the agent could not open directly.
+ * images, fetches) that the agent could not open directly. Requests arrive
+ * outside the run that opened the page, so a Cat's run is passed in
+ * (scheduledRun() returns it) to keep the page to the Cat's sites.
  */
-export async function guardPuppeteerPage(page) {
+export async function guardPuppeteerPage(page, { scheduledRun = null } = {}) {
+  const opener = currentScheduledRun();
   await page.setRequestInterception(true);
   page.on('request', async (request) => {
     if (request.isInterceptResolutionHandled?.()) return;
@@ -158,7 +161,8 @@ export async function guardPuppeteerPage(page) {
       request.continue().catch(() => {});
       return;
     }
-    const check = await checkAgentUrl(url);
+    const run = (scheduledRun ? scheduledRun() : null) || opener;
+    const check = run ? await runInScheduledContext(run, () => checkAgentUrl(url)) : await checkAgentUrl(url);
     if (check.ok) request.continue().catch(() => {});
     else request.abort('blockedbyclient').catch(() => {});
   });

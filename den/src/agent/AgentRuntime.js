@@ -115,14 +115,11 @@ const PLAN_BLOCKED_SAFE_TOOLS = new Set([
   'preview_type',
   'preview_press_key',
   'preview_select_option',
-  'browser_click',
-  'browser_type',
-  'browser_fill',
 ]);
 // Tools whose results carry text written by someone other than the user.
 const OUTSIDE_CONTENT_TOOLS = new Set([
-  'web_search', 'fetch_url', 'http_request', 'browse_url', 'browser_navigate', 'browser_extract',
-  'screenshot_page', 'preview_get_text', 'preview_evaluate', 'preview_screenshot', 'read_email', 'search_email',
+  'web_search', 'fetch_url', 'http_request',
+  'preview_get_text', 'preview_evaluate', 'preview_screenshot', 'read_email', 'search_email',
   'rss_read', 'clipboard_read',
   // Built-in browser tools that return page content (titles, outlines, text).
   'preview_snapshot', 'preview_navigate', 'preview_go_back', 'preview_click', 'preview_hover', 'preview_type',
@@ -2484,8 +2481,6 @@ export class AgentRuntime {
       // Pages are read in parts of about 12k characters; let a part through.
       preview_snapshot: 14000,
       preview_get_text: 13000,
-      browse_url: 12500,
-      browser_extract: 6000,
       preview_list_tabs: 6000,
     };
     const maxString = TOOL_CONTEXT_LIMITS[toolName] || 3000;

@@ -7,7 +7,6 @@ import { fileTools } from './tools/fileTools.js';
 import { shellTools } from './tools/shellTools.js';
 import { searchTools } from './tools/searchTools.js';
 import { memoryTools } from './tools/memoryTools.js';
-import { browserTools } from './tools/browserTools.js';
 import { agentTools } from './tools/agentTools.js';
 import { systemTools } from './tools/systemTools.js';
 import { gitTools } from './tools/gitTools.js';
@@ -49,6 +48,7 @@ import { desktopTools } from './tools/desktopTools.js';
 import { previewTools } from './tools/previewTool.js';
 import { previewBrowserTools } from './tools/previewBrowserTools.js';
 import { knowledgeTools } from './tools/knowledgeTools.js';
+import { TOOL_ALIASES } from './tools/toolAliases.js';
 import { AgentRuntime } from './AgentRuntime.js';
 import { AgentSession } from './AgentSession.js';
 import { permissionManager } from './PermissionManager.js';
@@ -117,12 +117,8 @@ export async function initializeAgent() {
   toolRegistry.registerAll(previewBrowserTools);
   toolRegistry.registerAll(knowledgeTools);
 
-  // Browser tools are optional — puppeteer may not be installed
-  try {
-    toolRegistry.registerAll(browserTools);
-  } catch (err) {
-    console.warn('[agent] Browser tools not available (puppeteer not installed):', err.message);
-  }
+  // Old names of tools that were merged into others (see tools/toolAliases.js).
+  toolRegistry.registerAliases(TOOL_ALIASES);
 
   // Connector (MCP) tools are added as their servers connect; see
   // connectors/connectorManager.js, started with the server.

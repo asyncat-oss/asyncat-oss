@@ -4,10 +4,13 @@ import assert from 'node:assert/strict';
 process.env.ASYNCAT_HOST_TOKEN = 'test-host-token';
 
 const bridge = await import('../src/lib/hostBridge.js');
-const { NO_DESKTOP_APP, runBrowserAction, sendBrowserCommand, redactArgs, browserOwner } = await import('../src/agent/browserCommandQueue.js');
+const { HANDOVER_NEEDS_DESKTOP, runBrowserAction, sendBrowserCommand, redactArgs, browserOwner, useHeadlessBrowser } = await import('../src/agent/browserCommandQueue.js');
 const { previewBrowserTools } = await import('../src/agent/tools/previewBrowserTools.js');
 
-test.afterEach(() => bridge.resetHostBridge());
+test.afterEach(() => {
+  bridge.resetHostBridge();
+  useHeadlessBrowser(null);
+});
 
 const tool = (name) => previewBrowserTools.find((t) => t.name === name);
 
@@ -32,11 +35,91 @@ function fakeHost(reply) {
   return { seen, stop: () => { running = false; } };
 }
 
-test('without the desktop app, browser commands fail at once with a plain message', async () => {
-  await assert.rejects(sendBrowserCommand('snapshot', {}, {}), (err) => err.message === NO_DESKTOP_APP);
-  const result = await tool('preview_snapshot').execute({}, {});
-  assert.equal(result.success, false);
-  assert.equal(result.error, NO_DESKTOP_APP);
+test('without the desktop app, browser commands go to the headless browser', async () => {
+  const seen = [];
+  useHeadlessBrowser({
+    command: async (action, params) => {
+      seen.push({ action, ...params });
+      if (action === 'handover_start') throw new Error(HANDOVER_NEEDS_DESKTOP);
+      return { success: true, url: 'https://example.com/', title: 'Example', snapshot: '[e1] link "More"' };
+    },
+  });
+  const read = await sendBrowserCommand('snapshot', { offset: 0 }, { conversationId: 'chat-9' });
+  assert.equal(read.snapshot, '[e1] link "More"');
+  assert.deepEqual(seen[0], { action: 'snapshot', offset: 0, owner: 'chat-9' });
+  const result = await tool('preview_snapshot').execute({}, { conversationId: 'chat-9' });
+  assert.equal(result.success, true);
+  const handover = await tool('preview_ask_user').execute({ message: 'Sign in, please.' }, { conversationId: 'chat-9' });
+  assert.equal(handover.success, false);
+  assert.equal(handover.error, HANDOVER_NEEDS_DESKTOP);
+});
+
+test('preview_get_text can read one attribute of the matches, which needs a selector', async () => {
+  const seen = [];
+  useHeadlessBrowser({
+    command: async (action, params) => {
+      seen.push({ action, ...params });
+      return { success: true, text: '/pears.pdf\n/plums.pdf' };
+    },
+  });
+  const links = await tool('preview_get_text').execute({ selector: 'a.download', attribute: 'href' }, { conversationId: 'chat-9' });
+  assert.equal(links.text, '/pears.pdf\n/plums.pdf');
+  assert.deepEqual(seen, [{ action: 'get_text', offset: 0, limit: 12000, selector: 'a.download', attribute: 'href', owner: 'chat-9' }]);
+  const loose = await tool('preview_get_text').execute({ attribute: 'href' }, { conversationId: 'chat-9' });
+  assert.equal(loose.success, false);
+  assert.match(loose.error, /needs a selector/);
+  assert.equal(seen.length, 1, 'nothing is sent without one');
+});
+
+test('given a url, the page is read or photographed in one command that leaves the agent\'s tab alone', async () => {
+  const seen = [];
+  useHeadlessBrowser({
+    command: async (action, params) => {
+      seen.push({ action, ...params });
+      return action === 'read_page'
+        ? { success: true, url: params.url, text: `Text of ${params.url}` }
+        : { success: true, url: params.url, dataUrl: 'data:image/jpeg;base64,AAAA' };
+    },
+  });
+  const context = { conversationId: 'chat-9' };
+  const read = await tool('preview_get_text').execute({ url: 'http://127.0.0.1:5173/pears', selector: 'main' }, context);
+  assert.equal(read.text, 'Text of http://127.0.0.1:5173/pears');
+  const shot = await tool('preview_screenshot').execute({ url: 'http://127.0.0.1:5173/plums', full_page: true }, context);
+  assert.equal(shot.success, true);
+  assert.deepEqual(seen, [
+    { action: 'read_page', url: 'http://127.0.0.1:5173/pears', offset: 0, limit: 12000, selector: 'main', owner: 'chat-9' },
+    { action: 'screenshot_url', url: 'http://127.0.0.1:5173/plums', fullPage: true, owner: 'chat-9' },
+  ], 'no navigate: the agent\'s tab stays where it was');
+
+  const byRef = await tool('preview_screenshot').execute({ url: 'http://127.0.0.1:5173/plums', ref: 'e3' }, context);
+  assert.equal(byRef.success, false, 'a ref belongs to the agent\'s own tab');
+  assert.match(byRef.error, /selector/);
+  const blocked = await tool('preview_get_text').execute({ url: 'file:///etc/passwd' }, context);
+  assert.match(blocked.error, /http and https/);
+  assert.equal(seen.length, 2);
+});
+
+test('a page the desktop app can\'t photograph while its window is hidden is photographed headless', async () => {
+  await bridge.waitForHostMessages({ waitMs: 0, capabilities: ['browser'] });
+  const host = fakeHost((payload) => {
+    if (payload.action === 'screenshot_url') throw new Error('The page is not on screen (Asyncat\'s window is closed, hidden or minimised), so it can\'t be photographed now.');
+    return { success: true };
+  });
+  const headless = [];
+  useHeadlessBrowser({
+    command: async (action, params) => {
+      headless.push({ action, ...params });
+      return { success: true, url: params.url, dataUrl: 'data:image/jpeg;base64,AAAA' };
+    },
+  });
+  try {
+    const shot = await tool('preview_screenshot').execute({ url: 'http://127.0.0.1:5173/plums' }, { conversationId: 'chat-3' });
+    assert.equal(shot.success, true, shot.error);
+    assert.equal(host.seen[0].action, 'screenshot_url', 'the desktop app is asked first');
+    assert.deepEqual(headless, [{ action: 'screenshot_url', url: 'http://127.0.0.1:5173/plums', fullPage: false, owner: 'chat-3' }]);
+  } finally {
+    host.stop();
+  }
 });
 
 test('commands carry the chat as their owner', async () => {
@@ -120,6 +203,7 @@ test('navigation is checked before the desktop app is asked', async () => {
 test('typed secrets are hidden on approval cards', () => {
   assert.deepEqual(redactArgs({ ref: 'e1', text: 'secret' }), { ref: 'e1', text: '••••••' });
   assert.deepEqual(redactArgs({ fields: { '#pw': 'x', '#user': 'y' } }), { fields: { '#pw': '••••••', '#user': '••••••' } });
+  assert.deepEqual(redactArgs({ fields: [{ ref: 'e4', value: 'x' }] }), { fields: [{ ref: 'e4', value: '••••••' }] });
 });
 
 test('page-reading browser tools are marked as outside content and plan mode cannot type', async () => {

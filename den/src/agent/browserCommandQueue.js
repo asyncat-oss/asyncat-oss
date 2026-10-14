@@ -1,15 +1,15 @@
 /**
  * browserCommandQueue.js
  *
- * The agent's way into the built-in browser. Browser tabs live in the
- * desktop app's main process (electron/browserHost.js), so every command
- * goes there over the host bridge (lib/hostBridge.js) and works whether or
- * not the chat screen, the browser panel or any window is open. When the
- * backend runs without the desktop app there is no browser, and commands
- * fail at once with a plain message.
+ * The agent's way into a browser. Browser tabs live in the desktop app's
+ * main process (electron/browserHost.js), so every command goes there over
+ * the host bridge (lib/hostBridge.js) and works whether or not the chat
+ * screen, the browser panel or any window is open. When the backend runs
+ * without the desktop app, the same commands go to a headless browser
+ * (headlessBrowser.js) with the same results.
  *
  * Actions that need the user's yes (typing a password or card number,
- * buy/delete/send buttons, choosing a file) come back from the desktop app
+ * buy/delete/send buttons, choosing a file) come back from either browser
  * as { needsApproval, approval }; runBrowserAction asks the user through
  * the run's approval card and retries with the approval attached.
  */
@@ -18,8 +18,15 @@ import { isHostConnected, requestFromHost } from '../lib/hostBridge.js';
 import { approvalAllows, approvalCoversRun } from './approvalDecisions.js';
 import { currentCatRun } from './scheduledRunContext.js';
 import { getBlockedSites } from '../privacy/blockedSites.js';
+import { headlessBrowser, HANDOVER_NEEDS_DESKTOP } from './headlessBrowser.js';
 
-export const NO_DESKTOP_APP = 'The built-in browser needs the Asyncat desktop app, and the backend is running without it. Use fetch_url or web_search instead, or open Asyncat.';
+export { HANDOVER_NEEDS_DESKTOP };
+
+// The browser used without the desktop app; tests swap in a stand-in.
+let headless = headlessBrowser;
+export function useHeadlessBrowser(stand) {
+  headless = stand || headlessBrowser;
+}
 
 /** Which agent this is, so its tabs and command queue stay its own. */
 export function browserOwner(context) {
@@ -28,13 +35,22 @@ export function browserOwner(context) {
   return String(context?.conversationId || context?.session?.id || 'default');
 }
 
-export function isBrowserAvailable() {
+/** True when commands go to the desktop app's browser, not the headless one. */
+export function isDesktopBrowser() {
   return isHostConnected('browser');
 }
 
-/** Send one command to the desktop app's browser. Throws on failure. */
+/**
+ * Send one command to the headless browser, even with the desktop app
+ * running (for a page it can't photograph). Throws on failure.
+ */
+export async function sendHeadlessCommand(action, params = {}, context = {}, { timeoutMs = 30_000 } = {}) {
+  return headless.command(action, { ...params, owner: browserOwner(context) }, { timeoutMs });
+}
+
+/** Send one command to the agent's browser. Throws on failure. */
 export async function sendBrowserCommand(action, params = {}, context = {}, { timeoutMs = 30_000 } = {}) {
-  if (!isHostConnected('browser')) throw new Error(NO_DESKTOP_APP);
+  if (!isHostConnected('browser')) return sendHeadlessCommand(action, params, context, { timeoutMs });
   // A Cat browses in its own profile (its logins stay its own) and only on
   // its sites; the desktop app enforces both for the tabs it opens, and
   // keeps every agent tab off the sites the user blocked for agents.
@@ -82,7 +98,9 @@ export function redactArgs(args = {}) {
   for (const key of ['text', 'value', 'values']) {
     if (key in shown) shown[key] = '••••••';
   }
-  if (shown.fields && typeof shown.fields === 'object') {
+  if (Array.isArray(shown.fields)) {
+    shown.fields = shown.fields.map((field) => ({ ...field, value: '••••••' }));
+  } else if (shown.fields && typeof shown.fields === 'object') {
     shown.fields = Object.fromEntries(Object.keys(shown.fields).map((field) => [field, '••••••']));
   }
   return shown;

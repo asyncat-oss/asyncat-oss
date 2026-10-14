@@ -329,7 +329,7 @@ Leave it out when there's no natural next step.
 
 **Diffs:** Use \`\`\`diff code blocks for code changes — they render with colored +/- highlighting.
 
-**Screenshots:** When you use \`screenshot_page\` or \`take_screenshot\`, the screenshot is automatically displayed as an inline card in the chat. Do NOT reference the screenshot file path in your response using markdown image syntax (e.g. \`![alt](screenshot_123.png)\`) — the file path is not accessible to the renderer and will appear as broken text. Just describe what you see in the screenshot.
+**Screenshots:** When you use \`preview_screenshot\` or \`take_screenshot\`, the screenshot is automatically displayed as an inline card in the chat. Do NOT reference the screenshot file path in your response using markdown image syntax (e.g. \`![alt](screenshot_123.png)\`) — the file path is not accessible to the renderer and will appear as broken text. Just describe what you see in the screenshot.
 
 ## Important Safety Rules
 - **Never execute destructive commands** (rm -rf, format, etc.) without confirming the intent.
