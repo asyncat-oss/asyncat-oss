@@ -139,9 +139,9 @@ export function resultMeta(image, seconds = null) {
   return parts.join(' · ');
 }
 
-/** Where images open in Files (the made-files page), at one image when `name` is given. */
+/** Where images open in Files (its Made by Asyncat place, pictures only), at one image when `name` is given. */
 export function picturesUrl(name = null) {
-  return `/made?kind=picture${name ? `&open=${encodeURIComponent(name)}` : ''}`;
+  return `/files/made?kind=picture${name ? `&open=${encodeURIComponent(name)}` : ''}`;
 }
 
 /** "34 images made". */

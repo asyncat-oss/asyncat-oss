@@ -43,8 +43,8 @@ test('the summary line and the result line', () => {
   assert.equal(changedCount({ ...EMPTY_OPTIONS, seed: '1' }, 'openai'), 0);
   assert.equal(resultMeta({ width: 512, height: 512, seed: 4113 }, 6.2), '512 × 512 · seed 4113 · 6 s');
   assert.equal(resultMeta({ width: 1024, height: 1024, seed: null }, 0.3), '1024 × 1024 · 1 s');
-  assert.equal(picturesUrl(), '/made?kind=picture');
-  assert.equal(picturesUrl('cat 1.png'), '/made?kind=picture&open=cat%201.png');
+  assert.equal(picturesUrl(), '/files/made?kind=picture');
+  assert.equal(picturesUrl('cat 1.png'), '/files/made?kind=picture&open=cat%201.png');
   assert.equal(imagesMadeText(1), '1 image made');
   assert.equal(imagesMadeText(34), '34 images made');
 });
