@@ -62,7 +62,6 @@ const ownerSettings = new Map(); // agent owner → { partition, allowedSites }
 // Sites the user blocked for every agent (Settings → Privacy & safety); the
 // backend sends the list with each agent command.
 let agentBlockedSites = [];
-const headlessTabs = new Map(); // agent owner → hidden tab id for browse/browser_* tools
 const agentQueues = new Map();
 let agentBusy = 0; // agent commands running; page dialogs are answered meanwhile
 const downloads = [];
@@ -770,7 +769,6 @@ function removeTab(id) {
   if (shownTab === tab) shownTab = null;
   detachFromParent(tab);
   for (const [owner, tabId] of agentCurrent) if (tabId === id) agentCurrent.delete(owner);
-  for (const [owner, tabId] of headlessTabs) if (tabId === id) headlessTabs.delete(owner);
   if (handover?.tabId === id) finishHandover(handover.id, 'closed');
   if (activeTabId === id) {
     const strip = stripTabs();
@@ -1026,37 +1024,68 @@ async function screenshot(tab, { ref, selector, fullPage = false } = {}) {
   return { dataUrl: `data:image/jpeg;base64,${jpeg.toString('base64')}`, width, height };
 }
 
-async function pageTextOf(tab) {
+/**
+ * The page's visible text, or only the text of the elements a CSS selector
+ * matches: { text, matches } (matches is null without a selector). With an
+ * attribute, that attribute of each element instead, one per line (elements
+ * without it are skipped).
+ */
+async function pageTextOf(tab, selector = null, attribute = null) {
   const wc = tab.wc;
-  if (!wc || wc.isDestroyed()) return '';
-  const text = await withTimeout(wc.executeJavaScriptInIsolatedWorld(ISOLATED_WORLD_ID, [{
-    code: '(document.body ? document.body.innerText : document.documentElement ? document.documentElement.innerText : "")',
-  }]), 10000, 'Reading the page timed out');
-  return String(text || '').replace(/\n{3,}/g, '\n\n').trim();
+  if (!wc || wc.isDestroyed()) return { text: '', matches: null };
+  const code = selector
+    ? `(function (sel, attr) {
+        var nodes = document.querySelectorAll(sel);
+        var parts = [];
+        Array.prototype.forEach.call(nodes, function (node) {
+          var value = attr ? node.getAttribute(attr) : (node.innerText || node.textContent || '');
+          if (value !== null) parts.push(value);
+        });
+        return { matches: nodes.length, text: parts.join(attr ? '\\n' : '\\n\\n') };
+      })(${JSON.stringify(String(selector))}, ${JSON.stringify(attribute ? String(attribute) : null)})`
+    : '({ matches: null, text: document.body ? document.body.innerText : document.documentElement ? document.documentElement.innerText : "" })';
+  const found = await withTimeout(wc.executeJavaScriptInIsolatedWorld(ISOLATED_WORLD_ID, [{ code }]), 10000, 'Reading the page timed out');
+  return { text: String(found?.text || '').replace(/\n{3,}/g, '\n\n').trim(), matches: found?.matches ?? null };
 }
 
-async function articleTextOf(tab) {
-  const wc = tab.wc;
-  const text = await withTimeout(wc.executeJavaScriptInIsolatedWorld(ISOLATED_WORLD_ID, [{
-    code: `(function () {
-      document.querySelectorAll('script, style, noscript, nav, header, footer, aside, iframe, svg').forEach(function (el) { el.remove(); });
-      var root = document.querySelector('article') || document.querySelector('main') || document.body;
-      return root ? root.innerText : '';
-    })()`,
-  }]), 10000, 'Reading the page timed out');
-  return String(text || '').replace(/\n{3,}/g, '\n\n').trim();
+/** The get_text result for a tab: its text (or a selector's), in parts. */
+async function readText(tab, payload) {
+  const selector = typeof payload.selector === 'string' && payload.selector.trim() ? payload.selector.trim() : null;
+  const attribute = selector && typeof payload.attribute === 'string' && payload.attribute.trim() ? payload.attribute.trim() : null;
+  const found = await pageTextOf(tab, selector, attribute);
+  if (selector && !found.matches) return { success: false, ...pageInfo(tab), error: `Nothing on the page matches ${selector}.` };
+  const page = pageText(found.text, { offset: payload.offset, limit: payload.limit || 12000 });
+  return {
+    success: true,
+    ...pageInfo(tab),
+    ...(selector ? { selector, matches: found.matches } : {}),
+    ...(attribute ? { attribute } : {}),
+    text: page.text,
+    offset: page.offset,
+    nextOffset: page.nextOffset,
+    totalChars: page.totalChars,
+    truncated: page.truncated,
+    ...(page.truncated ? { hint: `More text follows: call preview_get_text with offset ${page.nextOffset}.` } : {}),
+  };
 }
 
-async function waitForSelector(tab, selector, timeoutMs = 5000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const found = await tab.wc.executeJavaScriptInIsolatedWorld(ISOLATED_WORLD_ID, [{
-      code: `Boolean(document.querySelector(${JSON.stringify(String(selector))}))`,
-    }]).catch(() => false);
-    if (found) return true;
-    await sleep(250);
+/**
+ * Load a page in a hidden tab of the agent's profile, run read(tab) on it,
+ * then close the tab: for preview_get_text and preview_screenshot with a
+ * url. The agent's own tab stays where it was, and reads of several pages
+ * at once can't mix them up.
+ */
+async function inHiddenTab(owner, url, read) {
+  const tab = createTab({ profile: 'standard', agent: true, ownerKey: owner, hidden: true, ...ownerTabOptions(owner) });
+  try {
+    const loaded = await navigateAndWait(tab, url, 25000);
+    if (loaded.loadError) return { success: false, ...loaded, error: loaded.loadError };
+    await waitForLoad(tab, 8000);
+    await sleep(1200); // scripts draw the page
+    return await read(tab);
+  } finally {
+    closeTab(tab.id);
   }
-  return false;
 }
 
 // ─── Agent commands ───────────────────────────────────────────────────────────
@@ -1083,15 +1112,6 @@ function agentTab(owner, { create = false } = {}) {
 function requireAgentTab(owner) {
   const tab = agentTab(owner);
   if (!tab || !tab.wc) throw new Error('No page is open in the browser. Open one with preview_navigate first.');
-  return tab;
-}
-
-function headlessTab(owner, { create = true } = {}) {
-  const id = headlessTabs.get(owner);
-  if (id && tabs.has(id)) return tabs.get(id);
-  if (!create) return null;
-  const tab = createTab({ profile: 'standard', agent: true, ownerKey: owner, hidden: true, ...ownerTabOptions(owner) });
-  headlessTabs.set(owner, tab.id);
   return tab;
 }
 
@@ -1345,18 +1365,7 @@ async function runAgentCommand(owner, payload) {
       const tab = requireAgentTab(owner);
       markAgent(tab);
       await waitForLoad(tab, 8000);
-      const text = await pageTextOf(tab);
-      const page = pageText(text, { offset: payload.offset, limit: payload.limit || 12000 });
-      return {
-        success: true,
-        ...pageInfo(tab),
-        text: page.text,
-        offset: page.offset,
-        nextOffset: page.nextOffset,
-        totalChars: page.totalChars,
-        truncated: page.truncated,
-        ...(page.truncated ? { hint: `More text follows: call preview_get_text with offset ${page.nextOffset}.` } : {}),
-      };
+      return readText(tab, payload);
     }
 
     case 'screenshot': {
@@ -1365,6 +1374,15 @@ async function runAgentCommand(owner, payload) {
       const shot = await screenshot(tab, { ref: payload.ref, selector: payload.selector, fullPage: Boolean(payload.fullPage) });
       return { success: true, ...pageInfo(tab), ...shot, format: 'image/jpeg' };
     }
+
+    case 'read_page':
+      return inHiddenTab(owner, payload.url, (tab) => readText(tab, payload));
+
+    case 'screenshot_url':
+      return inHiddenTab(owner, payload.url, async (tab) => {
+        const shot = await screenshot(tab, { selector: payload.selector, fullPage: Boolean(payload.fullPage) });
+        return { success: true, ...pageInfo(tab), ...shot, format: 'image/jpeg' };
+      });
 
     case 'click': {
       const tab = requireAgentTab(owner);
@@ -1450,94 +1468,6 @@ async function runAgentCommand(owner, payload) {
 
     case 'handover_wait':
       return waitForHandover(String(payload.handoverId || ''));
-
-    // ── Headless-style tools (browse_url, screenshot_page, browser_*) ───────
-    // These use hidden tabs in the Standard profile, so they share sign-ins
-    // with the visible browser, but never show up in the tab strip.
-
-    case 'read_page': {
-      const tab = createTab({ profile: 'standard', agent: true, ownerKey: owner, hidden: true, ...ownerTabOptions(owner) });
-      try {
-        await navigateAndWait(tab, payload.url, Math.min(Number(payload.timeoutMs) || 15000, 45000));
-        if (payload.waitFor) await waitForSelector(tab, payload.waitFor, 5000);
-        await sleep(1200);
-        const info = pageInfo(tab);
-        const text = await articleTextOf(tab);
-        const page = pageText(text, { offset: 0, limit: 12000 });
-        return { success: !info.loadError, ...info, content: page.text, truncated: page.truncated, totalChars: page.totalChars };
-      } finally {
-        closeTab(tab.id);
-      }
-    }
-
-    case 'screenshot_url': {
-      const tab = createTab({ profile: 'standard', agent: true, ownerKey: owner, hidden: true, ...ownerTabOptions(owner) });
-      try {
-        await navigateAndWait(tab, payload.url, 20000);
-        await sleep(1500);
-        const shot = await screenshot(tab, { fullPage: Boolean(payload.fullPage) });
-        return { success: true, ...pageInfo(tab), ...shot };
-      } finally {
-        closeTab(tab.id);
-      }
-    }
-
-    case 'headless_navigate': {
-      const tab = headlessTab(owner);
-      const result = await navigateAndWait(tab, payload.url, Math.min(Number(payload.timeoutMs) || 15000, 45000));
-      if (payload.waitFor) await waitForSelector(tab, payload.waitFor, 5000);
-      return { success: !result.loadError, ...result };
-    }
-
-    case 'headless_click': {
-      const tab = headlessTab(owner, { create: false });
-      if (!tab?.wc) throw new Error('No page is open. Use browser_navigate first.');
-      await waitForSelector(tab, payload.selector, 5000);
-      return doClick(tab, { selector: payload.selector, approvals: payload.approvals });
-    }
-
-    case 'headless_type': {
-      const tab = headlessTab(owner, { create: false });
-      if (!tab?.wc) throw new Error('No page is open. Use browser_navigate first.');
-      await waitForSelector(tab, payload.selector, 5000);
-      return doType(tab, {
-        selector: payload.selector,
-        text: payload.text,
-        clear: payload.clear,
-        submit: payload.submit,
-        approvals: payload.approvals,
-      });
-    }
-
-    case 'headless_extract': {
-      const tab = headlessTab(owner, { create: false });
-      if (!tab?.wc) throw new Error('No page is open. Use browser_navigate first.');
-      const data = await tab.wc.executeJavaScriptInIsolatedWorld(ISOLATED_WORLD_ID, [{
-        code: `(function (args) {
-          function read(el, attr) { return attr ? el.getAttribute(attr) : (el.textContent || '').trim(); }
-          if (args.structure) {
-            var out = {};
-            Object.keys(args.structure).forEach(function (key) {
-              try { out[key] = Array.prototype.map.call(document.querySelectorAll(args.structure[key]), function (el) { return read(el, args.attribute); }).slice(0, 200); }
-              catch (e) { out[key] = []; }
-            });
-            return { data: out };
-          }
-          var nodes = document.querySelectorAll(args.selector);
-          if (args.multiple) return { count: nodes.length, data: Array.prototype.map.call(nodes, function (el) { return read(el, args.attribute); }).slice(0, 500) };
-          if (!nodes.length) return { missing: true };
-          return { data: read(nodes[0], args.attribute) };
-        })(${JSON.stringify({ selector: payload.selector || '', attribute: payload.attribute || null, multiple: Boolean(payload.multiple), structure: payload.structure || null })})`,
-      }]);
-      if (data?.missing) return { success: false, error: `No element found for selector: ${payload.selector}` };
-      return { success: true, ...data };
-    }
-
-    case 'headless_close': {
-      const tab = headlessTab(owner, { create: false });
-      if (tab) closeTab(tab.id);
-      return { success: true };
-    }
 
     default:
       throw new Error(`Unknown browser action: ${action}`);
@@ -1767,7 +1697,7 @@ async function handleUi(action, payload = {}) {
       return true;
     case 'page-text': {
       if (!tab?.wc) return '';
-      const text = await pageTextOf(tab).catch(() => '');
+      const { text } = await pageTextOf(tab).catch(() => ({ text: '' }));
       return text.slice(0, 4000);
     }
     case 'capture': {
