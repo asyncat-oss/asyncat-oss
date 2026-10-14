@@ -35,14 +35,18 @@ export function formatDuration(seconds) {
 }
 
 /**
- * "24 of 60 MB · 3 MB/s · 20 s left". Both amounts use the total's unit; the
- * speed and time left appear only once the speed is known.
+ * "24 of 60 MB · 3 MB/s · 20 s left". Both amounts use the total's unit,
+ * unless what is done is too small to show in it ("9 MB of 1.8 GB", not
+ * "0.0 of 1.8 GB"); the speed and time left appear only once the speed is
+ * known.
  */
 export function transferDetail({ done, total, rate } = {}) {
   const parts = [];
   if (Number.isFinite(total) && total > 0) {
     const [unit, size] = unitFor(total);
-    parts.push(`${amount(Math.min(done || 0, total), size)} of ${amount(total, size)} ${unit}`);
+    const shown = Math.min(done || 0, total);
+    const tiny = shown > 0 && shown < size * 0.05;
+    parts.push(`${tiny ? formatBytes(shown) : amount(shown, size)} of ${amount(total, size)} ${unit}`);
   } else if (Number.isFinite(done) && done > 0) {
     parts.push(formatBytes(done));
   }

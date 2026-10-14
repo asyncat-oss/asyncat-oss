@@ -23,6 +23,8 @@ test('durations read as seconds, minutes or hours', () => {
 test('a transfer line shows amounts in the total unit, speed and time left', () => {
   assert.equal(transferDetail({ done: 24e6, total: 60e6, rate: 3e6 }), '24 of 60 MB · 3 MB/s · 12 s left');
   assert.equal(transferDetail({ done: 0.5e9, total: 1.5e9 }), '0.5 of 1.5 GB');
+  assert.equal(transferDetail({ done: 9e6, total: 1.76e9 }), '9 MB of 1.8 GB');
+  assert.equal(transferDetail({ done: 0, total: 1.76e9 }), '0 of 1.8 GB');
   assert.equal(transferDetail({ done: 5e6 }), '5 MB');
   assert.equal(transferDetail({ done: 60e6, total: 60e6, rate: 3e6 }), '60 of 60 MB · 3 MB/s');
   assert.equal(transferDetail({}), '');
