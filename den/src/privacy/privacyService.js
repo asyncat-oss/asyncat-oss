@@ -10,20 +10,14 @@ import { Readable } from 'stream';
 import JSZip from 'jszip';
 import db from '../db/client.js';
 import { secretStatus } from '../lib/secretBox.js';
-import { runtimeDataPath, runtimeDataRoot, runtimeHome } from '../config/runtimeConfig.js';
+import {
+  runtimeDataPath, runtimeDataRoot, runtimeDbPath, runtimeHome, runtimeModelsPath, runtimeUploadsPath,
+} from '../config/runtimeConfig.js';
 import { RESET_MARKER } from './resetData.js';
 
-function dbPath() {
-  return process.env.DB_PATH ? path.resolve(process.env.DB_PATH) : path.resolve('data', 'asyncat.db');
-}
-
-function uploadsPath() {
-  return process.env.STORAGE_PATH ? path.resolve(process.env.STORAGE_PATH) : path.resolve('data', 'uploads');
-}
-
-function modelsPath() {
-  return process.env.MODELS_PATH ? path.resolve(process.env.MODELS_PATH) : path.join(runtimeDataRoot(), 'models');
-}
+const dbPath = () => runtimeDbPath();
+const uploadsPath = () => runtimeUploadsPath();
+const modelsPath = () => runtimeModelsPath();
 
 function inside(child, parent) {
   const relative = path.relative(path.resolve(parent), path.resolve(child));

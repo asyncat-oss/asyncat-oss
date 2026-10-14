@@ -31,6 +31,18 @@ export function runtimeModelsPath(env = process.env, cwd = process.cwd()) {
   return configured ? path.resolve(cwd, configured) : path.join(runtimeDataRoot(env, cwd), 'models');
 }
 
+/** Where files added to notes (and profile pictures) are kept: STORAGE_PATH, or data/uploads. */
+export function runtimeUploadsPath(env = process.env, cwd = process.cwd()) {
+  const configured = String(env.STORAGE_PATH || '').trim();
+  return configured ? path.resolve(cwd, configured) : path.join(runtimeDataRoot(env, cwd), 'uploads');
+}
+
+/** The SQLite database: DB_PATH, or data/asyncat.db. */
+export function runtimeDbPath(env = process.env, cwd = process.cwd()) {
+  const configured = String(env.DB_PATH || '').trim();
+  return configured ? path.resolve(cwd, configured) : path.join(runtimeDataRoot(env, cwd), 'asyncat.db');
+}
+
 export function runtimeGeneratedImagesPath(env = process.env, cwd = process.cwd()) {
   const configured = String(env.IMAGEGEN_OUTPUT_PATH || '').trim();
   return configured

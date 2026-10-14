@@ -4,7 +4,7 @@ import os from 'os';
 import path from 'path';
 import db from '../db/client.js';
 import { getModelsDir } from '../ai/controllers/ai/modelManager.js';
-import { runtimeHome } from '../config/runtimeConfig.js';
+import { runtimeDbPath, runtimeHome, runtimeUploadsPath } from '../config/runtimeConfig.js';
 import { logRoot } from '../logger.js';
 
 // den's logs are in logRoot(), one folder per kind. The folder above it holds
@@ -162,17 +162,8 @@ function directoryUsage(rootPath, limit = DEFAULT_SCAN_LIMIT) {
   };
 }
 
-function getDbPath() {
-  return process.env.DB_PATH
-    ? path.resolve(process.env.DB_PATH)
-    : path.resolve('data', 'asyncat.db');
-}
-
-function getStoragePath() {
-  return process.env.STORAGE_PATH
-    ? path.resolve(process.env.STORAGE_PATH)
-    : path.resolve('data', 'uploads');
-}
+const getDbPath = () => runtimeDbPath();
+const getStoragePath = () => runtimeUploadsPath();
 
 function assertInside(parentPath, childPath) {
   const relative = path.relative(parentPath, childPath);

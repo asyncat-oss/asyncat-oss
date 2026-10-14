@@ -8,17 +8,14 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import logger from '../logger.js';
-
-const STORAGE_ROOT = process.env.STORAGE_PATH
-  ? path.resolve(process.env.STORAGE_PATH)
-  : path.resolve('data', 'uploads');
+import { runtimeUploadsPath } from '../config/runtimeConfig.js';
 
 const PUBLIC_URL_BASE = process.env.PUBLIC_URL || 'http://127.0.0.1:8716';
 
 const initializedContainers = new Set();
 
 const getContainerDir = (container) => {
-  return path.join(STORAGE_ROOT, container);
+  return path.join(runtimeUploadsPath(), container);
 };
 
 const fileUrl = (container, blobName) =>

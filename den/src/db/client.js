@@ -16,14 +16,13 @@ import logger from '../logger.js';
 import { openingStatements, sealStoredSecrets } from './sealSecrets.js';
 import { secretStatus } from '../lib/secretBox.js';
 import { ensureMessageIndex } from '../search/messageIndex.js';
+import { runtimeDbPath } from '../config/runtimeConfig.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Default: data/asyncat.db next to the project root.
+// Default: data/asyncat.db in the data folder.
 // Override with DB_PATH in .env.
-const DB_PATH = process.env.DB_PATH
-  ? path.resolve(process.env.DB_PATH)
-  : path.resolve('data', 'asyncat.db');
+const DB_PATH = runtimeDbPath();
 
 // Ensure parent directory exists
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });

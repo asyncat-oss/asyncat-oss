@@ -1,12 +1,10 @@
 import path from 'path';
 import fsp from 'fs/promises';
 import crypto from 'crypto';
+import { runtimeUploadsPath } from '../../config/runtimeConfig.js';
 
-const STORAGE_ROOT = process.env.STORAGE_PATH
-  ? path.resolve(process.env.STORAGE_PATH)
-  : path.resolve('data', 'uploads');
 const PUBLIC_URL_BASE = process.env.PUBLIC_URL || 'http://127.0.0.1:8716';
-const PROFILE_PICTURES_DIR = path.join(STORAGE_ROOT, 'profile-pictures');
+const PROFILE_PICTURES_DIR = path.join(runtimeUploadsPath(), 'profile-pictures');
 
 /**
  * Get current user's profile
