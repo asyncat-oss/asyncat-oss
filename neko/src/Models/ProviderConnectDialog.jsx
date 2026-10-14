@@ -11,6 +11,12 @@ import { ProviderLogo } from './modelLogos.jsx';
 import ModelList from './ModelList.jsx';
 import { settingsForModel } from './modelSettings.js';
 
+// What a typed address looks like, for the services that have none of their own.
+const ADDRESS_EXAMPLES = {
+  azure: 'https://resource-name.openai.azure.com',
+  bedrock: 'https://bedrock-runtime.us-west-2.amazonaws.com/openai/v1',
+};
+
 const portOf = (url = '') => {
   try { return new URL(url).port; } catch { return ''; }
 };
@@ -47,6 +53,8 @@ export default function ProviderConnectDialog({ entry = null, profile = null, ca
   const isLocal = Boolean(preset.local) && !isRuntime;
   const isAzure = providerId === 'azure';
   const needsKey = !isLocal && !isRuntime;
+  // Custom, Azure and Bedrock have no address of their own: it comes first.
+  const needsAddress = needsKey && !preset.baseUrl;
 
   const [name, setName] = useState(profile?.name || '');
   const [baseUrl, setBaseUrl] = useState(profile?.base_url || preset.baseUrl || '');
@@ -54,7 +62,7 @@ export default function ProviderConnectDialog({ entry = null, profile = null, ca
   const [model, setModel] = useState(profile?.model || '');
   const [settings, setSettings] = useState(profile?.settings || preset.settings || {});
   const [supportsTools, setSupportsTools] = useState(profile ? Boolean(profile.supports_tools) : Boolean(preset.supportsTools));
-  const [showAdvanced, setShowAdvanced] = useState(Boolean(profile) || !preset.baseUrl || providerId === 'custom');
+  const [showAdvanced, setShowAdvanced] = useState(Boolean(profile) || isAzure);
   const [models, setModels] = useState([]);
   const [modelsState, setModelsState] = useState('idle'); // idle | loading | done | error
   const [modelsError, setModelsError] = useState('');
@@ -126,8 +134,16 @@ export default function ProviderConnectDialog({ entry = null, profile = null, ca
   };
 
   const displayName = entry?.name || preset.name || 'provider';
-  const title = profile ? `Edit ${profile.name}` : isRuntime ? `Use ${displayName}` : `Connect ${displayName}`;
+  const title = profile
+    ? `Edit ${profile.name}`
+    : isRuntime ? `Use ${displayName}` : providerId === 'custom' ? 'Connect an OpenAI-compatible service' : `Connect ${displayName}`;
   const canSave = Boolean(model.trim() || preset.model);
+  let modelHint = '';
+  if (modelsState === 'idle' && needsKey) {
+    if (needsAddress && !baseUrl) modelHint = 'Add the address to see the models it offers.';
+    else if (preset.requiresApiKey === false) modelHint = 'Check to see the models it offers, or type one.';
+    else modelHint = 'Add your key to see the models this provider offers.';
+  }
   const setupNotes = Array.isArray(preset.setup) ? preset.setup : [];
 
   return (
@@ -182,11 +198,31 @@ export default function ProviderConnectDialog({ entry = null, profile = null, ca
           </div>
         ) : null}
 
+        {needsAddress ? (
+          <Field
+            label="Address"
+            htmlFor="provider-url"
+            hint={providerId === 'custom' ? 'Usually ends in /v1.' : ''}
+          >
+            <Input
+              id="provider-url"
+              value={baseUrl}
+              autoComplete="off"
+              onChange={(event) => setBaseUrl(event.target.value)}
+              onBlur={() => { if (baseUrl && apiKey && modelsState !== 'loading') loadModels(); }}
+              placeholder={ADDRESS_EXAMPLES[providerId] || 'https://api.example.com/v1'}
+              className="font-mono"
+            />
+          </Field>
+        ) : null}
+
         {needsKey ? (
           <Field
             label="API key"
             htmlFor="provider-api-key"
-            hint={profile?.api_key_set ? 'A key is saved. Leave this empty to keep it.' : 'Stored on this computer only.'}
+            hint={profile?.api_key_set
+              ? 'A key is saved. Leave this empty to keep it.'
+              : preset.requiresApiKey === false ? "Leave it empty if the service doesn't ask for one. Stored on this computer only." : 'Stored on this computer only.'}
             action={preset.docsUrl ? (
               <a href={preset.docsUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[12px] font-medium text-accent hover:underline">
                 Get a key <ExternalLink className="h-3 w-3" />
@@ -200,10 +236,10 @@ export default function ProviderConnectDialog({ entry = null, profile = null, ca
                 value={apiKey}
                 autoComplete="off"
                 onChange={(event) => setApiKey(event.target.value)}
-                onBlur={() => { if (apiKey && modelsState !== 'loading') loadModels(); }}
+                onBlur={() => { if (apiKey && baseUrl && modelsState !== 'loading') loadModels(); }}
                 placeholder={profile?.api_key_set ? '••••••••••••' : 'Paste your API key'}
               />
-              <Button onClick={loadModels} loading={modelsState === 'loading'} disabled={!apiKey && !profile?.api_key_set}>
+              <Button onClick={loadModels} loading={modelsState === 'loading'} disabled={!baseUrl || (!apiKey && !profile?.api_key_set && preset.requiresApiKey !== false)}>
                 Check
               </Button>
             </div>
@@ -234,7 +270,7 @@ export default function ProviderConnectDialog({ entry = null, profile = null, ca
         <Field
           label="Model"
           error={modelsState === 'error' ? modelsError : ''}
-          hint={modelsState === 'idle' && needsKey ? 'Add your key to see the models this provider offers.' : ''}
+          hint={modelHint}
         >
           {models.length ? (
             <ModelList
@@ -272,7 +308,7 @@ export default function ProviderConnectDialog({ entry = null, profile = null, ca
               <Field label="Name" htmlFor="provider-name" className="sm:col-span-2">
                 <Input id="provider-name" value={name} onChange={(event) => setName(event.target.value)} placeholder={entry?.name || preset.name || 'My provider'} />
               </Field>
-              {!isLocal && !isRuntime ? (
+              {needsKey && !needsAddress ? (
                 <Field label="Base URL" htmlFor="provider-url" className="sm:col-span-2">
                   <Input id="provider-url" value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} placeholder={preset.baseUrl || 'https://api.example.com/v1'} className="font-mono" />
                 </Field>
