@@ -1,9 +1,9 @@
 // den/src/media/setupJobs.js
 // "Set up voice" and "Set up images" are a few steps in a row: engine
-// installs (lib/runtimeInstallJobs.js) and model downloads
-// (modelManager.startDownload). A setup job runs them one after another in
-// the backend, so it carries on when its page is closed, and reports one
-// progress the screens follow live ('media.setup' events).
+// installs (lib/runtimeInstallJobs.js, or an installer the step brings) and
+// model downloads (modelManager.startDownload). A setup job runs them one
+// after another in the backend, so it carries on when its page is closed,
+// and reports one progress the screens follow live ('media.setup' events).
 
 import fs from 'fs';
 import path from 'path';
@@ -21,7 +21,7 @@ function publicJob(job) {
   const { cancelCurrent, onComplete, ...rest } = job;
   return {
     ...rest,
-    steps: job.steps.map(({ headers, check, ...step }) => step),
+    steps: job.steps.map(({ headers, check, installer, ...step }) => step),
   };
 }
 
@@ -40,18 +40,30 @@ async function engineFound(step) {
   }
 }
 
+// Engines from lib/runtimeInstallJobs.js. A step can bring its own installer
+// of the same shape (the llama.cpp engine has install jobs of its own); `get`
+// answers { status, progress: { percent, message, downloadedBytes,
+// totalBytes }, error }.
+const runtimeInstaller = {
+  active: (step) => isRuntimeInstallActive(step.runtimeId),
+  start: (step) => startRuntimeInstallJob(step.runtimeId),
+  get: (id) => getRuntimeInstallJob(id),
+  cancel: (id) => cancelRuntimeInstallJob(id),
+};
+
 async function runEngineStep(job, step) {
   if (await engineFound(step)) {
     step.status = 'skipped';
     step.detail = 'Already installed';
     return;
   }
-  if (isRuntimeInstallActive(step.runtimeId)) throw new Error(`${step.label} is already being installed. Wait for it to finish, then try again.`);
-  const started = startRuntimeInstallJob(step.runtimeId);
-  job.cancelCurrent = () => { try { cancelRuntimeInstallJob(started.id); } catch { /* finished */ } };
+  const installer = step.installer || runtimeInstaller;
+  if (installer.active?.(step)) throw new Error(`${step.label} is already being installed. Wait for it to finish, then try again.`);
+  const started = await installer.start(step);
+  job.cancelCurrent = () => { try { installer.cancel(started.id); } catch { /* finished */ } };
   for (;;) {
     await sleep(POLL_MS);
-    const state = getRuntimeInstallJob(started.id);
+    const state = installer.get(started.id);
     if (!state) throw new Error(`${step.label}: the install stopped.`);
     step.progress = state.progress?.percent ?? step.progress;
     step.detail = state.progress?.message || step.detail;
@@ -134,8 +146,9 @@ async function runJob(job) {
 }
 
 /**
- * Start a setup. `steps`: { key, label, type: 'engine', runtimeId } or
- * { key, label, type: 'download', url, filename, subDir, bytes, headers }.
+ * Start a setup. `steps`: { key, label, type: 'engine', runtimeId, check,
+ * installer } or { key, label, type: 'download', url, filename, subDir,
+ * bytes, headers }.
  * `onComplete(job)` runs after the last step (save the choices) and its
  * result is kept on the job. `options` are what it was started with, kept
  * so "Try again" can start the same setup, also after a reload.
