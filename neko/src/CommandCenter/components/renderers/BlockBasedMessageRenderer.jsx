@@ -119,115 +119,39 @@ const splitMath = (text) => {
   return segments.length > 0 ? segments : [{ type: 'text', value: text }];
 };
 
-// ─── Safe inline link component ─────────────────────────────────────────────
+// ─── Inline links ───────────────────────────────────────────────────────────
+// Plain links that open with the user's Workbench choice (the built-in
+// browser or the system one). No favicons: fetching one would tell a third
+// party about every link in an answer.
 
-const InlineLinkModal = ({ href, onClose }) => {
+const useOpenLink = (href) => {
   const { workbenchPreferences } = useUiPreferences();
-  const getDomain = (url) => { try { return new URL(url).hostname.replace('www.', ''); } catch { return url; } };
-  const domain = getDomain(href);
-  const opensInternally = workbenchPreferences.browserOpenLinks !== 'system';
-  const handleOpen = () => {
+  return useCallback((event) => {
+    event.preventDefault();
     openWebLink(href, workbenchPreferences.browserOpenLinks);
-    onClose();
-  };
-
-  return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-gray-950/45 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-gray-200/90 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900">
-        <div className="border-b border-gray-100 bg-gradient-to-br from-blue-50/80 via-white to-indigo-50/50 px-5 py-5 dark:border-gray-800 dark:from-blue-950/25 dark:via-gray-900 dark:to-indigo-950/20 midnight:border-slate-800 midnight:from-blue-950/25 midnight:via-slate-900 midnight:to-indigo-950/20">
-          <div className="flex items-start gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/80 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800 midnight:border-slate-700 midnight:bg-slate-800">
-              <img
-                src={`https://icons.duckduckgo.com/ip3/${domain}.ico`}
-                alt=""
-                className="h-6 w-6 rounded object-contain"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                  e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                }}
-              />
-              <Globe2 className="hidden h-5 w-5 text-gray-400" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-gray-950 dark:text-white midnight:text-slate-100">Open this link?</p>
-              <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">{domain}</p>
-            </div>
-            <button type="button" onClick={onClose} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xl leading-none text-gray-400 transition-colors hover:bg-black/5 hover:text-gray-700 dark:hover:bg-white/10 dark:hover:text-gray-200" aria-label="Close link dialog">×</button>
-          </div>
-        </div>
-        <div className="px-5 py-4">
-          <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-800/80 midnight:border-slate-700 midnight:bg-slate-800/80">
-            <span className="block truncate font-mono text-[11px] text-gray-600 selection:bg-blue-100 dark:text-gray-300 midnight:text-slate-300" title={href}>{href}</span>
-          </div>
-          <div className="mt-3 flex items-start gap-2 rounded-xl bg-blue-50/70 px-3 py-2.5 text-xs leading-5 text-blue-700 dark:bg-blue-950/25 dark:text-blue-300 midnight:bg-blue-950/25 midnight:text-blue-300">
-            {opensInternally ? <Globe2 className="mt-0.5 h-3.5 w-3.5 shrink-0" /> : <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
-            <span>
-              {opensInternally ? 'This will open in Asyncat’s built-in browser panel.' : 'This will open in your system’s default browser.'}
-              {' '}You can change this in Settings → Workbench.
-            </span>
-          </div>
-          <p className="mt-3 text-[11px] leading-5 text-gray-400 dark:text-gray-500 midnight:text-slate-500">AI-provided links may be inaccurate. Check the address before continuing.</p>
-        </div>
-        <div className="flex gap-2 border-t border-gray-100 px-5 py-4 dark:border-gray-800 midnight:border-slate-800">
-          <button type="button" onClick={onClose} className="flex-1 rounded-xl bg-gray-100 px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 midnight:bg-slate-800 midnight:text-slate-300 midnight:hover:bg-slate-700">Cancel</button>
-          <button type="button" onClick={handleOpen} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:focus:ring-blue-900">
-            {opensInternally ? <Globe2 className="h-4 w-4" /> : <ExternalLink className="h-4 w-4" />}
-            {opensInternally ? 'Open in Asyncat' : 'Open in browser'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+  }, [href, workbenchPreferences.browserOpenLinks]);
 };
 
 const InlineLink = ({ href, label, variant = 'inline' }) => {
-  const [open, setOpen] = useState(false);
+  const open = useOpenLink(href);
 
   if (variant === 'chip') {
-    const domain = getUrlDomain(href);
     return (
-      <>
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-xs font-medium text-gray-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:border-blue-700 dark:hover:bg-blue-950/30 midnight:border-slate-700 midnight:bg-slate-800"
-          title={href}
-        >
-          <img
-            src={`https://icons.duckduckgo.com/ip3/${domain}.ico`}
-            alt=""
-            className="h-3.5 w-3.5 flex-shrink-0 rounded object-contain"
-            onError={(e) => { e.currentTarget.style.display = 'none'; }}
-          />
-          <span className="truncate">{label || domain}</span>
-          <ExternalLink className="h-3 w-3 flex-shrink-0 opacity-50" />
-        </button>
-        {open && <InlineLinkModal href={href} label={label} onClose={() => setOpen(false)} />}
-      </>
+      <a
+        href={href}
+        onClick={open}
+        title={href}
+        className="inline-flex max-w-full items-center gap-1 text-accent underline-offset-2 hover:underline"
+      >
+        <span className="truncate">{label || getUrlDomain(href)}</span>
+      </a>
     );
   }
 
-  const domain = getUrlDomain(href);
-
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1 mx-0.5 px-1.5 py-[1px] rounded border border-blue-200/60 bg-blue-50/50 text-blue-700 hover:bg-blue-100/70 hover:border-blue-300 dark:border-blue-800/40 dark:bg-blue-900/10 dark:text-blue-300 dark:hover:bg-blue-900/30 midnight:border-blue-800/40 midnight:bg-blue-900/10 midnight:text-blue-300 midnight:hover:bg-blue-900/30 transition-colors cursor-pointer font-medium text-[0.95em]"
-      >
-        <img
-          src={`https://icons.duckduckgo.com/ip3/${domain}.ico`}
-          alt=""
-          className="h-3.5 w-3.5 flex-shrink-0 rounded-sm object-contain"
-          onError={(e) => { e.currentTarget.style.display = 'none'; }}
-        />
-        <span className="truncate">{label}</span>
-        <ExternalLink className="w-3 h-3 opacity-60" />
-      </button>
-      {open && <InlineLinkModal href={href} label={label} onClose={() => setOpen(false)} />}
-    </>
+    <a href={href} onClick={open} title={href} className="break-words text-accent underline-offset-2 hover:underline">
+      {label}
+    </a>
   );
 };
 
@@ -326,58 +250,40 @@ const parseWebLinkItem = (text = '') => {
 };
 
 const WebsiteCard = ({ item, number }) => {
-  const [open, setOpen] = useState(false);
-  const { workbenchPreferences } = useUiPreferences();
-  const opensInternally = workbenchPreferences.browserOpenLinks !== 'system';
+  const open = useOpenLink(item.url);
 
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="group relative flex min-h-[92px] min-w-0 items-start gap-3.5 overflow-hidden rounded-xl border border-gray-200/90 bg-gradient-to-br from-white to-gray-50/60 p-3.5 text-left shadow-[0_1px_2px_rgba(15,23,42,0.06)] transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:from-blue-50/80 hover:to-white hover:shadow-[0_8px_20px_rgba(37,99,235,0.10)] focus:outline-none focus:ring-2 focus:ring-blue-200 dark:border-gray-700 dark:from-gray-900 dark:to-gray-900/70 dark:hover:border-blue-700 dark:hover:from-blue-950/25 dark:hover:to-gray-900 dark:focus:ring-blue-900/60 midnight:border-slate-700 midnight:from-slate-900 midnight:to-slate-900/70 midnight:hover:border-blue-700 midnight:hover:from-blue-950/25 midnight:hover:to-slate-900"
-        title={item.url}
-      >
-        {item.isImage ? (
-          <img
-            src={item.url}
-            alt=""
-            loading="lazy"
-            className="h-14 w-16 flex-shrink-0 rounded-lg border border-gray-200 object-cover shadow-sm dark:border-gray-700"
-            onError={(e) => { e.currentTarget.style.display = 'none'; }}
-          />
-        ) : (
-          <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border border-gray-200/80 bg-white shadow-sm transition-transform duration-200 group-hover:scale-105 dark:border-gray-700 dark:bg-gray-800 midnight:border-slate-700 midnight:bg-slate-800">
-            <img
-              src={`https://icons.duckduckgo.com/ip3/${item.domain}.ico`}
-              alt=""
-              className="h-6 w-6 rounded object-contain"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-                e.currentTarget.nextElementSibling?.classList.remove('hidden');
-              }}
-            />
-            <Globe2 className="hidden h-4 w-4 text-gray-400 midnight:text-slate-500" />
-          </span>
-        )}
-        <span className="min-w-0 flex-1">
-          <span className="flex min-w-0 items-center gap-2">
-            {number && <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-gray-100 px-1 text-[10px] font-bold text-gray-500 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-400">{number}</span>}
-            <span className="truncate text-sm font-semibold tracking-[-0.01em] text-gray-950 dark:text-gray-100 midnight:text-slate-100">{item.title}</span>
-          </span>
-          {item.description && (
-            <span className="mt-1 line-clamp-2 text-xs leading-4 text-gray-500 dark:text-gray-400 midnight:text-slate-400">{item.description}</span>
-          )}
-          <span className="mt-2 flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-blue-600 dark:text-blue-400 midnight:text-blue-300">
-            <span className="truncate">{item.domain}</span>
-            <span className="text-gray-300 dark:text-gray-600 midnight:text-slate-600">·</span>
-            <span className="shrink-0 text-gray-400 transition-colors group-hover:text-blue-600 dark:text-gray-500 dark:group-hover:text-blue-400 midnight:text-slate-500">{opensInternally ? 'Asyncat browser' : 'System browser'}</span>
-            <ExternalLink className="h-3 w-3 flex-shrink-0 opacity-45 transition-all group-hover:translate-x-0.5 group-hover:opacity-100" />
-          </span>
+    <a
+      href={item.url}
+      onClick={open}
+      className="group flex min-w-0 items-start gap-3 rounded-xl border border-line p-3 text-left transition-colors hover:bg-hover"
+      title={item.url}
+    >
+      {item.isImage ? (
+        <img
+          src={item.url}
+          alt=""
+          loading="lazy"
+          className="h-14 w-16 flex-shrink-0 rounded-lg border border-line object-cover"
+          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+        />
+      ) : (
+        <Globe2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-fg-subtle" />
+      )}
+      <span className="min-w-0 flex-1">
+        <span className="flex min-w-0 items-center gap-2">
+          {number && <span className="shrink-0 text-[12px] tabular-nums text-fg-subtle">{number}</span>}
+          <span className="truncate text-sm font-medium text-fg">{item.title}</span>
         </span>
-      </button>
-      {open && <InlineLinkModal href={item.url} onClose={() => setOpen(false)} />}
-    </>
+        {item.description && (
+          <span className="mt-1 line-clamp-2 text-xs leading-4 text-fg-muted">{item.description}</span>
+        )}
+        <span className="mt-1.5 flex min-w-0 items-center gap-1 text-[12px] text-accent">
+          <span className="truncate">{item.domain}</span>
+          <ExternalLink className="h-3 w-3 flex-shrink-0 opacity-60" />
+        </span>
+      </span>
+    </a>
   );
 };
 
