@@ -118,7 +118,10 @@ export default function EngineRow({ runtimeId, loaded = false, enginePath = null
   }
 
   const { state } = summary;
-  const planText = plan?.data ? enginePlanText(runtimeId, plan.data, { installedVersion: engine.runtime?.managedInstalled ? engine.runtime.version : null }) : null;
+  const planText = plan?.data ? enginePlanText(runtimeId, plan.data, {
+    installedVersion: engine.runtime?.managedInstalled ? engine.runtime.version : null,
+    working: state === 'managed' || state === 'external',
+  }) : null;
   const bodyOpen = state === 'installing' || Boolean(plan) || Boolean(engine.error);
 
   const value = state === 'loading' ? <Skeleton className="h-4 w-40" /> : state === 'external' ? (

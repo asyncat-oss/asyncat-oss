@@ -206,6 +206,9 @@ test('the engine row says which copy runs, and the plan says what an update cost
   });
   assert.equal(enginePlanText('whisper', plan, { installedVersion: '1.7.7' }).newest, true);
   assert.equal(enginePlanText('sd', { estimated: true, downloadBytes: 30_000_000 }).line, 'Download about 30 MB');
+  // Nothing runs yet: nothing keeps working meanwhile.
+  assert.equal(enginePlanText('sd', { assetName: 'sd-bin.zip', downloadBytes: 30_000_000 }).detail, 'sd-bin.zip.');
+  assert.equal(enginePlanText('sd', { assetName: 'sd-bin.zip', downloadBytes: 30_000_000 }, { working: true }).detail, 'sd-bin.zip. Images keep working while it downloads.');
   assert.equal(installText({ progress: { downloadedBytes: 4_000_000, totalBytes: 12_000_000 } }), 'Installing · 4 of 12 MB');
   assert.equal(installText({ progress: { percent: 2 } }), 'Installing');
 });

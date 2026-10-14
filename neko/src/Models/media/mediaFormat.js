@@ -431,13 +431,15 @@ const KEEPS_WORKING = {
  *   line:   "Download 24 MB · version 1.7.7 · CUDA build"
  *   detail: "whisper-bin-x64.zip · MIT. Listening keeps working while it downloads."
  *   newest: true when that version is the one already installed.
+ * `working` says an engine runs now (Asyncat's copy or one found here), so
+ * the part keeps working meanwhile; it does when a version is installed.
  */
-export function enginePlanText(runtimeId, plan, { installedVersion = null } = {}) {
+export function enginePlanText(runtimeId, plan, { installedVersion = null, working = Boolean(installedVersion) } = {}) {
   const version = versionText(plan?.version);
   const size = plan?.downloadBytes ? totalText(plan.downloadBytes, { estimated: plan.estimated }) : 'size unknown';
   const line = joinMeta([`Download ${size}`, version ? `version ${version}` : null, buildWords(plan?.capability)]);
   const source = joinMeta([plan?.assetName, plan?.license]);
-  const detail = `${source ? `${source}. ` : ''}${KEEPS_WORKING[runtimeId] || ''}`.trim();
+  const detail = `${source ? `${source}. ` : ''}${working ? KEEPS_WORKING[runtimeId] || '' : ''}`.trim();
   return { line, detail, newest: Boolean(version && installedVersion && version === versionText(installedVersion)) };
 }
 
