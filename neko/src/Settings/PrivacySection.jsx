@@ -1,11 +1,11 @@
 // Settings → Privacy & safety: how much agents may do on their own, where
-// they may browse, how saved keys are protected, where your things are kept,
-// and taking everything with you or deleting it.
+// they may browse, how saved keys are protected, where your things are kept
+// (shown in Files → System), and taking everything with you or deleting it.
 
 import { useCallback, useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
-import { Archive, Copy, FolderOpen, Globe, KeyRound, ListChecks, Loader2, ShieldCheck, X } from 'lucide-react';
+import { Archive, FolderOpen, Globe, KeyRound, ListChecks, Loader2, ShieldCheck, X } from 'lucide-react';
 import Button from '../components/ui/Button.jsx';
 import { Segmented } from '../components/ui/Tabs.jsx';
 import { RowGroup, SettingsRow, SettingsSection } from '../components/ui/Rows.jsx';
@@ -155,43 +155,8 @@ function keyText(secrets) {
   return "Saved API keys, passwords and connector sign-ins are encrypted. The key that opens them is in a file only your account can read, because no system keychain was available (on Linux, GNOME Keyring or KWallet provides one).";
 }
 
-function Locations({ locations }) {
-  const toast = useToast();
-  const desktop = Boolean(window.electronAPI?.shellOpen);
-  const open = (item) => {
-    const isFile = item.id === 'database' || item.id === 'key';
-    const action = isFile ? window.electronAPI.shellShowInFolder(item.path) : window.electronAPI.shellOpen(item.path);
-    Promise.resolve(action).catch(() => {});
-  };
-  const copy = async (item) => {
-    try {
-      await navigator.clipboard.writeText(item.path);
-      toast.success('Copied the path');
-    } catch { /* clipboard blocked */ }
-  };
-  return (
-    <div className="divide-y divide-line rounded-xl border border-line">
-      {locations.map((item) => (
-        <div key={item.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-4" data-location={item.id}>
-          <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-medium text-fg">{item.label} <span className="font-normal text-fg-subtle">· {item.note}</span></p>
-            <p className="truncate font-mono text-[12px] text-fg-muted" title={item.path}>{item.path}{item.exists ? '' : ' (not made yet)'}</p>
-          </div>
-          <div className="flex shrink-0 items-center gap-1">
-            {desktop && item.exists ? (
-              <Button size="sm" variant="ghost" icon={FolderOpen} onClick={() => open(item)}>{item.id === 'database' || item.id === 'key' ? 'Show' : 'Open'}</Button>
-            ) : null}
-            <Button size="icon" variant="ghost" icon={Copy} aria-label={`Copy the path of ${item.label}`} onClick={() => copy(item)} />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-Locations.propTypes = { locations: PropTypes.array.isRequired };
-
 export default function PrivacySection() {
+  const navigate = useNavigate();
   const toast = useToast();
   const [mode, setMode] = useState(() => newChatMode());
   const [overview, setOverview] = useState(null);
@@ -252,8 +217,12 @@ export default function PrivacySection() {
         ) : <Loading error={overview?.error} />}
       </SettingsSection>
 
-      <SettingsSection icon={FolderOpen} title="Where your things are kept" hint="Everything stays on this computer, except what you send to an online model or service.">
-        {overview && !overview.error ? <Locations locations={overview.locations || []} /> : <Loading error={overview?.error} />}
+      <SettingsSection icon={FolderOpen} title="Where your things are kept">
+        <RowGroup>
+          <SettingsRow label="Asyncat's folders and files" hint="Everything stays on this computer, except what you send to an online model or service." data-locations>
+            <Button onClick={() => navigate('/files/system')}>Open in Files</Button>
+          </SettingsRow>
+        </RowGroup>
       </SettingsSection>
 
       <SettingsSection icon={Archive} title="Your data">
