@@ -5,6 +5,27 @@ import { Check } from 'lucide-react';
 import { floatingStyle, useDismiss, useFloatingPosition } from './floating.js';
 
 const MenuContext = createContext({ close: () => {} });
+const MOVE_KEYS = ['ArrowDown', 'ArrowUp', 'Home', 'End'];
+
+function menuItems(menu) {
+  return [...(menu?.querySelectorAll('[role="menuitem"]:not([disabled])') || [])];
+}
+
+/**
+ * Arrow keys, Home and End move to the next item, wrapping round. From
+ * outside the menu, down starts at the top and up at the bottom.
+ */
+function moveFocus(event, items) {
+  if (!items.length) return;
+  event.preventDefault();
+  const index = items.indexOf(document.activeElement);
+  const last = items.length - 1;
+  let next;
+  if (event.key === 'Home' || (event.key === 'ArrowDown' && index === -1)) next = 0;
+  else if (event.key === 'End' || (event.key === 'ArrowUp' && index === -1)) next = last;
+  else next = event.key === 'ArrowDown' ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
+  items[next].focus();
+}
 
 /**
  * A floating menu anchored to a trigger element:
@@ -25,27 +46,37 @@ export function Menu({ anchorRef, open, onClose, placement = 'bottom-start', wid
   const position = useFloatingPosition(anchorRef, menuRef, open, { placement });
   useDismiss(menuRef, anchorRef, onClose, Boolean(open));
 
-  // Focus the first item once the menu is placed (a hidden element can't take focus).
+  // The menu stays hidden until it is placed, and a hidden item can't take
+  // focus, so this waits for the position. Opened from the keyboard, the
+  // first item gets focus; opened by a click, focus stays on the trigger
+  // and the arrow keys start from the top.
   const placed = Boolean(position);
   useEffect(() => {
-    if (open && placed) menuRef.current?.querySelector('[role="menuitem"]:not([disabled])')?.focus({ preventScroll: true });
-  }, [open, placed]);
+    if (!open || !placed) return;
+    const trigger = document.activeElement;
+    if (!anchorRef.current?.contains(trigger) || !trigger.matches(':focus-visible')) return;
+    menuItems(menuRef.current)[0]?.focus({ preventScroll: true });
+  }, [anchorRef, open, placed]);
+
+  // With focus still on the trigger (opened by a click), the arrow keys go
+  // into the menu: down and Home to the first item, up and End to the last.
+  // Keys pressed inside the menu are handled by onKeyDown below.
+  useEffect(() => {
+    if (!open || !placed) return undefined;
+    const onTriggerKeyDown = (event) => {
+      if (!MOVE_KEYS.includes(event.key) || !anchorRef.current?.contains(document.activeElement)) return;
+      // The open menu owns these keys, not a list the trigger sits in.
+      event.stopPropagation();
+      moveFocus(event, menuItems(menuRef.current));
+    };
+    document.addEventListener('keydown', onTriggerKeyDown, true);
+    return () => document.removeEventListener('keydown', onTriggerKeyDown, true);
+  }, [anchorRef, open, placed]);
 
   if (!open) return null;
 
   const onKeyDown = (event) => {
-    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
-    const items = [...(menuRef.current?.querySelectorAll('[role="menuitem"]:not([disabled])') || [])];
-    if (!items.length) return;
-    event.preventDefault();
-    const index = items.indexOf(document.activeElement);
-    const next = {
-      ArrowDown: items[(index + 1) % items.length],
-      ArrowUp: items[(index - 1 + items.length) % items.length],
-      Home: items[0],
-      End: items[items.length - 1],
-    }[event.key];
-    next.focus();
+    if (MOVE_KEYS.includes(event.key)) moveFocus(event, menuItems(menuRef.current));
   };
 
   // Portal straight into <body> (not the shared Portal, which mounts a render
