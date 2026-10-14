@@ -1,7 +1,7 @@
 // den/src/media/mediaRoutes.js
 // /api/media: "Set up voice" and "Set up images" (status, catalog, a plan
-// with sizes, the setup job, choices, voice previews and samples) and the
-// gallery of pictures Asyncat made.
+// with sizes, the setup job, choices, voice previews and samples, trying an
+// image) and the gallery of images Asyncat made.
 
 import express from 'express';
 import { getSetupJob, cancelSetupJob, latestSetupJob } from './setupJobs.js';

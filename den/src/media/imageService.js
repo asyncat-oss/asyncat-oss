@@ -1,9 +1,10 @@
 // den/src/media/imageService.js
-// Pictures: made on this computer with stable-diffusion.cpp, or by a cloud
-// service with the user's key (ComfyUI stays an advanced option). This keeps
-// the chosen engine and model (ASYNCAT_IMAGE_PROVIDER, ASYNCAT_IMAGE_MODEL),
-// says which catalog models suit this computer's graphics card, and plans
-// "Set up images" with sizes before anything downloads.
+// Images: made on this computer with stable-diffusion.cpp, by a ComfyUI the
+// user runs, or by a cloud service with the user's key. This keeps the
+// chosen engine and model (ASYNCAT_IMAGE_PROVIDER, ASYNCAT_IMAGE_MODEL,
+// COMFYUI_CHECKPOINT), says which catalog models suit this computer's
+// graphics card, plans "Set up images" with sizes before anything
+// downloads, and makes one image to try what is chosen.
 
 import fs from 'fs';
 import os from 'os';

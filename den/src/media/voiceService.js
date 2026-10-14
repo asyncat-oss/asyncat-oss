@@ -1,7 +1,7 @@
 // den/src/media/voiceService.js
 // Voice for Asyncat: listening (speech to text) and speaking (text to
-// speech), each on this computer (whisper.cpp, Piper) or with a cloud
-// service. This keeps the choice across restarts (ASYNCAT_STT_MODEL,
+// speech), each on this computer (whisper.cpp, Piper), with a cloud
+// service, or off. This keeps the choice across restarts (ASYNCAT_STT_MODEL,
 // ASYNCAT_TTS_VOICE), starts the local engines when they are first used,
 // previews voices without changing the chosen one, and plans "Set up
 // voice": what it downloads and how big that is, before anything starts.
