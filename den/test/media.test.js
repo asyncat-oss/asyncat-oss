@@ -398,6 +398,18 @@ test('listening or speaking can be turned off, and nothing tries to use it (B3)'
   assert.equal(status.setUp, true, 'turning them back on uses the same models');
 });
 
+test('status says whether each local engine has its model loaded (B4)', async () => {
+  await voice.ensureLocalListening();
+  await voice.ensureLocalSpeaking();
+  let status = await voice.voiceStatus();
+  assert.equal(status.stt.running, 'ready');
+  assert.equal(status.tts.running, 'ready');
+  await tts.stopTts();
+  status = await voice.voiceStatus();
+  assert.equal(status.tts.running, 'idle', 'freed, and still chosen');
+  assert.equal(status.tts.ready, true);
+});
+
 // ── Images ───────────────────────────────────────────────────────────────────
 
 function addImageFile(name, body = 'weights') {

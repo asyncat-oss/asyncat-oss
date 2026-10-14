@@ -129,6 +129,7 @@ export async function voiceStatus() {
       voice: voice ? { path: voice, id: catalogVoiceId(voice), name: voiceLabel(voice) } : null,
       ready: Boolean(piperBinary.found && voice),
       reason: !piperBinary.found ? 'needs_engine' : !voice ? 'needs_voice' : null,
+      running: tts.getStatus().status,
     };
   } else {
     const service = CLOUD_SPEECH[ttsProvider];
