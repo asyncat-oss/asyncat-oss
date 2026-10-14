@@ -148,6 +148,7 @@ const { default: mediaRouter } = await import('../src/media/mediaRoutes.js');
 const { default: providerRouter } = await import('../src/ai/routes/providerRoutes.js');
 const audioTools = await import('../src/agent/tools/audioTools.js');
 const tts = await import('../src/ai/controllers/ai/ttsServerManager.js');
+const configController = await import('../src/config/configController.js');
 
 test.after(async () => {
   await whisper.stopWhisper().catch(() => {});
@@ -196,6 +197,18 @@ async function serve(mount, router) {
     }).then(async (res) => ({ status: res.status, body: await res.json() })),
     close: () => new Promise((resolve) => server.close(resolve)),
   };
+}
+
+/** Call an Express handler that answers at once; resolves to { status, ...json }. */
+function call(handler, body = {}) {
+  let out = null;
+  const res = {
+    code: 200,
+    status(code) { this.code = code; return this; },
+    json(data) { out = { status: this.code, ...data }; return this; },
+  };
+  handler({ body }, res);
+  return out;
 }
 
 async function until(check, ms = 15_000) {
@@ -444,27 +457,16 @@ test('the engine list carries a running install, so a page can pick it up again 
 // ── Keys ─────────────────────────────────────────────────────────────────────
 
 test('saving an empty key removes it, also a copy in .env (B6)', async () => {
-  const config = await import('../src/config/configController.js');
-  const call = (handler, body = {}) => {
-    let out = null;
-    const res = {
-      code: 200,
-      status(code) { this.code = code; return this; },
-      json(data) { out = { status: this.code, ...data }; return this; },
-    };
-    handler({ body }, res);
-    return out;
-  };
   const envFile = process.env.ASYNCAT_ENV_PATH;
 
-  assert.equal(call(config.updateSecret, { key: 'OPENAI_API_KEY', value: 'sk-test-0123456789abcdef' }).success, true);
+  assert.equal(call(configController.updateSecret, { key: 'OPENAI_API_KEY', value: 'sk-test-0123456789abcdef' }).success, true);
   assert.equal(process.env.OPENAI_API_KEY, 'sk-test-0123456789abcdef');
-  assert.equal(call(config.updateSecret, { key: 'OPENAI_API_KEY' }).status, 400, 'no value at all is a mistake');
+  assert.equal(call(configController.updateSecret, { key: 'OPENAI_API_KEY' }).status, 400, 'no value at all is a mistake');
   assert.equal(process.env.OPENAI_API_KEY, 'sk-test-0123456789abcdef', 'and keeps the key');
   // An older version kept keys in the runtime .env.
   fs.writeFileSync(envFile, 'PORT=8716\nOPENAI_API_KEY=sk-old-0123456789abcdef\n');
 
-  const removed = call(config.updateSecret, { key: 'OPENAI_API_KEY', value: '' });
+  const removed = call(configController.updateSecret, { key: 'OPENAI_API_KEY', value: '' });
   assert.equal(removed.status, 200);
   assert.equal(removed.removed, true);
   assert.equal(process.env.OPENAI_API_KEY, undefined);
@@ -472,11 +474,11 @@ test('saving an empty key removes it, also a copy in .env (B6)', async () => {
   const env = fs.readFileSync(envFile, 'utf8');
   assert.match(env, /^OPENAI_API_KEY=$/m, 'blanked in .env, so it stays gone after a restart');
   assert.match(env, /^PORT=8716$/m, 'other lines are kept');
-  assert.equal(call(config.getSecrets).secrets.OPENAI_API_KEY, '');
+  assert.equal(call(configController.getSecrets).secrets.OPENAI_API_KEY, '');
   assert.equal(voice.voiceCatalog().cloud.openai.hasKey, false);
 
-  assert.equal(call(config.updateSecret, { key: 'HF_TOKEN', value: '' }).success, true, 'removing a key that isn\'t saved is fine');
-  assert.equal(call(config.updateSecret, { key: 'PORT', value: '' }).status, 400, 'only secrets');
+  assert.equal(call(configController.updateSecret, { key: 'HF_TOKEN', value: '' }).success, true, 'removing a key that isn\'t saved is fine');
+  assert.equal(call(configController.updateSecret, { key: 'PORT', value: '' }).status, 400, 'only secrets');
 });
 
 // ── Images ───────────────────────────────────────────────────────────────────
@@ -642,4 +644,36 @@ test('image status carries the defaults and samplers of the engine that draws (B
   assert.deepEqual(status.defaults, { width: 1024, height: 1024 });
 
   await images.chooseImage({ provider: 'local', model: path.join(images.IMAGE_DIR, 'dreamshaper_8.safetensors') });
+});
+
+test('the chosen ComfyUI checkpoint is kept and draws (B9)', async () => {
+  let status = await images.chooseImage({ provider: 'comfyui', model: 'juggernaut.safetensors' });
+  assert.equal(process.env.COMFYUI_CHECKPOINT, 'juggernaut.safetensors');
+  assert.equal(status.checkpoint, 'juggernaut.safetensors');
+  await assert.rejects(images.chooseImage({ provider: 'comfyui', model: 'missing.safetensors' }), /doesn't have that checkpoint/);
+  assert.equal(call(configController.updateConfig, { key: 'COMFYUI_CHECKPOINT', value: 'juggernaut.safetensors' }).status, 200, 'settings may save it too');
+
+  const made = await images.tryImage({ prompt: 'A lighthouse at dusk', sampler: 'dpmpp_2m', scheduler: 'karras', seed: 7, steps: 12 });
+  let workflow = comfyPrompts.at(-1);
+  assert.equal(workflow['4'].inputs.ckpt_name, 'juggernaut.safetensors', 'the saved checkpoint draws');
+  assert.deepEqual(
+    [workflow['3'].inputs.sampler_name, workflow['3'].inputs.scheduler, workflow['3'].inputs.seed, workflow['3'].inputs.steps],
+    ['dpmpp_2m', 'karras', 7, 12],
+  );
+  assert.equal(made.runtime, 'comfyui');
+  assert.equal(made.model, 'juggernaut.safetensors');
+  assert.equal(made.width, 768);
+  assert.ok(made.name && gallery.galleryFile(made.name), 'saved in the gallery');
+
+  await images.tryImage({ checkpoint: 'dreamshaper_8.safetensors' });
+  assert.equal(comfyPrompts.at(-1)['4'].inputs.ckpt_name, 'dreamshaper_8.safetensors', 'a checkpoint asked for wins');
+
+  process.env.COMFYUI_CHECKPOINT = 'removed.safetensors';
+  status = await images.imageStatus();
+  assert.equal(status.checkpoint, 'dreamshaper_8.safetensors', "one ComfyUI no longer has gives way to its first");
+  await images.tryImage({});
+  workflow = comfyPrompts.at(-1);
+  assert.equal(workflow['4'].inputs.ckpt_name, 'dreamshaper_8.safetensors');
+
+  await images.chooseImage({ provider: 'local' });
 });

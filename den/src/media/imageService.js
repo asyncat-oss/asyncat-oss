@@ -10,7 +10,7 @@ import os from 'os';
 import path from 'path';
 import { MODELS_DIR } from '../ai/controllers/ai/modelManager.js';
 import { checkSdCpp } from '../ai/controllers/ai/sdCppManager.js';
-import { checkComfyUi } from '../ai/controllers/ai/comfyUiManager.js';
+import { checkComfyUi, chosenComfyCheckpoint } from '../ai/controllers/ai/comfyUiManager.js';
 import { clearCache as clearVisualCache, isDrawableImageModel, listVisualModels } from '../ai/controllers/ai/visualModelManager.js';
 import { huggingFaceHeaders } from '../ai/controllers/ai/huggingFaceAuth.js';
 import { setConfigValue } from '../config/appConfig.js';
@@ -92,6 +92,7 @@ export async function imageStatus() {
       ready: Boolean(local || comfy.found),
       reason: comfy.found ? null : !engine.found ? 'needs_engine' : !model ? 'needs_model' : null,
       comfyui: Boolean(comfy.found),
+      checkpoint: chosenComfyCheckpoint(comfy.checkpoints || []),
       defaults: comfyDraws ? { ...COMFYUI_DEFAULTS } : imageModelDefaults(model || ''),
       samplers: comfyDraws ? comfy.samplers || [] : SD_CPP_SAMPLERS,
       schedulers: comfyDraws ? comfy.schedulers || [] : [],
@@ -136,11 +137,21 @@ export function imageCatalog() {
 }
 
 /**
- * Save what makes pictures: { provider: 'local', model: path }, 'comfyui'
- * (a ComfyUI you run yourself), or a cloud service { provider, model }.
+ * Save what makes images: { provider: 'local', model: path }, 'comfyui'
+ * (a ComfyUI you run yourself, model: one of its checkpoints), or a cloud
+ * service { provider, model }.
  */
 export async function chooseImage({ provider = 'local', model = '' } = {}) {
   if (provider === 'comfyui') {
+    const checkpoint = String(model || '').trim();
+    if (checkpoint) {
+      // Checked while ComfyUI answers; saved as it is while it doesn't.
+      const comfy = await checkComfyUi().catch(() => ({ found: false }));
+      if (comfy.found && comfy.checkpoints?.length && !comfy.checkpoints.includes(checkpoint)) {
+        throw imageError("ComfyUI doesn't have that checkpoint.");
+      }
+      setConfigValue('COMFYUI_CHECKPOINT', checkpoint);
+    }
     setConfigValue('ASYNCAT_IMAGE_PROVIDER', 'comfyui');
     return imageStatus();
   }

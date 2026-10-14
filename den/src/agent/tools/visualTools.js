@@ -268,7 +268,7 @@ export const generateImageTool = {
       negative_prompt: { type: 'string', description: 'Things to avoid in the image.' },
       engine: { type: 'string', description: 'Image engine: "auto" (the chosen one), "simple" (stable-diffusion.cpp), or "comfyui". Default: auto.' },
       model_path: { type: 'string', description: 'For simple engine: absolute image model path. If omitted, the chosen model is used.' },
-      checkpoint: { type: 'string', description: 'For ComfyUI: checkpoint name. If omitted, the first checkpoint is used.' },
+      checkpoint: { type: 'string', description: 'For ComfyUI: checkpoint name. If omitted, the one chosen in Models → Images is used.' },
       width: { type: 'number', description: 'Image width, 256-2048. Defaults suit the model.' },
       height: { type: 'number', description: 'Image height, 256-2048. Defaults suit the model.' },
       steps: { type: 'number', description: 'Sampling steps.' },

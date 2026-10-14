@@ -80,6 +80,19 @@ export async function checkComfyUi() {
   }
 }
 
+/**
+ * The checkpoint to draw with: the one asked for, else the one chosen in
+ * Models → Images (COMFYUI_CHECKPOINT) while ComfyUI still has it, else
+ * ComfyUI's first.
+ */
+export function chosenComfyCheckpoint(checkpoints = [], asked = '') {
+  const wanted = String(asked || '').trim();
+  if (wanted) return wanted;
+  const saved = String(process.env.COMFYUI_CHECKPOINT || '').trim();
+  if (saved && (!checkpoints.length || checkpoints.includes(saved))) return saved;
+  return checkpoints[0] || null;
+}
+
 export async function listComfyUiModels() {
   const objectInfo = await fetchJson('/object_info');
   return {
@@ -270,7 +283,7 @@ export async function generateComfyUiImage(options = {}) {
   if (!prompt) throw new Error('prompt is required');
 
   const models = await listComfyUiModels();
-  const checkpoint = String(options.checkpoint || models.checkpoints[0] || '').trim();
+  const checkpoint = String(chosenComfyCheckpoint(models.checkpoints, options.checkpoint) || '').trim();
   if (!checkpoint) {
     throw new Error('No ComfyUI checkpoint is available. Add a checkpoint to ComfyUI/models/checkpoints and restart or refresh ComfyUI.');
   }
@@ -322,7 +335,7 @@ export async function editComfyUiImage(options = {}) {
   if (!fs.existsSync(imagePath)) throw new Error(`Input image not found: ${imagePath}`);
 
   const models = await listComfyUiModels();
-  const checkpoint = String(options.checkpoint || models.checkpoints[0] || '').trim();
+  const checkpoint = String(chosenComfyCheckpoint(models.checkpoints, options.checkpoint) || '').trim();
   if (!checkpoint) {
     throw new Error('No ComfyUI checkpoint is available. Add a checkpoint to ComfyUI/models/checkpoints and restart or refresh ComfyUI.');
   }
