@@ -9,18 +9,16 @@ import { Archive, Copy, FolderOpen, Globe, KeyRound, ListChecks, Loader2, Shield
 import Button from '../components/ui/Button.jsx';
 import { Segmented } from '../components/ui/Tabs.jsx';
 import { RowGroup, SettingsRow, SettingsSection } from '../components/ui/Rows.jsx';
-import { useConfirm } from '../components/confirmContext.js';
 import { errorDetail, useToast } from '../components/toastContext.js';
-import Switch from '../components/ui/Switch.jsx';
 import { Chips } from '../Cats/CatForm.jsx';
 import { profilesApi } from '../CommandCenter/api';
 import catsApi from '../CommandCenter/api/catsApi.js';
 import { connectorToolLabel } from '../Connectors/connectorFormat.js';
-import { configApi } from './settingApi.js';
 import privacyApi from '../services/privacyApi.js';
 import { alwaysAllowedChatTools, newChatMode, setAlwaysAllowedChatTools, setNewChatMode } from '../services/chatDefaults.js';
 import { ExportEverything, DeleteEverything, ImportChats } from './PrivacyDataParts.jsx';
 import LearningSettings from './LearningSettings.jsx';
+import SandboxSettings from './SandboxSettings.jsx';
 
 const MODE_HINTS = {
   last: 'Each new chat starts in the mode you used last.',
@@ -117,42 +115,6 @@ function AlwaysAllowed() {
         </p>
       ) : null}
     </RowGroup>
-  );
-}
-
-function CommandSandbox() {
-  const confirm = useConfirm();
-  const [on, setOn] = useState(true);
-  const [platform, setPlatform] = useState(() => (typeof navigator !== 'undefined' && /win/i.test(navigator.userAgent) ? 'win32' : 'other'));
-
-  useEffect(() => {
-    configApi.getConfig()
-      .then((res) => setOn(String(res?.config?.ASYNCAT_COMMAND_SANDBOX || 'auto').toLowerCase() !== 'off'))
-      .catch(() => {});
-    window.electronAPI?.getPlatform?.().then((value) => value && setPlatform(value)).catch(() => {});
-  }, []);
-
-  const change = async (value) => {
-    if (!value) {
-      const ok = await confirm({
-        title: 'Turn off the command sandbox?',
-        message: "Commands the agent runs will be able to change or delete any file your account can, not just files in the project. Only do this if a tool you need can't work in the sandbox.",
-        confirmLabel: 'Turn off',
-        destructive: true,
-      });
-      if (!ok) return;
-    }
-    setOn(value);
-    configApi.updateConfig('ASYNCAT_COMMAND_SANDBOX', value ? 'auto' : 'off').catch(() => setOn(!value));
-  };
-
-  if (platform === 'win32') {
-    return <SettingsRow label="Sandbox the agent's commands" hint="Not available on Windows: commands the agent runs can change any file your account can, so they ask first." />;
-  }
-  return (
-    <SettingsRow label="Sandbox the agent's commands" hint="Commands the agent runs can read your files but only change files in the project folder, temporary folders and package caches." stack={false}>
-      <Switch checked={on} onChange={change} label="Sandbox the agent's commands" />
-    </SettingsRow>
   );
 }
 
@@ -270,7 +232,7 @@ export default function PrivacySection() {
               role="radiogroup"
             />
           </SettingsRow>
-          <CommandSandbox />
+          <SandboxSettings />
         </RowGroup>
       </SettingsSection>
 

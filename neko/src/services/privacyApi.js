@@ -8,6 +8,10 @@ const send = (method, body = {}) => ({ method, body: JSON.stringify(body) });
 export const privacyApi = {
   overview: () => apiRequest(BASE),
   setBlockedSites: (sites) => apiRequest(`${BASE}/blocked-sites`, send('PUT', { sites })),
+  /** The command sandbox: { sandbox: { state, reason, network, hiddenFolders, … } }. */
+  sandbox: (recheck = false) => apiRequest(`${BASE}/sandbox${recheck ? '?recheck=1' : ''}`),
+  /** Any of { enabled, network, allowRead, registries }. */
+  setSandbox: (changes) => apiRequest(`${BASE}/sandbox`, send('PUT', changes)),
   exportEstimate: () => apiRequest(`${BASE}/export/estimate`),
   exportEverything: () => apiRequest(`${BASE}/export`, send('POST')),
   /** Carried out the next time the server starts. */
