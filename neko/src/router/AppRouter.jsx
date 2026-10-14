@@ -1,5 +1,5 @@
 // router/AppRouter.jsx - local application routes
-import { lazy } from 'react';
+import { lazy, Suspense } from 'react';
 import PropTypes from 'prop-types';
 import { createBrowserRouter, RouterProvider, Navigate, useParams } from 'react-router-dom';
 import { UserProvider } from '../contexts/UserContext';
@@ -28,6 +28,9 @@ const AgentPage = lazy(() => import('../Agent/AgentPage'));
 const CatsPage = lazy(() => import('../Cats/CatsPage'));
 const CatPage = lazy(() => import('../Cats/CatPage'));
 const MadePage = lazy(() => import('../made/MadePage'));
+// The desktop app's Quick ask window: its own small page, outside the app's
+// layout and providers (electron/quick.js).
+const QuickAsk = lazy(() => import('../quick/QuickAsk'));
 
 // Old /workspace and task-board (/tasks) links open the project instead.
 const LegacyProjectRedirect = () => {
@@ -63,6 +66,17 @@ LocalApp.propTypes = {
 
 
 const createRouter = () => createBrowserRouter([
+  {
+    path: "/quick",
+    element: (
+      <UiPreferencesProvider>
+        <Suspense fallback={null}>
+          <QuickAsk />
+        </Suspense>
+      </UiPreferencesProvider>
+    ),
+    errorElement: <RouteErrorElement />
+  },
   {
     path: "/",
     element: (
