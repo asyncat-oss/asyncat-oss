@@ -20,6 +20,7 @@ import { configApi } from './settingApi.js';
 import privacyApi from '../services/privacyApi.js';
 import { alwaysAllowedChatTools, newChatMode, setAlwaysAllowedChatTools, setNewChatMode } from '../services/chatDefaults.js';
 import { ExportEverything, DeleteEverything, ImportChats } from './PrivacyDataParts.jsx';
+import LearningSettings from './LearningSettings.jsx';
 
 const MODE_HINTS = {
   last: 'Each new chat starts in the mode you used last.',
@@ -280,6 +281,8 @@ export default function PrivacySection() {
       <SettingsSection icon={Globe} title="Browsing">
         {overview && !overview.error ? <BrowserRules blockedSites={overview.blockedSites || []} onChange={saveBlockedSites} /> : <Loading error={overview?.error} />}
       </SettingsSection>
+
+      <LearningSettings />
 
       <SettingsSection icon={KeyRound} title="Saved keys">
         {overview && !overview.error ? (
