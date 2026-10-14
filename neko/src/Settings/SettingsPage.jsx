@@ -29,7 +29,7 @@ import NotificationsSection from './NotificationsSection.jsx';
 import { SettingsSearchBox, SettingsSearchResults } from './SettingsSearchBox.jsx';
 import { resultRoute, searchSettings } from './settingsSearch.js';
 import { Segmented } from '../components/ui/Tabs.jsx';
-import { Switch } from '../Cats/CatParts.jsx';
+import Switch from '../components/ui/Switch.jsx';
 
 const TAB_ALIASES = {
   general: 'profile',

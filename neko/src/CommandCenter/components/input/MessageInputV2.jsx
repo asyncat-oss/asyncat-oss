@@ -22,29 +22,7 @@ import { filesApi } from "../../api";
 import { dirname, basename, fileIconMeta, rootIcon } from "../../../files/fileUtils.js";
 import { attachmentKind, AttachmentChip, ImageLightbox } from "../shared/AttachmentComponents.jsx";
 import AskUserForm from "../agent/AskUserForm.jsx";
-
-const ToggleSwitch = ({ checked, onChange, disabled }) => {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onChange}
-      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-        checked
-          ? "bg-indigo-600 dark:bg-indigo-500"
-          : "bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700"
-      } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
-    >
-      <span
-        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-          checked ? "translate-x-4" : "translate-x-0"
-        }`}
-      />
-    </button>
-  );
-};
-
-
+import Switch from "../../../components/ui/Switch.jsx";
 
 function getAgentTrigger(value, cursor) {
   const beforeCursor = value.slice(0, cursor);
@@ -2072,10 +2050,11 @@ export const MessageInputV2 = ({
                               </span>
                             </div>
                           </div>
-                          <ToggleSwitch
-                            checked={voiceConversationActive}
-                            onChange={onToggleVoiceMode}
+                          <Switch
+                            checked={Boolean(voiceConversationActive)}
+                            onChange={() => onToggleVoiceMode()}
                             disabled={disabled}
+                            label="Voice mode"
                           />
                         </div>
                       )}

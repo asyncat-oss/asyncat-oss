@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
 import { Globe2 } from 'lucide-react';
+import Switch from '../components/ui/Switch.jsx';
 
 // System-wide shortcuts work in every app while Asyncat runs, and the app in
 // front never sees the key press, so they can block shortcuts in an editor or
@@ -183,17 +184,12 @@ export default function GlobalShortcutsSection() {
                   >
                     {isRecording ? 'Cancel' : 'Change'}
                   </button>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={Boolean(entry?.enabled)}
-                    aria-label={`${label} shortcut`}
-                    onClick={() => entry && update(id, { enabled: !entry.enabled })}
+                  <Switch
+                    checked={Boolean(entry?.enabled)}
+                    onChange={(enabled) => entry && update(id, { enabled })}
                     disabled={!entry}
-                    className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${entry?.enabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-700'}`}
-                  >
-                    <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${entry?.enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
-                  </button>
+                    label={`${label} shortcut`}
+                  />
                 </div>
               </div>
               {id === 'quickAsk' && quickAskCommand && entry?.enabled && (

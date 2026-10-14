@@ -9,7 +9,7 @@ import { Menu, MenuItem, MenuSeparator } from '../components/ui/Menu.jsx';
 import { useConfirm } from '../components/confirmContext.js';
 import { errorDetail, useToast } from '../components/toastContext.js';
 import { openWebLink } from '../utils/openWebLink.js';
-import { Switch } from '../Cats/CatParts.jsx';
+import Switch from '../components/ui/Switch.jsx';
 import { connectorsApi } from './connectorsApi.js';
 import { PERMISSION_TEXT, whereLine } from './connectorFormat.js';
 import { ConnectorIcon, ConnectorStatus } from './ConnectorParts.jsx';

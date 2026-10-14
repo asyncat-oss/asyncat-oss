@@ -11,7 +11,7 @@ import { Segmented } from '../components/ui/Tabs.jsx';
 import { RowGroup, SettingsRow, SettingsSection } from '../components/ui/Rows.jsx';
 import { useConfirm } from '../components/confirmContext.js';
 import { errorDetail, useToast } from '../components/toastContext.js';
-import { Switch } from '../Cats/CatParts.jsx';
+import Switch from '../components/ui/Switch.jsx';
 import { Chips } from '../Cats/CatForm.jsx';
 import { profilesApi } from '../CommandCenter/api';
 import catsApi from '../CommandCenter/api/catsApi.js';

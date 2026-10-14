@@ -4,11 +4,11 @@
 // electron/background-config.js.
 
 import { useCallback, useEffect, useState } from 'react';
-import PropTypes from 'prop-types';
 import { Cat, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Panel } from '../Models/modelPageShared.jsx';
 import { catsApi } from '../CommandCenter/api/catsApi.js';
+import Switch from '../components/ui/Switch.jsx';
 
 const CHOICES = [
   {
@@ -27,24 +27,6 @@ const CHOICES = [
     description: 'Closing the window quits Asyncat. Cats only work while it is open.',
   },
 ];
-
-function Switch({ checked, onChange, disabled, label }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      disabled={disabled}
-      onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-50 ${checked ? 'bg-accent' : 'bg-line-strong'}`}
-    >
-      <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-4' : 'translate-x-0.5'}`} />
-    </button>
-  );
-}
-
-Switch.propTypes = { checked: PropTypes.bool, onChange: PropTypes.func.isRequired, disabled: PropTypes.bool, label: PropTypes.string };
 
 function closingSummary(settings, enabledTasks) {
   if (!settings) return '';

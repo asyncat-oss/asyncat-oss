@@ -1,5 +1,5 @@
-// Small pieces shared by the Cats pages: the Cat's picture, its state pill
-// and an on/off switch.
+// Small pieces shared by the Cats pages: the Cat's picture and its state
+// pill.
 
 import PropTypes from 'prop-types';
 import { catStatus } from './catFormat.js';
@@ -44,22 +44,3 @@ export function StatusPill({ cat, className = '' }) {
 }
 
 StatusPill.propTypes = { cat: PropTypes.object, className: PropTypes.string };
-
-export function Switch({ checked, onChange, label, disabled = false }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      title={checked ? 'On' : 'Off'}
-      disabled={disabled}
-      onClick={(event) => { event.stopPropagation(); onChange(!checked); }}
-      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-50 ${checked ? 'bg-accent' : 'bg-line-strong'}`}
-    >
-      <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-4' : 'translate-x-0.5'}`} />
-    </button>
-  );
-}
-
-Switch.propTypes = { checked: PropTypes.bool, onChange: PropTypes.func.isRequired, label: PropTypes.string, disabled: PropTypes.bool };

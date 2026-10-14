@@ -10,7 +10,7 @@ import Button from '../components/ui/Button.jsx';
 import { Field, Input } from '../components/ui/Field.jsx';
 import { useConfirm } from '../components/confirmContext.js';
 import { errorDetail, useToast } from '../components/toastContext.js';
-import { Switch } from '../Cats/CatParts.jsx';
+import Switch from '../components/ui/Switch.jsx';
 import { Badge, Panel } from '../Models/modelPageShared.jsx';
 import { formatBytes } from '../Models/engineProgress.js';
 import { llamaServerApi, localModelsApi } from '../Settings/settingApi.js';

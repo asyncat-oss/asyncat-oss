@@ -20,6 +20,7 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { useUiPreferences } from '../contexts/UiPreferencesContext.jsx';
 import { useConfirm } from '../components/confirmContext.js';
+import Switch from '../components/ui/Switch.jsx';
 
 const card = 'overflow-hidden rounded-xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950';
 const row = 'flex items-center justify-between gap-4 rounded-lg px-3 py-3 transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03] midnight:hover:bg-white/[0.03]';
@@ -86,16 +87,7 @@ function ToggleRow({ icon: Icon, label, description, checked, onChange, disabled
           {description && <span className="block text-xs leading-5 text-gray-500 dark:text-gray-400 midnight:text-slate-400">{description}</span>}
         </span>
       </span>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        disabled={disabled}
-        onClick={() => onChange(!checked)}
-        className={`relative h-6 w-11 shrink-0 rounded-full border transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:ring-offset-2 disabled:cursor-not-allowed dark:focus:ring-indigo-900/60 dark:focus:ring-offset-gray-900 ${checked ? 'border-indigo-600 bg-indigo-600 dark:border-indigo-500 dark:bg-indigo-500' : 'border-gray-300 bg-gray-200 dark:border-gray-600 dark:bg-gray-700 midnight:border-slate-600 midnight:bg-slate-700'}`}
-      >
-        <span className={`pointer-events-none absolute left-0.5 top-0.5 h-[18px] w-[18px] rounded-full bg-white shadow-sm ring-1 ring-black/5 transition-transform duration-200 ${checked ? 'translate-x-5' : 'translate-x-0'}`} />
-      </button>
+      <Switch checked={checked} onChange={onChange} disabled={disabled} label={typeof label === 'string' ? label : undefined} />
     </div>
   );
 }

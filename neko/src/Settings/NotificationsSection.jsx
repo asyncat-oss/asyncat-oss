@@ -9,7 +9,7 @@ import Button from '../components/ui/Button.jsx';
 import { Input } from '../components/ui/Field.jsx';
 import { RowGroup, SettingsRow, SettingsSection } from '../components/ui/Rows.jsx';
 import { errorDetail, useToast } from '../components/toastContext.js';
-import { Switch } from '../Cats/CatParts.jsx';
+import Switch from '../components/ui/Switch.jsx';
 import { notifyStatus, saveNotifyPrefs, testNotification } from '../services/notifyPrefs.js';
 
 const EVENTS = [
