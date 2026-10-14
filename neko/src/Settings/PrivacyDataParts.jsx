@@ -81,15 +81,16 @@ export function ImportChats({ title = 'Bring your chats from ChatGPT or Claude',
 
   const info = preview?.preview;
   return (
-    <div className="rounded-xl border border-line px-4 py-3" data-import>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <div className="@container rounded-xl border border-line px-4 py-3" data-import>
+      {/* Side by side when the card is wide (Settings), one under the other in the setup's column. */}
+      <div className="flex flex-col gap-3 @lg:flex-row @lg:items-start @lg:justify-between">
         <div className="min-w-0">
           {title ? <p className="text-[13px] font-medium text-fg">{title}</p> : null}
           <p className={`${title ? 'mt-0.5 ' : ''}text-[12px] leading-5 text-fg-muted`}>
             Ask either for a copy of your data (ChatGPT: Settings → Data controls → Export; Claude: Settings → Privacy → Export data), then pick the .zip it emails you. Chats keep their titles and dates; ones brought over before are skipped.
           </p>
         </div>
-        <label className={`inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-line-strong px-3 py-1.5 text-[13px] font-medium text-fg hover:bg-hover ${reading ? 'pointer-events-none opacity-60' : ''}`}>
+        <label className={`inline-flex shrink-0 cursor-pointer items-center gap-1.5 self-start rounded-lg border border-line-strong px-3 py-1.5 text-[13px] font-medium text-fg hover:bg-hover ${reading ? 'pointer-events-none opacity-60' : ''}`}>
           <Upload className="h-3.5 w-3.5" />
           {reading ? 'Reading…' : 'Pick the export'}
           <input type="file" accept=".zip,.json,application/zip,application/json" className="sr-only" onChange={pick} aria-label="Export file" />
