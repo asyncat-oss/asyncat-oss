@@ -403,8 +403,8 @@ export const imageDescribeTool = {
       const prompt = args.prompt || 'Describe this image in detail.';
 
       // Dynamically import the AI client — works with any OpenAI-compatible model
-      const { getAiClientForUser } = await import('../../ai/controllers/ai/clientFactory.js');
-      const providerInfo = await getAiClientForUser(context.userId);
+      const { clientForToolContext } = await import('../../ai/controllers/ai/clientFactory.js');
+      const providerInfo = clientForToolContext(context);
       if (!providerInfo?.client) return { success: false, error: 'Could not get AI client for vision.' };
 
       const response = await providerInfo.client.client.chat.completions.create({

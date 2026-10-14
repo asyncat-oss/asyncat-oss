@@ -1679,7 +1679,7 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
     });
     const resolvedWorkingDir = resolvedWorkingContext.workingDir;
     const resolvedFiles = resolveFileAttachments(fileAttachments, resolvedWorkingContext, req.user.id);
-    const multimodalCapabilities = await getMultimodalCapabilities(req.user.id);
+    const multimodalCapabilities = await getMultimodalCapabilities(req.user.id, { resolvedClient });
     const initialImageUrls = multimodalCapabilities.vision?.ready
       ? resolvedFiles
           .filter(file => file.promptOnly && String(file.mime || '').startsWith('image/'))

@@ -669,6 +669,11 @@ export class AgentRuntime {
       // chat-only models and Anthropic native. Returns { vector, model, dim }.
       aiClient: this.aiClient,
       model: this.model,
+      // With the two above: the run's model, which a chat's helpers (sub-agents,
+      // describing a picture) use too (clientFactory.clientForToolContext).
+      isLocal: this.isLocal,
+      supportsNativeTools: this.supportsNativeTools,
+      providerInfo: this.providerInfo,
       computeEmbedding: async (text) => {
         try {
           return await embedText(text, { userId: this.userId });

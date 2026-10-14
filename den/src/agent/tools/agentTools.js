@@ -36,9 +36,9 @@ export const agentTools = [
     execute: async (args, context) => {
       // Dynamically import AgentRuntime to avoid circular dependencies
       const { AgentRuntime } = await import('../AgentRuntime.js');
-      const { getAiClientForUser } = await import('../../ai/controllers/ai/clientFactory.js');
+      const { clientForToolContext } = await import('../../ai/controllers/ai/clientFactory.js');
       
-      const providerInfo = await getAiClientForUser(context.userId);
+      const providerInfo = clientForToolContext(context);
       if (!providerInfo || !providerInfo.client) {
         return { success: false, error: 'Could not initialize AI client for sub-agent.' };
       }
@@ -192,7 +192,7 @@ export const agentTools = [
     },
     execute: async (args, context) => {
       const { AgentRuntime } = await import('../AgentRuntime.js');
-      const { getAiClientForUser } = await import('../../ai/controllers/ai/clientFactory.js');
+      const { clientForToolContext } = await import('../../ai/controllers/ai/clientFactory.js');
       const { getProfile, getProfileByHandle, toolsForCapabilities } = await import('../ProfileManager.js');
       const { loadSoul } = await import('../prompts/agentSystemPrompt.js');
       const { buildChatContext } = await import('../../knowledge/chatContext.js');
@@ -208,7 +208,7 @@ export const agentTools = [
         return { success: false, error: 'Agent profile not found. Use a valid profileHandle or profileId.' };
       }
 
-      const providerInfo = await getAiClientForUser(context.userId);
+      const providerInfo = clientForToolContext(context);
       if (!providerInfo || !providerInfo.client) {
         return { success: false, error: 'Could not initialize AI client for delegated agent.' };
       }

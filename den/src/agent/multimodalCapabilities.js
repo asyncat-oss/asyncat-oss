@@ -6,11 +6,15 @@ import { checkComfyUi } from '../ai/controllers/ai/comfyUiManager.js';
 import { voiceStatus } from '../media/voiceService.js';
 import { imageStatus } from '../media/imageService.js';
 
-export async function getMultimodalCapabilities(userId = null) {
+/**
+ * What Asyncat can see, hear, say and draw right now. `resolvedClient` is the
+ * model a run uses (a chat's own, say); without it, the default model.
+ */
+export async function getMultimodalCapabilities(userId = null, { resolvedClient = null } = {}) {
   let provider = null;
   try {
-    const resolved = userId ? getAiClientForUser(userId) : null;
-    provider = resolved?.providerInfo || {};
+    const resolved = resolvedClient || (userId ? getAiClientForUser(userId) : null);
+    provider = { ...(resolved?.providerInfo || {}) };
     provider.model = resolved?.model || provider.model || '';
     provider.providerId = provider.providerId || provider.provider_id || '';
   } catch {

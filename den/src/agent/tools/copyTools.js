@@ -249,8 +249,8 @@ export const copyTools = [
       }
 
       const { AgentRuntime } = await import('../AgentRuntime.js');
-      const { getAiClientForUser } = await import('../../ai/controllers/ai/clientFactory.js');
-      const provider = getAiClientForUser(context.userId);
+      const { clientForToolContext } = await import('../../ai/controllers/ai/clientFactory.js');
+      const provider = clientForToolContext(context);
       const subAgent = new AgentRuntime({
         aiClient: provider.client,
         model: provider.model,

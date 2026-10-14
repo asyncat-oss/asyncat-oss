@@ -215,6 +215,24 @@ export function getAiClientForUser(userId) {
   }
 }
 
+/**
+ * The model a tool should call from inside a run (a sub-agent, a picture to
+ * describe): the run's own, so a chat's helpers use the chat's model. Outside
+ * a run, the default model.
+ */
+export function clientForToolContext(context = {}) {
+  if (context.aiClient && context.model) {
+    return {
+      client: context.aiClient,
+      model: context.model,
+      isLocal: Boolean(context.isLocal),
+      supportsNativeTools: Boolean(context.supportsNativeTools),
+      providerInfo: context.providerInfo || null,
+    };
+  }
+  return getAiClientForUser(context.userId);
+}
+
 function clientFromProviderRow(row, { allowGlobalApiKeyFallback = true } = {}) {
   const isLocal = row.provider_type === 'local';
   const requiresLocalServer = providerRequiresBuiltinServer(row);

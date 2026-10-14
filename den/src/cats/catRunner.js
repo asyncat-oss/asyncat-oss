@@ -118,7 +118,7 @@ export async function runCat({ cat, wake, abortSignal, conversationHistory = [],
   const scopeTools = scheduledRunToolNames({ hasProject: true });
   const agentTools = toolsForCapabilities(profile?.capabilities, toolRegistry.all());
   const allowedTools = agentTools ? scopeTools.filter((name) => agentTools.includes(name)) : scopeTools;
-  const multimodal = await getMultimodalCapabilities(cat.userId).catch(() => null);
+  const multimodal = await getMultimodalCapabilities(cat.userId, { resolvedClient }).catch(() => null);
 
   const agent = new AgentRuntime({
     aiClient: client,
