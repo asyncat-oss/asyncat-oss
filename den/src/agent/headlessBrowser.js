@@ -10,8 +10,8 @@
 // user needs the desktop app (nobody can see this browser).
 
 import { launchBrowser } from '../lib/browserLauncher.js';
-import { guardPuppeteerPage } from './tools/urlPolicy.js';
-import { currentScheduledRun } from './scheduledRunContext.js';
+import { checkAgentUrl, guardPuppeteerPage } from './tools/urlPolicy.js';
+import { currentScheduledRun, runInScheduledContext } from './scheduledRunContext.js';
 import {
   classifyTarget, describeSensitiveAction, formatOutline, pageLines, pageText, parseKeyCombo, PAYMENT_FIELD_PATTERN,
 } from './headlessSnapshot.js';
@@ -141,7 +141,22 @@ export class HeadlessBrowser {
         if (target.type() !== 'page' || !target.opener()) return;
         const page = await target.page().catch(() => null);
         if (!page || state.pages.includes(page)) return;
+        // A page read by its address opens none.
+        if ([...state.scratch].some((scratch) => scratch.target() === target.opener())) {
+          await page.close().catch(() => {});
+          return;
+        }
         await this.#preparePage(state, page);
+        // A pop-up's first page may load before the guard is in place: one
+        // the agent could not open itself is closed straight away.
+        const url = page.url();
+        if (/^https?:/i.test(url)) {
+          const check = state.run ? await runInScheduledContext(state.run, () => checkAgentUrl(url)) : await checkAgentUrl(url);
+          if (!check.ok) {
+            await page.close().catch(() => {});
+            return;
+          }
+        }
         state.pages.push(page);
         state.opened.push(page);
         state.front = page; // a new tab comes to the front
