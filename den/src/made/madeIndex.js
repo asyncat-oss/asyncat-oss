@@ -14,7 +14,7 @@ import db from '../db/client.js';
 import { getArtifactsDir, getLegacyArtifactsDir } from '../agent/workspacePaths.js';
 import { getWorkspaceRoot } from '../files/fileExplorerService.js';
 import { defaultCatFolder } from '../cats/catStore.js';
-import { listGallery } from '../media/gallery.js';
+import { galleryPictures } from '../media/gallery.js';
 
 const KINDS = {
   '.md': 'document', '.markdown': 'document', '.txt': 'document', '.pdf': 'document', '.docx': 'document',
@@ -81,20 +81,17 @@ export function madeFile(userId, rootId, name) {
   return null;
 }
 
-/** Everything, newest first: [{ id, kind, title, where, createdAt, bytes, … }]. */
-export function listMade(userId, { limit = 300 } = {}) {
+/**
+ * Everything, newest first: [{ id, kind, title, where, createdAt, bytes, … }].
+ * `kind` keeps one kind; `offset` and `limit` page through what is left.
+ * Counts are always of everything.
+ */
+export function listMade(userId, { limit = 300, offset = 0, kind = null } = {}) {
   const items = [];
-  for (const picture of listGallery({ limit: 200 }).images) {
-    items.push({
-      id: `picture:${picture.name}`,
-      kind: 'picture',
-      title: picture.prompt ? picture.prompt.slice(0, 120) : picture.name,
-      where: 'Pictures',
-      createdAt: picture.createdAt,
-      bytes: picture.bytes,
-      url: picture.url,
-      prompt: picture.prompt,
-    });
+  // Pictures are placed by when their file was written; their details are
+  // read below, only for the ones on the page.
+  for (const picture of galleryPictures()) {
+    items.push({ id: `picture:${picture.name}`, kind: 'picture', createdAt: picture.modifiedAt, picture });
   }
   for (const root of madeRoots(userId)) {
     for (const { name, stat } of artifactFiles(root)) {
@@ -128,5 +125,29 @@ export function listMade(userId, { limit = 300 } = {}) {
   items.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   const counts = {};
   for (const item of items) counts[item.kind] = (counts[item.kind] || 0) + 1;
-  return { items: items.slice(0, limit), counts, total: items.length };
+  const matching = kind ? items.filter((item) => item.kind === kind) : items;
+  const start = Math.max(0, Number(offset) || 0);
+  const count = Math.max(1, Number(limit) || 300);
+  const page = matching.slice(start, start + count).map((item) => (item.picture ? pictureItem(item.picture.describe()) : item));
+  return { items: page, counts, total: matching.length };
+}
+
+function pictureItem(picture) {
+  return {
+    id: `picture:${picture.name}`,
+    kind: 'picture',
+    title: picture.prompt ? picture.prompt.slice(0, 120) : picture.name,
+    where: 'Pictures',
+    createdAt: picture.createdAt,
+    bytes: picture.bytes,
+    url: picture.url,
+    name: picture.name,
+    prompt: picture.prompt,
+    runtime: picture.runtime,
+    model: picture.model,
+    width: picture.width,
+    height: picture.height,
+    seed: picture.seed,
+    editedFrom: picture.editedFrom,
+  };
 }

@@ -60,6 +60,43 @@ test('everything agents made, in one list with where it is from', () => {
   assert.equal(kindOf('x.py'), 'code');
 });
 
+test('pictures carry what they were made from, and page past the first ones', () => {
+  for (let i = 0; i < 205; i += 1) {
+    const file = path.join(process.env.IMAGEGEN_OUTPUT_PATH, `made_${String(i).padStart(3, '0')}.png`);
+    write(file, 'png');
+    fs.utimesSync(file, new Date(Date.now() - (300 - i) * 60_000), new Date(Date.now() - (300 - i) * 60_000));
+  }
+  fs.writeFileSync(path.join(process.env.IMAGEGEN_OUTPUT_PATH, 'basil.png.json'), JSON.stringify({
+    prompt: 'Basil on a sunny sill', runtime: 'stable-diffusion.cpp', model: 'dreamshaper_8.safetensors', width: 512, height: 768, seed: 4113, editedFrom: 'mint.png',
+  }));
+  const pictures = listMade(userId, { kind: 'picture', limit: 100 });
+  assert.equal(pictures.total, 206, 'every picture, not only the first 200');
+  assert.ok(pictures.counts.document >= 1, 'counts stay of everything');
+  assert.ok(pictures.items.every((item) => item.kind === 'picture'));
+  const basil = pictures.items.find((item) => item.name === 'basil.png');
+  assert.deepEqual(
+    [basil.title, basil.runtime, basil.model, basil.width, basil.height, basil.seed, basil.editedFrom],
+    ['Basil on a sunny sill', 'stable-diffusion.cpp', 'dreamshaper_8.safetensors', 512, 768, 4113, 'mint.png'],
+  );
+  const pages = [0, 100, 200].map((offset) => listMade(userId, { kind: 'picture', limit: 100, offset }).items);
+  assert.deepEqual(pages.map((page) => page.length), [100, 100, 6]);
+  assert.equal(new Set(pages.flat().map((item) => item.name)).size, 206, 'no picture twice');
+
+  // A page reads the notes of its own pictures only, not all 206.
+  const readFileSync = fs.readFileSync;
+  let notesRead = 0;
+  fs.readFileSync = function countNotes(file, ...rest) {
+    if (String(file).endsWith('.png.json')) notesRead += 1;
+    return readFileSync.call(this, file, ...rest);
+  };
+  try {
+    assert.equal(listMade(userId, { kind: 'picture', limit: 10 }).items.length, 10);
+  } finally {
+    fs.readFileSync = readFileSync;
+  }
+  assert.equal(notesRead, 10);
+});
+
 test('files are found by folder id and name only', () => {
   assert.ok(madeFile(userId, `project:${folderId}`, 'plan.md'));
   assert.equal(madeFile(userId, `project:${folderId}`, '../../secret.txt'), null);
@@ -85,6 +122,9 @@ test('the file route sends pages as sandboxed text', async () => {
     assert.equal(await page.text(), '<script>alert(1)</script>');
     const listed = await (await fetch(base)).json();
     assert.ok(listed.items.length >= 6);
+    const pictures = await (await fetch(`${base}?kind=picture&offset=200&limit=50`)).json();
+    assert.equal(pictures.items.length, 6);
+    assert.equal(pictures.total, 206);
     assert.equal((await fetch(`${base}/file?root=project:${folderId}&name=..%2F..%2Fsecret.txt`)).status, 404);
   } finally {
     server.close();

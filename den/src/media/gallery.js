@@ -58,14 +58,14 @@ function readMeta(file) {
   }
 }
 
-/** Pictures, newest first: { name, url, bytes, createdAt, prompt, … }. */
-export function listGallery({ limit = 60, offset = 0 } = {}) {
+/** The picture files, newest first: [{ name, file, stat }]. */
+function galleryEntries() {
   const dir = galleryDir();
   let names = [];
   try {
     names = fs.readdirSync(dir).filter((name) => IMAGE_FILE.test(name));
   } catch {
-    return { images: [], total: 0 };
+    return [];
   }
   const items = names.map((name) => {
     const file = path.join(dir, name);
@@ -73,28 +73,45 @@ export function listGallery({ limit = 60, offset = 0 } = {}) {
     try { stat = fs.statSync(file); } catch { /* gone */ }
     return stat?.isFile() ? { name, file, stat } : null;
   }).filter(Boolean);
-  items.sort((a, b) => b.stat.mtimeMs - a.stat.mtimeMs);
+  return items.sort((a, b) => b.stat.mtimeMs - a.stat.mtimeMs);
+}
+
+function describe({ name, file, stat }) {
+  const meta = readMeta(file);
+  return {
+    name,
+    url: galleryUrl(name),
+    bytes: stat.size,
+    createdAt: meta.createdAt || stat.mtime.toISOString(),
+    prompt: meta.prompt || null,
+    runtime: meta.runtime || null,
+    model: meta.model || null,
+    width: meta.width || null,
+    height: meta.height || null,
+    seed: meta.seed ?? null,
+    editedFrom: meta.editedFrom || null,
+  };
+}
+
+/** Pictures, newest first: { name, url, bytes, createdAt, prompt, … }, at most 200 at a time. */
+export function listGallery({ limit = 60, offset = 0 } = {}) {
+  const items = galleryEntries();
   const start = Math.max(0, Number(offset) || 0);
   const count = Math.min(200, Math.max(1, Number(limit) || 60));
-  return {
-    total: items.length,
-    images: items.slice(start, start + count).map(({ name, file, stat }) => {
-      const meta = readMeta(file);
-      return {
-        name,
-        url: galleryUrl(name),
-        bytes: stat.size,
-        createdAt: meta.createdAt || stat.mtime.toISOString(),
-        prompt: meta.prompt || null,
-        runtime: meta.runtime || null,
-        model: meta.model || null,
-        width: meta.width || null,
-        height: meta.height || null,
-        seed: meta.seed ?? null,
-        editedFrom: meta.editedFrom || null,
-      };
-    }),
-  };
+  return { total: items.length, images: items.slice(start, start + count).map(describe) };
+}
+
+/**
+ * Every picture, newest first, for lists that page through them themselves:
+ * [{ name, modifiedAt, describe }]. describe() reads the picture's notes, so
+ * a list reads them only for the page it shows.
+ */
+export function galleryPictures() {
+  return galleryEntries().map((entry) => ({
+    name: entry.name,
+    modifiedAt: entry.stat.mtime.toISOString(),
+    describe: () => describe(entry),
+  }));
 }
 
 export function deleteGalleryImage(name) {

@@ -13,9 +13,11 @@ const router = express.Router();
 const AS_TEXT = new Set(['.html', '.htm', '.svg', '.md', '.markdown', '.txt', '.csv', '.tsv', '.json', '.mmd', '.mermaid', '.js', '.ts', '.py', '.css', '.jsx', '.tsx', '.sh']);
 const BINARY_TYPES = { '.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg' };
 
+// ?kind=picture&offset=300&limit=300 pages through one kind.
 router.get('/', (req, res) => {
   try {
-    res.json({ success: true, ...listMade(req.user.id) });
+    const { kind, offset, limit } = req.query;
+    res.json({ success: true, ...listMade(req.user.id, { kind: kind ? String(kind) : null, offset, limit: Math.min(500, Number(limit) || 300) }) });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
