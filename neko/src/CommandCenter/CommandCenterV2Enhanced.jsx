@@ -32,10 +32,11 @@ import { catsApi } from './api/catsApi.js';
 import { useCat } from '../Cats/useCats.js';
 import { useCommandCenter } from "./context/CommandCenterContextEnhanced";
 import useActiveBrainStatus from "./hooks/useActiveBrainStatus.js";
+import { useChatModels } from "./hooks/useChatModels.js";
 import { useUiPreferences } from '../contexts/UiPreferencesContext.jsx';
 import { useToast, errorDetail } from '../components/toastContext.js';
 import { chatApi, agentApi, gitApi } from "./api";
-import { audioApi } from "../Settings/settingApi.js";
+import { aiProviderApi, audioApi } from "../Settings/settingApi.js";
 import { cleanReasoningAnswer } from "./utils/reasoningParser.js";
 import {
   Code2,
@@ -66,6 +67,7 @@ import { FOLLOW_UP_EVENT } from "./components/renderers/interactiveEvents.js";
 import { linkedMessageId } from "../sidebar/chatSearch.js";
 import { TEMPORARY_CHAT, engineForChat } from "./utils/temporaryChat.js";
 import { currentToolName } from "./utils/toolNames.js";
+import { agentModelOption, chatModelInfo, metadataWithRunModel, modelEventPatch, modelRef, sameModel } from "./utils/chatModel.js";
 
 import { buildConversationSourceCatalog } from "./utils/conversationUtils.js";
 import {
@@ -404,6 +406,55 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
   const setSelectedAgent = useCallback((agentId) => {
     setConversationMetadata({ ...(conversationMetadata || {}), agentProfileId: agentId || null });
   }, [conversationMetadata, setConversationMetadata]);
+  // The model this chat runs on: its own (kept in its metadata), else the
+  // default, which new chats start on (utils/chatModel.js).
+  const { options: modelOptions, loaded: modelOptionsLoaded, refresh: refreshModelOptions } = useChatModels({ loadedFile: activeBrain.loadedLocalModel });
+  const chatModel = useMemo(() => chatModelInfo({
+    chatRef: conversationMetadata?.model,
+    defaultRef: activeBrain.defaultRef,
+    options: modelOptions,
+    fallback: activeBrain,
+    loaded: modelOptionsLoaded,
+  }), [activeBrain, conversationMetadata?.model, modelOptions, modelOptionsLoaded]);
+  // An agent with a model of its own answers with it instead.
+  const agentModel = useMemo(() => {
+    const option = agentModelOption(selectedAgent, modelOptions);
+    return option ? { ...option, name: option.label, agentName: selectedAgent.name } : null;
+  }, [modelOptions, selectedAgent]);
+  const answeringModel = agentModel || chatModel;
+  const [savingChatModel, setSavingChatModel] = useState(false);
+  const conversationMetadataRef = useRef(conversationMetadata);
+  conversationMetadataRef.current = conversationMetadata;
+  // Picking a model changes this chat only, and new chats start with it: a
+  // saved chat keeps it on the server (which makes it the default too), a new
+  // one keeps it until its first message and makes it the default now, and a
+  // temporary chat keeps it to itself. Nothing loads until a message is sent.
+  const handleChatModelChange = useCallback(async (option) => {
+    const ref = modelRef(option?.ref ? { ...option.ref, name: option.label } : null);
+    if (!ref) return;
+    const previous = conversationMetadataRef.current?.model || null;
+    if (sameModel(previous, ref)) return;
+    const conversationId = currentConversationId;
+    const withModel = (model) => (prev) => {
+      const next = { ...(prev || {}) };
+      if (model) next.model = model;
+      else delete next.model;
+      return next;
+    };
+    setConversationMetadata(withModel(ref));
+    if (isTemporaryChat) return;
+    setSavingChatModel(true);
+    try {
+      if (conversationId) await chatApi.setChatModel(conversationId, ref);
+      else await aiProviderApi.setDefaultModel(ref);
+      window.dispatchEvent(new CustomEvent('asyncat-model-runtime-updated'));
+    } catch (err) {
+      if (currentConversationIdRef.current === conversationId) setConversationMetadata(withModel(previous));
+      toast.error("Couldn't switch the model", { detail: errorDetail(err) });
+    } finally {
+      setSavingChatModel(false);
+    }
+  }, [currentConversationId, currentConversationIdRef, isTemporaryChat, setConversationMetadata, toast]);
   const [agentLoadingSession, setAgentLoadingSession] = useState(false);
   const [showDeleteAgentConfirm, setShowDeleteAgentConfirm] = useState(false);
   // Track whether we're on an xl+ (≥1280px) viewport so we can skip mounting
@@ -866,6 +917,10 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     });
   }, [workingContext?.relativePath, workingContext?.rootId]);
 
+  const modelSeesImages = Boolean(
+    answeringModel.capabilities?.supportsImageInput
+      ?? (multimodalCapabilities?.vision?.supportsImageInput || multimodalCapabilities?.vision?.ready),
+  );
   const handleDrop = useCallback((e) => {
     // A folder isn't an attachment: let it through to make a project of it.
     if (e.dataTransfer.items?.[0]?.webkitGetAsEntry?.()?.isDirectory) return;
@@ -884,8 +939,8 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
         setError('Each prompt image must be 5 MB or smaller.');
         return;
       }
-      if (!multimodalCapabilities?.vision?.supportsImageInput && !multimodalCapabilities?.vision?.ready) {
-        setError('The active model does not support image input. Choose an image-capable language model first.');
+      if (!modelSeesImages) {
+        setError("This chat's model can't read images. Pick a model that can.");
         return;
       }
       const reader = new FileReader();
@@ -929,7 +984,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
         promptOnly: true,
       });
     }
-  }, [multimodalCapabilities?.vision?.ready, multimodalCapabilities?.vision?.supportsImageInput, setError]);
+  }, [modelSeesImages, setError]);
 
   const conversationBranches = useMemo(() => {
     const storedBranches = Array.isArray(conversationMetadata?.branches)
@@ -1178,6 +1233,9 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     const editedFromMessageId = runOptions.editedFromMessageId || messageObj?.editedFromMessageId || null;
     const editedFromContent = runOptions.editedFromContent || messageObj?.editedFromContent || null;
     const runMetadata = runOptions.metadata || conversationMetadata || {};
+    // The chat's own model, else the default as the composer shows it. Claude
+    // Code, Codex and other outside agents use their own.
+    const runModel = isExternalEngine ? null : (modelRef(runMetadata?.model) || chatModel.ref || null);
     const userMessageId = runOptions.userMessageId || messageObj?.id || `msg_${Date.now()}_user_${Math.random().toString(36).substr(2, 9)}`;
     const assistantMessageId = runOptions.assistantMessageId || runOptions.regenerateAssistantMessageId || `msg_${Date.now()}_assistant_${Math.random().toString(36).substr(2, 9)}`;
     const regeneratingAssistant = runOptions.regenerateAssistantMessage || null;
@@ -1320,6 +1378,8 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     let runSessionId = isDirectChat ? null : agentCurrentSessionId;
     let doneExternalSessionId = null;
     let doneWorkingDir = null;
+    // The model the run said it uses ("chat_model"), unless an agent's own.
+    let ranOnModel = null;
     const runEvents = [
       { type: 'user_goal', data: userGoalEventData },
     ];
@@ -1333,6 +1393,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
             profileId: effectiveProfileId || null,
             conversationId: isTemporaryChat ? null : runConversationId,
             ephemeral: isTemporaryChat,
+            model: runModel,
           })
         // maxRounds is left to the agent (or the default); it used to be
         // fixed at 25 here, which overrode every agent's own setting.
@@ -1358,10 +1419,24 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
         // A chat opened from a Claude Code or Codex session keeps working in that session's folder.
         externalCwd: isExternalEngine ? (runMetadata?.externalCwd || null) : null,
         engineModel: isExternalEngine ? (engineModels[runEngine] || null) : null,
+        model: runModel,
         ephemeral: isTemporaryChat,
       });
       for await (const event of eventStream) {
         if (controller.signal.aborted) break;
+        // "Loading <model>…" in the composer while a local model loads for
+        // this run; a chat without a model of its own keeps the one it ran on.
+        const modelPatch = modelEventPatch(event);
+        if (modelPatch) {
+          updateChatRun(runKey, modelPatch);
+          if (event.type === 'chat_model' && event.data?.source !== 'agent') {
+            ranOnModel = event.data;
+            if (runConversationId === currentConversationIdRef.current) {
+              setConversationMetadata((prev) => metadataWithRunModel(prev, event.data));
+            }
+          }
+          continue;
+        }
         if (event.type === 'session_start') {
           if (event.data?.sessionId) {
             runSessionId = event.data.sessionId;
@@ -1600,8 +1675,15 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
           };
         }
         const finalMessages = [...optimisticMessages, assistantMsg];
+        // The chat's model as it is now: picked during the run, else the one
+        // it ran on.
+        const keptModel = (runConversationId === currentConversationIdRef.current ? conversationMetadataRef.current?.model : null)
+          || runMetadata?.model
+          || metadataWithRunModel({}, ranOnModel)?.model
+          || null;
         const finalMetadata = {
           ...(runMetadata || {}),
+          ...(keptModel ? { model: keptModel } : {}),
           activeBranchId: runBranchId,
           experienceMode: runExperienceMode,
           engine: runEngine,
@@ -1676,7 +1758,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
           setError(isDirectChat ? 'Chat failed' : 'Agent run failed');
         }
       }
-      updateChatRun(runKey, { streamingText: '', streamingReasoning: '', running: false });
+      updateChatRun(runKey, { streamingText: '', streamingReasoning: '', running: false, modelLoading: null });
       agentAbortControllersRef.current.delete(runKey);
       window.dispatchEvent(new CustomEvent('agent-run-complete'));
     }
@@ -1684,6 +1766,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     toast,
     selectedEngine,
     engineModels,
+    chatModel.ref,
     setConversationMetadata,
     agentRunning,
     currentRunKey,
@@ -1735,8 +1818,8 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     if (toolsPreference === 'off') return 'chat';
     if (workingContext?.workingDir) return 'work';
     if (Array.isArray(messageObj?.agentMentions) && messageObj.agentMentions.length > 0) return 'work';
-    return activeBrain.supportsTools ? 'work' : 'chat';
-  }, [activeBrain.supportsTools, conversationMetadata?.engine, messages.length, selectedEngine, toolsPreference, workingContext?.workingDir]);
+    return answeringModel.supportsTools ? 'work' : 'chat';
+  }, [answeringModel.supportsTools, conversationMetadata?.engine, messages.length, selectedEngine, toolsPreference, workingContext?.workingDir]);
 
   const handleComposerSubmit = useCallback(
     (messageObj) => handleAgentRun(messageObj, { fromComposer: true, experienceMode: pickRunMode(messageObj) }),
@@ -2781,6 +2864,14 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                 onOpenRuntimePanel={openRuntimePanel}
                 runtimeStatus={runtimeStatus}
                 runtimePanelOpen={showActivitySidebar && sidePanelTab === 'runtime'}
+                chatModel={chatModel}
+                modelOptions={modelOptions}
+                agentModel={agentModel}
+                modelLoading={currentRun.modelLoading || null}
+                modelBusy={savingChatModel}
+                onChatModelChange={handleChatModelChange}
+                onModelMenuOpen={refreshModelOptions}
+                temporaryChat={isTemporaryChat}
               />
 
             {!isTemporaryChat && (
@@ -3258,6 +3349,14 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                 pendingInteraction={pendingInputInteraction}
                 onPermissionDecision={handleAgentPermission}
                 onAskUserAnswer={handleAgentAskUser}
+                chatModel={chatModel}
+                modelOptions={modelOptions}
+                agentModel={agentModel}
+                modelLoading={currentRun.modelLoading || null}
+                modelBusy={savingChatModel}
+                onChatModelChange={handleChatModelChange}
+                onModelMenuOpen={refreshModelOptions}
+                temporaryChat={isTemporaryChat}
               />
             </div>
           </div>

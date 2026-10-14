@@ -132,17 +132,26 @@ function commandCenterReducer(state, action) {
       return { ...state, justLoadedConversation: false };
     case ActionTypes.SET_CURRENT_WORKSPACE:
       return { ...state, currentWorkspace: action.payload };
-    case ActionTypes.SET_TEMPORARY_CHAT:
+    case ActionTypes.SET_TEMPORARY_CHAT: {
+      // Starting or ending a temporary chat starts on the default model; one
+      // picked in a temporary chat stays with it.
+      const { model: _model, ...conversationMetadata } = state.conversationMetadata || {};
       if (action.payload === true) {
-        return { ...state, isTemporaryChat: true, currentConversationId: null, conversationTitle: TEMPORARY_CHAT.title };
+        return { ...state, conversationMetadata, isTemporaryChat: true, currentConversationId: null, conversationTitle: TEMPORARY_CHAT.title };
       }
-      return { ...state, isTemporaryChat: false, messages: [], conversationHistory: [], currentConversationId: null, conversationTitle: null };
+      return { ...state, conversationMetadata, isTemporaryChat: false, messages: [], conversationHistory: [], currentConversationId: null, conversationTitle: null };
+    }
     case ActionTypes.SET_CONVERSATION_SUMMARIES:
       return { ...state, conversationSummaries: action.payload };
     case ActionTypes.SET_WORKING_CONTEXT:
       return { ...state, workingContext: normalizeWorkingContext(action.payload) };
-    case ActionTypes.SET_CONVERSATION_METADATA:
-      return { ...state, conversationMetadata: action.payload && typeof action.payload === 'object' ? action.payload : {} };
+    case ActionTypes.SET_CONVERSATION_METADATA: {
+      // A function is given the metadata as it is now, so a change made while
+      // a run goes on (the chat's model, say) isn't lost to an older copy.
+      const next = typeof action.payload === 'function' ? action.payload(state.conversationMetadata || {}) : action.payload;
+      if (next === state.conversationMetadata) return state;
+      return { ...state, conversationMetadata: next && typeof next === 'object' ? next : {} };
+    }
     default:
       return state;
   }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { aiProviderApi, llamaServerApi, mlxApi } from "../../Settings/settingApi.js";
 import { friendlyModelName } from "../../utils/modelNames.js";
+import { configModelName, defaultModelRef } from "../utils/chatModel.js";
 
 const PROVIDER_NAMES = {
   "llamacpp-builtin": "llama.cpp",
@@ -130,7 +131,9 @@ export function useActiveBrainStatus() {
     const isBuiltin = providerId === "llamacpp-builtin" || isMlx;
     const engineStatus = isMlx ? mlxStatus : localStatus;
     const status = isBuiltin ? (engineStatus?.status || "idle") : "ready";
-    const rawModel = isBuiltin ? (engineStatus?.model || config?.model) : config?.model;
+    // The default model, which isn't always the one loaded now: a chat can
+    // run on a model of its own (utils/chatModel.js).
+    const rawModel = config?.model || (isBuiltin ? engineStatus?.model : "");
     const model = shortModelName(rawModel, providerName);
     const mode = providerId === "openai-codex"
       ? "Codex"
@@ -161,6 +164,12 @@ export function useActiveBrainStatus() {
       supportsReasoning,
       capabilities,
       label: model ? `${mode} · ${providerName} · ${model}` : `${mode} · ${providerName}`,
+      // What new chats run on, as a model reference (null for MLX and the like).
+      defaultRef: defaultModelRef(config),
+      // Its name, as the composer's model menu says it.
+      defaultName: configModelName(config) || model,
+      // The file the built-in engine has loaded now, whichever chat it's for.
+      loadedLocalModel: localStatus?.status === "ready" ? localStatus.modelPath || localStatus.model || null : null,
     };
   }, [config, localStatus, mlxStatus, loading]);
 }

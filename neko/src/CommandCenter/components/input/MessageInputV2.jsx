@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import PropTypes from "prop-types";
 import { connectorToolLabel, connectorToolParts } from "../../../Connectors/connectorFormat.js";
 import { startWavRecording } from "../../../utils/wavRecorder.js";
-import { ArrowUp, Bell, Bookmark, ChevronDown, Hammer, ClipboardPen, Cloud, Cpu, Headphones, ImagePlus, Loader2, Mail, MessageCircle, Mic, Paperclip, Rss, Send, ShieldAlert, ShieldOff, Square, Wrench, X, Zap, Plus, Check, Folder, Sparkles } from "lucide-react";
+import { ArrowUp, Bell, Bookmark, ChevronDown, Hammer, ClipboardPen, Cpu, Headphones, ImagePlus, Loader2, Mail, MessageCircle, Mic, Paperclip, Rss, Send, ShieldAlert, ShieldOff, Square, Wrench, X, Zap, Plus, Check, Folder, Sparkles } from "lucide-react";
 import { Menu, MenuItem, MenuLabel, MenuSeparator } from "../../../components/ui/Menu.jsx";
 import AgentAvatar from "../../../Agent/AgentAvatar.jsx";
 import { useAgents } from "../../../Agent/useAgents.js";
@@ -14,10 +14,10 @@ import eventBus from "../../../utils/eventBus.js";
 import ConfirmModal from "../modals/ConfirmModal.jsx";
 import { WorkingContextModal } from "../modals/WorkingContextModal.jsx";
 import { projectApi } from "../../../projects/projectApi.js";
-import { useLocalModelStatus } from "../../hooks/useLocalModelStatus.js";
-import { useModelConfig } from "../../hooks/useModelConfig.js";
 import { useActiveBrainStatus } from "../../hooks/useActiveBrainStatus.js";
-import { localModelsApi, llamaServerApi, audioApi, aiProviderApi } from "../../../Settings/settingApi.js";
+import { audioApi } from "../../../Settings/settingApi.js";
+import { modelBlockReason } from "../../utils/chatModel.js";
+import ChatModelPicker from "./ChatModelPicker.jsx";
 import { filesApi } from "../../api";
 import { dirname, basename, fileIconMeta, rootIcon } from "../../../files/fileUtils.js";
 import { attachmentKind, AttachmentChip, ImageLightbox } from "../shared/AttachmentComponents.jsx";
@@ -815,6 +815,17 @@ export const MessageInputV2 = ({
   // { name, avatar }: messages go to a Cat, which has its own model and
   // settings, so the pickers are replaced by who you're writing to.
   lockedTo = null,
+  // The model this chat runs on (utils/chatModel.js chatModelInfo), the
+  // menu's other models, and an agent's own model when it has one.
+  chatModel = null,
+  modelOptions = [],
+  agentModel = null,
+  // { name, waitingFor } while a run loads this chat's local model.
+  modelLoading = null,
+  modelBusy = false,
+  onChatModelChange,
+  onModelMenuOpen,
+  temporaryChat = false,
 }) => {
   const navigate = useNavigate();
   const isWorkExperience = experienceMode === "work";
@@ -825,12 +836,6 @@ export const MessageInputV2 = ({
   const recordingTimerRef = useRef(null);
   const [error, setError] = useState(null);
   const [isComposing, setIsComposing] = useState(false);
-  const [localModels, setLocalModels] = useState([]);
-  const [modelsLoaded, setModelsLoaded] = useState(false);
-  const [isSwitchingModel, setIsSwitchingModel] = useState(false);
-  const [modelSwitchError, setModelSwitchError] = useState(null);
-  const [providerProfiles, setProviderProfiles] = useState([]);
-  const [activeProfileId, setActiveProfileId] = useState(null);
   const [openMenu, setOpenMenu] = useState(null);
   const { agents: agentProfiles, loaded: profilesLoaded } = useAgents();
   const [cursorPosition, setCursorPosition] = useState(0);
@@ -855,23 +860,26 @@ export const MessageInputV2 = ({
   const [lightbox, setLightbox] = useState(null);
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
 
-  const localModel = useLocalModelStatus();
   const activeBrain = useActiveBrainStatus();
+  // The model that answers: an agent's own, else this chat's, else (with
+  // neither passed) the default.
+  const answeringModel = agentModel || chatModel;
+  const modelCapabilities = answeringModel?.capabilities ?? activeBrain.capabilities ?? null;
   const supportsImageInput = Boolean(
-    activeBrain.capabilities?.supportsImageInput
+    modelCapabilities?.supportsImageInput
       ?? multimodalCapabilities?.vision?.supportsImageInput
       ?? multimodalCapabilities?.vision?.ready,
   );
+  const supportsReasoning = Boolean(modelCapabilities?.supportsReasoning);
   const effectiveMultimodalCapabilities = useMemo(() => ({
     ...(multimodalCapabilities || {}),
     vision: {
       ...(multimodalCapabilities?.vision || {}),
       ready: supportsImageInput,
       supportsImageInput,
-      model: activeBrain.model || multimodalCapabilities?.vision?.model || null,
+      model: answeringModel?.name || activeBrain.model || multimodalCapabilities?.vision?.model || null,
     },
-  }), [activeBrain.model, multimodalCapabilities, supportsImageInput]);
-  const { config: modelContextConfig } = useModelConfig();
+  }), [activeBrain.model, answeringModel?.name, multimodalCapabilities, supportsImageInput]);
   const textareaRef = useRef(null);
   const toolbarRef = useRef(null);
   const modeMenuRef = useRef(null);
@@ -954,10 +962,10 @@ export const MessageInputV2 = ({
     }
   }, [activeRoot, fileRootsLoaded, isWorkExperience, onWorkingContextChange, workingContext?.rootId]);
   const activeContextLabel = labelForWorkingContext(activeWorkingContext, activeRoot);
-  const supportsReasoningControl = activeBrain.supportsReasoning && activeBrain.capabilities?.reasoningType === 'effort_string';
+  const supportsReasoningControl = supportsReasoning && modelCapabilities?.reasoningType === 'effort_string';
   const currentReasoningOptions = useMemo(() => {
     if (!supportsReasoningControl) return [];
-    const tiers = activeBrain.capabilities?.reasoningTiers || ["low", "medium", "high"];
+    const tiers = modelCapabilities?.reasoningTiers || ["low", "medium", "high"];
     const baseOptions = [
       { value: "auto", label: "Auto", short: "Think auto", description: "Let the provider choose." }
     ];
@@ -974,35 +982,16 @@ export const MessageInputV2 = ({
       if (tierMap[t]) baseOptions.push(tierMap[t]);
     }
     return baseOptions;
-  }, [activeBrain.capabilities, supportsReasoningControl]);
-
-  const ctxSize = localModel.ctxSize || modelContextConfig.ctx_size || (activeBrain.isLocal ? 8192 : 128000);
+  }, [modelCapabilities, supportsReasoningControl]);
 
   const usesExternalEngine = Boolean(engine && engine !== "asyncat");
 
-  const localModelSendBlockReason = useMemo(() => {
-    // Claude Code and Codex answer on their own; Asyncat's model doesn't matter.
-    if (usesExternalEngine || !activeBrain.isBuiltin) return null;
-    if (activeBrain.loading) return "Checking which model is ready…";
-    if (activeBrain.isLoadingModel) {
-      return activeBrain.model
-        ? `Model ${activeBrain.model} is still loading.`
-        : "Model is still loading.";
-    }
-    if (activeBrain.isReady) return null;
-    if (activeBrain.status === "error") return "The model failed to load. Pick another one to keep chatting.";
-    if (activeBrain.rawModel) return `${activeBrain.model || "The chosen model"} isn't loaded right now.`;
-    return "No model yet. Choose one to start chatting.";
-  }, [
-    activeBrain.isBuiltin,
-    activeBrain.loading,
-    activeBrain.isLoadingModel,
-    activeBrain.isReady,
-    activeBrain.status,
-    activeBrain.model,
-    activeBrain.rawModel,
-    usesExternalEngine,
-  ]);
+  // Claude Code and Codex answer on their own; Asyncat's model doesn't matter.
+  // A chat on a model file or saved model can always send: a local model
+  // loads when the message goes.
+  const localModelSendBlockReason = usesExternalEngine || lockedTo
+    ? null
+    : modelBlockReason({ model: answeringModel || { ref: activeBrain.defaultRef }, brain: activeBrain });
 
   useEffect(() => {
     if (!textareaRef.current) return;
@@ -1040,7 +1029,7 @@ export const MessageInputV2 = ({
     const mime = externalFileAttachment.mime || externalFileAttachment.mimeType || '';
     const ext = externalFileAttachment.ext || externalFileAttachment.name?.split('.').pop() || '';
     if (attachmentKind({ ...externalFileAttachment, mime, ext }) === 'image' && !supportsImageInput) {
-      setError('The active model does not support image input. Choose an image-capable language model first.');
+      setError("This chat's model can't read images. Pick a model that can.");
       return;
     }
     const attachmentPath = externalFileAttachment.path
@@ -1249,7 +1238,7 @@ export const MessageInputV2 = ({
       return;
     }
     if (imageFiles.length > 0 && !supportsImageInput) {
-      setError('The active model does not support image input. Choose an image-capable language model first.');
+      setError("This chat's model can't read images. Pick a model that can.");
       return;
     }
     if (!rootId && selected.some(file => !String(file.type || '').toLowerCase().startsWith('image/'))) {
@@ -1321,7 +1310,7 @@ export const MessageInputV2 = ({
         return;
       }
       if (!supportsImageInput && fileAttachments.some(file => attachmentKind(file) === 'image')) {
-        setError('The active model does not support image input. Remove the image or choose an image-capable model.');
+        setError("This chat's model can't read images. Remove the image or pick a model that can.");
         return;
       }
 
@@ -1346,7 +1335,7 @@ export const MessageInputV2 = ({
           content: textToSend.trim(),
           agentMentions: detectedAgentMentions,
           fileAttachments: allFileAttachments.length > 0 ? allFileAttachments : undefined,
-          reasoningEffort: activeBrain.supportsReasoning ? reasoningEffort : "auto",
+          reasoningEffort: supportsReasoning ? reasoningEffort : "auto",
           enabledIntegrationTools: Array.isArray(enabledIntegrationTools) ? enabledIntegrationTools : [],
         };
 
@@ -1361,7 +1350,7 @@ export const MessageInputV2 = ({
         setError("Failed to send message. Please try again.");
       }
     },
-    [value, disabled, localModelSendBlockReason, supportsImageInput, onSubmit, detectedAgentMentions, fileAttachments, inlineMentions, activeBrain.supportsReasoning, reasoningEffort, enabledIntegrationTools],
+    [value, disabled, localModelSendBlockReason, supportsImageInput, onSubmit, detectedAgentMentions, fileAttachments, inlineMentions, supportsReasoning, reasoningEffort, enabledIntegrationTools],
   );
 
   const handleKeyDown = useCallback(
@@ -1454,121 +1443,6 @@ export const MessageInputV2 = ({
     }
     onEnabledIntegrationToolsChange([...next]);
   }, [enabledIntegrationSet, onEnabledIntegrationToolsChange]);
-
-  const BrainIcon = activeBrain.isLocal ? Cpu : Cloud;
-  const modelLabel = activeBrain.isLoadingModel
-    ? "Loading…"
-    : `${activeBrain.mode} · ${activeBrain.providerName}${activeBrain.model ? ` · ${activeBrain.model}` : ""}`;
-
-  const allModelOptions = useMemo(() => {
-    const opts = [];
-    const cloudProfiles = providerProfiles.filter(p => p.provider_id !== "llamacpp-builtin");
-    if (cloudProfiles.length > 0) {
-      opts.push({ type: "section", label: "Providers" });
-      for (const profile of cloudProfiles) {
-        const isActive = profile.id === activeProfileId;
-        opts.push({
-          type: "option",
-          value: `provider:${profile.id}`,
-          label: profile.name,
-          detail: profile.model || profile.provider_id || "",
-          active: isActive,
-        });
-      }
-    }
-    if (localModels.length > 0 || (activeBrain.isBuiltin && localModel.model)) {
-      if (opts.length > 0) opts.push({ type: "divider" });
-      opts.push({ type: "section", label: "Local LLMs" });
-      const localFilenames = new Set(localModels.map(m => m.filename));
-      const allLocal = [
-        ...(activeBrain.isBuiltin && localModel.model && !localFilenames.has(localModel.model)
-          ? [{ filename: localModel.model, name: localModel.model }]
-          : []),
-        ...localModels,
-      ];
-      for (const m of allLocal) {
-        const isActive = activeBrain.isBuiltin && m.filename === localModel.model;
-        opts.push({
-          type: "option",
-          value: m.filename,
-          label: (m.name || m.filename).replace(/\.(gguf|bin)$/i, ""),
-          detail: isActive ? "Loaded" : "GGUF",
-          active: isActive,
-        });
-      }
-    }
-    return opts;
-  }, [providerProfiles, activeProfileId, localModels, localModel.model, activeBrain.isBuiltin]);
-
-  // Provider profiles + active config
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const [profilesRes, configRes] = await Promise.all([
-          aiProviderApi.listProfiles().catch(() => ({ profiles: [] })),
-          aiProviderApi.getConfig().catch(() => null),
-        ]);
-        if (cancelled) return;
-        setProviderProfiles(profilesRes.profiles || []);
-        setActiveProfileId(configRes?.profile_id || null);
-      } catch {
-        if (!cancelled) setProviderProfiles([]);
-      }
-    };
-    load();
-    window.addEventListener('asyncat-model-runtime-updated', load);
-    return () => {
-      cancelled = true;
-      window.removeEventListener('asyncat-model-runtime-updated', load);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (modelsLoaded) return;
-    let cancelled = false;
-    localModelsApi
-      .listModels()
-      .then((res) => { if (!cancelled) setLocalModels(res.models || []); })
-      .catch(() => { if (!cancelled) setLocalModels([]); })
-      .finally(() => { if (!cancelled) setModelsLoaded(true); });
-    return () => { cancelled = true; };
-  }, [modelsLoaded]);
-
-  const handleModelSelect = useCallback(
-    async (nextModel) => {
-      setOpenMenu(null);
-      if (nextModel === "__manage__") { navigate("/models"); return; }
-      if (!nextModel || isSwitchingModel) return;
-      if (nextModel.startsWith("provider:")) {
-        const profileId = nextModel.slice("provider:".length);
-        if (profileId === activeProfileId) return;
-        setModelSwitchError(null);
-        setIsSwitchingModel(true);
-        try {
-          await aiProviderApi.activateProfile(profileId);
-          setActiveProfileId(profileId);
-          window.dispatchEvent(new CustomEvent("asyncat-model-runtime-updated"));
-        } catch (err) {
-          setModelSwitchError(err.message || "Could not switch provider.");
-        } finally {
-          setIsSwitchingModel(false);
-        }
-        return;
-      }
-      if (nextModel === localModel.model) return;
-      setModelSwitchError(null);
-      setIsSwitchingModel(true);
-      try {
-        await llamaServerApi.start(nextModel, ctxSize);
-      } catch (err) {
-        setModelSwitchError(err.message || "Could not switch model.");
-      } finally {
-        setIsSwitchingModel(false);
-      }
-    },
-    [ctxSize, isSwitchingModel, localModel.model, activeProfileId, navigate],
-  );
 
   useEffect(() => {
     const handlePointerDown = (event) => {
@@ -1780,14 +1654,14 @@ export const MessageInputV2 = ({
                 isWorkExperience ? "rounded-[1.4rem] pb-3 pt-3.5" : "rounded-[1.5rem] pb-2.5 pt-3.5"
               }`}
             >
-              {(error || modelSwitchError) && (
+              {error && (
                 <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 midnight:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2">
                   <p className="text-sm text-red-800 dark:text-red-200 flex-1">
-                    {error || modelSwitchError}
+                    {error}
                   </p>
                   <button
                     type="button"
-                    onClick={() => { setError(null); setModelSwitchError(null); }}
+                    onClick={() => setError(null)}
                     className="text-red-400 hover:text-red-600"
                   >
                     <X className="w-4 h-4" />
@@ -1806,33 +1680,13 @@ export const MessageInputV2 = ({
                     <span className="min-w-0 truncate">{localModelSendBlockReason}</span>
                   </div>
                   {!(activeBrain.isLoadingModel || activeBrain.loading) && (
-                    <div className="flex shrink-0 items-center gap-1">
-                      {activeBrain.providerId === "llamacpp-builtin" && activeBrain.rawModel && activeBrain.status !== "error" && (
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            try {
-                              await llamaServerApi.start(activeBrain.rawModel, 8192);
-                            } catch (err) {
-                              setModelSwitchError(err.message || "Couldn't load the model");
-                            }
-                            window.dispatchEvent(new CustomEvent("asyncat-model-runtime-updated"));
-                          }}
-                          className="rounded-lg bg-fg px-2.5 py-1 text-[12px] font-medium text-canvas transition-opacity hover:opacity-90"
-                        >
-                          Load it
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => navigate('/models')}
-                        className={activeBrain.providerId === "llamacpp-builtin" && activeBrain.rawModel && activeBrain.status !== "error"
-                          ? "rounded-lg px-2.5 py-1 text-[12px] font-medium text-fg-muted transition-colors hover:bg-selected hover:text-fg"
-                          : "rounded-lg bg-fg px-2.5 py-1 text-[12px] font-medium text-canvas transition-opacity hover:opacity-90"}
-                      >
-                        {activeBrain.rawModel ? "Change model" : "Choose a model"}
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/models')}
+                      className="shrink-0 rounded-lg bg-fg px-2.5 py-1 text-[12px] font-medium text-canvas transition-opacity hover:opacity-90"
+                    >
+                      {activeBrain.rawModel ? "Change model" : "Choose a model"}
+                    </button>
                   )}
                 </div>
               )}
@@ -1989,7 +1843,8 @@ export const MessageInputV2 = ({
 
 
             <div ref={toolbarRef} className={`${isWorkExperience ? "mt-2.5" : "mt-1.5"} flex items-center justify-between gap-2 bg-transparent text-gray-500 select-none`}>
-              <div className="flex items-center gap-1.5">
+              {/* On a narrow window the pickers wrap, and the model's name shortens. */}
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                 <div className="relative">
                   <button
                     type="button"
@@ -2153,93 +2008,24 @@ export const MessageInputV2 = ({
                   />
                 )}
 
-                <div className={usesExternalEngine || lockedTo ? "hidden" : "relative"}>
-                  <button
-                    type="button"
-                    onClick={() => setOpenMenu((current) => (current === "model" ? null : "model"))}
-                    disabled={disabled || activeBrain.loading || isSwitchingModel}
-                    title={`${activeBrain.label}${activeBrain.supportsTools ? " · tools enabled" : ""}`}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all duration-200 disabled:cursor-not-allowed ${
-                      activeBrain.isLoadingModel || isSwitchingModel
-                        ? "text-amber-500 dark:text-amber-400 midnight:text-amber-400"
-                        : activeBrain.isReady
-                          ? activeBrain.isLocal
-                            ? "text-emerald-600 hover:text-emerald-700 hover:bg-gray-100 dark:text-emerald-400 dark:hover:text-emerald-300 dark:hover:bg-gray-800 midnight:text-emerald-400 midnight:hover:text-emerald-300 midnight:hover:bg-slate-800"
-                            : "text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-gray-100 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:text-slate-100 midnight:hover:bg-slate-800"
-                          : "text-fg-subtle"
-                    }`}
-                  >
-                    {activeBrain.isLoadingModel || activeBrain.loading || isSwitchingModel ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <BrainIcon className="w-3.5 h-3.5" />
-                    )}
-                    <span className="truncate max-w-[14rem]">{modelLabel}</span>
-                    <ChevronDown className="w-3 h-3 opacity-50" />
-                  </button>
-                  {openMenu === "model" && (
-                    <div className="absolute left-0 bottom-full z-30 mb-2 w-80 max-w-[calc(100vw-3rem)] overflow-hidden rounded-xl border border-line bg-elevated shadow-xl shadow-black/10 dark:shadow-black/40">
-                      <div className="max-h-72 overflow-y-auto p-1">
-                        {allModelOptions.length === 0 ? (
-                          <div className="px-3 py-4 text-center">
-                            <p className="text-[13px] font-medium text-fg">No models to switch to yet</p>
-                            <p className="mt-0.5 text-[12px] text-fg-subtle">Connect a provider or download a model on the Models page.</p>
-                          </div>
-                        ) : allModelOptions.map((item, i) => {
-                          if (item.type === "section") {
-                            return (
-                              <div key={`s-${i}`} className="px-2.5 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-fg-subtle">
-                                {item.label}
-                              </div>
-                            );
-                          }
-                          if (item.type === "divider") {
-                            return <div key={`d-${i}`} className="my-1 border-t border-line" />;
-                          }
-                          return (
-                            <button
-                              key={item.value}
-                              type="button"
-                              disabled={item.active}
-                              onClick={() => handleModelSelect(item.value)}
-                              className={`w-full rounded-md px-2.5 py-2 text-left text-xs transition-colors disabled:cursor-default ${
-                                item.active
-                                  ? "bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800 midnight:text-slate-100"
-                                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:text-slate-300 midnight:hover:bg-slate-800 midnight:hover:text-slate-100"
-                              }`}
-                            >
-                              <span className="flex items-center gap-2">
-                                <span className="block truncate font-medium flex-1">{item.label}</span>
-                                {item.active && (
-                                  <span className="flex h-2 w-2 shrink-0 relative">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-                                  </span>
-                                )}
-                              </span>
-                              {item.detail && (
-                                <span className="block truncate text-[10px] text-fg-subtle mt-0.5">{item.detail}</span>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <div className="border-t border-gray-100 p-1 dark:border-gray-800 midnight:border-slate-800">
-                        <button
-                          type="button"
-                          onClick={() => handleModelSelect("__manage__")}
-                          className="w-full rounded-md px-2.5 py-2 text-left text-xs font-medium text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200 midnight:text-slate-400 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
-                        >
-                          Manage models →
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                {!usesExternalEngine && !lockedTo && (
+                  <ChatModelPicker
+                    model={chatModel || { ref: activeBrain.defaultRef, name: activeBrain.defaultName || activeBrain.providerName, isLocal: activeBrain.isLocal, followsDefault: true }}
+                    options={modelOptions}
+                    agentModel={agentModel}
+                    loading={modelLoading}
+                    busy={modelBusy}
+                    disabled={disabled || !onChatModelChange}
+                    temporary={temporaryChat}
+                    onChange={onChatModelChange}
+                    onOpen={onModelMenuOpen}
+                    onManage={() => navigate("/models")}
+                  />
+                )}
 
               </div>
 
-              <div className="flex items-center gap-2.5">
+              <div className="flex shrink-0 items-center gap-2.5">
                 <input
                   ref={filePickerRef}
                   type="file"
@@ -2254,7 +2040,7 @@ export const MessageInputV2 = ({
                     type="button"
                     onClick={() => filePickerRef.current?.click()}
                     disabled={disabled || uploadingAttachment}
-                    title={`Add an image for ${activeBrain.model || 'the active model'}`}
+                    title={`Add an image for ${answeringModel?.name || activeBrain.model || "this chat's model"}`}
                     className="flex h-8 w-8 items-center justify-center rounded-full text-blue-500 transition-colors hover:bg-blue-50 hover:text-blue-700 disabled:opacity-40 dark:text-blue-400 dark:hover:bg-blue-950/30 dark:hover:text-blue-300 midnight:text-blue-400 midnight:hover:bg-blue-950/30"
                   >
                     {uploadingAttachment ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
