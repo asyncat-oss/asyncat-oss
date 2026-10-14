@@ -17,7 +17,7 @@ import path from 'path';
 import { app } from 'electron';
 import { createLaunchToken } from './hostBridge.js';
 import { loadSecretKey } from './secretKey.js';
-import { DEN_ENTRY, DEN_CWD, BACKEND_PORT, HEALTH_URL, IS_DEV, USE_EXTERNAL_BACKEND } from './constants.js';
+import { DEN_ENTRY, DEN_CWD, BACKEND_PORT, HEALTH_URL, IS_DEV, USE_EXTERNAL_BACKEND, USER_DATA } from './constants.js';
 
 let backendProcess = null;
 let externalBackendHealthy = false;
@@ -223,6 +223,8 @@ export function startBackend() {
       // shutdown over stdin (Windows has no SIGTERM to catch).
       ASYNCAT_HOST_TOKEN: createLaunchToken(),
       ASYNCAT_STDIN_CONTROL: '1',
+      // So the command sandbox can hide this folder (it holds the key file).
+      ASYNCAT_USER_DATA: USER_DATA,
       // The keychain-held key that encrypts saved API keys and tokens.
       ...(loadSecretKey() && { ASYNCAT_SECRET_KEY: loadSecretKey() }),
       ...(app.isPackaged && {
