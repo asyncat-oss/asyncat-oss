@@ -1180,13 +1180,19 @@ export class AgentRuntime {
             toolCallId: toolCall.call_id,
           });
 
-        // Parallel reads
+        // Parallel reads. Browser steps act on the agent's one tab, so they
+        // run one after another in the order given (a page opens before it
+        // is read), beside the other reads.
         if (readIndices.length > 0) {
+          let browserSteps = Promise.resolve();
           const readResults = await Promise.all(
             readIndices.map(i => {
               const { toolCall } = permitted[i];
-              return executeToolCall(toolCall)
+              const run = () => executeToolCall(toolCall)
                 .catch(err => ({ success: false, error: err.message || String(err) }));
+              if (toolRegistry.get(toolCall.tool_name)?.category !== 'browser') return run();
+              browserSteps = browserSteps.then(run);
+              return browserSteps;
             })
           );
           readIndices.forEach((origIdx, ri) => { execResults[origIdx] = readResults[ri]; });
