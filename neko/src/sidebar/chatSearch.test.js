@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MARK_START, MARK_END, snippetParts, plainSnippet, chatLink, linkedMessageId } from './chatSearch.js';
+import {
+  MARK_START, MARK_END, snippetParts, plainSnippet, chatLink, linkedMessageId,
+  isPinned, sidebarChatLists, withPinned,
+} from './chatSearch.js';
 
 const marked = (word) => `${MARK_START}${word}${MARK_END}`;
 
@@ -23,4 +26,31 @@ test('links open a chat at a message, and read back', () => {
   assert.equal(linkedMessageId('?message=msg%201%26x'), 'msg 1&x');
   assert.equal(linkedMessageId('?other=1'), null);
   assert.equal(linkedMessageId(''), null);
+});
+
+test('the sidebar shows each chat once: pinned, else in its project, else in recents', () => {
+  const chats = [
+    { id: 'a', is_pinned: 0 },
+    { id: 'b', is_pinned: 1, project: 'p1' },
+    { id: 'c', is_pinned: 0, project: 'p1' },
+    { id: 'd', is_pinned: true },
+    { id: 'e' },
+    { id: 'f' },
+    { id: 'g', project: 'p2' },
+  ];
+  const { pinned, recents, byProject, pinnedInProject } = sidebarChatLists(chats, {
+    projectOf: (c) => c.project || null,
+    recentLimit: 2,
+  });
+  assert.deepEqual(pinned.map((c) => c.id), ['b', 'd'], "a project's pinned chat goes to Pinned");
+  assert.deepEqual(recents.map((c) => c.id), ['a', 'e']);
+  assert.deepEqual([...byProject].map(([id, list]) => [id, list.map((c) => c.id)]), [['p1', ['c']], ['p2', ['g']]]);
+  assert.deepEqual([...pinnedInProject], [['p1', 1]]);
+  const shown = [...pinned, ...recents, ...[...byProject.values()].flat()].map((c) => c.id);
+  assert.equal(new Set(shown).size, shown.length, 'never twice');
+
+  assert.ok(isPinned({ is_pinned: '1' }));
+  assert.ok(!isPinned({ is_pinned: 'false' }));
+  assert.deepEqual(withPinned(chats, 'a', true)[0], { id: 'a', is_pinned: true });
+  assert.equal(withPinned(chats, 'a', true)[1], chats[1], 'others are left alone');
 });

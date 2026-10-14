@@ -21,6 +21,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Pencil,
+  Pin,
+  PinOff,
   Search,
   Settings,
   SlidersHorizontal,
@@ -50,6 +52,7 @@ import { formatShortcut } from "../components/ui/shortcuts.js";
 import { avatarSrc } from "../assets/dp/avatars.js";
 import eventBus from "../utils/eventBus.js";
 import { loadKeyboardShortcuts } from "../utils/keyboardShortcutsUtils.js";
+import { isPinned, sidebarChatLists, withPinned } from "./chatSearch.js";
 
 const UniversalSearch = lazy(() => import("./UniversalSearch"));
 
@@ -209,8 +212,9 @@ function conversationUpdatedAt(conversation) {
   ).getTime() || 0;
 }
 
-const RecentConversationItem = memo(({ conversation, active, running, onOpen, onRename, onDelete, nested = false, agentsById = null }) => {
+const RecentConversationItem = memo(({ conversation, active, running, onOpen, onRename, onDelete, onTogglePin, nested = false, agentsById = null }) => {
   const title = conversation.title || "Untitled conversation";
+  const pinned = isPinned(conversation);
   const menuButtonRef = useRef(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -280,6 +284,7 @@ const RecentConversationItem = memo(({ conversation, active, running, onOpen, on
         aria-label={`Options for ${title}`}
         aria-haspopup="menu"
         aria-expanded={menuOpen}
+        data-chat-options={conversation.id}
         className={`absolute right-1 flex h-6 w-6 items-center justify-center rounded-md text-fg-subtle outline-none transition-opacity hover:bg-selected hover:text-fg focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-accent/40 ${
           menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100"
         }`}
@@ -287,6 +292,7 @@ const RecentConversationItem = memo(({ conversation, active, running, onOpen, on
         <MoreHorizontal className="h-4 w-4" />
       </button>
       <Menu anchorRef={menuButtonRef} open={menuOpen} onClose={() => setMenuOpen(false)} placement="bottom-end" width={176} label="Chat options">
+        <MenuItem icon={pinned ? PinOff : Pin} label={pinned ? "Unpin" : "Pin"} onSelect={() => onTogglePin(conversation)} />
         <MenuItem icon={Pencil} label="Rename" onSelect={startRename} />
         <MenuSeparator />
         <MenuItem icon={Trash2} label="Delete" danger onSelect={() => onDelete(conversation)} />
@@ -301,12 +307,14 @@ RecentConversationItem.propTypes = {
     id: PropTypes.string.isRequired,
     title: PropTypes.string,
     mode: PropTypes.string,
+    is_pinned: PropTypes.oneOfType([PropTypes.bool, PropTypes.number]),
   }).isRequired,
   active: PropTypes.bool,
   running: PropTypes.bool,
   onOpen: PropTypes.func.isRequired,
   onRename: PropTypes.func.isRequired,
   onDelete: PropTypes.func.isRequired,
+  onTogglePin: PropTypes.func.isRequired,
   nested: PropTypes.bool,
   agentsById: PropTypes.instanceOf(Map),
 };
@@ -314,6 +322,7 @@ RecentConversationItem.propTypes = {
 const ProjectConversationGroup = memo(({
   project,
   conversations,
+  pinnedCount = 0,
   expanded,
   active,
   activeConversationId,
@@ -323,6 +332,7 @@ const ProjectConversationGroup = memo(({
   onOpenConversation,
   onRenameConversation,
   onDeleteConversation,
+  onTogglePinConversation,
   agentsById = null,
 }) => {
   const ProjectIcon = expanded ? FolderOpen : Folder;
@@ -369,6 +379,7 @@ const ProjectConversationGroup = memo(({
               onOpen={onOpenConversation}
               onRename={onRenameConversation}
               onDelete={onDeleteConversation}
+              onTogglePin={onTogglePinConversation}
               agentsById={agentsById}
               nested
             />
@@ -378,7 +389,7 @@ const ProjectConversationGroup = memo(({
               onClick={onOpenProject}
               className="flex h-8 w-full items-center rounded-lg pl-7 pr-2.5 text-left text-xs text-fg-subtle transition-colors hover:bg-hover hover:text-fg-muted"
             >
-              No chats yet · Open project
+              <span className="truncate">{pinnedCount > 0 ? "Pinned above" : "No chats yet"} · Open project</span>
             </button>
           )}
         </div>
@@ -391,6 +402,7 @@ ProjectConversationGroup.displayName = "ProjectConversationGroup";
 ProjectConversationGroup.propTypes = {
   project: PropTypes.shape({ id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired, name: PropTypes.string }).isRequired,
   conversations: PropTypes.arrayOf(PropTypes.object).isRequired,
+  pinnedCount: PropTypes.number,
   expanded: PropTypes.bool,
   active: PropTypes.bool,
   activeConversationId: PropTypes.string,
@@ -400,6 +412,7 @@ ProjectConversationGroup.propTypes = {
   onOpenConversation: PropTypes.func.isRequired,
   onRenameConversation: PropTypes.func.isRequired,
   onDeleteConversation: PropTypes.func.isRequired,
+  onTogglePinConversation: PropTypes.func.isRequired,
   agentsById: PropTypes.instanceOf(Map),
 };
 
@@ -436,7 +449,6 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
   const [updateAvailable, setUpdateAvailable] = useState(
     () => sessionStorage.getItem("asyncatUpdateAvailable") === "true",
   );
-  const [recentConversations, setRecentConversations] = useState([]);
   const [conversationCatalog, setConversationCatalog] = useState([]);
   const [projects, setProjects] = useState([]);
   const [projectsLoading, setProjectsLoading] = useState(true);
@@ -500,15 +512,17 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
     }
   }, []);
 
-  useEffect(() => {
-    // Project conversations already have a stable home in the Projects tree.
-    // Keep this list for genuinely unscoped chats so the same conversation is
-    // never presented twice in the sidebar.
-    const unscopedConversations = conversationCatalog.filter(
-      (conversation) => !conversationProjectId(conversation),
-    );
-    setRecentConversations(unscopedConversations.slice(0, 7));
-  }, [conversationCatalog]);
+  // Each chat shows once: pinned chats (projects' too) above everything,
+  // other project chats in the Projects tree, and the newest of the rest in
+  // Recents.
+  const {
+    pinned: pinnedConversations,
+    recents: recentConversations,
+    byProject: conversationsByProject,
+    pinnedInProject,
+  } = useMemo(() => (
+    sidebarChatLists(conversationCatalog, { projectOf: conversationProjectId })
+  ), [conversationCatalog]);
 
   const loadProjects = useCallback(async () => {
     if (!currentWorkspace) {
@@ -623,9 +637,11 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
   const routeConversationId = location.pathname.match(/^\/conversations\/([^/]+)/)?.[1] || null;
   const activeRecentConversationId = routeConversationId;
   const routeProjectId = location.pathname.match(/^\/projects\/([^/]+)/)?.[1] || null;
-  const activeConversationProjectId = useMemo(() => (
-    conversationProjectId(conversationCatalog.find((conversation) => conversation.id === routeConversationId))
-  ), [conversationCatalog, routeConversationId]);
+  // A pinned chat is open from Pinned, so its project isn't marked or opened.
+  const activeConversationProjectId = useMemo(() => {
+    const conversation = conversationCatalog.find((item) => item.id === routeConversationId);
+    return conversation && !isPinned(conversation) ? conversationProjectId(conversation) : null;
+  }, [conversationCatalog, routeConversationId]);
   const activeProjectId = routeProjectId || activeConversationProjectId;
 
   useEffect(() => {
@@ -638,19 +654,11 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
     });
   }, [activeProjectId]);
 
-  const projectGroups = useMemo(() => {
-    const conversationsByProject = new Map();
-    conversationCatalog.forEach((conversation) => {
-      const projectId = conversationProjectId(conversation);
-      if (!projectId) return;
-      if (!conversationsByProject.has(projectId)) conversationsByProject.set(projectId, []);
-      conversationsByProject.get(projectId).push(conversation);
-    });
-    return projects.map((project) => ({
-      project,
-      conversations: conversationsByProject.get(String(project.id)) || [],
-    }));
-  }, [conversationCatalog, projects]);
+  const projectGroups = useMemo(() => projects.map((project) => ({
+    project,
+    conversations: conversationsByProject.get(String(project.id)) || [],
+    pinnedCount: pinnedInProject.get(String(project.id)) || 0,
+  })), [conversationsByProject, pinnedInProject, projects]);
 
   const openConversation = useCallback((conversationId) => {
     navigate(`/conversations/${conversationId}`);
@@ -667,6 +675,41 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
       loadRecentConversations();
     }
   }, [loadRecentConversations, toast]);
+
+  // Pinning moves a chat to another section, where its row is a new
+  // element. Done from the keyboard, focus follows the chat to its options
+  // button (or to Recents, if it left the list) instead of dropping to the
+  // page.
+  const chatListRef = useRef(null);
+  const refocusChatRef = useRef(null);
+  useEffect(() => {
+    const id = refocusChatRef.current;
+    refocusChatRef.current = null;
+    if (!id || (document.activeElement && document.activeElement !== document.body)) return;
+    const list = chatListRef.current;
+    const target = list?.querySelector(`[data-chat-options="${CSS.escape(id)}"]`)
+      || list?.querySelector('[aria-label="Recent conversations"] button');
+    target?.focus();
+  }, [conversationCatalog]);
+
+  const togglePinConversation = useCallback(async (conversation) => {
+    const pinned = !isPinned(conversation);
+    if (document.activeElement?.matches?.(":focus-visible")) refocusChatRef.current = conversation.id;
+    setConversationCatalog((current) => withPinned(current, conversation.id, pinned));
+    eventBus.emit("conversationPinned", { id: conversation.id, pinned });
+    try {
+      await chatApi.updateConversation(conversation.id, { is_pinned: pinned });
+    } catch (err) {
+      toast.error(pinned ? "Couldn't pin the chat" : "Couldn't unpin the chat", { detail: errorDetail(err) });
+      eventBus.emit("conversationPinned", { id: conversation.id, pinned: !pinned });
+      loadRecentConversations();
+    }
+  }, [loadRecentConversations, toast]);
+
+  // Pinned from the All chats page.
+  useEffect(() => eventBus.on("conversationPinned", ({ id, pinned } = {}) => {
+    if (id) setConversationCatalog((current) => withPinned(current, id, pinned));
+  }), []);
 
   const deleteConversation = useCallback(async (conversation) => {
     const confirmed = await confirm({
@@ -800,7 +843,28 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
           </div>
         </nav>
 
-        <div className={`min-h-0 flex-1 overflow-y-auto px-3 pb-3 ${collapsed ? "hidden" : "hidden sm:block"}`}>
+        <div ref={chatListRef} className={`min-h-0 flex-1 overflow-y-auto px-3 pb-3 ${collapsed ? "hidden" : "hidden sm:block"}`}>
+          {pinnedConversations.length > 0 ? (
+            <section className="mt-3" aria-label="Pinned chats">
+              <SectionHeader label="Pinned" labelTitle="View all conversations" onLabelClick={() => navigate("/all-chats")} />
+              <div className="space-y-px">
+                {pinnedConversations.map((conversation) => (
+                  <RecentConversationItem
+                    key={conversation.id}
+                    conversation={conversation}
+                    active={conversation.id === activeRecentConversationId}
+                    running={activeConversationIds.has(conversation.id)}
+                    onOpen={openConversation}
+                    onRename={renameConversation}
+                    onDelete={deleteConversation}
+                    onTogglePin={togglePinConversation}
+                    agentsById={agentsById}
+                  />
+                ))}
+              </div>
+            </section>
+          ) : null}
+
           {showProjectsTree ? (
             <section className="mt-3" aria-label="Projects and their conversations">
               <SectionHeader label="Projects" labelTitle="Manage projects" onLabelClick={() => navigate("/projects")}>
@@ -823,13 +887,14 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
                   >
                     Create your first project
                   </button>
-                ) : projectGroups.map(({ project, conversations }) => {
+                ) : projectGroups.map(({ project, conversations, pinnedCount }) => {
                   const projectId = String(project.id);
                   return (
                     <ProjectConversationGroup
                       key={projectId}
                       project={project}
                       conversations={conversations}
+                      pinnedCount={pinnedCount}
                       expanded={expandedProjectIds.has(projectId)}
                       active={String(activeProjectId || "") === projectId}
                       activeConversationId={activeRecentConversationId}
@@ -844,6 +909,7 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
                       onOpenConversation={openConversation}
                       onRenameConversation={renameConversation}
                       onDeleteConversation={deleteConversation}
+                      onTogglePinConversation={togglePinConversation}
                       agentsById={agentsById}
                     />
                   );
@@ -881,6 +947,7 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
                   onOpen={openConversation}
                   onRename={renameConversation}
                   onDelete={deleteConversation}
+                  onTogglePin={togglePinConversation}
                   agentsById={agentsById}
                 />
               ))}
