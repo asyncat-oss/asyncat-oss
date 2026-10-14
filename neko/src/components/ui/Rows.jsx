@@ -83,11 +83,15 @@ export function PropertyRow({ label, value, meta, status, control, open = false,
   }, [highlight]);
 
   const details = (Array.isArray(meta) ? meta : [meta]).filter((part) => part !== null && part !== undefined && part !== false && part !== '');
+  // Text is cut off with an ellipsis. A control in the value (an inline
+  // Select, a field) isn't clipped, so its hover fill and focus ring show.
+  const plain = value === null || value === undefined || typeof value === 'string' || typeof value === 'number';
   return (
     <div className={`transition-colors duration-500 first:rounded-t-[11px] last:rounded-b-[11px] ${flash ? 'bg-selected' : ''} ${className}`} {...rest}>
-      <div className="flex flex-col gap-1.5 px-4 py-3 sm:flex-row sm:items-center sm:gap-4">
-        <div className="shrink-0 text-[13px] text-fg-muted sm:w-32">{label}</div>
-        <div className="min-w-0 flex-1 truncate text-[13px] text-fg">
+      {/* On a phone the label and control share the top line and the value goes under them. */}
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 px-4 py-3 sm:flex sm:min-h-14 sm:gap-4">
+        <div className="col-start-1 row-start-1 shrink-0 text-[13px] text-fg-muted sm:w-32">{label}</div>
+        <div className={`col-span-2 row-start-2 min-w-0 flex-1 text-[13px] text-fg ${plain ? 'truncate' : ''}`}>
           {value}
           {details.length ? (
             <span className="ml-2 text-[12px] tabular-nums text-fg-subtle">
@@ -96,7 +100,7 @@ export function PropertyRow({ label, value, meta, status, control, open = false,
           ) : null}
         </div>
         {status || control ? (
-          <div className="flex shrink-0 items-center gap-3">
+          <div className="col-start-2 row-start-1 flex shrink-0 items-center justify-self-end gap-3">
             {status ? <div className="text-[12px] text-fg-subtle">{status}</div> : null}
             {control ? <div className="shrink-0">{control}</div> : null}
           </div>
