@@ -206,7 +206,8 @@ function ComfyRows({ status, comfy, draft, onDraft, onChoose, fallback = null, d
         label="Address"
         data-comfy-address
         value={editing ? (
-          <form className="flex min-w-0 items-center gap-2" onSubmit={saveAddress}>
+          // On a phone the field takes the line and its buttons go under it.
+          <form className="flex min-w-0 flex-wrap items-center gap-2" onSubmit={saveAddress}>
             <Input
               value={address}
               onChange={(event) => setAddress(event.target.value)}
@@ -220,12 +221,14 @@ function ComfyRows({ status, comfy, draft, onDraft, onChoose, fallback = null, d
               aria-label="ComfyUI address"
               autoComplete="off"
               spellCheck={false}
-              className="h-8 min-w-0 flex-1"
+              className="h-8 min-w-0 flex-1 basis-full sm:basis-0"
               // Edit was just pressed: the field is what comes next.
               autoFocus
             />
-            <Button type="submit" size="sm" loading={saving}>Save</Button>
-            <Button variant="ghost" size="sm" onClick={stopEdit}>Cancel</Button>
+            <div className="ml-auto flex items-center gap-2">
+              <Button type="submit" size="sm" loading={saving}>Save</Button>
+              <Button variant="ghost" size="sm" onClick={stopEdit}>Cancel</Button>
+            </div>
           </form>
         ) : shownAddress}
         control={editing ? null : <Button variant="ghost" size="sm" disabled={disabled} onClick={startEdit}>Edit</Button>}
