@@ -11,7 +11,6 @@ import {
   Folder,
   FolderKanban,
   FolderOpen,
-  LayoutGrid,
   Info,
   Loader2,
   Monitor,
@@ -631,7 +630,7 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
   const isOnModels = basePage === "models";
   const isOnAgent = location.pathname === "/agents";
   const isOnCats = location.pathname.startsWith("/cats");
-  const isOnMade = location.pathname.startsWith("/made");
+  const isOnFiles = location.pathname.startsWith("/files");
   const catsWaiting = useWaitingCount();
   const isOnTools = location.pathname.startsWith("/tools");
   const routeConversationId = location.pathname.match(/^\/conversations\/([^/]+)/)?.[1] || null;
@@ -747,8 +746,8 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
         </span>
       ) : null,
     },
-    // Everything agents have made: pictures, documents, pages, data, notes.
-    { key: "made", label: "Gallery", path: "/made", active: isOnMade, icon: LayoutGrid },
+    // What agents made, and everything else Asyncat keeps on this computer.
+    { key: "files", label: "Files", path: "/files", active: isOnFiles, icon: Folder },
     // The full sidebar lists projects below; the rail needs a way in.
     { key: "projects", label: "Projects", path: "/projects", active: isOnProjects, icon: FolderKanban, hint: shortcutHint("navWorkspace") },
   ].filter((item) => navItemsVisibility[item.key] !== false && (collapsed || item.key !== "projects"));

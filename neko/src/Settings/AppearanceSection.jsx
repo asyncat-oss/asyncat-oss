@@ -10,6 +10,7 @@ import {
   Sun,
   Trash2,
   Wrench,
+  Folder,
   FolderKanban,
   Cat as CatIcon,
 } from 'lucide-react';
@@ -172,6 +173,12 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
           description="Agents that work on their own"
           checked={navItemsVisibility.cats}
           onChange={() => toggleNavItem("cats")}
+        />
+        <CheckboxRow
+          icon={Folder}
+          label="Files"
+          checked={navItemsVisibility.files}
+          onChange={() => toggleNavItem("files")}
         />
         <CheckboxRow
           icon={Cpu}

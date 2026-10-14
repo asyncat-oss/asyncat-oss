@@ -3,6 +3,7 @@
 export const DEFAULT_NAV_ITEMS = Object.freeze({
   projects: true,
   cats: true,
+  files: true,
   models: true,
   tools: true,
   agent: true,

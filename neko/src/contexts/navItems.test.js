@@ -32,3 +32,10 @@ test('Cats stays hidden for people who hid all three old entries', () => {
   assert.equal(migrateNavItems({ workflows: false, schedules: true, activity: false }).cats, true, 'hiding some of them does not hide it');
   assert.equal(migrateNavItems({ workflows: false, schedules: false, activity: false, cats: true }).cats, true);
 });
+
+test('Files is shown unless hidden, and can be hidden like the rest', () => {
+  assert.equal(DEFAULT_NAV_ITEMS.files, true);
+  assert.equal(migrateNavItems({ cats: true }).files, true, 'saved settings from before Files show it');
+  assert.equal(migrateNavItems({ files: false }).files, false);
+  assert.equal('made' in migrateNavItems({ made: false }), false, 'the old entry is dropped');
+});
