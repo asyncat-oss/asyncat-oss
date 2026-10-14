@@ -72,25 +72,26 @@ export function payloadFromForm(form, { cat = null } = {}) {
   return payload;
 }
 
-/** Projects, agents, saved models and tools the form offers. */
+/** Projects, agents, saved models, the default model and tools the form offers. */
 export function useCatFormOptions() {
-  const [options, setOptions] = useState({ projects: [], agents: [], models: [], activeModel: null, tools: [] });
+  const [options, setOptions] = useState({ projects: [], agents: [], models: [], defaultModelName: '', tools: [] });
   useEffect(() => {
     let cancelled = false;
     Promise.allSettled([
       projectsApi.getProjects(),
       profilesApi.listProfiles(),
       aiProviderApi.listProfiles(),
-      aiProviderApi.getConfig(),
+      aiProviderApi.getDefaultModel(),
       agentApi.getTools(),
-    ]).then(([projects, agents, models, config, tools]) => {
+    ]).then(([projects, agents, models, defaultModel, tools]) => {
       if (cancelled) return;
       const value = (result) => (result.status === 'fulfilled' ? result.value : null);
       setOptions({
         projects: value(projects)?.data || value(projects)?.projects || [],
         agents: value(agents)?.profiles || [],
         models: value(models)?.profiles || [],
-        activeModel: value(config)?.model ? value(config) : null,
+        // What a Cat without a model of its own runs on, followed as it changes.
+        defaultModelName: value(defaultModel)?.name || '',
         tools: (value(tools)?.tools || []).filter((tool) => tool.permission !== 'safe' && tool.category !== 'schedule'),
       });
     });

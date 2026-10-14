@@ -177,13 +177,21 @@ export function BrainSection({ form, set, options }) {
           ]}
         />
       </Field>
-      <Field label="Model" htmlFor="cat-model" hint="Kept with the Cat, so changing the chat model later doesn't change it.">
+      <Field
+        label="Model"
+        htmlFor="cat-model"
+        hint={form.providerProfileId
+          ? 'Kept with the Cat, whatever the default model is.'
+          : agent?.model_profile_id
+            ? `The model ${agent.name} is set to use.`
+            : 'The default model is the one you last picked in a chat. Pick one here to keep the Cat on it.'}
+      >
         <Select
           id="cat-model"
           value={form.providerProfileId}
           onChange={(providerProfileId) => set({ providerProfileId })}
           options={[
-            { value: '', label: agent?.model_profile_id ? `Its brain's model` : options.activeModel?.model ? `The model in use now (${options.activeModel.model})` : 'The model in use now' },
+            { value: '', label: agent?.model_profile_id ? `Its brain's model` : options.defaultModelName ? `Default model (now: ${options.defaultModelName})` : 'Default model' },
             ...options.models.map((model) => ({ value: model.id, label: `${model.name} · ${model.model}` })),
           ]}
         />
