@@ -5,7 +5,7 @@
 // the main flows: chat, a project with instructions, agents, Cats, a note made
 // by the agent, connectors (with a fake MCP server), an ACP agent (a fake
 // one), searching inside chats, pinning a chat, Models → Voice and Images
-// (and a Models search that finds a voice file), and the main pages.
+// (and a Models search that finds a voice file), Files, and the main pages.
 //
 // Needs a Chromium-based browser (Chrome, Chromium, Edge or Brave), found the
 // same way PDF export finds one; PUPPETEER_EXECUTABLE_PATH picks another.
@@ -541,7 +541,22 @@ async function main() {
     await noCrash();
   });
 
-  for (const [label, route] of [['Models', '/models'], ['Settings → Profile', '/settings/profile'], ['Settings → Connections', '/settings/connections'], ['Settings → Notifications', '/settings/notifications'], ['Settings → Background', '/settings/background'], ['Settings → Engines', '/settings/runtime'], ['Tools & Skills', '/tools'], ['Gallery (made by agents)', '/made']]) {
+  await check('Files lists what agents made, and the old addresses lead there', async () => {
+    await page.goto(`${app}/files/made`, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('[data-files-page] [data-files-place="made"]', { timeout: 20000 });
+    // The note the agent made earlier is among what agents made.
+    await textAppears('Smoke test note');
+    assert(await page.$('aside button[aria-label="Files"][aria-current="page"]'), 'the sidebar has no Files entry, or it is not the current page');
+    assert(!(await bodyText()).includes('Gallery'), 'the page still says Gallery');
+    await page.goto(`${app}/made?kind=note`, { waitUntil: 'domcontentloaded' });
+    await waitFor(() => page.evaluate(() => `${location.pathname}${location.search}` === '/files/made?kind=note'), { timeout: 10000, what: '/made to lead to Files → Made by agents' });
+    await page.goto(`${app}/settings/storage`, { waitUntil: 'domcontentloaded' });
+    await waitFor(() => page.evaluate(() => location.pathname === '/files/logs'), { timeout: 10000, what: 'Storage & logs to lead to Files → Logs & caches' });
+    await page.waitForSelector('[data-files-place="logs"]', { timeout: 20000 });
+    await noCrash();
+  });
+
+  for (const [label, route] of [['Models', '/models'], ['Settings → Profile', '/settings/profile'], ['Settings → Connections', '/settings/connections'], ['Settings → Notifications', '/settings/notifications'], ['Settings → Background', '/settings/background'], ['Settings → Engines', '/settings/runtime'], ['Tools & Skills', '/tools'], ['Files → System', '/files/system']]) {
     await check(`${label} opens`, async () => {
       await page.goto(`${app}${route}`, { waitUntil: 'domcontentloaded' });
       // Pages keep live connections open (/api/events), so the network never
