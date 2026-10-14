@@ -21,9 +21,9 @@ Ask yourself: "What EXACTLY went wrong?"
 ### Step 2: Change Strategy (Don't Retry)
 | Failed Operation | Alternative Strategy |
 |-----------------|---------------------|
-| `edit_file` find not found | `read_file` → copy exact text → retry edit |
-| `edit_file` multiple matches | Use `start_line`/`end_line` to scope, or use `patch_file` with more context |
-| `patch_file` old_string not found | `read_file` the file → use exact content |
+| `edit_file` old_string not found | `read_file` → copy exact text → retry edit |
+| `edit_file` multiple matches | Add more surrounding lines, or use `start_line`/`end_line` to scope |
+| `apply_patch` hunk does not match | `read_file` the file → rebuild the edit from its current content |
 | `code_search` no results | Try `search_files` with simpler pattern, or `find_files` by name |
 | `run_command` fails | Read the error output → fix the underlying issue → retry |
 | File not found | `list_directory` → `find_files` → correct the path |

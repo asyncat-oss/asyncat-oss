@@ -6,6 +6,7 @@
 // toolRegistry.registerAlias); none of them is listed as a tool.
 
 const text = (value) => (value === undefined || value === null ? undefined : String(value));
+const blocks = /<<<<<<< SEARCH\r?\n([\s\S]*?)\r?\n=======\r?\n([\s\S]*?)\r?\n>>>>>>> REPLACE/g;
 const defined = (object) => Object.fromEntries(Object.entries(object).filter(([, value]) => value !== undefined));
 
 export const TOOL_ALIASES = {
@@ -35,6 +36,19 @@ export const TOOL_ALIASES = {
         : text(old.selector),
       attribute: text(old.attribute) || undefined,
     }),
+  },
+
+  // ── Editing: edit_file for one replacement, apply_patch for several ──
+  patch_file: 'edit_file',
+  search_replace_block: {
+    to: 'apply_patch',
+    args: (old) => ({
+      edits: [...String(old.edit_blocks || '').matchAll(blocks)].map(([, search, replace]) => ({ path: text(old.path) ?? '', old_string: search, new_string: replace })),
+    }),
+  },
+  diff_apply: {
+    to: 'apply_patch',
+    args: (old) => defined({ patch: text(old.patch_content), patch_path: text(old.patch_file), strip: old.strip, dry_run: old.dry_run }),
   },
 
   // ── semantic_search was local_rag_search plus recall_memory ──

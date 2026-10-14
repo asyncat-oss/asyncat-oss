@@ -13,7 +13,7 @@ when_to_use: |
 ## Workflow
 1. **Inspect first:** Read the relevant files, repo scripts, and current Git state. Always batch reads — emit multiple `read_file` calls in a single turn.
 2. **Plan:** Use `todo_write` for any task with 3+ steps. Each item should be atomic and verifiable.
-3. **Edit carefully:** Use `patch_file` for precise single-location edits. Use `edit_file` for broader replacements. Always provide exact content from your `read_file` result.
+3. **Edit carefully:** Use `edit_file` for a precise single-location edit. Use `apply_patch` when several edits must land together. Always provide exact content from your `read_file` result.
 4. **Verify after every edit:** Re-read the file to confirm. Run tests/lint if available.
 5. **Report clearly:** Changed behavior, files touched, verification, and any remaining risk.
 
@@ -25,12 +25,13 @@ when_to_use: |
 | Find text in files | `search_files` | Broadest grep-based search |
 | Understand file structure | `list_definitions` | Shows all functions/classes |
 | Find a file by name | `find_files` | Glob-based, recursive |
-| Small precise edit | `patch_file` | Requires unique old_string |
+| Small precise edit | `edit_file` | Requires unique old_string |
 | Edit with disambiguation | `edit_file` with start_line/end_line | Scopes to line range |
+| Several edits at once, or a diff | `apply_patch` | All or nothing |
 | New file or full rewrite | `write_file` | Creates parent dirs |
 
 ## Error Recovery Playbook
-- **"find text not found"**: Re-read the file. Your content is stale or has wrong whitespace.
+- **"old_string was not found"**: Re-read the file. Your content is stale or has wrong whitespace.
 - **"old_string appears N times"**: Add more surrounding context to make it unique. Use `read_file` to see the exact lines.
 - **"File not found"**: Use `list_directory` or `find_files` to locate it. Don't guess paths.
 - **Command fails**: Read the error output. Fix the root cause, don't retry blindly.
@@ -38,7 +39,7 @@ when_to_use: |
 ## Pre-Edit Checklist
 1. ✅ Read the file with `read_file` (required — edits to unread files are blocked)
 2. ✅ Identify the exact lines to change
-3. ✅ Copy the exact text for `find`/`old_string` from the read result
+3. ✅ Copy the exact text for `old_string` from the read result
 4. ✅ Make the smallest change possible
 
 ## Post-Edit Verification

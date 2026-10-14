@@ -67,6 +67,13 @@ function unknownTools(text) {
   return toolMentions(text).filter((name) => !toolNames.has(name)).sort();
 }
 
+// Old names of merged tools still work (tools/toolAliases.js), but the prompt
+// and skills should teach the current ones, wherever the name appears.
+const oldToolNames = toolRegistry.aliases().map(({ name }) => name);
+function oldNames(text) {
+  return oldToolNames.filter((name) => new RegExp(`\\b${name}\\b`).test(text)).sort();
+}
+
 const markdownIn = (dir) => fs.readdirSync(dir)
   .filter((file) => file.endsWith('.md'))
   .map((file) => [file, fs.readFileSync(path.join(dir, file), 'utf8')]);
@@ -75,7 +82,9 @@ test('the tool mention finder catches a removed tool and leaves arguments alone'
   assert.deepEqual(unknownTools('use `create_scheduled_task` with a prompt'), ['create_scheduled_task']);
   assert.deepEqual(unknownTools('- **Allowed:** read_file, list_scheduled_tasks, run_command (read-only only)'), ['list_scheduled_tasks']);
   assert.deepEqual(unknownTools('{"name": "list_scheduled_task_runs", "arguments": {}}'), ['list_scheduled_task_runs']);
-  assert.deepEqual(unknownTools('`patch_file` requires `old_string` and `new_string`'), []);
+  assert.deepEqual(unknownTools('`edit_file` requires `old_string` and `new_string`'), []);
+  assert.ok(oldToolNames.includes('patch_file'), 'merged tools keep their old names as aliases');
+  assert.deepEqual(oldNames('4. patch_file / edit_file → make the change'), ['patch_file']);
   assert.deepEqual(unknownTools('`run_command` requires `command` — NOT `cmd`, `exec`, or `shell_command`'), []);
 });
 
@@ -83,6 +92,7 @@ test('the system prompt only names registered tools, in every mode', () => {
   for (const agentMode of ['action', 'plan', 'design']) {
     const prompt = buildAgentSystemPrompt({ agentMode, goal: 'remind me every morning' });
     assert.deepEqual(unknownTools(prompt), [], `${agentMode} mode names tools that don't exist`);
+    assert.deepEqual(oldNames(prompt), [], `${agentMode} mode names tools by their old names`);
   }
 });
 
@@ -102,5 +112,6 @@ test('the prompt sends later and repeated work to Cats', () => {
 test('bundled skills and souls only name registered tools', () => {
   for (const [file, text] of [...markdownIn(BUNDLED_SKILLS_DIR), ...markdownIn(SOULS_DIR)]) {
     assert.deepEqual(unknownTools(text), [], `${file} names tools that don't exist`);
+    assert.deepEqual(oldNames(text), [], `${file} names tools by their old names`);
   }
 });

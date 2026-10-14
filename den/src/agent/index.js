@@ -42,7 +42,6 @@ import { codebaseMetricsTools } from './tools/codebaseMetricsTools.js';
 import { sandboxTools } from './tools/sandboxTools.js';
 import { astTools } from './tools/astTools.js';
 import { lspTools } from './tools/lspTools.js';
-import { searchReplaceBlockTools } from './tools/searchReplaceBlockTool.js';
 import { desktopTools } from './tools/desktopTools.js';
 import { previewTools } from './tools/previewTool.js';
 import { previewBrowserTools } from './tools/previewBrowserTools.js';
@@ -109,7 +108,6 @@ export async function initializeAgent() {
   toolRegistry.registerAll(sandboxTools);
   toolRegistry.registerAll(astTools);
   toolRegistry.registerAll(lspTools);
-  toolRegistry.registerAll(searchReplaceBlockTools);
   toolRegistry.registerAll(desktopTools);
   toolRegistry.registerAll(previewTools);
   toolRegistry.registerAll(previewBrowserTools);

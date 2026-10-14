@@ -18,7 +18,7 @@ when_to_use: |
 2. **Find tests** — use `find_files` to locate test files. If none exist, note the risk
 3. **Run tests BEFORE refactoring** — establish the green baseline
 4. **Plan small** — identify the smallest useful structural improvement
-5. **Make the change** — use `patch_file` for precision; multiple small edits > one big edit
+5. **Make the change** — use `edit_file` for precision (or `apply_patch` for coordinated edits); multiple small edits > one big edit
 6. **Run tests AFTER refactoring** — verify behavior is preserved
 7. **Check for regressions** — `git diff` to review what changed
 
@@ -27,7 +27,7 @@ when_to_use: |
 1. find_files "*.test.*" OR find_files "*.spec.*"  → locate tests
 2. run_command "npm test"                           → establish baseline
 3. read_file + list_definitions                     → understand structure
-4. patch_file / edit_file                           → make the change
+4. edit_file / apply_patch                          → make the change
 5. read_file                                        → verify edit applied
 6. run_command "npm test"                           → verify behavior preserved
 ```

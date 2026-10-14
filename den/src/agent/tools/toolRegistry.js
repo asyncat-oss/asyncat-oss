@@ -17,6 +17,16 @@ export const PermissionLevel = {
 
 const plainObject = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? value : {});
 
+/**
+ * Whether a required argument was given. Models send "" for arguments they
+ * have nothing for, so an empty string counts as missing, except where it
+ * means something: an empty new_string deletes the text it replaces.
+ */
+export function argumentGiven(key, value) {
+  if (value === undefined || value === null) return false;
+  return value !== '' || key === 'new_string';
+}
+
 class ToolRegistry {
   constructor() {
     this._tools = new Map();
@@ -114,7 +124,7 @@ class ToolRegistry {
     const required = Array.isArray(parameters.required) ? parameters.required : [];
     const props = parameters.properties || {};
     const value = args && typeof args === 'object' && !Array.isArray(args) ? args : {};
-    const missing = required.filter(key => value[key] === undefined || value[key] === null || value[key] === '');
+    const missing = required.filter(key => !argumentGiven(key, value[key]));
     const invalid = [];
 
     for (const [key, spec] of Object.entries(props)) {

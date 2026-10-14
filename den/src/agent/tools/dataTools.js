@@ -1,7 +1,7 @@
 // den/src/agent/tools/dataTools.js
 // ─── Data & File Format Tools ────────────────────────────────────────────────
 // read_pdf, read_csv, write_csv, zip_files, unzip_files, json_query,
-// diff_apply, ssh_exec
+// ssh_exec
 
 import { execFileSync, spawn } from 'child_process';
 import fs from 'fs';
@@ -373,63 +373,6 @@ export const jsonQueryTool = {
   },
 };
 
-// ── diff_apply ────────────────────────────────────────────────────────────────
-export const diffApplyTool = {
-  name: 'diff_apply',
-  description: 'Apply a unified diff/patch to files. Requires the patch command (available on Linux/macOS by default; Windows: install GNU patch or use Git for Windows).',
-  category: 'data',
-  permission: PermissionLevel.MODERATE,
-  parameters: {
-    type: 'object',
-    properties: {
-      patch_file: { type: 'string', description: 'Path to .patch or .diff file (relative to working directory). Use instead of patch_content.' },
-      patch_content: { type: 'string', description: 'Raw unified diff content to apply directly.' },
-      strip:         { type: 'number', description: 'Strip N leading path components (-p flag, default: 0)' },
-      dry_run:       { type: 'boolean', description: 'Check if patch applies without actually changing files (default: false)' },
-    },
-    required: [],
-  },
-  execute: async (args, context) => {
-    if (!hasBin('patch')) {
-      return {
-        success: false,
-        error: missingDepError('patch', 'macOS: xcode-select --install | Linux: sudo apt install patch | Windows: built-in via Git Bash'),
-        install: IS_WIN ? 'Install Git for Windows (includes patch) or GNU patch for Windows.'
-          : PLATFORM === 'darwin' ? 'patch is built-in on macOS. Try: xcode-select --install'
-          : 'sudo apt install patch',
-      };
-    }
-
-    let patchPath;
-    const owned = !args.patch_file; // we created the tmp file
-
-    try {
-      if (args.patch_file) {
-        patchPath = safePath(args.patch_file, context.workingDir);
-        if (!fs.existsSync(patchPath)) return { success: false, error: `Patch file not found: ${args.patch_file}` };
-      } else if (args.patch_content) {
-        patchPath = path.join(os.tmpdir(), `asyncat_patch_${Date.now()}.diff`);
-        fs.writeFileSync(patchPath, args.patch_content, 'utf8');
-      } else {
-        return { success: false, error: 'Provide either patch_file or patch_content.' };
-      }
-
-      const strip = clampInt(args.strip, 0, 0, 20);
-      const result = await runProc('patch', [`-p${strip}`, ...(args.dry_run ? ['--dry-run'] : []), '-i', patchPath], { cwd: context.workingDir, timeout: 30000 });
-
-      return {
-        success: result.success,
-        dry_run: !!args.dry_run,
-        stdout: result.stdout?.slice(0, 4000),
-        stderr: result.stderr?.slice(0, 2000),
-        ...(result.error ? { error: result.error } : {}),
-      };
-    } finally {
-      if (owned && patchPath) try { fs.unlinkSync(patchPath); } catch {}
-    }
-  },
-};
-
 // ── ssh_exec ─────────────────────────────────────────────────────────────────
 export const sshExecTool = {
   name: 'ssh_exec',
@@ -611,7 +554,6 @@ export const dataTools = [
   zipFilesTool,
   unzipFilesTool,
   jsonQueryTool,
-  diffApplyTool,
   sshExecTool,
   imageDescribeTool,
 ];

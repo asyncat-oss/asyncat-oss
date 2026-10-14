@@ -14,6 +14,7 @@
 //   { tool_name: string, arguments: object, call_id: string }
 
 import { randomUUID } from 'crypto';
+import { argumentGiven } from './tools/toolRegistry.js';
 
 function parseArguments(value) {
   if (!value) return {};
@@ -391,11 +392,14 @@ export class ToolCallFormatter {
     q: 'query',
     search: 'query',
     search_query: 'query',
-    replacement: 'replace',
-    new_content: 'replace',
-    old_content: 'find',
-    pattern: 'find',
-    search_term: 'find',
+    // edit_file once took find/replace.
+    find: 'old_string',
+    old_content: 'old_string',
+    old_text: 'old_string',
+    replace: 'new_string',
+    replacement: 'new_string',
+    new_content: 'new_string',
+    new_text: 'new_string',
     name: 'path',  // only applied when 'path' is required and 'name' isn't a schema field
   };
 
@@ -418,15 +422,16 @@ export class ToolCallFormatter {
     const schemaProps = new Set(Object.keys(toolSchema.properties || {}));
 
     for (const req of required) {
-      // Skip if already present and non-empty
-      if (repaired[req] !== undefined && repaired[req] !== null && repaired[req] !== '') continue;
+      // Skip if already given (an empty new_string counts: it deletes)
+      const given = (value) => argumentGiven(req, value);
+      if (given(repaired[req])) continue;
 
       // Look for a matching alias
       for (const [alias, canonical] of Object.entries(ToolCallFormatter.COMMON_ARG_ALIASES)) {
         if (canonical !== req) continue;
         // Don't steal 'name' if it's an actual schema property (e.g. create_directory might use 'name')
         if (alias === 'name' && schemaProps.has('name')) continue;
-        if (repaired[alias] !== undefined && repaired[alias] !== null && repaired[alias] !== '') {
+        if (given(repaired[alias])) {
           repaired[req] = repaired[alias];
           // Only delete the alias if it's not also a valid schema property
           if (!schemaProps.has(alias)) {

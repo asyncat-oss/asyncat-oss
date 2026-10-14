@@ -8,13 +8,14 @@ import path from 'path';
 import * as parser from '@babel/parser';
 import { PermissionLevel } from './toolRegistry.js';
 import { clampInt, firstLines, hasBin, runFile, safePath, truncate } from './shared.js';
+import { applyHunks, parseUnifiedDiff, stripComponents } from './unifiedDiff.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
  * Validate JS/TS syntax of proposed file content before writing. No-op for
- * non-JS/TS files. Mirrors the check in searchReplaceBlockTool so atomic
- * multi-file patches never leave a file in a syntactically broken state.
+ * non-JS/TS files, so atomic multi-file patches never leave a file in a
+ * syntactically broken state.
  */
 function verifyJsSyntax(filePath, newContent) {
   const ext = path.extname(filePath).toLowerCase();
@@ -170,7 +171,7 @@ export const writeFileTool = {
       action: existed ? 'overwritten' : 'created',
       lines,
       bytes: Buffer.byteLength(args.content, 'utf8'),
-      ...(existed ? { warning: 'File was overwritten. If you intended a partial edit, use edit_file or patch_file instead.' } : {}),
+      ...(existed ? { warning: 'File was overwritten. If you intended a partial edit, use edit_file or apply_patch instead.' } : {}),
     };
   },
 };
@@ -202,207 +203,271 @@ export const createDirectoryTool = {
   },
 };
 
+/**
+ * Lines from..to (exclusive) of a file replaced by text. A CRLF line ending
+ * after them stays, and a line break the old text began or ended with goes
+ * with it, as it would in an exact replacement.
+ */
+function replaceLines(lines, from, to, text, oldString) {
+  let head = from > 0 ? `${lines.slice(0, from).join('\n')}\n` : '';
+  let tail = to < lines.length ? `\n${lines.slice(to).join('\n')}` : '';
+  if (lines[to - 1].endsWith('\r')) tail = `\r${tail}`;
+  if (/^\r?\n/.test(oldString)) head = head.replace(/\r?\n$/, '');
+  if (oldString.endsWith('\n')) tail = tail.replace(/^\r?\n/, '');
+  return head + text + tail;
+}
+
+/**
+ * Replace oldString in content: exactly, or (when that finds nothing) with
+ * whitespace-normalised lines, as long as the match is unique. Returns
+ * { content, mode } or { error, count?, closest? }.
+ */
+function replaceText(content, oldString, newString, { replaceAll = false } = {}) {
+  if (!oldString) return { error: 'old_string is empty. To create a file use write_file; to add text, include a nearby line in old_string.' };
+  const count = content.split(oldString).length - 1;
+  if (count > 1 && !replaceAll) {
+    return { error: `old_string appears ${count} times. Add surrounding lines to make it unique, pass start_line/end_line, or set replace_all.`, count };
+  }
+  if (count >= 1) {
+    return { content: replaceAll ? content.split(oldString).join(newString) : content.replace(oldString, () => newString), mode: 'exact', count };
+  }
+
+  // Whitespace-normalised fallback: the same lines, indented differently
+  // (blank lines between them don't count). A match starts on a line that
+  // is the first wanted line, and the lines it covers are replaced, never
+  // the same text found somewhere else (such as at the end of a line).
+  const wanted = oldString.split('\n').map(l => l.trim()).filter(Boolean);
+  if (wanted.length) {
+    const lines = content.split('\n');
+    const matches = [];
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].trim() !== wanted[0]) continue;
+      let j = 1;
+      let k = i + 1;
+      while (j < wanted.length && k < lines.length) {
+        if (!lines[k].trim()) { k++; continue; }
+        if (lines[k].trim() !== wanted[j]) break;
+        j++; k++;
+      }
+      if (j === wanted.length) matches.push([i, k]);
+    }
+    if (matches.length === 1) {
+      const [from, to] = matches[0];
+      return { content: replaceLines(lines, from, to, newString, oldString), mode: 'fuzzy_whitespace', count: 1 };
+    }
+    if (matches.length > 1) {
+      return { error: `old_string was not found exactly, and its lines with other whitespace appear ${matches.length} times. Copy the exact text from read_file, with enough lines to make it unique.`, count: matches.length };
+    }
+  }
+  const closest = _findClosestLines(content, oldString, 3);
+  return { error: 'old_string was not found. The file may have changed since you read it, or the text differs (whitespace, quotes): read it again and copy the exact text.', closest };
+}
+
+/** True when a JS/TS file parsed before an edit and doesn't after it. */
+function syntaxBroken(filePath, before, after) {
+  if (before !== null && !verifyJsSyntax(filePath, before).valid) return null;
+  const check = verifyJsSyntax(filePath, after);
+  return check.valid ? null : check.error;
+}
+
 export const editFileTool = {
   name: 'edit_file',
-  description: 'Replace specific content in a file. Provide the exact text to find and its replacement. Use read_file first to see the current content. Optionally provide start_line/end_line to restrict the search to a line range (1-indexed, inclusive) — useful when the find text appears multiple times.',
+  description: 'Replace one exact piece of text in a file. old_string must match the file exactly (whitespace included) and appear once: add surrounding lines to make it unique, pass start_line/end_line to look only there, or set replace_all to change every occurrence. Read the file first. For several edits at once or a unified diff, use apply_patch; for a new file, write_file.',
   category: 'file',
   permission: PermissionLevel.MODERATE,
   parameters: {
     type: 'object',
     properties: {
       path: { type: 'string', description: 'File path relative to working directory' },
-      find: { type: 'string', description: 'Exact text to find (must match exactly including whitespace)' },
-      replace: { type: 'string', description: 'Replacement text' },
-      start_line: { type: 'number', description: 'Optional: restrict search to lines starting from this line (1-indexed)' },
-      end_line: { type: 'number', description: 'Optional: restrict search to lines ending at this line (1-indexed, inclusive)' },
-    },
-    required: ['path', 'find', 'replace'],
-  },
-  execute: async (args, context) => {
-    const filePath = safePath(args.path, context.workingDir);
-    if (!fs.existsSync(filePath)) {
-      return { success: false, error: `File not found: ${args.path}` };
-    }
-    const content = fs.readFileSync(filePath, 'utf8');
-
-    // Line-range mode: if start_line/end_line provided, search within that range
-    if (args.start_line || args.end_line) {
-      const lines = content.split('\n');
-      const startLine = Math.max(1, args.start_line || 1);
-      const endLine = Math.min(lines.length, args.end_line || lines.length);
-      const rangeContent = lines.slice(startLine - 1, endLine).join('\n');
-      if (!rangeContent.includes(args.find)) {
-        return {
-          success: false,
-          error: `The "find" text was not found in lines ${startLine}-${endLine}.`,
-          actual_content_in_range: rangeContent.slice(0, 500),
-          suggestion: 'Re-read the file and check the exact content within the specified line range.',
-        };
-      }
-      const newRange = rangeContent.replace(args.find, args.replace);
-      const newLines = [...lines.slice(0, startLine - 1), ...newRange.split('\n'), ...lines.slice(endLine)];
-      fs.writeFileSync(filePath, newLines.join('\n'), 'utf8');
-      return {
-        success: true,
-        path: args.path,
-        message: `Replacement applied within lines ${startLine}-${endLine}.`,
-        mode: 'line_range',
-      };
-    }
-
-    // Standard exact-match mode
-    if (content.includes(args.find)) {
-      const count = content.split(args.find).length - 1;
-      const newContent = content.replace(args.find, args.replace);
-      fs.writeFileSync(filePath, newContent, 'utf8');
-      return {
-        success: true,
-        path: args.path,
-        occurrences_found: count,
-        occurrences_replaced: 1,
-        message: count > 1 ? `Replaced first occurrence (${count} total found). Call again to replace more.` : 'Replacement applied.',
-      };
-    }
-
-    // Fuzzy fallback: try whitespace-normalized matching
-    const normalizeWS = s => s.replace(/[ \t]+/g, ' ').replace(/\r\n/g, '\n').trim();
-    const normalizedContent = normalizeWS(content);
-    const normalizedFind = normalizeWS(args.find);
-    if (normalizedFind.length > 0 && normalizedContent.includes(normalizedFind)) {
-      // Find the original substring that matches after normalization
-      const lines = content.split('\n');
-      const findLines = args.find.split('\n').map(l => l.trim()).filter(Boolean);
-      if (findLines.length > 0) {
-        // Find the first line in the file that matches the first find line
-        let matchStart = -1;
-        for (let i = 0; i < lines.length; i++) {
-          if (lines[i].trim() === findLines[0]) {
-            // Check if subsequent lines also match
-            let allMatch = true;
-            for (let j = 1; j < findLines.length && i + j < lines.length; j++) {
-              if (lines[i + j].trim() !== findLines[j]) { allMatch = false; break; }
-            }
-            if (allMatch) { matchStart = i; break; }
-          }
-        }
-        if (matchStart >= 0) {
-          const originalBlock = lines.slice(matchStart, matchStart + findLines.length).join('\n');
-          const newContent = content.replace(originalBlock, args.replace);
-          fs.writeFileSync(filePath, newContent, 'utf8');
-          return {
-            success: true,
-            path: args.path,
-            message: 'Replacement applied (fuzzy whitespace match).',
-            mode: 'fuzzy_whitespace',
-            warning: 'The exact text was not found but a whitespace-normalized match was. Verify the result with read_file.',
-          };
-        }
-      }
-    }
-
-    // Find closest matching lines for the error message
-    const closestMatches = _findClosestLines(content, args.find, 3);
-    return {
-      success: false,
-      error: 'The "find" text was not found in the file. Make sure it matches exactly (including whitespace and newlines).',
-      closest_matches: closestMatches.length > 0 ? closestMatches : undefined,
-      suggestion: closestMatches.length > 0
-        ? 'The closest matching content is shown above. Re-read the file with read_file and use the exact content.'
-        : 'Re-read the file with read_file to see its current content.',
-    };
-  },
-};
-
-export const patchFileTool = {
-  name: 'patch_file',
-  description: 'Precisely replace an exact string in a file using old_string → new_string semantics. old_string must match exactly (including whitespace and newlines) and must appear exactly once in the file — this prevents ambiguous replacements. If old_string appears more than once, provide more surrounding context to make it unique. Prefer this over edit_file for reliable, targeted edits.',
-  category: 'file',
-  permission: PermissionLevel.MODERATE,
-  parameters: {
-    type: 'object',
-    properties: {
-      path: { type: 'string', description: 'File path relative to working directory' },
-      old_string: { type: 'string', description: 'Exact text to find — must appear exactly once in the file' },
-      new_string: { type: 'string', description: 'Text to replace it with' },
+      old_string: { type: 'string', description: 'Exact text to replace, copied from read_file (unique in the file or the line range)' },
+      new_string: { type: 'string', description: 'Text to put in its place (empty to delete it)' },
+      replace_all: { type: 'boolean', description: 'Replace every occurrence (default false)' },
+      start_line: { type: 'number', description: 'Optional: only look from this line (1-indexed)' },
+      end_line: { type: 'number', description: 'Optional: only look up to this line (1-indexed, inclusive)' },
     },
     required: ['path', 'old_string', 'new_string'],
   },
   execute: async (args, context) => {
-    const filePath = safePath(args.path, context.workingDir);
-    if (!fs.existsSync(filePath)) {
-      return { success: false, error: `File not found: ${args.path}` };
-    }
-    const content = fs.readFileSync(filePath, 'utf8');
-    const count = content.split(args.old_string).length - 1;
-    if (count === 0) {
-      // Try fuzzy whitespace-normalized match before failing
-      const normalizeWS = s => s.replace(/[ \t]+/g, ' ').replace(/\r\n/g, '\n').trim();
-      const normalizedContent = normalizeWS(content);
-      const normalizedOld = normalizeWS(args.old_string);
-      if (normalizedOld.length > 0 && normalizedContent.includes(normalizedOld)) {
-        const lines = content.split('\n');
-        const oldLines = args.old_string.split('\n').map(l => l.trim()).filter(Boolean);
-        if (oldLines.length > 0) {
-          let matchStart = -1;
-          for (let i = 0; i < lines.length; i++) {
-            if (lines[i].trim() === oldLines[0]) {
-              let allMatch = true;
-              for (let j = 1; j < oldLines.length && i + j < lines.length; j++) {
-                if (lines[i + j].trim() !== oldLines[j]) { allMatch = false; break; }
-              }
-              if (allMatch) { matchStart = i; break; }
-            }
-          }
-          if (matchStart >= 0) {
-            const originalBlock = lines.slice(matchStart, matchStart + oldLines.length).join('\n');
-            // Check uniqueness of the fuzzy match
-            const fuzzyCount = content.split(originalBlock).length - 1;
-            if (fuzzyCount === 1) {
-              const newContent = content.replace(originalBlock, args.new_string);
-              fs.writeFileSync(filePath, newContent, 'utf8');
-              return {
-                success: true,
-                path: args.path,
-                message: 'Replacement applied (fuzzy whitespace match).',
-                mode: 'fuzzy_whitespace',
-                warning: 'Exact match failed but whitespace-normalized match succeeded. Verify with read_file.',
-              };
-            }
-          }
-        }
-      }
+    const plan = planEdit(args, context.workingDir);
+    if (plan.error) return { success: false, error: plan.error, ...plan.details };
 
-      // Find closest matches for helpful error
-      const closestMatches = _findClosestLines(content, args.old_string, 3);
-      return {
-        success: false,
-        error: `old_string not found in file. It may have changed since you last read it — call read_file first to see the current content.`,
-        closest_matches: closestMatches.length > 0 ? closestMatches : undefined,
-        suggestion: closestMatches.length > 0
-          ? 'The closest matching content is shown above. Use the exact text from the file.'
-          : undefined,
-      };
-    }
-    if (count > 1) {
-      return {
-        success: false,
-        error: `old_string appears ${count} times in the file — it must be unique. Add more surrounding lines to make it unambiguous.`,
-        occurrences: count,
-      };
-    }
-    const newContent = content.replace(args.old_string, args.new_string);
-    fs.writeFileSync(filePath, newContent, 'utf8');
+    fs.writeFileSync(plan.filePath, plan.after, 'utf8');
+    const broken = syntaxBroken(plan.filePath, plan.before, plan.after);
     return {
       success: true,
       path: args.path,
-      message: 'Replacement applied.',
+      replaced: args.replace_all === true ? plan.count : 1,
+      ...(plan.lines ? { lines: plan.lines } : {}),
+      ...(plan.mode === 'fuzzy_whitespace' ? { mode: plan.mode, warning: 'The exact text was not found, but the same lines with different whitespace were. Check the result with read_file.' } : {}),
+      ...(broken ? { warning: `The file no longer parses: ${broken}` } : {}),
     };
   },
 };
 
+/**
+ * Work out what edit_file would write, without writing anything:
+ * { filePath, before, after, mode, count, lines? } or { error, details }.
+ * The approval card's diff comes from here too, so what the user approves
+ * is the change the tool makes (the line range and loose matches included).
+ */
+export function planEdit(args = {}, workingDir) {
+  const filePath = safePath(args.path, workingDir);
+  if (!fs.existsSync(filePath)) {
+    return { error: `File not found: ${args.path}. Use write_file to create it.` };
+  }
+  if (fs.statSync(filePath).isDirectory()) return { error: `"${args.path}" is a directory, not a file.` };
+  const content = fs.readFileSync(filePath, 'utf8');
+  const oldString = String(args.old_string ?? '');
+  const newString = String(args.new_string ?? '');
+  const replaceAll = args.replace_all === true;
+
+  if (args.start_line || args.end_line) {
+    const lines = content.split('\n');
+    const startLine = Math.max(1, Number(args.start_line) || 1);
+    const endLine = Math.min(lines.length, Number(args.end_line) || lines.length);
+    const region = lines.slice(startLine - 1, endLine).join('\n');
+    const replaced = replaceText(region, oldString, newString, { replaceAll });
+    if (replaced.error) {
+      return { error: `Lines ${startLine}-${endLine}: ${replaced.error}`, details: { actual_content_in_range: region.slice(0, 500) } };
+    }
+    const after = [...lines.slice(0, startLine - 1), replaced.content, ...lines.slice(endLine)].join('\n');
+    return { filePath, before: content, after, mode: replaced.mode, count: replaced.count, lines: `${startLine}-${endLine}` };
+  }
+
+  const replaced = replaceText(content, oldString, newString, { replaceAll });
+  if (replaced.error) {
+    return {
+      error: replaced.error,
+      details: {
+        ...(replaced.count ? { occurrences: replaced.count } : {}),
+        ...(replaced.closest?.length ? { closest_matches: replaced.closest } : {}),
+      },
+    };
+  }
+  return { filePath, before: content, after: replaced.content, mode: replaced.mode, count: replaced.count };
+}
+
+// ── apply_patch: several edits, all or nothing ───────────────────────────────
+
+/** Where a diff's file lands: git-style a/ and b/ prefixes are dropped. */
+function diffTarget(file, rawPath, strip, workingDir) {
+  if (rawPath === null) return null;
+  if (Number.isInteger(strip)) return stripComponents(rawPath, strip);
+  const gitStyle = file.git || (/^a\//.test(file.oldPath || 'a/') && /^b\//.test(file.newPath || 'b/'));
+  if (gitStyle && /^[ab]\//.test(rawPath)) return rawPath.slice(2);
+  // "--- src/x.js" without prefixes, or a/ that is a real folder.
+  try {
+    if (!fs.existsSync(safePath(rawPath, workingDir)) && /^[ab]\//.test(rawPath)) return rawPath.slice(2);
+  } catch { /* outside the folder: reported later */ }
+  return rawPath;
+}
+
+function readIfFile(filePath) {
+  if (!fs.existsSync(filePath)) return null;
+  if (fs.statSync(filePath).isDirectory()) throw new Error('is a directory, not a file');
+  return fs.readFileSync(filePath, 'utf8');
+}
+
+/**
+ * Work out what apply_patch would write, without writing anything:
+ * { changes: [{ path, filePath, before, after, from }] } (after null deletes
+ * the file; from is the old path of a renamed one) or { error }.
+ */
+export function planPatch(args = {}, workingDir) {
+  // Models that fill in every field send edits: [] beside a patch; an empty
+  // list counts as not given.
+  const edits = Array.isArray(args.edits) && args.edits.length ? args.edits : null;
+  let patch = typeof args.patch === 'string' && args.patch.trim() ? args.patch : null;
+  // Older diff_apply calls could point at a .diff file instead.
+  if (!patch && typeof args.patch_path === 'string' && args.patch_path.trim()) {
+    try {
+      patch = fs.readFileSync(safePath(args.patch_path, workingDir), 'utf8');
+    } catch (err) {
+      return { error: `Could not read ${args.patch_path}: ${err.message}` };
+    }
+  }
+  if (edits && patch) return { error: 'Pass edits or patch, not both.' };
+  if (!edits && !patch) return { error: 'Pass edits (a list of { path, old_string, new_string }) or patch (a unified diff).' };
+
+  const planned = new Map(); // path → { path, filePath, before, after, from }
+  const current = (relPath) => {
+    const filePath = safePath(relPath, workingDir);
+    if (planned.has(filePath)) return planned.get(filePath);
+    const before = readIfFile(filePath);
+    const entry = { path: relPath, filePath, before, after: before };
+    planned.set(filePath, entry);
+    return entry;
+  };
+
+  try {
+    if (edits) {
+      for (let i = 0; i < edits.length; i++) {
+        const edit = edits[i];
+        if (!edit || typeof edit.path !== 'string' || typeof edit.old_string !== 'string' || typeof edit.new_string !== 'string') {
+          return { error: `Edit ${i + 1} needs path, old_string and new_string (strings).` };
+        }
+        const entry = current(edit.path);
+        if (entry.after === null) return { error: `Edit ${i + 1}: file not found: ${edit.path}. Use write_file to create it.` };
+        const replaced = replaceText(entry.after, edit.old_string, edit.new_string, { replaceAll: edit.replace_all === true });
+        if (replaced.error) return { error: `Edit ${i + 1} (${edit.path}): ${replaced.error}`, closest: replaced.closest };
+        entry.after = replaced.content;
+      }
+    } else {
+      const strip = Number.isInteger(args.strip) ? args.strip : null;
+      const files = parseUnifiedDiff(patch);
+      if (!files.length) return { error: 'No file changes found in the patch. It should look like `git diff` output: --- a/path, +++ b/path, then @@ hunks.' };
+      for (const file of files) {
+        const oldPath = diffTarget(file, file.oldPath, strip, workingDir);
+        const newPath = diffTarget(file, file.newPath, strip, workingDir);
+        const label = newPath || oldPath;
+        if (oldPath === null) {
+          const entry = current(newPath);
+          if (entry.after !== null) return { error: `${newPath} already exists, but the patch creates it.` };
+          entry.after = applyHunks('', file.hunks, { label: newPath });
+          continue;
+        }
+        const entry = current(oldPath);
+        if (entry.after === null) return { error: `File not found: ${oldPath}.` };
+        const after = applyHunks(entry.after, file.hunks, { label });
+        if (newPath === null) {
+          entry.after = null;
+        } else if (newPath !== oldPath) {
+          const target = current(newPath);
+          if (target.after !== null) return { error: `${newPath} already exists, but the patch renames ${oldPath} to it.` };
+          target.after = after;
+          target.from = oldPath;
+          entry.after = null;
+        } else {
+          entry.after = after;
+        }
+      }
+    }
+  } catch (err) {
+    return { error: err.message };
+  }
+
+  const changes = [...planned.values()].filter((entry) => entry.before !== entry.after);
+  for (const change of changes) {
+    if (change.after === null) continue;
+    const broken = syntaxBroken(change.filePath, change.before, change.after);
+    if (broken) return { error: `${change.path}: ${broken}` };
+  }
+  return { changes };
+}
+
+/** Existing files an apply_patch call would change (for read-before-write). */
+export function patchTargets(args, workingDir) {
+  try {
+    const plan = planPatch(args, workingDir);
+    return (plan.changes || []).filter((change) => change.before !== null).map((change) => change.path);
+  } catch {
+    return [];
+  }
+}
+
 export const applyPatchTool = {
   name: 'apply_patch',
-  description: 'Apply multiple precise edits across one or more files as a single ATOMIC operation. Every edit is validated first (each old_string must exist exactly once in its file, and JS/TS syntax must stay valid); if ANY edit fails, no files are changed at all. Use this for coordinated multi-file changes (e.g. rename a function and update all call sites) so the working tree is never left half-edited.',
+  description: 'Make several edits at once, in one file or many, all or nothing: pass edits (a list of exact replacements, each like edit_file) or patch (a unified diff, as git diff prints it; it can also create, delete and rename files). Everything is checked first: if any part does not apply, or a JS/TS file would stop parsing, no file changes. For a single replacement, edit_file is simpler.',
   category: 'file',
   permission: PermissionLevel.MODERATE,
   parameters: {
@@ -410,84 +475,47 @@ export const applyPatchTool = {
     properties: {
       edits: {
         type: 'array',
-        description: 'Ordered list of edits. Each: { path, old_string, new_string }. old_string must match exactly (whitespace included) and appear exactly once in its file at the time it is applied.',
+        description: 'Edits in order: [{ path, old_string, new_string, replace_all? }]. Each old_string must match exactly and be unique in its file when it is applied.',
         items: {
           type: 'object',
           properties: {
             path: { type: 'string', description: 'File path relative to working directory' },
-            old_string: { type: 'string', description: 'Exact text to find — must be unique within the file' },
-            new_string: { type: 'string', description: 'Replacement text' },
+            old_string: { type: 'string', description: 'Exact text to replace' },
+            new_string: { type: 'string', description: 'Text to put in its place (empty to delete it)' },
+            replace_all: { type: 'boolean', description: 'Replace every occurrence (default false)' },
           },
           required: ['path', 'old_string', 'new_string'],
         },
       },
+      patch: { type: 'string', description: 'A unified diff: --- a/path and +++ b/path headers, then @@ hunks with context lines. Use instead of edits.' },
     },
-    required: ['edits'],
+    required: [],
   },
   execute: async (args, context) => {
-    const edits = Array.isArray(args.edits) ? args.edits : [];
-    if (edits.length === 0) {
-      return { success: false, error: 'No edits provided. Pass an "edits" array of { path, old_string, new_string }.' };
+    const plan = planPatch(args, context.workingDir);
+    if (plan.error) {
+      return { success: false, error: `${plan.error} No files were changed.`, ...(plan.closest?.length ? { closest_matches: plan.closest } : {}) };
     }
+    const results = plan.changes.map((change) => ({
+      path: change.path,
+      action: change.after === null ? (plan.changes.some((c) => c.from === change.path) ? 'renamed' : 'deleted')
+        : change.from ? `renamed from ${change.from}` : change.before === null ? 'created' : 'edited',
+    }));
+    if (args.dry_run) return { success: true, dry_run: true, files_changed: results.length, results, message: 'The patch applies; nothing was written.' };
 
-    // Group edits by file, preserving order so coordinated edits apply predictably.
-    const byPath = new Map();
-    for (const e of edits) {
-      if (!e || typeof e.path !== 'string' || typeof e.old_string !== 'string' || typeof e.new_string !== 'string') {
-        return { success: false, error: 'Every edit must include string path, old_string, and new_string. No files were modified.' };
-      }
-      if (!byPath.has(e.path)) byPath.set(e.path, []);
-      byPath.get(e.path).push(e);
+    for (const change of plan.changes) {
+      if (change.after === null) continue;
+      fs.mkdirSync(path.dirname(change.filePath), { recursive: true });
+      fs.writeFileSync(change.filePath, change.after, 'utf8');
     }
-
-    // ── Phase 1: validate everything in-memory (no writes yet) ──────────────
-    const planned = [];
-    const results = [];
-    for (const [relPath, fileEdits] of byPath) {
-      const filePath = safePath(relPath, context.workingDir);
-      if (!fs.existsSync(filePath)) {
-        return { success: false, error: `File not found: ${relPath}. No files were modified.` };
-      }
-      if (fs.statSync(filePath).isDirectory()) {
-        return { success: false, error: `"${relPath}" is a directory, not a file. No files were modified.` };
-      }
-      let content = fs.readFileSync(filePath, 'utf8');
-      for (let i = 0; i < fileEdits.length; i++) {
-        const { old_string, new_string } = fileEdits[i];
-        const count = content.split(old_string).length - 1;
-        if (count === 0) {
-          return {
-            success: false,
-            error: `Edit ${i + 1} for "${relPath}": old_string not found (it may be stale — re-read the file). No files were modified.`,
-            closest_matches: _findClosestLines(content, old_string, 2) || undefined,
-          };
-        }
-        if (count > 1) {
-          return {
-            success: false,
-            error: `Edit ${i + 1} for "${relPath}": old_string appears ${count} times — it must be unique. Add more surrounding context. No files were modified.`,
-          };
-        }
-        content = content.replace(old_string, new_string);
-      }
-      const syntax = verifyJsSyntax(filePath, content);
-      if (!syntax.valid) {
-        return { success: false, error: `"${relPath}": ${syntax.error} No files were modified.` };
-      }
-      planned.push({ filePath, newContent: content });
-      results.push({ path: relPath, edits_applied: fileEdits.length });
-    }
-
-    // ── Phase 2: all validated — commit every file ──────────────────────────
-    for (const p of planned) {
-      fs.writeFileSync(p.filePath, p.newContent, 'utf8');
+    for (const change of plan.changes) {
+      if (change.after === null) fs.rmSync(change.filePath, { force: true });
     }
     return {
       success: true,
-      files_changed: planned.length,
-      total_edits: edits.length,
+      files_changed: results.length,
       results,
-      message: `Atomically applied ${edits.length} edit(s) across ${planned.length} file(s).`,
+      message: results.length ? `Changed ${results.length} file(s).` : 'Nothing to change: the files already look like that.',
     };
   },
 };
@@ -902,7 +930,7 @@ export const fileWatchTool = {
 
 /** All file tools for batch registration. */
 export const fileTools = [
-  readFileTool, writeFileTool, createDirectoryTool, editFileTool, patchFileTool, applyPatchTool, searchFilesTool,
+  readFileTool, writeFileTool, createDirectoryTool, editFileTool, applyPatchTool, searchFilesTool,
   listDirectoryTool, findFilesTool, fileDiffTool, globFindTool,
   fileCopyTool, fileMoveTool, fileDeleteTool, fileWatchTool,
 ];

@@ -18,6 +18,7 @@ const { default: db } = await import('../src/db/client.js');
 const { initializeAgent } = await import('../src/agent/index.js');
 const { toolRegistry } = await import('../src/agent/tools/toolRegistry.js');
 const { AgentRuntime } = await import('../src/agent/AgentRuntime.js');
+const { ToolCallFormatter } = await import('../src/agent/ToolCallFormatter.js');
 const toolAliasesModule = await import('../src/agent/tools/toolAliases.js');
 
 await initializeAgent();
@@ -111,7 +112,8 @@ test('a model that calls an old name gets the new tool in a run', async () => {
 test('every old name points at a registered tool, and none is still a tool', () => {
   const { TOOL_ALIASES } = toolAliasesModule;
   for (const [name, spec] of Object.entries(TOOL_ALIASES)) {
-    assert.ok(toolRegistry.has(spec.to), `${name} points at ${spec.to}, which is not registered`);
+    const to = typeof spec === 'string' ? spec : spec.to;
+    assert.ok(toolRegistry.has(to), `${name} points at ${to}, which is not registered`);
     assert.equal(toolRegistry.has(name), false, `${name} is still registered as a tool`);
     assert.equal(toolRegistry.isAlias(name), true);
   }
@@ -154,4 +156,57 @@ test('semantic_search is local_rag_search with memories', async () => {
   assert.equal(found.success, true, found.error);
   assert.match(found.ragError, /index/i);
   assert.ok(found.memories.some((memory) => memory.key === 'pear_tree'), JSON.stringify(found.memories));
+});
+
+test('edit_file calls with the old find and replace still work, deleting text too', async () => {
+  const dir = workspace();
+  const file = path.join(dir, 'plums.md');
+  fs.writeFileSync(file, 'Plums want a sunny wall.\nDamsons too.\n');
+  const schema = toolRegistry.get('edit_file').parameters;
+  for (const [args, expected] of [
+    [{ path: 'plums.md', find: 'sunny', replace: 'warm' }, 'Plums want a warm wall.\nDamsons too.\n'],
+    [{ path: 'plums.md', find: 'Damsons too.\n', replace: '' }, 'Plums want a warm wall.\n'],
+  ]) {
+    const repaired = ToolCallFormatter.repairArguments('edit_file', args, schema);
+    assert.equal(toolRegistry.validateArgs('edit_file', repaired).valid, true, JSON.stringify(repaired));
+    const result = await toolRegistry.execute('edit_file', repaired, { workingDir: dir });
+    assert.equal(result.success, true, result.error);
+    assert.equal(fs.readFileSync(file, 'utf8'), expected);
+  }
+  // An empty old_string is still no answer.
+  const empty = ToolCallFormatter.repairArguments('edit_file', { path: 'plums.md', find: '', replace: 'x' }, schema);
+  assert.equal(toolRegistry.validateArgs('edit_file', empty).valid, false);
+});
+
+test('the old editing tools map onto edit_file and apply_patch', async () => {
+  const dir = workspace();
+  const context = { workingDir: dir };
+  fs.writeFileSync(path.join(dir, 'plums.md'), 'Plums want a sunny wall.\nDamsons too.\n');
+
+  assert.deepEqual(toolRegistry.resolve('patch_file', { path: 'plums.md', old_string: 'a', new_string: 'b' }).name, 'edit_file');
+  const patched = await toolRegistry.execute('patch_file', { path: 'plums.md', old_string: 'sunny wall', new_string: 'warm wall' }, context);
+  assert.equal(patched.success, true, patched.error);
+
+  const blocks = '<<<<<<< SEARCH\nPlums want\n=======\nPlums like\n>>>>>>> REPLACE\n<<<<<<< SEARCH\nDamsons too.\n=======\nDamsons as well.\n>>>>>>> REPLACE';
+  assert.deepEqual(toolRegistry.resolve('search_replace_block', { path: 'plums.md', edit_blocks: blocks }), {
+    name: 'apply_patch',
+    args: { edits: [
+      { path: 'plums.md', old_string: 'Plums want', new_string: 'Plums like' },
+      { path: 'plums.md', old_string: 'Damsons too.', new_string: 'Damsons as well.' },
+    ] },
+    aliasOf: 'search_replace_block',
+  });
+  const replaced = await toolRegistry.execute('search_replace_block', { path: 'plums.md', edit_blocks: blocks }, context);
+  assert.equal(replaced.success, true, replaced.error);
+  assert.equal(fs.readFileSync(path.join(dir, 'plums.md'), 'utf8'), 'Plums like a warm wall.\nDamsons as well.\n');
+
+  const diff = '--- plums.md\n+++ plums.md\n@@ -2 +2 @@\n-Damsons as well.\n+Damsons and gages.\n';
+  assert.deepEqual(toolRegistry.resolve('diff_apply', { patch_content: diff, dry_run: true }).args, { patch: diff, dry_run: true });
+  const dry = await toolRegistry.execute('diff_apply', { patch_content: diff, dry_run: true }, context);
+  assert.equal(dry.success, true, dry.error);
+  assert.match(fs.readFileSync(path.join(dir, 'plums.md'), 'utf8'), /as well/, 'a dry run writes nothing');
+  fs.writeFileSync(path.join(dir, 'change.diff'), diff);
+  const applied = await toolRegistry.execute('diff_apply', { patch_file: 'change.diff' }, context);
+  assert.equal(applied.success, true, applied.error);
+  assert.match(fs.readFileSync(path.join(dir, 'plums.md'), 'utf8'), /Damsons and gages/);
 });

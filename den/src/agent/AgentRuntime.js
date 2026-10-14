@@ -20,6 +20,7 @@ import { normalizeTags, selectRelevantSkillsWithLlm } from './skills.js';
 import { learningSettings } from './learningSettings.js';
 import { suggestSkillFromRun } from './skillSuggestions.js';
 import { listMemories, searchMemories, enforceMemoryCap, decayMemoryImportance, memoryProjectFor, memoryCatFor } from './tools/memoryTools.js';
+import { planEdit, planPatch, patchTargets } from './tools/fileTools.js';
 import { currentCatRun } from './scheduledRunContext.js';
 import { memoryConsolidator } from './MemoryConsolidator.js';
 import { isGitDangerousAction, isGitReadOnlyAction } from './gitService.js';
@@ -83,9 +84,8 @@ const SNAPSHOT_SKIP = new Set([
   '.asyncat', '.asyncat-attachments', '.asyncat-artifacts', '.agent_tmp',
 ]);
 const MUTATING_FILE_TOOLS = new Set([
-  'write_file', 'create_file', 'edit_file', 'patch_file', 'create_directory',
+  'write_file', 'create_file', 'edit_file', 'apply_patch', 'create_directory',
   'file_delete', 'delete_file', 'file_copy', 'copy_file', 'file_move', 'move_file',
-  'search_replace_block', 'apply_patch',
 ]);
 const MUTATING_SHELL_TOOLS = new Set(['run_command', 'run_python', 'run_node']);
 const ACTION_GOAL_RE = /\b(create|add|update|edit|delete|remove|move|rename|write|save|schedule|run|execute|install|open|read|inspect|check|search|find|browse|fix|change|modify|look at|review)\b/i;
@@ -172,7 +172,7 @@ const MAX_NATIVE_TOOLS = 128;
 // In the core set whenever the mode allows them, whatever the task.
 const ESSENTIAL_TOOLS = [
   'tool_search', 'todo_write', 'ask_user',
-  'read_file', 'write_file', 'edit_file', 'patch_file', 'list_directory', 'search_files', 'find_files',
+  'read_file', 'write_file', 'edit_file', 'list_directory', 'search_files', 'find_files',
   'run_command', 'web_search', 'fetch_url', 'save_memory', 'recall_memory', 'create_artifact',
 ];
 // Tool categories to fill the core set from, by task. Every name must be a
@@ -1974,26 +1974,33 @@ export class AgentRuntime {
   }
 
   _buildPermissionDiff(toolName, args = {}) {
+    if (toolName === 'apply_patch') {
+      try {
+        const plan = planPatch(args, this.workingDir);
+        if (plan.error || !plan.changes?.length) return null;
+        const diffs = plan.changes.map((change) => this._unifiedDiff(change.path, change.before ?? '', change.after ?? '')).filter(Boolean);
+        return diffs.length ? diffs.join('\n') : null;
+      } catch {
+        return null;
+      }
+    }
     if (toolName !== 'write_file' && toolName !== 'edit_file') return null;
     if (!args.path) return null;
 
     try {
+      if (toolName === 'edit_file') {
+        // The same plan the tool runs: a call it would refuse shows no diff.
+        const plan = planEdit(args, this.workingDir);
+        return plan.error ? null : this._unifiedDiff(args.path, plan.before, plan.after);
+      }
+
       const targetPath = path.resolve(this.workingDir, args.path);
       const rootPath = path.resolve(this.workingDir);
       const relative = path.relative(rootPath, targetPath);
       if (relative.startsWith('..') || path.isAbsolute(relative)) return null;
 
       const oldContent = fs.existsSync(targetPath) ? fs.readFileSync(targetPath, 'utf8') : '';
-      let newContent = oldContent;
-      if (toolName === 'write_file') {
-        newContent = String(args.content ?? '');
-      } else {
-        const find = String(args.find ?? '');
-        if (!find || !oldContent.includes(find)) return null;
-        newContent = oldContent.replace(find, String(args.replace ?? ''));
-      }
-
-      return this._unifiedDiff(args.path, oldContent, newContent);
+      return this._unifiedDiff(args.path, oldContent, String(args.content ?? ''));
     } catch {
       return null;
     }
@@ -2294,8 +2301,8 @@ export class AgentRuntime {
       ['list_plan', -2],
       ['ask_user', -1],
       ['read_file', 0],
-      ['patch_file', 1],
-      ['search_replace_block', 2],
+      ['edit_file', 1],
+      ['apply_patch', 2],
       ['run_command', 3],
     ]);
 
@@ -2325,22 +2332,24 @@ export class AgentRuntime {
   }
 
   _preflightMutatingTool(toolCall) {
-    if (!['write_file', 'edit_file', 'patch_file', 'search_replace_block'].includes(toolCall?.tool_name)) {
-      return null;
+    const name = toolCall?.tool_name;
+    if (!['write_file', 'edit_file', 'apply_patch'].includes(name)) return null;
+    const targets = name === 'apply_patch'
+      ? patchTargets(toolCall.arguments, this.workingDir)
+      : [toolCall?.arguments?.path].filter(Boolean);
+
+    for (const targetFile of targets) {
+      const absTarget = path.resolve(this.workingDir, targetFile);
+      if (!fs.existsSync(absTarget)) continue;
+      if (this.filesReadInSession.has(absTarget)) continue;
+      return {
+        success: false,
+        code: 'read_before_write_required',
+        error: `You must read_file("${targetFile}") before editing it. This ensures your edits match the current file content and prevents stale or blind writes.`,
+        hint: 'read_first',
+      };
     }
-    const targetFile = toolCall?.arguments?.path;
-    if (!targetFile) return null;
-
-    const absTarget = path.resolve(this.workingDir, targetFile);
-    if (!fs.existsSync(absTarget)) return null;
-    if (this.filesReadInSession.has(absTarget)) return null;
-
-    return {
-      success: false,
-      code: 'read_before_write_required',
-      error: `You must read_file("${targetFile}") before editing it. This ensures your edits match the current file content and prevents stale or blind writes.`,
-      hint: 'read_first',
-    };
+    return null;
   }
 
   _isMutatingTool(toolName, args = {}) {
@@ -3056,7 +3065,7 @@ export class AgentRuntime {
         '3. Should it change its approach?',
         '4. If there is a plan with items being completed, that indicates progress even if tool calls look similar.',
         '5. If a tool has FAILED 2+ times with the same error, recommend a SPECIFIC alternative tool or strategy.',
-        '6. If edit_file/patch_file failed, suggest reading the file first with read_file.',
+        '6. If edit_file/apply_patch failed, suggest reading the file first with read_file.',
         '7. If code_search found nothing, suggest trying search_files with a simpler pattern.',
         ...planModeExtra,
         '',

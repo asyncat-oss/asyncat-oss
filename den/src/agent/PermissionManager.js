@@ -112,6 +112,10 @@ export class PermissionManager {
       run_node: () => `Execute JavaScript code:\n${(args.code || '').slice(0, 200)}`,
       write_file: () => `Write file: ${args.path} (${(args.content || '').length} chars)`,
       edit_file: () => `Edit file: ${args.path}`,
+      apply_patch: () => {
+        const files = Array.isArray(args.edits) ? [...new Set(args.edits.map((edit) => edit?.path).filter(Boolean))] : [];
+        return files.length ? `Edit ${files.length === 1 ? 'file' : 'files'}: ${files.join(', ')}` : 'Apply a patch to files';
+      },
       file_copy: () => `Copy file: ${args.source} -> ${args.destination}`,
       file_move: () => `Move file: ${args.source} -> ${args.destination}`,
       file_delete: () => `Delete file: ${args.path}`,
