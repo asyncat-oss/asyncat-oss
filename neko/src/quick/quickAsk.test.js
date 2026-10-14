@@ -81,20 +81,22 @@ test('model notices use the composer wording and offer the right buttons', () =>
   assert.equal(modelNotice(brain({ loading: true })), null);
   assert.equal(modelNotice(null), null);
 
-  const notLoaded = modelNotice(brain({ model: 'Qwen3 4B', rawModel: 'qwen3-4b.gguf' }));
-  assert.equal(notLoaded.text, "Qwen3 4B isn't loaded right now.");
-  assert.deepEqual(notLoaded.actions, ['load', 'models']);
-  assert.equal(notLoaded.modelsLabel, 'Change model');
+  // A model file that isn't loaded loads when you ask.
+  assert.equal(modelNotice(brain({ model: 'Qwen3 4B', rawModel: 'qwen3-4b.gguf' })), null);
+  assert.equal(modelNotice(brain({ model: 'Qwen3 4B', rawModel: 'qwen3-4b.gguf', status: 'error' })), null);
+  assert.equal(modelNotice(brain({ providerId: 'mlx-builtin', defaultRef: { kind: 'local', file: 'a.gguf' } })), null);
 
   const mlx = modelNotice(brain({ providerId: 'mlx-builtin', model: 'Gemma', rawModel: '/m/gemma' }));
+  assert.equal(mlx.text, "Gemma isn't loaded right now.");
   assert.deepEqual(mlx.actions, ['models']);
+  assert.equal(mlx.modelsLabel, 'Change model');
 
-  const loading = modelNotice(brain({ isLoadingModel: true, model: 'Qwen3 4B' }));
-  assert.equal(loading.text, 'Model Qwen3 4B is still loading.');
+  const loading = modelNotice(brain({ providerId: 'mlx-builtin', isLoadingModel: true, model: 'Gemma', rawModel: '/m/gemma' }));
+  assert.equal(loading.text, 'Gemma is still loading.');
   assert.equal(loading.busy, true);
   assert.deepEqual(loading.actions, []);
 
-  assert.equal(modelNotice(brain({ status: 'error', rawModel: 'x' })).modelsLabel, 'Choose a model');
+  assert.equal(modelNotice(brain({ providerId: 'mlx-builtin', status: 'error', rawModel: 'x' })).modelsLabel, 'Choose a model');
   assert.equal(modelNotice(brain({})).text, 'No model yet. Choose one to start chatting.');
 });
 

@@ -2,6 +2,8 @@
 // prompt history, notices, and the chat it saves. No React, so node:test can
 // cover it.
 
+import { modelBlockReason } from '../CommandCenter/utils/chatModel.js';
+
 export const HISTORY_KEY = 'asyncat.quickAsk.history';
 export const HISTORY_LIMIT = 50;
 // Reopening after this long starts a new chat.
@@ -64,26 +66,17 @@ export function canBrowseHistory({ text = '', selectionStart = 0, selectionEnd =
 
 /**
  * Why sending is blocked by the model, with the composer's wording, or null.
- * `actions` are the buttons the notice offers: 'load' and 'models'.
+ * `actions` are the buttons the notice offers ('models'). Quick ask uses the
+ * default model, and a model file loads when you ask, so only a default
+ * without one (MLX, nothing set up) can block.
  */
 export function modelNotice(brain) {
   if (!brain || !brain.isBuiltin || brain.loading) return null;
-  const name = brain.model || 'The chosen model';
-  if (brain.isLoadingModel) {
-    return { text: brain.model ? `Model ${brain.model} is still loading.` : 'Model is still loading.', busy: true, actions: [] };
-  }
-  if (brain.isReady) return null;
-  if (brain.status === 'error') {
-    return { text: 'The model failed to load. Pick another one to keep chatting.', actions: ['models'], modelsLabel: 'Choose a model' };
-  }
-  if (brain.rawModel) {
-    return {
-      text: `${name} isn't loaded right now.`,
-      actions: brain.providerId === 'llamacpp-builtin' ? ['load', 'models'] : ['models'],
-      modelsLabel: 'Change model',
-    };
-  }
-  return { text: 'No model yet. Choose one to start chatting.', actions: ['models'], modelsLabel: 'Choose a model' };
+  if (brain.defaultRef || (brain.providerId === 'llamacpp-builtin' && brain.rawModel)) return null;
+  const text = modelBlockReason({ model: { ref: null }, brain });
+  if (!text) return null;
+  if (brain.isLoadingModel) return { text, busy: true, actions: [] };
+  return { text, actions: ['models'], modelsLabel: brain.rawModel && brain.status !== 'error' ? 'Change model' : 'Choose a model' };
 }
 
 /** The tooltip on a disabled Send button, or '' when sending is possible. */

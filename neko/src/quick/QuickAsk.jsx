@@ -11,7 +11,7 @@ import { useActiveBrainStatus } from '../CommandCenter/hooks/useActiveBrainStatu
 import { BlockRenderer, parseAIResponseToBlocks } from '../CommandCenter/components/renderers/BlockBasedMessageRenderer.jsx';
 import { FOLLOW_UP_EVENT } from '../CommandCenter/components/renderers/interactiveEvents.js';
 import { extractReasoningFromText } from '../CommandCenter/utils/reasoningParser.js';
-import { llamaServerApi } from '../Settings/settingApi.js';
+import { metadataWithRunModel } from '../CommandCenter/utils/chatModel.js';
 import { isMacPlatform } from '../components/ui/shortcuts.js';
 import { normalizeWebLink } from '../utils/openWebLink.js';
 import {
@@ -36,9 +36,10 @@ async function serverIsUp() {
   }
 }
 
-// The chat being built here: its saved id, the messages already saved, and
-// the save in flight (saves run one after another).
-const newSession = () => ({ conversationId: null, savedIds: new Set(), saving: Promise.resolve(), unsaved: false });
+// The chat being built here: its saved id, the messages already saved, the
+// save in flight (saves run one after another), and the model it first ran
+// on, which it keeps when opened in the app (as chats there do).
+const newSession = () => ({ conversationId: null, savedIds: new Set(), saving: Promise.resolve(), unsaved: false, model: null });
 
 // Outside the desktop app (a browser tab), "open in the app" is this tab.
 function openRoute(route) {
@@ -81,7 +82,6 @@ export default function QuickAsk() {
   const [thread, setThread] = useState([]);
   const [busy, setBusy] = useState(false);
   const [server, setServer] = useState('checking'); // checking | ok | down | starting | start-failed
-  const [modelAction, setModelAction] = useState({ loading: false, error: '' });
   const [history, setHistory] = useState(() => loadHistory(globalThis.localStorage));
   const [nav, setNav] = useState({ index: null, draft: '' });
   const [copied, setCopied] = useState(false);
@@ -105,11 +105,8 @@ export default function QuickAsk() {
     if (server === 'starting') return { text: 'Starting…', busy: true, actions: [] };
     if (server === 'start-failed') return { text: "Couldn't start it. Open Asyncat to see what went wrong.", actions: ['open'] };
     if (server === 'checking') return null;
-    if (modelAction.loading) return { text: 'Loading the model…', busy: true, actions: [] };
-    const model = modelNotice(brain);
-    if (model && modelAction.error) return { ...model, text: `Couldn't load the model. ${modelAction.error}` };
-    return model;
-  }, [server, brain, modelAction]);
+    return modelNotice(brain);
+  }, [server, brain]);
 
   const blockReason = sendBlockReason({ server, brain, notice });
   const canSend = Boolean(text.trim()) && !busy && !blockReason;
@@ -135,7 +132,7 @@ export default function QuickAsk() {
           messages,
           mode: 'chat',
           clientId: 'quick',
-          metadata: { source: 'quick-ask', experienceMode: 'chat', engine: 'asyncat' },
+          metadata: { source: 'quick-ask', experienceMode: 'chat', engine: 'asyncat', ...(session.model ? { model: session.model } : {}) },
           ...(session.conversationId
             ? { conversationId: session.conversationId, knownMessageIds: [...session.savedIds] }
             : {}),
@@ -177,6 +174,14 @@ export default function QuickAsk() {
         if (event.type === 'delta') {
           answer += event.data?.content || '';
           patch({ answer, status: 'streaming' });
+        } else if (event.type === 'model_loading') {
+          // The default is a model file that isn't loaded: it loads first.
+          patch({ loadingModel: event.data?.name || brain.defaultName || 'the model' });
+        } else if (event.type === 'model_ready') {
+          patch({ loadingModel: null });
+        } else if (event.type === 'chat_model') {
+          patch({ loadingModel: null });
+          if (!session.model) session.model = metadataWithRunModel({}, event.data).model || null;
         } else if (event.type === 'error') {
           error = event.data?.message || 'Something went wrong.';
         } else if (event.type === 'done') {
@@ -199,7 +204,7 @@ export default function QuickAsk() {
     if (sessionRef.current !== session) return; // a new chat started meanwhile
     setBusy(false);
     saveChat(session, turns.map((item) => (item.id === id ? { ...item, ...final } : item)));
-  }, [saveChat]);
+  }, [brain.defaultName, saveChat]);
 
   const send = useCallback((value) => {
     const question = String(value ?? text).trim();
@@ -279,17 +284,6 @@ export default function QuickAsk() {
     refreshModelStatus();
   }, []);
 
-  const loadModel = useCallback(async () => {
-    setModelAction({ loading: true, error: '' });
-    let error = '';
-    try {
-      await llamaServerApi.start(brain.rawModel, 8192);
-    } catch (err) {
-      error = err?.message || "Couldn't load the model.";
-    }
-    setModelAction({ loading: false, error });
-    refreshModelStatus();
-  }, [brain.rawModel]);
 
   // ── Keys ────────────────────────────────────────────────────────────────
   const onInputKeyDown = (event) => {
@@ -479,8 +473,8 @@ export default function QuickAsk() {
           spellCheck
           className="max-h-36 min-h-8 flex-1 resize-none bg-transparent py-1 text-[15px] leading-6 text-fg caret-fg placeholder:text-fg-subtle focus:outline-none"
         />
-        <span title={brain.label} className="mb-1.5 max-w-40 truncate text-[12px] text-fg-muted">
-          {brain.loading ? '' : brain.model || brain.providerName}
+        <span title={brain.loading ? '' : `Default model: ${brain.defaultName || brain.providerName}`} className="mb-1.5 max-w-40 truncate text-[12px] text-fg-muted">
+          {brain.loading ? '' : brain.defaultName || brain.providerName}
         </span>
         {busy ? (
           <button
@@ -518,9 +512,6 @@ export default function QuickAsk() {
                   {notice.actions.includes('start') && (
                     <button type="button" onClick={startServer} className={noticeButton(true)}>Start it</button>
                   )}
-                  {notice.actions.includes('load') && (
-                    <button type="button" onClick={loadModel} className={noticeButton(true)}>Load it</button>
-                  )}
                   {notice.actions.includes('models') && (
                     <button type="button" onClick={() => openRoute('/models')} className={noticeButton(notice.actions.length === 1)}>
                       {notice.modelsLabel}
@@ -540,7 +531,7 @@ export default function QuickAsk() {
               <p className="mb-2 whitespace-pre-wrap text-[13px] leading-5 text-fg-muted">{turn.question}</p>
               {turn.answer
                 ? <Answer text={turn.answer} streaming={turn.status === 'streaming'} />
-                : turn.status === 'sending' && <p className="shimmer-text text-[13px]">Thinking</p>}
+                : turn.status === 'sending' && <p className="shimmer-text text-[13px]">{turn.loadingModel ? `Loading ${turn.loadingModel}…` : 'Thinking'}</p>}
               {turn.status === 'stopped' && <p className="mt-2 text-[12px] text-fg-muted">Stopped</p>}
               {turn.status === 'error' && (
                 <div role="alert" className="mt-2 rounded-lg bg-red-500/10 px-3 py-2 text-[13px] text-red-700 dark:text-red-400">
