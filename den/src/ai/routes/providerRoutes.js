@@ -118,6 +118,7 @@ import {
 } from '../controllers/ai/huggingFaceAuth.js';
 import { synthesizeWithCloudProvider, transcribeWithCloudProvider } from '../controllers/ai/cloudSpeech.js';
 import { ensureLocalListening, ensureLocalSpeaking, speechProvider, voiceOffMessage } from '../../media/voiceService.js';
+import { hfRepoFiles, hfSearchModels } from '../../media/hf.js';
 
 
 function activeProviderSnapshot(userId) {
@@ -1020,48 +1021,15 @@ router.get('/local-models/downloads/:downloadId/stream', async (req, res) => {
   req.on('close', () => clearInterval(interval));
 });
 
-// ── GET /hf-search — search HuggingFace GGUF models ─────────────────────────
+// ── GET /hf-search — search Hugging Face model repos ─────────────────────────
+// ?q&filter&sort&page&limit; filter is a task such as text-to-speech.
 router.get('/hf-search', async (req, res) => {
   try {
     const { q = '', filter = '', sort = 'downloads', page = 0, limit = 20 } = req.query;
-    const params = new URLSearchParams({
-      search: q || 'text generation gguf',
-      sort,
-      direction: '-1',
-      page: String(page),
-      limit: String(limit),
-      full: 'true',
-    });
-    if (filter) params.set('filter', String(filter));
-    const url = `https://huggingface.co/api/models?${params.toString()}`;
-
-    const hfRes = await fetch(url, {
-      headers: huggingFaceHeaders(req.user.id),
-      signal: AbortSignal.timeout(8000),
-    });
-
-    if (!hfRes.ok) {
-      throw new Error(`HF API ${hfRes.status}: ${hfRes.statusText}`);
-    }
-
-    const data = await hfRes.json();
-
-    const models = (Array.isArray(data) ? data : []).map(m => ({
-      id: m.id,
-      repoId: m.id,
-      repo: m.repoId || m.id,
-      modelId: m.modelId || m.id,
-      author: m.author || m.id.split('/')[0],
-      downloads: m.downloads || 0,
-      likes: m.likes || 0,
-      tags: (m.tags || []).filter(t => !t.startsWith('license:')),
-      pipeline_tag: m.pipeline_tag || '',
-      created: m.createdAt || null,
-      updated: m.lastModified || null,
-      private: m.private || false,
-      gated: m.gated || false,
-    }));
-
+    const models = await hfSearchModels(
+      { q: q || 'text generation gguf', filter, sort, page, limit },
+      { headers: huggingFaceHeaders(req.user.id) },
+    );
     res.json({ success: true, models, count: models.length });
   } catch (err) {
     console.error('HF search error:', err.message);
@@ -1069,40 +1037,14 @@ router.get('/hf-search', async (req, res) => {
   }
 });
 
-// ── GET /hf-files?repoId=org/name — list downloadable files in a HF repo ─────
+// ── GET /hf-files?repoId=org/name — a HF repo's files, with sizes ────────────
 router.get('/hf-files', async (req, res) => {
   try {
     const repoId = String(req.query.repoId || '').trim();
     if (!repoId) {
       return res.status(400).json({ success: false, error: 'repoId is required' });
     }
-
-    const encodedRepo = repoId.split('/').map(encodeURIComponent).join('/');
-    const url = `https://huggingface.co/api/models/${encodedRepo}`;
-    const hfRes = await fetch(url, {
-      headers: huggingFaceHeaders(req.user.id),
-      signal: AbortSignal.timeout(8000),
-    });
-
-    if (!hfRes.ok) {
-      const hint = hfRes.status === 401 || hfRes.status === 403
-        ? 'Check that HF_TOKEN is saved and that your Hugging Face account has accepted this model license.'
-        : hfRes.statusText;
-      throw new Error(`HF API ${hfRes.status}: ${hint}`);
-    }
-
-    const data = await hfRes.json();
-    const files = (data.siblings || []).map(f => ({
-      rfilename: f.rfilename,
-      size: f.size || 0,
-    }));
-    res.json({
-      success: true,
-      repoId,
-      private: Boolean(data.private),
-      gated: data.gated || false,
-      files,
-    });
+    res.json({ success: true, ...(await hfRepoFiles(repoId, { headers: huggingFaceHeaders(req.user.id) })) });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to fetch repo files', details: err.message });
   }

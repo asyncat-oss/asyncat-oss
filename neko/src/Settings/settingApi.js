@@ -293,15 +293,18 @@ export const localModelsApi = {
     });
   },
 
-  searchHuggingFace: async (query, { limit = 20 } = {}) => {
+  // filter narrows to a task, e.g. 'automatic-speech-recognition', 'text-to-speech', 'text-to-image'.
+  searchHuggingFace: async (query, { limit = 20, filter = '' } = {}) => {
     const params = new URLSearchParams({
       q: query,
       limit: String(limit),
       sort: 'downloads',
     });
+    if (filter) params.set('filter', filter);
     return apiCall(`${AI_API_BASE}/hf-search?${params.toString()}`);
   },
 
+  // Each file comes with its size in bytes and its download url.
   listHuggingFaceFiles: async (repoId) => {
     const params = new URLSearchParams({ repoId });
     return apiCall(`${AI_API_BASE}/hf-files?${params.toString()}`);

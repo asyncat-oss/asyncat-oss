@@ -80,8 +80,41 @@ const FILES = {
   'rhasspy/piper-voices/en/en_US/lessac/medium/samples/speaker_0.mp3': Buffer.from('ID3fake-mp3'),
 };
 const requests = [];
+// A repo as Hugging Face describes it: sizes only with blobs=true, and an
+// LFS file's real size under lfs.
+const REPO_INFO = {
+  'ggerganov/whisper.cpp': {
+    private: false,
+    gated: false,
+    siblings: [
+      { rfilename: 'ggml-tiny.en.bin', size: 134, lfs: { size: 77_691_713 } },
+      { rfilename: 'README.md', size: 2048 },
+    ],
+  },
+};
 const hf = http.createServer((req, res) => {
   requests.push(req.url);
+  const url = new URL(req.url, 'http://hf.test');
+  if (url.pathname === '/api/models') {
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify([{
+      id: 'ggerganov/whisper.cpp',
+      downloads: 1_200_000,
+      likes: 900,
+      tags: ['license:mit', 'whisper'],
+      pipeline_tag: 'automatic-speech-recognition',
+      lastModified: '2026-08-01T00:00:00.000Z',
+    }]));
+    return;
+  }
+  const info = /^\/api\/models\/([^/]+\/[^/]+)$/.exec(url.pathname);
+  if (info && REPO_INFO[info[1]]) {
+    const repo = REPO_INFO[info[1]];
+    const blobs = url.searchParams.get('blobs') === 'true';
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ ...repo, siblings: repo.siblings.map((file) => (blobs ? file : { rfilename: file.rfilename })) }));
+    return;
+  }
   const tree = /^\/api\/models\/([^/]+\/[^/]+)\/tree\/main\/?(.*)$/.exec(req.url);
   if (tree) {
     const [, repo, dir] = tree;
@@ -676,4 +709,33 @@ test('the chosen ComfyUI checkpoint is kept and draws (B9)', async () => {
   assert.equal(workflow['4'].inputs.ckpt_name, 'dreamshaper_8.safetensors');
 
   await images.chooseImage({ provider: 'local' });
+});
+
+// ── Hugging Face ─────────────────────────────────────────────────────────────
+
+test('Hugging Face search sends the task filter, and repo files come with sizes (B10)', async () => {
+  const api = await serve('/api/ai/providers', providerRouter);
+  try {
+    const found = await api.get('/hf-search?q=whisper%20ggml&filter=automatic-speech-recognition&limit=5');
+    assert.equal(found.status, 200);
+    assert.equal(found.body.models[0].repoId, 'ggerganov/whisper.cpp');
+    assert.deepEqual(found.body.models[0].tags, ['whisper'], 'licence tags left out');
+    const searched = new URL(requests.findLast((item) => item.startsWith('/api/models?')), 'http://hf.test');
+    assert.equal(searched.searchParams.get('filter'), 'automatic-speech-recognition');
+    assert.equal(searched.searchParams.get('search'), 'whisper ggml');
+
+    const listed = await api.get('/hf-files?repoId=ggerganov/whisper.cpp');
+    assert.equal(listed.status, 200);
+    assert.ok(requests.some((item) => item === '/api/models/ggerganov/whisper.cpp?blobs=true'), 'asks for sizes');
+    const [model, readme] = listed.body.files;
+    assert.equal(model.size, 77_691_713, 'the LFS size, not the pointer');
+    assert.equal(readme.size, 2048);
+    assert.equal(model.url, `${process.env.HF_ENDPOINT}/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin`);
+
+    const missing = await api.get('/hf-files?repoId=nobody/nothing');
+    assert.equal(missing.status, 500);
+    assert.match(missing.body.details, /404/);
+  } finally {
+    await api.close();
+  }
 });
