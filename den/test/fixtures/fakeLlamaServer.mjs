@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // A stand-in for llama-server in tests and demo runs. It takes the same
 // options Asyncat passes (-m, --port, --lora…), serves /health, /props,
-// /v1/models, /lora-adapters and /v1/chat/completions, and answers
-// differently when a LoRA adapter is applied (its scale above 0), so the
-// before/after comparison can be checked without a real model.
+// /v1/models, /lora-adapters and /v1/chat/completions (streamed or not), and
+// answers differently when a LoRA adapter is applied (its scale above 0), so
+// the before/after comparison can be checked without a real model.
 
 import http from 'node:http';
 import path from 'node:path';
@@ -52,7 +52,17 @@ http.createServer((req, res) => {
       const content = scale > 0
         ? `Water them deeply twice a week, in the morning. (${question.slice(0, 40)})`
         : `It depends on many things. (${question.slice(0, 40)})`;
-      return send(res, 200, { id: 'x', object: 'chat.completion', choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }] });
+      if (json.stream) {
+        // Streamed answers also say which model file is loaded, so a test can
+        // tell which model answered.
+        const chunk = (choices, extra = {}) => `data: ${JSON.stringify({ id: 'x', object: 'chat.completion.chunk', model: path.basename(model), choices, ...extra })}\n\n`;
+        res.writeHead(200, { 'content-type': 'text/event-stream' });
+        res.write(chunk([{ index: 0, delta: { role: 'assistant', content: `${content} [${path.basename(model)}]` }, finish_reason: null }]));
+        res.write(chunk([{ index: 0, delta: {}, finish_reason: 'stop' }]));
+        res.write(chunk([], { usage: { prompt_tokens: 12, completion_tokens: 6, total_tokens: 18 } }));
+        return res.end('data: [DONE]\n\n');
+      }
+      return send(res, 200, { id: 'x', object: 'chat.completion', model: path.basename(model), choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }] });
     }
     send(res, 404, { error: 'not found' });
   });

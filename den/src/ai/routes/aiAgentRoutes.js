@@ -25,6 +25,7 @@ import {
 import { loadSkills, reloadSkills, listSkills, normalizeTags, createSkill, updateSkill, deleteSkill } from '../../agent/skills.js';
 import { loadSoul, readSoulRaw, writeSoul, listSouls } from '../../agent/prompts/agentSystemPrompt.js';
 import { getAiClientForScheduledProvider, getAiClientForUser } from '../controllers/ai/clientFactory.js';
+import { checkModelRef, chooseRunModel, describeModelRef, modelErrorDetails, openRunModel, rememberChatModel, setDefaultModel } from '../controllers/ai/chatModel.js';
 import { noProjectToolNames } from '../../agent/toolScopes.js';
 import { getWorkspaceRoot, loadEntry, resolveWorkingDirectoryContext } from '../../files/fileExplorerService.js';
 import { codeSearchTool, listDefinitionsTool, findDefinitionTool, findReferencesTool } from '../../agent/tools/codeSearchTools.js';
@@ -298,18 +299,64 @@ await initializeAgent();
 markStaleActiveSessions();
 
 /**
- * The model client for a chat: the agent's own model when it has one and it
- * can be used, otherwise the user's current model.
+ * The model client for an agent: its own model when it has one and it can be
+ * used, otherwise the default model. (Runs choose with chatModel.js, which
+ * also knows the chat's own model.)
  */
 function clientForAgent(userId, profile) {
   if (profile?.model_profile_id) {
     try {
       return getAiClientForScheduledProvider(userId, profile.model_profile_id);
     } catch (err) {
-      console.warn(`[agent] ${profile.name}'s model is unavailable, using the current one: ${err.message}`);
+      console.warn(`[agent] ${profile.name}'s model is unavailable, using the default one: ${err.message}`);
     }
   }
   return getAiClientForUser(userId);
+}
+
+/** A wait for the user that lets other chats use a local model meanwhile. */
+function waitingFreesModel(opened, wait) {
+  return (...args) => opened.whileWaiting(() => wait(...args));
+}
+
+/**
+ * Open the model a chat runs on (chatModel.js), telling the app as it goes:
+ * "model_loading" / "model_ready" while a local model loads, then
+ * "chat_model" with the model the run uses. Resolves to openRunModel's result,
+ * or null after sending the error (with which model, so the app can offer
+ * another) and ending the stream.
+ */
+async function openChatModel(req, res, { agentProfile = null, conversationId = null, temporary = false, signal = null }) {
+  const userId = req.user.id;
+  const choice = chooseRunModel({
+    userId,
+    agentProfile,
+    requested: req.body?.model,
+    conversationId: conversationId || null,
+  });
+  try {
+    const opened = await openRunModel(userId, choice, {
+      conversationId,
+      temporary,
+      ctxSize: req.body?.ctxSize,
+      signal,
+      onProgress: ({ phase, waitingFor, model, name }) => {
+        writeAgentSse(res, {
+          type: phase === 'ready' ? 'model_ready' : 'model_loading',
+          data: { model, name, waitingFor: waitingFor || null },
+        });
+      },
+    });
+    writeAgentSse(res, { type: 'chat_model', data: { model: opened.ref, name: opened.name, source: opened.source } });
+    return opened;
+  } catch (err) {
+    if (err?.name !== 'AbortError' && !signal?.aborted) {
+      writeAgentSse(res, { type: 'error', data: { message: err.message, ...modelErrorDetails(err) } });
+      writeAgentSse(res, { type: 'done', data: { answer: '', stopReason: 'error' } });
+    }
+    if (!res.writableEnded) res.end();
+    return null;
+  }
 }
 
 
@@ -344,18 +391,6 @@ router.post('/chat/stream', withWorkspaceContext, async (req, res) => {
 
   const history = normalizeConversationHistory(req.body?.conversationHistory);
   const chatAgent = req.body?.profileId ? getProfile(String(req.body.profileId), req.user.id) : null;
-  let resolvedClient;
-  try {
-    resolvedClient = clientForAgent(req.user.id, chatAgent);
-  } catch (error) {
-    return res.status(400).json({ success: false, error: error.message || 'Could not load the active model' });
-  }
-  const { client: aiClient, model, providerInfo } = resolvedClient;
-  const modelCapabilities = getModelCapabilities(
-    providerInfo?.providerId,
-    model,
-    providerInfo?.settings?.model_capabilities,
-  );
   const suppliedCurrentImages = (Array.isArray(req.body?.fileAttachments) ? req.body.fileAttachments : [])
     .filter(attachment => (
       String(attachment?.mime || attachment?.mimeType || '').toLowerCase().startsWith('image/')
@@ -368,36 +403,9 @@ router.post('/chat/stream', withWorkspaceContext, async (req, res) => {
       error: 'Images must be PNG, JPEG, WebP, or GIF files under the attachment size limit.',
     });
   }
-  if (currentImageUrls.length > 0 && !modelCapabilities.supportsImageInput) {
-    return res.status(400).json({
-      success: false,
-      error: `The active model (${model || 'unknown'}) does not support image input. Choose an image-capable language model first.`,
-    });
-  }
-  // Project instructions and knowledge apply to plain chats as well.
-  const chatProject = projectForChat(req.user.id, req.body?.projectId || req.body?.workingContext?.projectId || null);
-  const chatContext = buildChatContext({ project: chatProject, agent: chatAgent, query: message, resolvedClient });
-  const currentContent = modelCapabilities.supportsImageInput
-    ? messageContentWithImages(message, req.body?.fileAttachments)
-    : message;
-  const messages = [
-    ...(chatContext.prompt ? [{ role: 'system', content: chatContext.prompt }] : []),
-    ...history.map(item => ({
-      role: item.role,
-      content: item.role === 'user' && modelCapabilities.supportsImageInput
-        ? messageContentWithImages(item.content, item.fileAttachments)
-        : item.content,
-    })),
-    {
-      role: 'user',
-      content: chatContext.images.length
-        ? [
-          ...(typeof currentContent === 'string' ? [{ type: 'text', text: currentContent }] : currentContent),
-          ...chatContext.images.map(url => ({ type: 'image_url', image_url: { url } })),
-        ]
-        : currentContent,
-    },
-  ];
+  // Quick ask names no chat, so it uses the default model.
+  const conversationId = typeof req.body?.conversationId === 'string' ? req.body.conversationId : null;
+  const temporary = req.body?.ephemeral === true;
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -410,8 +418,59 @@ router.post('/chat/stream', withWorkspaceContext, async (req, res) => {
   };
   res.on('close', abort);
 
+  const opened = await openChatModel(req, res, {
+    agentProfile: chatAgent,
+    conversationId,
+    temporary,
+    signal: abortController.signal,
+  });
+  if (!opened) {
+    res.off('close', abort);
+    return;
+  }
+  const resolvedClient = opened.resolved;
+  const { client: aiClient, model, providerInfo } = resolvedClient;
+
   let answer = '';
   try {
+    const modelCapabilities = getModelCapabilities(
+      providerInfo?.providerId,
+      model,
+      providerInfo?.settings?.model_capabilities,
+    );
+    if (currentImageUrls.length > 0 && !modelCapabilities.supportsImageInput) {
+      writeAgentSse(res, {
+        type: 'error',
+        data: { message: `This chat's model (${opened.name || model || 'unknown'}) can't read images. Pick a model that can, or remove the image.` },
+      });
+      writeAgentSse(res, { type: 'done', data: { answer: '', stopReason: 'error' } });
+      return;
+    }
+    // Project instructions and knowledge apply to plain chats as well.
+    const chatProject = projectForChat(req.user.id, req.body?.projectId || req.body?.workingContext?.projectId || null);
+    const chatContext = buildChatContext({ project: chatProject, agent: chatAgent, query: message, resolvedClient });
+    const currentContent = modelCapabilities.supportsImageInput
+      ? messageContentWithImages(message, req.body?.fileAttachments)
+      : message;
+    const messages = [
+      ...(chatContext.prompt ? [{ role: 'system', content: chatContext.prompt }] : []),
+      ...history.map(item => ({
+        role: item.role,
+        content: item.role === 'user' && modelCapabilities.supportsImageInput
+          ? messageContentWithImages(item.content, item.fileAttachments)
+          : item.content,
+      })),
+      {
+        role: 'user',
+        content: chatContext.images.length
+          ? [
+            ...(typeof currentContent === 'string' ? [{ type: 'text', text: currentContent }] : currentContent),
+            ...chatContext.images.map(url => ({ type: 'image_url', image_url: { url } })),
+          ]
+          : currentContent,
+      },
+    ];
+
     // Only a level the model has, mapped to its nearest one (xhigh → high…).
     const reasoningEffort = normalizeReasoningEffort(req.body?.reasoningEffort, modelCapabilities);
     const stream = await aiClient.client.chat.completions.create({
@@ -450,6 +509,7 @@ router.post('/chat/stream', withWorkspaceContext, async (req, res) => {
       writeAgentSse(res, { type: 'done', data: { answer: '', stopReason: 'error' } });
     }
   } finally {
+    opened.release();
     res.off('close', abort);
     if (!res.writableEnded) res.end();
   }
@@ -576,6 +636,24 @@ router.patch('/chats/:conversationId', withWorkspaceContext, async (req, res) =>
       return res.status(404).json({ success: false, error: 'Conversation not found' });
     }
     res.status(500).json({ success: false, error: 'Failed to update conversation' });
+  }
+});
+
+// The model a chat runs on. Picking one changes this chat only, and makes it
+// the default for new chats too ("new chats start with the model you used
+// last") unless makeDefault is false. null makes the chat follow the default.
+router.put('/chats/:conversationId/model', withWorkspaceContext, (req, res) => {
+  try {
+    const value = req.body?.model ?? null;
+    const picked = value === null ? null : checkModelRef(req.user.id, value);
+    if (!rememberChatModel(req.user.id, req.params.conversationId, picked?.ref || null)) {
+      return res.status(404).json({ success: false, error: 'Conversation not found' });
+    }
+    if (picked && req.body?.makeDefault !== false) setDefaultModel(req.user.id, picked.ref);
+    res.json({ success: true, model: picked?.ref || null, name: picked?.name || describeModelRef(req.user.id, null) });
+  } catch (err) {
+    const details = modelErrorDetails(err);
+    res.status(details.code ? 400 : 500).json({ success: false, error: err.message, ...details });
   }
 });
 
@@ -1551,6 +1629,7 @@ router.post('/acp-agents/:name/check', withWorkspaceContext, async (req, res) =>
 
 router.post('/run', withWorkspaceContext, async (req, res) => {
   let heartbeatInterval = null;
+  let releaseModel = null;
   const abortController = new AbortController();
   let clientClosed = false;
   res.on('close', () => {
@@ -1639,8 +1718,6 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
     // The agent picked for this chat (none means Asyncat itself). A default
     // agent is pre-selected in the composer, never applied silently here.
     const profile = profileId ? getProfile(profileId, req.user.id) : null;
-    const resolvedClient = clientForAgent(req.user.id, profile);
-    const { client: aiClient, model, isLocal, supportsNativeTools, providerInfo } = resolvedClient;
 
     const workspaceId = req.workspaceId;
     if (!workspaceId) {
@@ -1663,6 +1740,18 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
       if (heartbeatInterval) clearInterval(heartbeatInterval);
       heartbeatInterval = null;
     });
+
+    // The agent's own model, else this chat's, else the default (chatModel.js).
+    const opened = await openChatModel(req, res, {
+      agentProfile: profile,
+      conversationId,
+      temporary,
+      signal: abortController.signal,
+    });
+    if (!opened) return;
+    releaseModel = opened.release;
+    const resolvedClient = opened.resolved;
+    const { client: aiClient, model, isLocal, supportsNativeTools, providerInfo } = resolvedClient;
 
     const hasProjectContext = Boolean(workingContext && typeof workingContext === 'object' && workingContext.rootId);
     // A chat can belong to a project without using its folders: the project's
@@ -1732,8 +1821,9 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
       workspaceRoot: resolvedWorkingContext.rootPath || resolvedWorkingDir,
       maxRounds: resolvedMaxRounds,
       autoApprove: resolvedAutoApprove,
-      requestPermission: createPermissionRequest(req, res),
-      askUser: createAskUserRequest(req, res),
+      // A local model isn't held while the run waits for the user.
+      requestPermission: waitingFreesModel(opened, createPermissionRequest(req, res)),
+      askUser: waitingFreesModel(opened, createAskUserRequest(req, res)),
       continueSessionId,
       soul: resolvedSoul,
       providerInfo,
@@ -1784,6 +1874,7 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
     }
   } finally {
     if (heartbeatInterval) clearInterval(heartbeatInterval);
+    releaseModel?.();
   }
 });
 

@@ -48,7 +48,6 @@ import {
   normalizeProviderType,
   parseSettings,
   providerRequiresBuiltinServer,
-  providerSupportsTools,
   publicProvider,
 } from '../controllers/ai/providerCatalog.js';
 import { resolveContextWindow } from '../controllers/ai/modelContextResolver.js';
@@ -103,6 +102,15 @@ import {
 import db from '../../db/client.js';
 import { modelInUse } from '../../storage/modelLocks.js';
 import { sealSecret } from '../../lib/secretBox.js';
+import {
+  defaultModelRef,
+  describeModelRef,
+  modelErrorDetails,
+  onDefaultModelChange,
+  saveDefaultFromProfile,
+  saveDefaultLocalModel,
+  setDefaultModel,
+} from '../controllers/ai/chatModel.js';
 import { setConfigValue } from '../../config/appConfig.js';
 import { asyncatHome, listManagedRuntimes, managedEnginesDiskUsage, planManagedRuntimeInstall, removeManagedRuntime } from '../../lib/localEngine.js';
 import { startRuntimeInstallJob, getRuntimeInstallJob, isRuntimeInstallActive, cancelRuntimeInstallJob, activeRuntimeInstallJob } from '../../lib/runtimeInstallJobs.js';
@@ -129,7 +137,9 @@ function activeProviderSnapshot(userId) {
   const localStatus = getLlamaStatus();
   const settings = parseSettings(active?.settings);
   const providerId = active?.provider_id || LLAMA_PROVIDER_ID;
-  const model = providerId === LLAMA_PROVIDER_ID ? localStatus?.model : active?.model;
+  // The default model's abilities, as GET /config gives them: the engine may
+  // hold another chat's model.
+  const model = providerId === LLAMA_PROVIDER_ID ? (active?.model || localStatus?.model) : active?.model;
   const capabilities = getModelCapabilities(providerId, model, settings.model_capabilities);
 
   return {
@@ -153,25 +163,13 @@ function notifyProviderStatus(userId) {
   }
 }
 
+// Picking a model in a chat makes it the default; the Models page hears of it.
+onDefaultModelChange(notifyProviderStatus);
+
 // The context size is kept so the model can be reloaded the same way when
 // Asyncat next starts (see localModelRestore.js).
 function saveBuiltinProviderConfig(userId, filename, ctxSize = getLlamaStatus()?.ctxSize) {
-  const now = new Date().toISOString();
-  const settings = JSON.stringify(Number(ctxSize) > 0 ? { ctx_size: Number(ctxSize) } : {});
-  db.prepare(`
-    INSERT INTO ai_provider_config (user_id, profile_id, provider_type, provider_id, base_url, model, api_key, settings, supports_tools, updated_at)
-    VALUES (?, NULL, 'local', 'llamacpp-builtin', ?, ?, NULL, ?, 0, ?)
-    ON CONFLICT(user_id) DO UPDATE SET
-      profile_id     = NULL,
-      provider_type = 'local',
-      provider_id   = 'llamacpp-builtin',
-      base_url      = excluded.base_url,
-      model         = excluded.model,
-      api_key       = NULL,
-      settings      = excluded.settings,
-      supports_tools = 0,
-      updated_at    = excluded.updated_at
-  `).run(userId, LLAMA_BASE_URL, filename, settings, now);
+  saveDefaultLocalModel(userId, filename, ctxSize);
   notifyProviderStatus(userId);
 }
 
@@ -423,38 +421,6 @@ async function testProvider(row) {
   return text ? `Connected. Test response: ${text.slice(0, 80)}` : 'Connected.';
 }
 
-function saveActiveProviderFromRow(userId, row) {
-  const now = new Date().toISOString();
-  db.prepare(`
-    INSERT INTO ai_provider_config (
-      user_id, profile_id, provider_type, provider_id, base_url, model,
-      api_key, settings, supports_tools, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(user_id) DO UPDATE SET
-      profile_id = excluded.profile_id,
-      provider_type = excluded.provider_type,
-      provider_id = excluded.provider_id,
-      base_url = excluded.base_url,
-      model = excluded.model,
-      api_key = excluded.api_key,
-      settings = excluded.settings,
-      supports_tools = excluded.supports_tools,
-      updated_at = excluded.updated_at
-  `).run(
-    userId,
-    row.id,
-    row.provider_type,
-    row.provider_id,
-    row.base_url,
-    row.model,
-    sealSecret(row.api_key) || null,
-    row.settings || '{}',
-    providerSupportsTools(row) ? 1 : 0,
-    now,
-  );
-  return now;
-}
-
 router.use((_req, res, next) => {
   res.set({
     'Cache-Control': 'no-store, no-cache, must-revalidate, private',
@@ -550,6 +516,27 @@ router.delete('/config', (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── The default model — what new chats, Quick ask and Cats without a model of
+// their own use (see chatModel.js). Setting it loads nothing: a local model
+// loads when a chat first runs on it.
+router.get('/default-model', (req, res) => {
+  try {
+    const model = defaultModelRef(req.user.id);
+    res.json({ success: true, model, name: describeModelRef(req.user.id, model) });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.put('/default-model', (req, res) => {
+  try {
+    res.json({ success: true, ...setDefaultModel(req.user.id, req.body?.model) });
+  } catch (err) {
+    const details = modelErrorDetails(err);
+    res.status(details.code ? 400 : 500).json({ success: false, error: err.message, ...details });
   }
 });
 
@@ -687,7 +674,7 @@ router.patch('/profiles/:id', (req, res) => {
     const row = rowByProfileId(req.user.id, req.params.id);
     const active = db.prepare('SELECT profile_id FROM ai_provider_config WHERE user_id = ?').get(req.user.id);
     if (active?.profile_id === req.params.id) {
-      saveActiveProviderFromRow(req.user.id, row);
+      saveDefaultFromProfile(req.user.id, row);
       notifyProviderStatus(req.user.id);
     }
     res.json({ success: true, profile: publicProvider(row) });
@@ -749,7 +736,7 @@ router.post('/profiles/:id/activate', async (req, res) => {
       }
     }
 
-    const now = saveActiveProviderFromRow(req.user.id, row);
+    const now = saveDefaultFromProfile(req.user.id, row);
     db.prepare('UPDATE ai_provider_profiles SET updated_at = ? WHERE id = ? AND user_id = ?').run(now, row.id, req.user.id);
     const active = db.prepare('SELECT profile_id, provider_type, provider_id, base_url, model, settings, supports_tools FROM ai_provider_config WHERE user_id = ?').get(req.user.id);
     notifyProviderStatus(req.user.id);

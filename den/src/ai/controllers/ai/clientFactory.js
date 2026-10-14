@@ -9,6 +9,7 @@ import { getStatus as getLlamaStatus } from './llamaServerManager.js';
 import { getStatus as getMlxStatus } from './mlxServerManager.js';
 import {
   LLAMA_BASE_URL,
+  LLAMA_PROVIDER_ID,
   MLX_PROVIDER_ID,
   normalizeBaseUrl,
   parseSettings,
@@ -216,6 +217,42 @@ export function getAiClientForUser(userId) {
 }
 
 /**
+ * The built-in llama.cpp server's client, for the model it holds now. A chat
+ * on a local model calls this once its model is loaded (chatModel.js).
+ */
+export function clientForLoadedLocalModel({ settings = {}, profileId = null, name = null } = {}) {
+  const localStatus = assertLocalModelReady();
+  const merged = withLocalServerFacts(parseSettings(settings), localStatus);
+  // As when the built-in server is the default (its config row says no tools).
+  const supportsNativeTools = false;
+  const client = new OpenAIClient({
+    endpoint:     LLAMA_BASE_URL,
+    apiKey:       'local',
+    defaultModel: localStatus.model,
+    providerId:   LLAMA_PROVIDER_ID,
+    settings:     merged,
+  });
+  return {
+    client,
+    model: localStatus.model,
+    isLocal: true,
+    requiresLocalServer: true,
+    supportsNativeTools,
+    provider_type: 'local',
+    providerInfo: {
+      type:              'local',
+      providerId:        LLAMA_PROVIDER_ID,
+      baseUrl:           LLAMA_BASE_URL,
+      model:             localStatus.model,
+      profileId,
+      supportsNativeTools,
+      name,
+      settings:          merged,
+    },
+  };
+}
+
+/**
  * The model a tool should call from inside a run (a sub-agent, a picture to
  * describe): the run's own, so a chat's helpers use the chat's model. Outside
  * a run, the default model.
@@ -233,7 +270,7 @@ export function clientForToolContext(context = {}) {
   return getAiClientForUser(context.userId);
 }
 
-function clientFromProviderRow(row, { allowGlobalApiKeyFallback = true } = {}) {
+export function clientFromProviderRow(row, { allowGlobalApiKeyFallback = true } = {}) {
   const isLocal = row.provider_type === 'local';
   const requiresLocalServer = providerRequiresBuiltinServer(row);
   const baseUrl = normalizeBaseUrl(row.base_url, row.provider_id);

@@ -652,6 +652,30 @@ class ChatService {
     };
   }
 
+  /**
+   * Set (or, with null, remove) one key of a chat's metadata, leaving the
+   * rest as it is. Not activity, so the chat keeps its place among recents.
+   * Returns whether the chat was found.
+   */
+  setMetadataKey(userId, conversationId, key, value) {
+    if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(String(key || ''))) throw new Error('Invalid metadata key');
+    const row = rawDb.prepare(`
+      SELECT workspace_id FROM conversations WHERE id = ? AND user_id = ? AND deleted_at IS NULL
+    `).get(conversationId, userId);
+    if (!row) return false;
+    const current = "CASE WHEN json_valid(metadata) THEN metadata ELSE '{}' END";
+    if (value === null || value === undefined) {
+      rawDb.prepare(`UPDATE conversations SET metadata = json_remove(${current}, '$.${key}') WHERE id = ? AND user_id = ?`)
+        .run(conversationId, userId);
+    } else {
+      rawDb.prepare(`UPDATE conversations SET metadata = json_set(${current}, '$.${key}', json(?)) WHERE id = ? AND user_id = ?`)
+        .run(JSON.stringify(value), conversationId, userId);
+    }
+    this.clearUserWorkspaceCache(userId, row.workspace_id);
+    this.cache.delete(`conversation_${conversationId}_${userId}`);
+    return true;
+  }
+
   // Simplified save conversation using SQLite
   async saveConversation(userId, messages, options = {}) {
     const {
