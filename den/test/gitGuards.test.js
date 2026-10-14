@@ -63,6 +63,14 @@ test('the git folders of a project: its own, a worktree\'s shared one, and submo
     assert.ok(own.readOnly.includes(path.join(dotGit, 'modules/lib/config')));
     assert.ok(!own.readOnly.includes(path.join(dotGit, 'config.worktree')), 'only what exists');
     assert.deepEqual(gitDirsOf(path.join(root, 'none')), []);
+
+    // A git folder without hooks gets an empty one first: a command can't add it then.
+    const bare = path.join(root, 'bare.git');
+    fs.mkdirSync(bare);
+    fs.writeFileSync(path.join(bare, 'config'), '[core]\n');
+    const made = gitGuards({ workspaceRoot: root, roots: [root], gitDirs: () => [bare] });
+    assert.ok(fs.statSync(path.join(bare, 'hooks')).isDirectory());
+    assert.ok(made.readOnly.includes(path.join(bare, 'hooks')));
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

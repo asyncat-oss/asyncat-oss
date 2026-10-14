@@ -9,7 +9,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 import {
-  allowedReads, bwrapArgs, bwrapFailureReason, hiddenFolders, sandboxAvailable, sandboxedCommand, seatbeltProfile, writableRoots,
+  allowedReads, bwrapArgs, bwrapFailureReason, hiddenFolders, prepareReadOnly, sandboxAvailable, sandboxedCommand, seatbeltProfile, writableRoots,
 } from '../src/agent/commandSandbox.js';
 import { runCommandTool } from '../src/agent/tools/shellTools.js';
 
@@ -158,6 +158,31 @@ test('the macOS profile denies reading secret folders', () => {
   assert.match(more, /\(deny network-outbound \(literal "\/private\/var\/run\/docker\.sock"\)\)/);
 });
 
+// bwrap skips a read-only folder that doesn't exist, and a command could then
+// make it, with programs in it, inside the writable ~/.cache.
+test('folders kept read-only inside the caches are made first, and then mounted read-only', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'asyncat-readonly-'));
+  try {
+    fs.mkdirSync(path.join(home, '.cache'));
+    const plan = sandboxedCommand({ file: 'true', workspaceRoot: path.join(home, 'project'), platform: 'linux', home, force: true, hidden: [], flags: [] });
+    const text = plan.args.join(' ');
+    for (const rel of ['.cache/node/corepack', '.cache/pre-commit']) {
+      const folder = path.join(home, rel);
+      assert.ok(fs.statSync(folder).isDirectory(), `${rel} is made`);
+      assert.ok(text.includes(`--ro-bind ${folder} ${folder}`), `${rel} is mounted read-only`);
+    }
+    assert.doesNotMatch(text, /--ro-bind-try/);
+    assert.ok(text.indexOf(`--ro-bind ${path.join(home, '.cache/pre-commit')}`) > text.indexOf(`--bind-try ${path.join(home, '.cache')} `), 'after the writable cache');
+
+    // One that can't be made is left out: a command can't make it either.
+    prepareReadOnly(['/proc/asyncat-cannot-exist/x']);
+    const args = bwrapArgs({ file: 'true', args: [], workspaceRoot: '/work/p', roots: ['/work/p'], hidden: [], readOnly: ['/nowhere/corepack'], inspect: () => ({ kind: null }) });
+    assert.ok(!args.includes('/nowhere/corepack'));
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test("the reason bwrap can't start is said plainly", () => {
   const blocked = { ok: false, stderr: 'bwrap: setting up uid map: Permission denied' };
   assert.match(bwrapFailureReason(blocked, { readFile: (file) => (file.endsWith('apparmor_restrict_unprivileged_userns') ? '1' : null) }), /AppArmor/);
@@ -221,6 +246,8 @@ test('in the sandbox a command finds secret folders empty and PATH folders read-
       `touch '${home}/.dotnet/dotnet' 2>/dev/null; echo "dotnet:$?"`,
       `touch '${home}/.gradle/wrapper/dists/gradle' 2>/dev/null; echo "gradle:$?"`,
       `touch '${home}/.cache/node/corepack/pnpm' 2>/dev/null; echo "corepack:$?"`,
+      // Not there before the command started: made first, so still read-only.
+      `mkdir -p '${home}/.cache/pre-commit/repo' 2>/dev/null; echo "precommit:$?"`,
       // A write into a hidden folder fails, rather than vanishing afterwards.
       `echo new > '${home}/.ssh/known_hosts'`,
       `[ -S '${agentSocket}' ]; echo "agent:$?"`,
@@ -239,7 +266,7 @@ test('in the sandbox a command finds secret folders empty and PATH folders read-
     assert.match(out, /data:1/);
     assert.match(out, /bin:1/, '~/.cargo/bin must not be writable');
     assert.match(out, /registry:ok/);
-    for (const program of ['rustc', 'dotnet', 'gradle', 'corepack']) assert.match(out, new RegExp(`${program}:1`), program);
+    for (const program of ['rustc', 'dotnet', 'gradle', 'corepack', 'precommit']) assert.match(out, new RegExp(`${program}:1`), program);
     assert.match(result.stderr, /Read-only file system/, 'writing into ~/.ssh fails');
     assert.match(out, /agent:1/, 'the SSH agent goes with ~/.ssh');
     assert.match(out, /den:1/, "den's own process (and its environment) must not be visible");

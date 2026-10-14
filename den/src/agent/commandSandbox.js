@@ -34,7 +34,8 @@ const HOME_CACHE_DIRS = [
   'go/pkg/mod', 'go/pkg/sumdb', '.config/configstore', 'Library/Caches',
 ];
 // Inside those, still read-only: the pnpm and Yarn that corepack starts, and
-// the environments pre-commit runs from git hooks.
+// the environments pre-commit runs from git hooks. Each is made before a
+// command starts, so a command can't make it either (prepareReadOnly).
 const HOME_READ_ONLY = ['.cache/node/corepack', '.cache/pre-commit'];
 
 // Folders and files that hold sign-ins, keys and private data. The package
@@ -363,16 +364,29 @@ export function gitDirsOf(root) {
 }
 
 /**
+ * Make the folders that are to be read-only in the sandbox, where missing.
+ * A folder that doesn't exist can't be mounted read-only, and a command
+ * could then make it, with programs in it, inside a folder it may write to.
+ */
+export function prepareReadOnly(folders) {
+  for (const folder of folders) {
+    try { fs.mkdirSync(folder, { recursive: true }); } catch { /* can't be made here, nor by a command */ }
+  }
+}
+
+/**
  * What keeps git's settings and hooks in the project read-only, for git
  * folders a command could otherwise change: { gitDirs, readOnly }. den runs
  * git there later, outside the sandbox (the Code panel, checkpoints, copies),
  * and a command that set core.fsmonitor or added a hook would get a program
  * of its own run there. Each git folder is also bound onto itself, so it can't
- * be renamed and replaced by one with other settings.
+ * be renamed and replaced by one with other settings. A missing hooks folder
+ * is made first, so a command can't add one.
  */
-export function gitGuards({ workspaceRoot, roots, gitDirs = gitDirsOf }) {
+export function gitGuards({ workspaceRoot, roots, gitDirs = gitDirsOf, prepare = prepareReadOnly }) {
   const writable = (target) => roots.some((root) => isPathInside(target, root));
   const dirs = workspaceRoot ? gitDirs(workspaceRoot).filter(writable) : [];
+  prepare(dirs.map((dir) => path.join(dir, 'hooks')));
   const readOnly = dirs
     .flatMap((dir) => ['config', 'config.worktree', 'hooks'].map((name) => path.join(dir, name)))
     .filter((target) => fs.existsSync(target));
@@ -414,7 +428,11 @@ export function bwrapArgs({ file, args, workspaceRoot, cwd = workspaceRoot, root
   // inside a writable folder, like Asyncat's data in a project or /tmp), then
   // any writable folder that a secret one covered (a project in ~/.claude).
   for (const root of roots) mounts.push('--bind-try', root, root);
-  for (const target of readOnly) mounts.push('--ro-bind-try', target, target);
+  // Made beforehand (prepareReadOnly); one that still doesn't exist couldn't
+  // be made, so a command can't make it either.
+  for (const target of readOnly) {
+    if (inspect(target).kind) mounts.push('--ro-bind', target, target);
+  }
   const covers = [];
   const done = new Set();
   for (const item of hidden) {
@@ -516,6 +534,7 @@ export function sandboxedCommand({
   const git = gitGuards({ workspaceRoot, roots, ...(gitDirs ? { gitDirs } : {}) });
 
   if (platform === 'linux') {
+    prepareReadOnly(readOnly);
     const probeFlags = flags ?? (force ? OPTIONAL_FLAGS : probeLinuxSandbox().flags);
     const [innerFile, innerArgs] = net.wrap ? net.wrap(file, args) : [file, args];
     const bwrap = bwrapArgs({ file: innerFile, args: innerArgs, workspaceRoot, cwd: start, roots, hidden: secret, readOnly, git, flags: probeFlags, network: net, env, inspect });
