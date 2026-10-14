@@ -1845,12 +1845,14 @@ function scoreRuntimeAsset(name, platform = process.platform, arch = process.arc
     score += 40;
   }
 
+  // A 32-bit build ("win32", "x86", "i686") is refused; "x86_64" is not one.
+  const thirtyTwoBit = /(?:^|[-_])(win32|x86(?![-_]64)|i[3-6]86)(?:[-_.]|$)/;
   if (arch === 'x64') {
-    if (/(?:^|[-_])(win32|x86|i[3-6]86)(?:[-_.]|$)/.test(lower)) return null;
+    if (thirtyTwoBit.test(lower)) return null;
     if (/(x64|x86_64|amd64)/.test(lower)) score += 25;
     else if (/(arm64|aarch64)/.test(lower)) return null;
   } else if (arch === 'arm64') {
-    if (/(?:^|[-_])(win32|x86|i[3-6]86)(?:[-_.]|$)/.test(lower)) return null;
+    if (thirtyTwoBit.test(lower)) return null;
     if (/(arm64|aarch64)/.test(lower)) score += 25;
     else if (/(x64|x86_64|amd64)/.test(lower)) return null;
   }

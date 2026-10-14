@@ -53,6 +53,29 @@ test('the install plan names the file and size for this computer, without downlo
   }
 });
 
+test('a Linux x86_64 build counts as 64-bit, and a 32-bit one is still refused', async (t) => {
+  if (process.platform !== 'linux' || process.arch !== 'x64') {
+    t.skip('the fake release only has Linux builds');
+    return;
+  }
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    tag_name: 'master-337-1a2b3c4',
+    assets: [
+      { name: 'sd-master-1a2b3c4-bin-Linux-x86.zip', size: 20_000_000 },
+      { name: 'sd-master-1a2b3c4-bin-Linux-Ubuntu-24.04-x86_64.zip', size: 31_000_000 },
+      { name: 'sd-master-1a2b3c4-bin-win-avx2-x64.zip', size: 25_000_000 },
+    ],
+  }), { status: 200, headers: { 'content-type': 'application/json' } });
+  try {
+    const plan = await planManagedRuntimeInstall('sd', { capability: 'cpu_safe' });
+    assert.equal(plan.assetName, 'sd-master-1a2b3c4-bin-Linux-Ubuntu-24.04-x86_64.zip');
+    assert.equal(plan.downloadBytes, 31_000_000);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
 test('Python engines give an estimate and ask nothing online', async () => {
   const realFetch = globalThis.fetch;
   globalThis.fetch = async () => { throw new Error('no network in this test'); };
