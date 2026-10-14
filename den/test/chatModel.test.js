@@ -62,6 +62,8 @@ const { chatService } = await import('../src/ai/controllers/ai/chatService.js');
 const { default: providerRoutes } = await import('../src/ai/routes/providerRoutes.js');
 const { default: aiAgentRoutes } = await import('../src/ai/routes/aiAgentRoutes.js');
 const { createProfile } = await import('../src/agent/ProfileManager.js');
+const { insertCat, hydrateCat, ownedCatRow } = await import('../src/cats/catStore.js');
+const { runCat } = await import('../src/cats/catRunner.js');
 const llama = await import('../src/ai/controllers/ai/llamaServerManager.js');
 const { getModelsDir } = await import('../src/ai/controllers/ai/modelManager.js');
 const refs = await import('../src/ai/controllers/ai/modelRefs.js');
@@ -245,6 +247,24 @@ test('plain chats use their own model too; Quick ask uses the default', async ()
   const quick = await chat();
   assert.equal(quick.answer, 'I am cherry-model.');
   assert.equal(quick.events.find((event) => event.type === 'chat_model').data.source, 'default');
+});
+
+test("a Cat without a model follows the default; one with its own doesn't move", async () => {
+  await call('PUT', '/api/ai/providers/default-model', { model: apple });
+  const follower = hydrateCat(ownedCatRow(userId, insertCat(userId, { name: 'Follower', mission: 'Say which model you are.' }, { workspaceId })));
+  assert.equal(follower.providerProfileId, null, 'nothing is kept at creation');
+  assert.equal(follower.modelSource, 'default');
+  const own = hydrateCat(ownedCatRow(userId, insertCat(userId, { name: 'Own', mission: 'Say which model you are.', providerProfileId: berry.profileId }, { workspaceId })));
+  assert.equal(own.modelSource, 'own');
+
+  const wake = { kind: 'manual' };
+  assert.equal((await runCat({ cat: follower, wake })).answer, 'I am apple-model.');
+  assert.equal((await runCat({ cat: own, wake })).answer, 'I am berry-model.');
+
+  // Picking a model in a chat changes the default, so the follower follows.
+  await call('PUT', `/api/ai/chats/${await newChat('Moves the default')}/model`, { model: cherry });
+  assert.equal((await runCat({ cat: follower, wake })).answer, 'I am cherry-model.');
+  assert.equal((await runCat({ cat: own, wake })).answer, 'I am berry-model.');
 });
 
 test('chats on different local models load theirs in turn; cloud models leave llama-server alone', async () => {

@@ -132,7 +132,7 @@ export const createCatTool = {
       timezone: { type: 'string', description: 'IANA time zone such as "Europe/London". Defaults to this computer\'s.' },
       project_id: { type: 'string', description: 'A project it shares with the user. Defaults to this chat\'s project; "none" for none.' },
       profile_id: { type: 'string', description: 'The agent to use as its brain (its instructions, files and model).' },
-      provider_profile_id: { type: 'string', description: 'A saved model to use instead of the brain\'s.' },
+      provider_profile_id: { type: 'string', description: 'A saved model to use instead of the brain\'s. Without either, the Cat follows the default model as it changes.' },
       freedom: { type: 'string', enum: ['ask_first', 'ask_risky', 'alone'], description: FREEDOM_HELP },
       allowed_sites: { type: 'array', items: { type: 'string' }, description: 'If given, the only sites it may visit, e.g. ["example.com"].' },
       pre_approved_tools: { type: 'array', items: { type: 'string' }, description: 'Tools it may use without asking, e.g. ["mail_send_message"]. Only list tools the user agreed to.' },

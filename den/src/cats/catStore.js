@@ -178,6 +178,18 @@ function lookupName(table, id) {
   }
 }
 
+/** Whether a Cat's brain (its agent, else the default agent) has a model of its own. */
+function brainHasModel(row) {
+  try {
+    const brain = row.profile_id
+      ? db.prepare('SELECT model_profile_id FROM agent_profiles WHERE id = ? AND user_id = ?').get(row.profile_id, row.user_id)
+      : db.prepare('SELECT model_profile_id FROM agent_profiles WHERE user_id = ? AND is_default = 1 LIMIT 1').get(row.user_id);
+    return Boolean(brain?.model_profile_id);
+  } catch {
+    return false;
+  }
+}
+
 export function defaultWorkspaceId(userId) {
   try {
     return db.prepare('SELECT id FROM workspaces WHERE owner_id = ? ORDER BY created_at ASC LIMIT 1').get(userId)?.id || null;
@@ -579,6 +591,8 @@ export function hydrateCat(row, { running = null, queued = 0, includeRuns = true
     model: snapshot?.model
       ? { name: lookupName('ai_provider_profiles', row.provider_profile_id) || snapshot.name || snapshot.provider_id || null, model: snapshot.model }
       : null,
+    // Whose model it runs on: its own, its brain's, or the default model.
+    modelSource: row.provider_profile_id || snapshot?.model ? 'own' : brainHasModel(row) ? 'brain' : 'default',
     projectId: row.project_id || null,
     projectName: lookupName('projects', row.project_id),
     folderMode: row.folder_mode || 'own',
@@ -659,15 +673,13 @@ export function insertCat(userId, input = {}, { workspaceId = null, createdBy = 
   if (folderMode === 'project' && !projectId) throw catError('Pick the project whose folder the Cat uses.');
   const folder = checkFolder(folderMode, input.folder);
   const triggers = checkTriggerList(input.triggers) || [];
-  // The model: one picked for the Cat, else its brain's, else (with no brain)
-  // the model in use now, kept so a later change of chat model doesn't move it.
+  // The model: one picked for the Cat, else its brain's, else the default
+  // model (chatModel.js), followed as the default changes.
   let provider = { providerProfileId: null, providerSnapshot: {} };
   if (keepTimes && (input.providerProfileId || input.providerSnapshot)) {
     provider = { providerProfileId: input.providerProfileId || null, providerSnapshot: input.providerSnapshot || {} };
   } else if (input.providerProfileId) {
     provider = resolveScheduledProvider(userId, input.providerProfileId);
-  } else if (!input.profileId) {
-    try { provider = resolveScheduledProvider(userId, null); } catch { /* chosen when it runs */ }
   }
   const timeout = Number(input.approvalTimeoutMinutes ?? 120);
   const id = input.id || randomUUID();
@@ -739,7 +751,7 @@ export function patchCat(userId, id, patch = {}, { now = new Date() } = {}) {
       sets.provider_profile_id = provider.providerProfileId;
       sets.provider_snapshot = JSON.stringify(provider.providerSnapshot || {});
     } else {
-      // No model of its own: the brain's model, else the model in use now.
+      // No model of its own: the brain's model, else the default model.
       sets.provider_profile_id = null;
       sets.provider_snapshot = '{}';
     }

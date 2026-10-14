@@ -14,6 +14,8 @@ import { loadSoul } from '../agent/prompts/agentSystemPrompt.js';
 import { scheduledRunToolNames } from '../agent/toolScopes.js';
 import { formatMultimodalCapabilityPrompt, getMultimodalCapabilities } from '../agent/multimodalCapabilities.js';
 import { getAiClientForScheduledProvider } from '../ai/controllers/ai/clientFactory.js';
+import { defaultModelRef, openModel } from '../ai/controllers/ai/chatModel.js';
+import { LLAMA_PROVIDER_ID } from '../ai/controllers/ai/providerCatalog.js';
 import { buildChatContext, projectForChat } from '../knowledge/chatContext.js';
 import { describeSites } from './catSites.js';
 
@@ -28,17 +30,36 @@ function soulFor(profile) {
   return null;
 }
 
-/** The Cat's own model, else its brain's, else the one in use now. */
-export function clientForCat(cat, profile) {
-  const pinned = cat.providerProfileId || cat.providerSnapshot?.model;
-  if (!pinned && profile?.model_profile_id) {
+function noRelease() {}
+const noWaiting = (wait) => wait();
+
+/**
+ * The model a Cat runs on: its own, else its brain's, else the default model
+ * (chatModel.js). A Cat that follows the default changes model when the
+ * default does; one with a model of its own never does. A local model is
+ * loaded for the run if another one is loaded. Resolves to openModel's
+ * { ref, name, resolved, release, whileWaiting }.
+ */
+export async function openCatModel(cat, profile, options = {}) {
+  const snapshot = cat.providerSnapshot || {};
+  if (cat.providerProfileId) return openModel(cat.userId, { kind: 'profile', profileId: cat.providerProfileId }, options);
+  if (snapshot.model && snapshot.provider_id === LLAMA_PROVIDER_ID) {
+    return openModel(cat.userId, { kind: 'local', file: snapshot.model }, options);
+  }
+  if (snapshot.model) {
+    // A model kept from before saved models had ids (old scheduled tasks).
+    const resolved = getAiClientForScheduledProvider(cat.userId, null, snapshot);
+    return { ref: null, name: snapshot.name || snapshot.model, resolved, release: noRelease, whileWaiting: noWaiting };
+  }
+  if (profile?.model_profile_id) {
     try {
-      return getAiClientForScheduledProvider(cat.userId, profile.model_profile_id);
+      return await openModel(cat.userId, { kind: 'profile', profileId: profile.model_profile_id }, options);
     } catch (err) {
-      console.warn(`[cats] ${profile.name}'s model is unavailable for ${cat.name}, using the current one: ${err.message}`);
+      if (err?.name === 'AbortError') throw err;
+      console.warn(`[cats] ${profile.name}'s model is unavailable for ${cat.name}, using the default one: ${err.message}`);
     }
   }
-  return getAiClientForScheduledProvider(cat.userId, cat.providerProfileId, pinned ? cat.providerSnapshot : null);
+  return openModel(cat.userId, defaultModelRef(cat.userId), options);
 }
 
 function limitsText(cat) {
@@ -90,10 +111,6 @@ export function buildCatGoal({ cat, wake }) {
 }
 
 /**
- * Run a Cat once. `cat` is hydrated (catStore.hydrateCat). Resolves to
- * { answer, sessionId, stopReason, usage }; rejects on failure or abort.
- */
-/**
  * The connectors a Cat may use: its own choice, or else its brain agent's;
  * null means all of them.
  */
@@ -103,9 +120,28 @@ export function catConnectors(cat, profile) {
   return null;
 }
 
+/**
+ * Run a Cat once. `cat` is hydrated (catStore.hydrateCat). Resolves to
+ * { answer, sessionId, stopReason, usage }; rejects on failure or abort.
+ */
 export async function runCat({ cat, wake, abortSignal, conversationHistory = [], onEvent, requestPermission, askUser }) {
   const profile = cat.profileId ? getProfile(cat.profileId, cat.userId) : getDefaultProfile(cat.userId);
-  const resolvedClient = clientForCat(cat, profile);
+  const opened = await openCatModel(cat, profile, { signal: abortSignal });
+  // A Cat may wait hours for an answer; a local model isn't held meanwhile.
+  const whileWaiting = (fn) => (fn ? (...args) => opened.whileWaiting(() => fn(...args)) : fn);
+  try {
+    return await runCatWith({
+      cat, wake, abortSignal, conversationHistory, onEvent, profile,
+      requestPermission: whileWaiting(requestPermission),
+      askUser: whileWaiting(askUser),
+      resolvedClient: opened.resolved,
+    });
+  } finally {
+    opened.release();
+  }
+}
+
+async function runCatWith({ cat, wake, abortSignal, conversationHistory, onEvent, requestPermission, askUser, profile, resolvedClient }) {
   const { client, model, isLocal, supportsNativeTools, providerInfo } = resolvedClient;
 
   const folder = cat.folder;
