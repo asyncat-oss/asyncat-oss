@@ -293,15 +293,15 @@ export class HeadlessBrowser {
   async #settle(state, page, before) {
     await sleep(200);
     if (page.url() !== before.url) {
-      // The wait starts again when the navigation replaces the document it was
-      // running in, so the title is read from the new page, not mid-way.
-      for (let tries = 0; tries < 3; tries += 1) {
-        try {
-          await page.waitForFunction(() => document.readyState !== 'loading', { timeout: 10_000, polling: 100 });
-          break;
-        } catch (err) {
-          if (!/context was destroyed|navigat/i.test(String(err?.message || err))) break;
-        }
+      // The address changes before the new document has parsed, and a check
+      // can still land in the old one while it is torn down: wait until the
+      // document at the new address says it has loaded, so the title is the
+      // new page's, not read mid-way.
+      const deadline = Date.now() + 10_000;
+      while (Date.now() < deadline) {
+        const loadedAt = await page.evaluate(() => (document.readyState !== 'loading' ? location.href : null)).catch(() => null);
+        if (loadedAt && loadedAt === page.url()) break;
+        await sleep(100);
       }
       await sleep(150);
     }
