@@ -1,5 +1,5 @@
 import { execFileSync } from 'child_process';
-import { DIFF_SAFE, gitEnv } from './gitEnv.js';
+import { DIFF_SAFE, STATUS_SAFE, gitEnv } from './gitEnv.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -215,7 +215,7 @@ export function getGitState(cwd) {
   const repo = ensureRepo(cwd);
   if (!repo.success) return { success: true, detected: false, reason: repo.error };
 
-  const status = runGit(['status', '--porcelain=v1', '-b', '-uall'], repo.root, 10000);
+  const status = runGit(['status', ...STATUS_SAFE, '--porcelain=v1', '-b', '-uall'], repo.root, 10000);
   const remotes = runGit(['remote', '-v'], repo.root, 5000);
   const parsed = parseStatus(status.output || '');
   const groups = groupFiles(parsed.files);

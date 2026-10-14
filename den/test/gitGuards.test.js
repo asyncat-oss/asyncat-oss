@@ -11,9 +11,11 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 import { bwrapArgs, gitDirsOf, gitGuards, sandboxAvailable, sandboxedCommand, seatbeltProfile } from '../src/agent/commandSandbox.js';
-import { gitEnv, repoFilterKeys } from '../src/agent/gitEnv.js';
+import { gitEnv, repoProgramKeys } from '../src/agent/gitEnv.js';
 import { childEnv } from '../src/agent/childEnv.js';
 import { getGitState, getGitDiff } from '../src/agent/gitService.js';
+import { gitLogTool } from '../src/agent/tools/gitTools.js';
+import { codebaseMetricsTool } from '../src/agent/tools/codebaseMetricsTools.js';
 import { hasBin } from '../src/agent/tools/shared.js';
 
 const noGit = !hasBin('git') && 'git is not installed';
@@ -82,7 +84,7 @@ test('bwrap pins the git folder and keeps its settings and hooks read-only, afte
   assert.ok(profile.indexOf('(deny file-write* (literal "/Users/me/p/.git")') > profile.indexOf('(allow file-write* (subpath "/Users/me/p")'));
 });
 
-test("a repository's own filter programs are found, git-lfs's are kept", () => {
+test("a repository's own programs are found, git-lfs's filters are kept", () => {
   const scoped = [
     'global', 'filter.lfs.clean\ngit-lfs clean -- %f',
     'local', 'filter.lfs.smudge\ngit-lfs smudge -- %f',
@@ -92,14 +94,27 @@ test("a repository's own filter programs are found, git-lfs's are kept", () => {
     'global', 'filter.mine.clean\ntrusted-tool',
     '',
   ].join('\0');
-  assert.deepEqual(repoFilterKeys(scoped), ['filter.evil.clean', 'filter.Odd.Name.process']);
-  assert.deepEqual(repoFilterKeys('filter.x.smudge\nevil\0core.bare\nfalse\0', { scoped: false }), ['filter.x.smudge']);
+  assert.deepEqual(repoProgramKeys(scoped), ['filter.evil.clean', 'filter.Odd.Name.process']);
+  assert.deepEqual(repoProgramKeys('filter.x.smudge\nevil\0core.bare\nfalse\0', { scoped: false }), ['filter.x.smudge']);
+
+  // Every other setting that names a program, in the repository's own config.
+  const programs = [
+    'gpg.program', 'gpg.ssh.program', 'gpg.x509.program', 'gpg.ssh.defaultKeyCommand', 'diff.pic.textconv', 'diff.pic.command',
+    'diff.external', 'merge.ours.driver', 'core.sshCommand', 'core.askPass', 'core.pager', 'core.editor', 'core.gitProxy',
+    'pager.log', 'sequence.editor', 'credential.helper', 'credential.https://example.com.helper', 'remote.origin.uploadpack',
+    'hook.evil.command', 'hook.evil.event',
+  ];
+  const found = repoProgramKeys([...programs.flatMap((key) => ['local', `${key}\nrun-me`]), 'global', 'gpg.program\ngpg2', 'local', 'user.name\nDemo', ''].join('\0'));
+  assert.deepEqual(found, programs);
 
   const env = gitEnv(null, { source: { PATH: '/bin', GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'user.name', GIT_CONFIG_VALUE_0: 'Demo', OPENAI_API_KEY: 'sk-demo' } });
-  assert.equal(env.GIT_CONFIG_COUNT, '3', 'after the settings already passed');
-  assert.equal(env.GIT_CONFIG_KEY_0, 'user.name');
+  assert.equal(env.GIT_CONFIG_KEY_0, 'user.name', 'after the settings already passed');
   assert.equal(env.GIT_CONFIG_KEY_1, 'core.fsmonitor');
   assert.equal(env.GIT_CONFIG_KEY_2, 'core.hooksPath');
+  const settings = Object.fromEntries(Array.from({ length: Number(env.GIT_CONFIG_COUNT) }, (_, i) => [env[`GIT_CONFIG_KEY_${i}`], env[`GIT_CONFIG_VALUE_${i}`]]));
+  assert.equal(settings['log.showSignature'], 'false', 'no signature checks, which run gpg');
+  assert.equal(settings['protocol.ext.allow'], 'never');
+  assert.equal(settings['submodule.recurse'], 'false');
   assert.equal(env.OPENAI_API_KEY, undefined, 'without secrets');
   const asked = gitEnv(null, { asked: true, source: { PATH: '/bin' } });
   assert.equal(asked.GIT_CONFIG_COUNT, '1', 'a commit someone asked for keeps its hooks');
@@ -134,6 +149,67 @@ test("den's own git runs none of a repository's programs", { skip: noGit }, () =
     // Plain git does run them: the test plants what it means to.
     spawnSync('git', ['status', '--porcelain'], { cwd: project, env: childEnv() });
     assert.ok(fs.existsSync(marker('fsmonitor')) || fs.existsSync(marker('filter')), 'the planted programs work');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// A repository the sandboxed command makes itself, nested in the project,
+// where none of .git is read-only: signature checks run gpg.program, hooks
+// can be named in settings, and git status looks inside submodules with
+// their own settings. The agent's read-only git tools and the Code panel run
+// none of them.
+test("den's own git runs no program a nested repository names", { skip: noGit }, async () => {
+  const root = scratchDir('git-nested');
+  const project = path.join(root, 'project');
+  const nested = path.join(project, 'nested');
+  const marker = (name) => path.join(root, `ran-${name}`);
+  const gpg = path.join(root, 'fake-gpg');
+  fs.writeFileSync(gpg, [
+    '#!/bin/sh',
+    'case " $* " in',
+    `  *" -bsau "*) cat >/dev/null; printf '\\n[GNUPG:] SIG_CREATED D 1 8 00 0 0\\n' >&2; printf -- '-----BEGIN PGP SIGNATURE-----\\n\\nZmFrZQ==\\n-----END PGP SIGNATURE-----\\n';;`,
+    `  *) touch '${marker('gpg')}'; exit 1;;`,
+    'esac',
+    '',
+  ].join('\n'), { mode: 0o755 });
+  try {
+    fs.mkdirSync(nested, { recursive: true });
+    git(project, 'init', '-q');
+    fs.writeFileSync(path.join(project, 'readme.txt'), 'project\n');
+    git(project, 'add', 'readme.txt');
+    git(project, 'commit', '-qm', 'project');
+
+    git(nested, 'init', '-q');
+    fs.writeFileSync(path.join(nested, 'a.txt'), 'one\n');
+    git(nested, 'add', 'a.txt');
+    git(nested, '-c', `gpg.program=${gpg}`, '-c', 'user.signingkey=demo', 'commit', '-S', '-qm', 'signed');
+    git(nested, 'config', 'gpg.program', gpg);
+    git(nested, 'config', 'log.showSignature', 'true');
+    git(nested, 'config', 'hook.evil.event', 'post-index-change');
+    git(nested, 'config', 'hook.evil.command', `touch '${marker('hook')}'`);
+    git(nested, 'config', 'filter.demo.clean', `sh -c "touch '${marker('filter')}'; cat"`);
+    fs.writeFileSync(path.join(nested, '.gitattributes'), '* filter=demo\n');
+    // The nested repository becomes a submodule of the project, with a change inside.
+    git(project, 'add', 'nested');
+    git(project, 'commit', '-qm', 'nested');
+    fs.writeFileSync(path.join(nested, 'a.txt'), 'two\n');
+
+    const context = { workingDir: project, workspaceRoot: project };
+    const log = await gitLogTool.execute({ path: 'nested' }, context);
+    assert.equal(log.success, true, log.error);
+    assert.match(log.commits, /signed/);
+    const metrics = await codebaseMetricsTool.execute({ path: 'nested' }, context);
+    assert.equal(metrics.success, true, metrics.error);
+    assert.equal(getGitState(nested).detected, true);
+    assert.equal(getGitState(project).detected, true);
+    for (const name of ['gpg', 'hook', 'filter']) assert.equal(fs.existsSync(marker(name)), false, `${name} ran`);
+
+    // Plain git does run them: the test plants what it means to.
+    spawnSync('git', ['log', '-1'], { cwd: nested, env: childEnv() });
+    assert.ok(fs.existsSync(marker('gpg')), 'the planted gpg works');
+    spawnSync('git', ['status', '--porcelain'], { cwd: project, env: childEnv() });
+    assert.ok(fs.existsSync(marker('filter')) || fs.existsSync(marker('hook')), 'the planted filter or hook works');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

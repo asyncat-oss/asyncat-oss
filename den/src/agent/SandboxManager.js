@@ -11,7 +11,7 @@ import path from 'path';
 import { randomUUID } from 'crypto';
 import db from '../db/client.js';
 import { getWorkspaceRoot } from '../files/fileExplorerService.js';
-import { DIFF_SAFE, gitEnv } from './gitEnv.js';
+import { DIFF_SAFE, STATUS_SAFE, gitEnv } from './gitEnv.js';
 import { hiddenFolders, runInSandbox } from './commandSandbox.js';
 
 const COPY_SKIP = new Set([
@@ -245,7 +245,7 @@ function filePatch(row, filePath) {
   const abs = path.resolve(row.sandbox_path, rel);
   if (!isInside(abs, row.sandbox_path)) throw new Error('filePath must stay inside the copy.');
 
-  const status = runGitResult(['status', '--porcelain=v1', '--', rel], row.sandbox_path).stdout.trim();
+  const status = runGitResult(['status', ...STATUS_SAFE, '--porcelain=v1', '--', rel], row.sandbox_path).stdout.trim();
   if (status.startsWith('??')) {
     const result = runGitResult(['diff', ...DIFF_SAFE, '--no-index', '--binary', '--', '/dev/null', rel], row.sandbox_path);
     return result.stdout || '';
@@ -304,7 +304,7 @@ export function getSandboxStatus(userId, id) {
     try {
       sandbox.git = {
         branch: runGit(['branch', '--show-current'], row.sandbox_path),
-        status: runGit(['status', '--short'], row.sandbox_path),
+        status: runGit(['status', ...STATUS_SAFE, '--short'], row.sandbox_path),
       };
     } catch (err) {
       sandbox.git = { error: err.message };
@@ -326,7 +326,7 @@ export function getSandboxDiff(userId, id, { filePath = null, includePatch = fal
     };
   }
 
-  const statusResult = runGitResult(['status', '--porcelain=v1'], row.sandbox_path);
+  const statusResult = runGitResult(['status', ...STATUS_SAFE, '--porcelain=v1'], row.sandbox_path);
   const files = parseGitStatus(statusResult.stdout || '');
   const summary = {
     changed: files.length,
@@ -358,7 +358,7 @@ export function createSandboxPatch(userId, id, { filePaths = [] } = {}) {
     success: true,
     sandbox: getSandboxStatus(userId, id),
     patch,
-    fileCount: normalizePathList(filePaths).length || parseGitStatus(runGitResult(['status', '--porcelain=v1'], row.sandbox_path).stdout).length,
+    fileCount: normalizePathList(filePaths).length || parseGitStatus(runGitResult(['status', ...STATUS_SAFE, '--porcelain=v1'], row.sandbox_path).stdout).length,
   };
 }
 
