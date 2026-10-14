@@ -7,9 +7,7 @@ import { useState } from 'react';
 import PropTypes from 'prop-types';
 import Button from '../../components/ui/Button.jsx';
 import Select from '../../components/ui/Select.jsx';
-import { Progress } from '../../components/ui/Progress.jsx';
 import { PropertyRow, RowGroup, SettingsSection } from '../../components/ui/Rows.jsx';
-import Skeleton from '../../components/ui/Skeleton.jsx';
 import { formatBytes } from '../../components/ui/progressFormat.js';
 import { errorDetail } from '../../components/toastContext.js';
 import ChooserRow from './ChooserRow.jsx';
@@ -22,10 +20,9 @@ import KeyRow from './KeyRow.jsx';
 import MicTest from './MicTest.jsx';
 import PlayButton from './PlayButton.jsx';
 import RunsOnRow from './RunsOnRow.jsx';
-import { LoadingRows } from './SetupParts.jsx';
+import { LoadingRows, PlannedSize, StepRow, ValueWithError } from './SetupParts.jsx';
 import SpeakTest from './SpeakTest.jsx';
 import { mediaApi, mediaUrl } from './mediaApi.js';
-import { sizeText, stepErrorText, stepProgressText, stepSizeText } from './mediaFormat.js';
 import { listeningModelName, providerLabel } from './providers.js';
 import { usePlayer } from './usePlayer.js';
 import {
@@ -34,52 +31,7 @@ import {
 
 const ERROR_TEXT = 'text-[12px] leading-5 text-red-600 dark:text-red-400';
 
-// A row's value with what went wrong on it underneath.
-function withError(text, error) {
-  if (!error) return text;
-  return (
-    <span className="block min-w-0">
-      <span className="block truncate">{text}</span>
-      <span role="alert" className={`block whitespace-normal ${ERROR_TEXT}`}>{stepErrorText(error)}</span>
-    </span>
-  );
-}
-
-// A model or voice a running setup is downloading: how far it is, and a bar.
-function StepRow({ label, name, meta, step }) {
-  const running = step.status === 'running';
-  const percent = step.total ? (Number(step.downloaded) / Number(step.total)) * 100 : Number(step.progress) || 0;
-  return (
-    <PropertyRow
-      label={label}
-      value={name}
-      meta={meta}
-      status={stepProgressText(step)}
-      open={running || Boolean(step.error)}
-      data-setup-step={step.key}
-    >
-      <div className="sm:pl-36">
-        {running ? <Progress value={percent} label={`Downloading ${name}`} /> : null}
-        {step.error ? <p role="alert" className={ERROR_TEXT}>{stepErrorText(step.error)}</p> : null}
-      </div>
-    </PropertyRow>
-  );
-}
-
-StepRow.propTypes = {
-  label: PropTypes.string.isRequired,
-  name: PropTypes.node,
-  meta: PropTypes.arrayOf(PropTypes.node),
-  step: PropTypes.object.isRequired,
-};
-
-// The size column of a first-run row: on this computer, the planned size, or a bar while it is checked.
-function plannedSize({ path, step, plan, bytes }) {
-  if (path) return 'On this computer';
-  if (step) return stepSizeText(step);
-  if (plan?.loading) return <Skeleton className="h-3 w-12" />;
-  return plan?.error ? 'Size unknown' : sizeText(bytes);
-}
+const withError = (text, error) => (error ? <ValueWithError error={error}>{text}</ValueWithError> : text);
 
 const pickDraft = {
   stt: (pick) => (String(pick?.value || '').startsWith('file:') ? { path: pick.value.slice(5) } : { whisper: String(pick?.value || '').replace(/^catalog:/, ''), english: Boolean(pick?.english) }),
@@ -283,7 +235,7 @@ export default function VoiceGroup({
             label="Model"
             value={withError(picked.name, failedFile)}
             meta={!failedFile && picked.recommended ? 'Recommended' : null}
-            status={plannedSize({ path: picked.path, step: plan?.steps?.file, plan, bytes: picked.bytes })}
+            status={<PlannedSize path={picked.path} step={plan?.steps?.file} plan={plan} bytes={picked.bytes} />}
           >
             {chooser({ draft: pickDraft.stt(pick), onPick })}
           </ChooserRow>,
@@ -329,7 +281,7 @@ export default function VoiceGroup({
             status={(
               <span className="flex items-center gap-3">
                 {playFor(picked)}
-                {plannedSize({ path: picked.path, step: plan?.steps?.file, plan, bytes: picked.bytes })}
+                <PlannedSize path={picked.path} step={plan?.steps?.file} plan={plan} bytes={picked.bytes} />
               </span>
             )}
           >

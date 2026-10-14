@@ -1,14 +1,19 @@
 // Pieces the Voice and Images tabs share around their groups: the offline
 // notice, the status lines with their buttons, the first-run line and its
-// one download button, and the rows shown while a group loads.
+// one download button, the rows shown while a group loads, and the parts of
+// a row a setup changes (its progress, its planned size, what went wrong).
 
 import PropTypes from 'prop-types';
 import { WifiOff } from 'lucide-react';
 import Notice from '../../components/ui/Notice.jsx';
-import { RowGroup } from '../../components/ui/Rows.jsx';
+import { Progress } from '../../components/ui/Progress.jsx';
+import { PropertyRow, RowGroup } from '../../components/ui/Rows.jsx';
 import Skeleton from '../../components/ui/Skeleton.jsx';
 import StatusLine from '../../components/ui/StatusLine.jsx';
 import ActionButton from './ActionButton.jsx';
+import { sizeText, stepErrorText, stepProgressText, stepSizeText } from './mediaFormat.js';
+
+const ERROR_TEXT = 'text-[12px] leading-5 text-red-600 dark:text-red-400';
 
 /** "You're offline…" above the first group, only while offline. */
 export function OfflineNotice({ offline }) {
@@ -118,3 +123,58 @@ export function LoadingRows({ count = 3 }) {
 }
 
 LoadingRows.propTypes = { count: PropTypes.number };
+
+/** A row's value with what went wrong on it underneath. */
+export function ValueWithError({ error, children }) {
+  return (
+    <span className="block min-w-0">
+      <span className="block truncate">{children}</span>
+      <span role="alert" className={`block whitespace-normal ${ERROR_TEXT}`}>{stepErrorText(error)}</span>
+    </span>
+  );
+}
+
+ValueWithError.propTypes = { error: PropTypes.string, children: PropTypes.node };
+
+/** A model or voice a running setup is downloading: how far it is, and a bar. */
+export function StepRow({ label, name, meta, step }) {
+  const running = step.status === 'running';
+  const percent = step.total ? (Number(step.downloaded) / Number(step.total)) * 100 : Number(step.progress) || 0;
+  return (
+    <PropertyRow
+      label={label}
+      value={name}
+      meta={meta}
+      status={stepProgressText(step)}
+      open={running || Boolean(step.error)}
+      data-setup-step={step.key}
+    >
+      <div className="sm:pl-36">
+        {running ? <Progress value={percent} label={`Downloading ${name}`} /> : null}
+        {step.error ? <p role="alert" className={ERROR_TEXT}>{stepErrorText(step.error)}</p> : null}
+      </div>
+    </PropertyRow>
+  );
+}
+
+StepRow.propTypes = {
+  label: PropTypes.string.isRequired,
+  name: PropTypes.node,
+  meta: PropTypes.arrayOf(PropTypes.node),
+  step: PropTypes.object.isRequired,
+};
+
+/** The size column of a first-run row: on this computer, the planned size, or a bar while it is checked. */
+export function PlannedSize({ path = null, step = null, plan = null, bytes = null }) {
+  if (path) return 'On this computer';
+  if (step) return stepSizeText(step);
+  if (plan?.loading) return <Skeleton className="h-3 w-12" />;
+  return plan?.error ? 'Size unknown' : sizeText(bytes);
+}
+
+PlannedSize.propTypes = {
+  path: PropTypes.string,
+  step: PropTypes.object,
+  plan: PropTypes.shape({ loading: PropTypes.bool, error: PropTypes.string }),
+  bytes: PropTypes.number,
+};
