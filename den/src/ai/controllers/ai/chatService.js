@@ -992,20 +992,26 @@ class ChatService {
       const effectiveWorkspaceId = await this.getCurrentWorkspaceId(userId, workspaceId, databaseClient);
 
       const allowedFields = ['title', 'is_pinned', 'is_archived', 'metadata', 'project_ids'];
-      const updateData = { updated_at: new Date().toISOString() };
+      const updateData = {};
 
       for (const [field, value] of Object.entries(updates)) {
         if (allowedFields.includes(field)) {
           if (field === 'project_ids') {
             updateData[field] = Array.isArray(value) ? value.filter(Boolean).map(String).slice(0, 1) : [];
+          } else if (field === 'is_pinned' || field === 'is_archived') {
+            updateData[field] = value === true || value === 1 || value === '1' || value === 'true';
           } else {
             updateData[field] = value;
           }
         }
       }
 
-      if (Object.keys(updateData).length === 1) {
+      if (Object.keys(updateData).length === 0) {
         throw new Error('No valid fields to update');
+      }
+      // Pinning isn't activity: a pinned chat keeps its place among recents.
+      if (Object.keys(updateData).some((field) => field !== 'is_pinned')) {
+        updateData.updated_at = new Date().toISOString();
       }
 
       const { data, error } = await dbClient
