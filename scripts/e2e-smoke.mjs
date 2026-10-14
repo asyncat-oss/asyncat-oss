@@ -4,8 +4,9 @@
 // OpenAI-compatible model, then drives the app in a headless browser through
 // the main flows: chat, a project with instructions, agents, Cats, a note made
 // by the agent, connectors (with a fake MCP server), an ACP agent (a fake
-// one), searching inside chats, pinning a chat, Models → Voice and Images
-// (and a Models search that finds a voice file), Files, and the main pages.
+// one), searching inside chats, pinning a chat, a model per chat, Models →
+// Voice and Images (and a Models search that finds a voice file), Files, and
+// the main pages.
 //
 // Needs a Chromium-based browser (Chrome, Chromium, Edge or Brave), found the
 // same way PDF export finds one; PUPPETEER_EXECUTABLE_PATH picks another.
@@ -128,6 +129,8 @@ function startFakeModel(port) {
       const calledNote = messages.some((m) => m.role === 'assistant' && String(m.content || '').includes('"create_note"'));
       const calledConnector = messages.some((m) => m.role === 'assistant' && String(m.content || '').includes('mcp__smoke_notes__echo'));
       let content = ANSWER;
+      // Says which model it was called as, so a test can tell models apart.
+      if (/^which model/i.test(lastUser)) content = `Answer from ${json.model}.`;
       if (/make a chart note/i.test(lastUser) && system.includes('<tool_call>') && !calledNote) {
         content = `<tool_call>\n${JSON.stringify({ name: 'create_note', arguments: NOTE })}\n</tool_call>`;
       }
@@ -490,6 +493,66 @@ async function main() {
     await clickText('[role="menuitem"]', 'Unpin');
     await waitFor(async () => !(await pinnedInSidebar()), { timeout: 10000, what: 'the sidebar to drop the pin' });
     await waitFor(async () => !(await api('GET', '/api/ai/chats?limit=80&mode=all')).conversations.some((chat) => chat.is_pinned), { timeout: 10000, what: 'the unpin to be saved' });
+    await noCrash();
+  });
+
+  await check('each chat keeps its own model, and new chats start with the one picked last', async () => {
+    const second = await api('POST', '/api/ai/providers/profiles', {
+      name: 'Smoke model two', provider_id: 'custom', provider_type: 'custom',
+      base_url: `http://127.0.0.1:${modelPort}/v1`, model: 'smoke-model-2', api_key: 'smoke-key', supports_tools: false,
+    });
+    const shownModel = () => page.evaluate(() => document.querySelector('[data-chat-model]')?.getAttribute('data-chat-model'));
+    const showsModel = (name) => waitFor(async () => (await shownModel()) === name, { timeout: 15000, what: `"${name}" in the composer` });
+    const answersIn = (text) => page.evaluate((t) => [...document.querySelectorAll('[data-message-id]')].filter((el) => el.innerText.includes(t)).length, text);
+    const ask = async (text) => {
+      const composer = await page.waitForSelector('textarea');
+      await composer.click();
+      await page.keyboard.type(text);
+      await page.keyboard.press('Enter');
+    };
+    // Moving around inside the app, as people do: a full page load each time
+    // can leave the browser waiting on the last page's open event streams.
+    const newChat = () => clickText('aside button', 'New chat');
+
+    // Chat A starts on the default: the first model.
+    await page.goto(`${app}/home`, { waitUntil: 'domcontentloaded' });
+    await showsModel('smoke-model');
+    await ask('Which model are you, chat A?');
+    await textAppears('Answer from smoke-model.');
+    const chatA = await waitFor(() => page.evaluate(() => location.pathname.match(/^\/conversations\/([^/]+)$/)?.[1]), { timeout: 15000, what: 'chat A to be saved' });
+
+    // Chat B: a new chat switched to the second model.
+    await newChat();
+    await waitFor(() => page.evaluate(() => location.pathname === '/home'), { timeout: 10000, what: 'a new chat' });
+    await showsModel('smoke-model');
+    await page.click('[data-chat-model]');
+    await clickText('[role="menuitem"]', 'smoke-model-2');
+    await showsModel('smoke-model-2');
+    await ask('Which model are you, chat B?');
+    await textAppears('Answer from smoke-model-2.');
+
+    // Back in chat A (from the sidebar): it still shows, and answers from, the first model.
+    await waitFor(() => page.evaluate((id) => {
+      const open = document.querySelector(`aside [data-chat-options="${id}"]`)?.parentElement?.querySelector('button');
+      open?.click();
+      return Boolean(open);
+    }, chatA), { timeout: 10000, what: 'chat A in the sidebar' });
+    await waitFor(() => page.evaluate((id) => location.pathname === `/conversations/${id}`, chatA), { timeout: 10000, what: 'chat A to open' });
+    await showsModel('smoke-model');
+    const before = requests.length;
+    await ask('Which model are you now, chat A?');
+    const sent = await waitFor(() => requests.slice(before).find((r) => JSON.stringify(r.messages || []).includes('now, chat A')), { timeout: 20000, what: 'chat A to reach the model' });
+    assert(sent.model === 'smoke-model', `chat A ran on ${sent.model}`);
+    await waitFor(async () => (await answersIn('Answer from smoke-model.')) >= 2, { timeout: 20000, what: "chat A's second answer" });
+    assert((await answersIn('Answer from smoke-model-2.')) === 0, 'chat A shows an answer from the second model');
+
+    // Picking a model made it the default, so a new chat starts with it.
+    const { model } = await api('GET', '/api/ai/providers/default-model');
+    assert(model?.profileId === second.profile.id, `the default is ${JSON.stringify(model)}`);
+    await newChat();
+    await showsModel('smoke-model-2');
+    // The checks after this one expect the first model.
+    await api('PUT', '/api/ai/providers/default-model', { model: { kind: 'profile', profileId: created.profile.id } });
     await noCrash();
   });
 
