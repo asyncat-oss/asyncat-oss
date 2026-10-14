@@ -410,6 +410,37 @@ test('status says whether each local engine has its model loaded (B4)', async ()
   assert.equal(status.tts.ready, true);
 });
 
+test('the engine list carries a running install, so a page can pick it up again (B5)', async () => {
+  // GitHub never answers, so the install stays at "finding a build" until cancelled.
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (url, options = {}) => (String(url).startsWith('https://api.github.com/')
+    ? new Promise((_, reject) => options.signal?.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))))
+    : realFetch(url, options));
+  const api = await serve('/api/ai/providers', providerRouter);
+  try {
+    const before = await api.get('/runtimes');
+    assert.ok(before.body.runtimes.every((runtime) => runtime.installJob === null));
+
+    const started = await api.post('/runtimes/whisper/install-jobs');
+    assert.equal(started.status, 202);
+    const listed = await api.get('/runtimes');
+    const whisperRuntime = listed.body.runtimes.find((runtime) => runtime.id === 'whisper');
+    assert.equal(whisperRuntime.installJob.id, started.body.job.id);
+    assert.equal(whisperRuntime.installJob.status, 'running');
+    assert.equal(listed.body.runtimes.find((runtime) => runtime.id === 'sd').installJob, null);
+
+    await fetch(`${api.base}/runtimes/install-jobs/${started.body.job.id}`, { method: 'DELETE' });
+    const after = await until(async () => {
+      const { body } = await api.get('/runtimes');
+      return body.runtimes.find((runtime) => runtime.id === 'whisper').installJob === null ? body : null;
+    }, 5000);
+    assert.ok(after, 'a finished install is no longer listed');
+  } finally {
+    globalThis.fetch = realFetch;
+    await api.close();
+  }
+});
+
 // ── Images ───────────────────────────────────────────────────────────────────
 
 function addImageFile(name, body = 'weights') {

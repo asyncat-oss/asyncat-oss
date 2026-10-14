@@ -102,7 +102,7 @@ import db from '../../db/client.js';
 import { sealSecret } from '../../lib/secretBox.js';
 import { setConfigValue } from '../../config/appConfig.js';
 import { asyncatHome, listManagedRuntimes, managedEnginesDiskUsage, planManagedRuntimeInstall, removeManagedRuntime } from '../../lib/localEngine.js';
-import { startRuntimeInstallJob, getRuntimeInstallJob, isRuntimeInstallActive, cancelRuntimeInstallJob } from '../../lib/runtimeInstallJobs.js';
+import { startRuntimeInstallJob, getRuntimeInstallJob, isRuntimeInstallActive, cancelRuntimeInstallJob, activeRuntimeInstallJob } from '../../lib/runtimeInstallJobs.js';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import os from 'os';
@@ -1601,9 +1601,15 @@ async function stopManagedRuntime(runtimeId) {
   }
 }
 
-// GET /runtimes — list installable managed runtimes.
+/** Managed runtimes, each with the install running for it (or null). */
+function runtimesWithInstallJobs() {
+  return listManagedRuntimes().map((runtime) => ({ ...runtime, installJob: activeRuntimeInstallJob(runtime.id) }));
+}
+
+// GET /runtimes — list installable managed runtimes; installJob lets a page
+// pick up an install that started before it opened.
 router.get('/runtimes', (_req, res) => {
-  res.json({ success: true, root: asyncatHome(), runtimes: listManagedRuntimes() });
+  res.json({ success: true, root: asyncatHome(), runtimes: runtimesWithInstallJobs() });
 });
 
 // GET /runtimes/disk — how much space each engine Asyncat installed uses.
@@ -1676,7 +1682,7 @@ router.delete('/runtimes/:id', async (req, res) => {
     }
     await stopManagedRuntime(runtimeId);
     const removal = removeManagedRuntime(runtimeId);
-    res.json({ success: true, removal, runtimes: listManagedRuntimes() });
+    res.json({ success: true, removal, runtimes: runtimesWithInstallJobs() });
   } catch (err) {
     const status = /Unknown runtime/i.test(err.message) ? 404 : 500;
     res.status(status).json({ success: false, error: err.message });

@@ -117,8 +117,13 @@ export function cancelAllRuntimeInstallJobs() {
   }
 }
 
-export function isRuntimeInstallActive(runtimeId) {
+/** The install running for a runtime, or null, so a page can pick it up again. */
+export function activeRuntimeInstallJob(runtimeId) {
   const id = activeByRuntime.get(runtimeId);
   const job = id ? jobs.get(id) : null;
-  return Boolean(job && (job.status === 'queued' || job.status === 'running'));
+  return job && (job.status === 'queued' || job.status === 'running') ? publicJob(job) : null;
+}
+
+export function isRuntimeInstallActive(runtimeId) {
+  return Boolean(activeRuntimeInstallJob(runtimeId));
 }
