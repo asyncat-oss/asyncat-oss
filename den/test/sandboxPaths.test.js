@@ -219,3 +219,19 @@ test("sandbox_exec says plainly that nothing ran without Docker", { skip: hasBin
   assert.doesNotMatch(res.error, /fallback/i);
   assert.match(res.error, /nothing ran/);
 });
+
+test('a copy of a folder without git has its files, not the copies folder', async () => {
+  const source = project({ 'readme.txt': 'demo' });
+  fs.mkdirSync(path.join(source, 'node_modules'));
+  const userId = `user-${randomUUID()}`;
+  db.prepare("INSERT INTO users (id, email, name) VALUES (?, ?, 'Demo')").run(userId, `${userId}@example.test`);
+  let copy;
+  try {
+    copy = createSandbox({ userId, sourcePath: source, strategy: 'copy', name: 'Plain' }).sandbox;
+    assert.equal(copy.strategy, 'copy');
+    assert.deepEqual(fs.readdirSync(copy.sandboxPath), ['readme.txt']);
+  } finally {
+    if (copy) deleteSandbox(userId, copy.id, { force: true });
+    fs.rmSync(source, { recursive: true, force: true });
+  }
+});

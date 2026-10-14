@@ -508,11 +508,18 @@ export function createSandbox({
     if (useWorktree) {
       runGit(['worktree', 'add', '-b', branchName, sandboxPath, baseRef || 'HEAD'], resolvedSource);
     } else {
-      fs.cpSync(resolvedSource, sandboxPath, {
-        recursive: true,
-        dereference: false,
-        filter: copyFilter,
-      });
+      // Entry by entry: the copies live inside the folder (.asyncat), and
+      // copying a folder into itself is refused even when filtered out.
+      fs.mkdirSync(sandboxPath, { recursive: true });
+      for (const entry of fs.readdirSync(resolvedSource)) {
+        const from = path.join(resolvedSource, entry);
+        if (!copyFilter(from)) continue;
+        fs.cpSync(from, path.join(sandboxPath, entry), {
+          recursive: true,
+          dereference: false,
+          filter: copyFilter,
+        });
+      }
     }
 
     db.prepare(`
