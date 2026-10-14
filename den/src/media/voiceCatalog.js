@@ -113,4 +113,11 @@ export const CLOUD_SPEECH = {
       voices: ['Aoede', 'Kore', 'Puck', 'Charon', 'Zephyr', 'Leda', 'Orus', 'Fenrir'].map((id) => ({ id, name: id })),
     },
   },
+  fal: {
+    title: 'fal',
+    keyName: 'FAL_KEY',
+    // Whisper on fal has no model to choose; speaking is Kokoro.
+    stt: { modelKey: null, models: ['whisper'], defaultModel: 'whisper' },
+    tts: { voiceKey: 'FAL_TTS_VOICE', defaultVoice: 'af_bella', voices: [{ id: 'af_bella', name: 'Bella' }] },
+  },
 };

@@ -341,6 +341,27 @@ test('cloud speech needs its key; choosing it saves the voice', async () => {
   assert.equal((await voice.voiceStatus()).tts.ready, true);
 });
 
+test('fal can listen and speak, and choosing it saves only the settings it has (B2)', async () => {
+  const { cloud } = voice.voiceCatalog();
+  assert.equal(cloud.fal.stt.defaultModel, 'whisper');
+  assert.deepEqual(cloud.fal.tts.voices.map((item) => item.id), ['af_bella']);
+
+  let status = await voice.chooseVoice({ stt: { provider: 'fal', model: 'whisper' }, tts: { provider: 'fal', voice: 'af_bella' } });
+  assert.equal(status.stt.provider, 'fal');
+  assert.equal(status.stt.model, 'whisper');
+  assert.equal(status.stt.reason, 'needs_key');
+  assert.equal(status.tts.voice.name, 'Bella');
+  const stray = db.prepare("SELECT COUNT(*) AS n FROM app_config WHERE key IS NULL OR key = 'null'").get().n;
+  assert.equal(stray, 0, 'no setting is written for a model fal has no setting for');
+  assert.equal(process.env.FAL_TTS_VOICE, 'af_bella');
+
+  process.env.FAL_KEY = 'fal-test-key';
+  status = await voice.voiceStatus();
+  assert.equal(status.stt.ready && status.tts.ready, true);
+  delete process.env.FAL_KEY;
+  await voice.chooseVoice({ stt: { provider: 'local' }, tts: { provider: 'local' } });
+});
+
 // ── Images ───────────────────────────────────────────────────────────────────
 
 function addImageFile(name, body = 'weights') {

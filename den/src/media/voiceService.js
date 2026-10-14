@@ -103,7 +103,7 @@ export async function voiceStatus() {
     stt = {
       provider: sttProvider,
       title: service?.title || sttProvider,
-      model: service?.stt ? String(process.env[service.stt.modelKey] || service.stt.defaultModel) : null,
+      model: service?.stt ? String((service.stt.modelKey && process.env[service.stt.modelKey]) || service.stt.defaultModel) : null,
       ready: Boolean(keyName ? hasKey(keyName) : false),
       reason: keyName && !hasKey(keyName) ? 'needs_key' : null,
       keyName: keyName || null,
@@ -179,7 +179,8 @@ export async function chooseVoice({ stt = null, tts: speak = null } = {}) {
       const service = CLOUD_SPEECH[provider];
       if (!service?.stt) throw voiceError(`${service?.title || provider} can't listen.`);
       setConfigValue('ASYNCAT_STT_PROVIDER', provider);
-      if (stt.model) setConfigValue(service.stt.modelKey, String(stt.model));
+      // Some services (fal) have one model and no setting for it.
+      if (stt.model && service.stt.modelKey) setConfigValue(service.stt.modelKey, String(stt.model));
     }
   }
   if (speak) {
