@@ -499,6 +499,12 @@ async function main() {
     await noCrash();
   });
 
+  await check('Models → Images shows how images are made', async () => {
+    await page.goto(`${app}/models?tab=image`, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('[data-images-page] [data-images-group] [data-runs-on="image"]', { timeout: 20000 });
+    await noCrash();
+  });
+
   for (const [label, route] of [['Models', '/models'], ['Settings → Profile', '/settings/profile'], ['Settings → Connections', '/settings/connections'], ['Settings → Notifications', '/settings/notifications'], ['Settings → Background', '/settings/background'], ['Settings → Engines', '/settings/runtime'], ['Tools & Skills', '/tools'], ['Gallery (made by agents)', '/made']]) {
     await check(`${label} opens`, async () => {
       await page.goto(`${app}${route}`, { waitUntil: 'domcontentloaded' });

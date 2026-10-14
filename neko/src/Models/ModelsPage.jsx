@@ -9,17 +9,12 @@ import { Segmented, Tabs } from '../components/ui/Tabs.jsx';
 import ActiveBrainPanel from './ActiveBrainPanel.jsx';
 import ProvidersSection from './ProvidersSection.jsx';
 import LocalModelsPane from './LocalModelsPane.jsx';
-import VisualModelsSection from './VisualModelsSection.jsx';
-import CapabilityProvidersSection from './CapabilityProvidersSection.jsx';
 import ModelUsageSection from './ModelUsageSection.jsx';
 import ConfirmDeleteDialog from './ConfirmDeleteDialog.jsx';
 import ModelDownloadHub from './ModelDownloadHub.jsx';
-import ManagedEngineCard from './ManagedEngineCard.jsx';
 import LocalEnginePanel from './LocalEnginePanel.jsx';
 import VoicePage from './media/VoicePage.jsx';
-import ImageSetupCard from './media/ImageSetupCard.jsx';
-import GallerySection from './media/GallerySection.jsx';
-import { Advanced } from './media/MediaParts.jsx';
+import ImagesPage from './media/ImagesPage.jsx';
 import { onEvents } from './media/notify.js';
 import {
   STATUS_META, conciseHardwareSummary, getModelContextLimit,
@@ -38,7 +33,7 @@ const VIEW_KEYS = ['connected', 'add', 'local'];
 const TAB_SUBTITLES = {
   chat: 'Choose what powers chats and agents: a cloud provider, a server on your computer, or a downloaded model.',
   audio: 'Talk to Asyncat with the mic, and hear answers read aloud.',
-  image: 'Generate images with a downloaded model or a cloud provider.',
+  image: 'Let Asyncat make and change images, in chats or here.',
   usage: 'Requests and tokens your models have handled.',
   training: 'Fine-tune models on your own data.',
 };
@@ -99,8 +94,8 @@ const ModelsPage = () => {
   const [visualModels, setVisualModels] = useState({ image: [] });
   const [highlightedItem, setHighlightedItem] = useState(null);
   const [voiceHighlight, setVoiceHighlight] = useState(null);
+  const [imageHighlight, setImageHighlight] = useState(null);
   const [refreshCount, setRefreshCount] = useState(0);
-  const [galleryKey, setGalleryKey] = useState(0);
   const [usageRange, setUsageRange] = useState('30d');
   const [modelUsage, setModelUsage] = useState(null);
   const [loadingUsage, setLoadingUsage] = useState(false);
@@ -150,8 +145,9 @@ const ModelsPage = () => {
     refreshVisualData();
   }, [refreshVoiceData, refreshVisualData]);
 
-  // Files added or deleted on the Voice tab show in the search at once.
+  // Files added or deleted on the Voice and Images tabs show in the search at once.
   useEffect(() => onEvents(['asyncat-audio-models-updated'], refreshVoiceData), [refreshVoiceData]);
+  useEffect(() => onEvents(['asyncat-visual-models-updated'], refreshVisualData), [refreshVisualData]);
 
   useEffect(() => {
     refreshUsageData();
@@ -191,6 +187,7 @@ const ModelsPage = () => {
   if (highlightTab !== activeTab) {
     setHighlightTab(activeTab);
     if (highlightTab === 'audio') setVoiceHighlight(null);
+    if (highlightTab === 'image') setImageHighlight(null);
   }
 
   // ── Unified search ─────────────────────────────────────────────────────────
@@ -283,13 +280,14 @@ const ModelsPage = () => {
       setActiveTab('audio');
       return;
     }
-    if (item.type === 'image') setActiveTab('image');
+    if (item.type === 'image') {
+      // The file's row in Images → Model files scrolls into view and flashes.
+      setImageHighlight({ id: `image-file-${item.id}`, at: Date.now() });
+      setActiveTab('image');
+      return;
+    }
     window.setTimeout(() => {
-      const id = item.type === 'model'
-        ? `model-card-${item.id}`
-        : item.type === 'provider'
-          ? `provider-card-${item.id}`
-          : `visual-card-${item.type}-${item.id}`;
+      const id = item.type === 'model' ? `model-card-${item.id}` : `provider-card-${item.id}`;
       document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 180);
   };
@@ -492,24 +490,7 @@ const ModelsPage = () => {
 
             {activeTab === 'audio' && <VoicePage highlight={voiceHighlight} refreshKey={refreshCount} />}
 
-            {activeTab === 'image' && (
-              <>
-                <ImageSetupCard onPictureMade={() => setGalleryKey((key) => key + 1)} />
-                <GallerySection refreshKey={galleryKey} />
-                <Advanced title="Advanced" hint="ComfyUI, the engine, any model from Hugging Face or a file, cloud keys">
-                  <ManagedEngineCard
-                    runtimeId="sd"
-                    name="stable-diffusion.cpp"
-                    purpose="Makes images on this computer from downloaded models; uses your GPU when it can."
-                    icon={Image}
-                    onChanged={refreshVisualData}
-                  />
-                  {downloadHub}
-                  <CapabilityProvidersSection capability="image" />
-                  <VisualModelsSection highlightedItem={highlightedItem} onModelsChange={setVisualModels} />
-                </Advanced>
-              </>
-            )}
+            {activeTab === 'image' && <ImagesPage highlight={imageHighlight} refreshKey={refreshCount} />}
 
             {activeTab === 'usage' && (
               <ModelUsageSection
