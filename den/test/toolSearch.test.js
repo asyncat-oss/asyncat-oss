@@ -96,3 +96,14 @@ test('the tool_search tool reports matches and a hint when nothing matches', asy
   assert.equal(miss.count, 0);
   assert.match(miss.note, /Try different/);
 });
+
+test('tool_search finds merged tools by their old names, and never lists an old name', () => {
+  const defs = allDefs();
+  const runtime = { loadedToolNames: new Set() };
+  const names = (query) => proto._discoverTools.call(runtime, query, 5, defs).map(t => t.name);
+  assert.equal(names('semantic search')[0], 'local_rag_search');
+  assert.ok(names('browse url').includes('preview_get_text'), names('browse url').join(', '));
+  assert.ok(names('patch file').includes('edit_file'), names('patch file').join(', '));
+  const everything = proto._discoverTools.call(runtime, 'file browser page search edit', 15, defs).map(t => t.name);
+  for (const name of everything) assert.equal(toolRegistry.isAlias(name), false, `${name} is an old name`);
+});

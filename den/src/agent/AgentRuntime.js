@@ -2266,6 +2266,14 @@ export class AgentRuntime {
       .map(term => (term.length > 3 && term.endsWith('s') ? term.slice(0, -1) : term));
     if (terms.length === 0) return [];
 
+    // A search for an old tool name ("semantic search", "browse url") finds
+    // the tool that replaced it.
+    const oldNames = new Map();
+    for (const { name, to } of toolRegistry.aliases()) {
+      if (!oldNames.has(to)) oldNames.set(to, []);
+      oldNames.get(to).push(name.split('_'));
+    }
+
     const scored = [];
     allowedDefs.forEach((tool, rank) => {
       if (tool.name === 'tool_search') return;
@@ -2273,10 +2281,12 @@ export class AgentRuntime {
       const words = name.split('_');
       const description = String(tool.description || '').toLowerCase();
       const category = String(tool.category || '').toLowerCase();
+      const formerWords = oldNames.get(tool.name) || [];
       let score = 0;
       for (const term of terms) {
         if (words.includes(term)) score += 6;
         else if (name.includes(term)) score += 4;
+        else if (formerWords.some(former => former.includes(term))) score += 5;
         if (category === term) score += 3;
         if (description.includes(term)) score += 1;
       }
