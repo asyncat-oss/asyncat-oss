@@ -125,6 +125,7 @@ const ChatsPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [serverSearchResults, setServerSearchResults] = useState(null); // null = use local, array = server results
   const [serverSearching, setServerSearching] = useState(false);
+  const [serverIndexing, setServerIndexing] = useState(false); // older chats not searchable yet
   const serverSearchTimer = useRef(null);
   const [searches] = useState(latestSearch);
   const searchInputRef = useRef(null);
@@ -207,28 +208,36 @@ const ChatsPage = () => {
 
   // Searches titles and messages 400 ms after typing stops. Each keystroke
   // cancels the search before it, so a slow answer for an older query never
-  // replaces the results for what is in the box now.
+  // replaces the results for what is in the box now. While older chats are
+  // still being indexed, it looks again every few seconds, so they show up.
   const trimmedQuery = searchQuery.trim();
   useEffect(() => {
     if (trimmedQuery.length < 3) {
       setServerSearchResults(null);
       setServerSearching(false);
+      setServerIndexing(false);
       return;
     }
     setServerSearching(true);
-    serverSearchTimer.current = setTimeout(async () => {
+    const run = async (again = false) => {
       const signal = searches.start();
       let results = null;
+      let indexing = false;
       try {
         const res = await chatApi.searchConversations(trimmedQuery, 50, { signal });
         results = res?.conversations || [];
+        indexing = Boolean(res?.indexing);
       } catch {
-        // Falls back to filtering the loaded list.
+        // Falls back to filtering the loaded list (a later look keeps what
+        // is shown).
       }
-      if (signal.aborted) return;
+      if (signal.aborted || (again && results === null)) return;
       setServerSearchResults(results);
+      setServerIndexing(indexing);
       setServerSearching(false);
-    }, 400);
+      if (indexing) serverSearchTimer.current = setTimeout(() => run(true), 3000);
+    };
+    serverSearchTimer.current = setTimeout(() => run(), 400);
     return () => {
       clearTimeout(serverSearchTimer.current);
       searches.cancel();
@@ -674,6 +683,13 @@ const ChatsPage = () => {
             </span>
           )}
         </div>
+        {/* Chats waiting to be indexed (after an update or a large import)
+            can't be found by what was said yet. */}
+        {searchMode && serverIndexing && !serverSearching && (
+          <p role="status" className="-mt-3 mb-4 flex-shrink-0 text-xs text-fg-muted">
+            Still indexing older chats, so some may be missing.
+          </p>
+        )}
 
         {enginesPresent.length > 1 && (
           <div className="mb-4 -mt-2 flex flex-wrap items-center gap-1.5 flex-shrink-0" role="radiogroup" aria-label="Who answered">

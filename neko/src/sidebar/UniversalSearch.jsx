@@ -142,6 +142,7 @@ const UniversalSearch = ({ isOpen, onClose }) => {
   const [serverResults, setServerResults] = useState(null); // null = not searched yet
   const [memoryResults, setMemoryResults] = useState([]);
   const [searchedTerm, setSearchedTerm] = useState(''); // what the server last answered
+  const [indexing, setIndexing] = useState(false); // older chats not searchable yet
   const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
   const [searches] = useState(latestSearch);
@@ -221,6 +222,7 @@ const UniversalSearch = ({ isOpen, onClose }) => {
     setServerResults(data ? (data.results || []).filter(r => r._type !== 'note' || r.conversationId) : null);
     setMemoryResults((mem?.results || []).map(m => ({ _type: 'memory', id: m.key, title: m.key, snippet: m.content })));
     setSearchedTerm(term);
+    setIndexing(Boolean(data?.indexing));
     setSearching(false);
   }, [searches]);
 
@@ -230,6 +232,7 @@ const UniversalSearch = ({ isOpen, onClose }) => {
       setServerResults(null);
       setMemoryResults([]);
       setSearchedTerm('');
+      setIndexing(false);
       return;
     }
     debounceRef.current = setTimeout(() => doServerSearch(query), 220);
@@ -349,6 +352,10 @@ const UniversalSearch = ({ isOpen, onClose }) => {
   const isSpinning = loading || pending;
   const isEmpty = filteredResults.length === 0;
   const activeId = filteredResults[selectedIndex] ? optionId(selectedIndex) : undefined;
+  // Chats waiting to be indexed (after an update or a large import) can't
+  // be found by what was said yet.
+  const stillIndexing = indexing && !pending;
+  const indexingNote = 'Still indexing older chats, so some may be missing.';
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 px-4 pt-[14vh]">
@@ -398,6 +405,7 @@ const UniversalSearch = ({ isOpen, onClose }) => {
                 {isSpinning ? 'Searching…' : (
                   <>Nothing found for &ldquo;<span className="text-fg">{query}</span>&rdquo;</>
                 )}
+                {stillIndexing ? <span className="mt-1 block text-xs text-fg-subtle">{indexingNote}</span> : null}
               </p>
             ) : (
               <div id={LISTBOX_ID} role="listbox" aria-label="Results" className="max-h-[min(440px,60vh)] overflow-y-auto py-1.5">
@@ -422,6 +430,9 @@ const UniversalSearch = ({ isOpen, onClose }) => {
                 ))}
               </div>
             )}
+            {stillIndexing && !isEmpty ? (
+              <p role="status" className="border-t border-line px-4 py-2 text-xs text-fg-subtle">{indexingNote}</p>
+            ) : null}
           </div>
         )}
 
