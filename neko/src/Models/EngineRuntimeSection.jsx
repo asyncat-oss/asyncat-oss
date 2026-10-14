@@ -4,6 +4,7 @@ import {
   RotateCcw, Settings2, TerminalSquare, Trash2, TriangleAlert, Wrench, Zap,
 } from 'lucide-react';
 import { Badge } from './modelPageShared.jsx';
+import Select from '../components/ui/Select.jsx';
 import { downloadProgressText, formatBytes } from './engineProgress.js';
 import { buildsBehind, buildsNewerText, profileForCapability } from './engineVersions.js';
 
@@ -79,6 +80,11 @@ const SettingGroup = ({ children, className = '' }) => (
     {children}
   </section>
 );
+
+const CUSTOM_RUNTIMES = [
+  { value: 'binary', label: 'Binary' },
+  { value: 'python', label: 'Python' },
+];
 
 const SettingRow = ({ label, detail, children, divider = true }) => (
   <div className={`grid gap-3 px-4 py-4 sm:grid-cols-[minmax(150px,240px)_1fr] sm:items-center ${divider ? 'border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800' : ''}`}>
@@ -272,8 +278,8 @@ const EngineRuntimeSection = ({
     onSwitch?.({ runtime: customRuntime, path }, retry);
   };
 
-  const handleEngineSelect = (event) => {
-    const selected = selectableCandidates.find(candidate => engineKey(candidate) === event.target.value);
+  const handleEngineSelect = (key) => {
+    const selected = selectableCandidates.find(candidate => engineKey(candidate) === key);
     if (!selected || selected.isCurrent) return;
     onSwitch?.({ runtime: selected.runtime, path: selected.path }, false);
   };
@@ -335,19 +341,19 @@ const EngineRuntimeSection = ({
           label="GGUF"
           detail={current?.path ? current.path : 'Used by downloaded llama.cpp models.'}
         >
-          <select
-            value={currentKey}
+          <Select
+            value={selectableCandidates.length ? currentKey : ''}
             onChange={handleEngineSelect}
             disabled={selectableCandidates.length === 0 || Boolean(switchingKey) || Boolean(installingKey)}
-            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-800 outline-none transition focus:border-gray-400 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100 midnight:border-slate-700 midnight:bg-slate-950 sm:w-[360px]"
-          >
-            {selectableCandidates.length === 0 && <option value="">Not detected</option>}
-            {selectableCandidates.map(candidate => (
-              <option key={candidate.id || engineKey(candidate)} value={engineKey(candidate)}>
-                {engineTitle(candidate)} - {candidate.capabilityLabel || 'Runtime'}
-              </option>
-            ))}
-          </select>
+            placeholder="Not detected"
+            aria-label="GGUF engine"
+            className="sm:w-[360px]"
+            options={selectableCandidates.map(candidate => ({
+              value: engineKey(candidate),
+              label: engineTitle(candidate),
+              hint: candidate.capabilityLabel || 'Runtime',
+            }))}
+          />
         </SettingRow>
 
         <SettingRow
@@ -699,14 +705,12 @@ const EngineRuntimeSection = ({
         {showAdvanced && (
           <div className="border-t border-gray-100 px-4 py-4 dark:border-gray-800 midnight:border-slate-800">
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-[150px_1fr_auto]">
-              <select
+              <Select
                 value={customRuntime}
-                onChange={(event) => setCustomRuntime(event.target.value)}
-                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 outline-none dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200"
-              >
-                <option value="binary">Binary</option>
-                <option value="python">Python</option>
-              </select>
+                onChange={setCustomRuntime}
+                aria-label="Runtime kind"
+                options={CUSTOM_RUNTIMES}
+              />
               <input
                 value={customPath}
                 onChange={(event) => setCustomPath(event.target.value)}

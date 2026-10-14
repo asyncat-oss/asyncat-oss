@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { Link, Youtube, ExternalLink, RefreshCw, Edit3 } from 'lucide-react';
+import Select from '../../../components/ui/Select.jsx';
 
 const EmbedBlock = ({ block, onChange }) => {
   const [url, setUrl] = useState(block.properties?.url || '');
@@ -149,18 +150,17 @@ const EmbedBlock = ({ block, onChange }) => {
 
           {url && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-400 mb-1">
+              <label htmlFor={`embed-type-${block.id}`} className="block text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-400 mb-1">
                 Detected type
               </label>
-              <select
+              <Select
+                id={`embed-type-${block.id}`}
+                fullWidth={false}
+                className="max-w-full"
                 value={embedType}
-                onChange={(e) => setEmbedType(e.target.value)}
-                className="px-3 py-2 border border-gray-300 dark:border-gray-600 midnight:border-gray-700 rounded-md bg-white dark:bg-gray-800 midnight:bg-gray-900 text-gray-900 dark:text-gray-100 midnight:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {embedTypes.map(type => (
-                  <option key={type.type} value={type.type}>{type.label}</option>
-                ))}
-              </select>
+                onChange={setEmbedType}
+                options={embedTypes.map((type) => ({ value: type.type, label: type.label }))}
+              />
             </div>
           )}
 

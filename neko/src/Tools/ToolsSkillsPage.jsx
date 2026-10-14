@@ -13,6 +13,9 @@ import {
 import { agentApi } from '../CommandCenter/api';
 import ConfirmModal from '../CommandCenter/components/modals/ConfirmModal.jsx';
 import { AddMemoryForm, MemoryEditor, MemoryOwnerSelect } from './memoryParts.jsx';
+import { MEMORY_KIND_OPTIONS } from './memoryKinds.js';
+import Select from '../components/ui/Select.jsx';
+import { backdropCloses, useLayer } from '../components/ui/floating.js';
 import { useMemoryOwners } from './useMemoryOwners.js';
 
 const PERM_META = {
@@ -678,6 +681,8 @@ const BRAIN_REGION_OPTIONS = [
   { value: 'unknown',      label: 'Other' },
 ];
 
+const MEMORY_KIND_FILTER = [{ value: 'all', label: 'All kinds' }, ...MEMORY_KIND_OPTIONS];
+
 const EMPTY_SKILL_FORM = {
   name: '',
   description: '',
@@ -691,6 +696,10 @@ function NewSkillModal({ open, onClose, onCreated }) {
   const [form, setForm] = useState(EMPTY_SKILL_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  // A layer, so a click on the backdrop with the brain region list open
+  // closes only the list, as it did with the native <select>.
+  const panelRef = useRef(null);
+  const layerRef = useLayer(open, panelRef);
 
   useEffect(() => {
     if (open) { setForm(EMPTY_SKILL_FORM); setError(null); }
@@ -723,10 +732,10 @@ function NewSkillModal({ open, onClose, onCreated }) {
   const labelClass = 'mb-1 block text-[10px] font-semibold uppercase tracking-wide text-gray-400';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onMouseDown={(e) => { if (backdropCloses(e, layerRef.current)) onClose(); }}>
       <div
+        ref={panelRef}
         className="w-full max-w-lg overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-950"
-        onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4 dark:border-gray-800 midnight:border-slate-800">
           <h2 className="text-sm font-semibold text-gray-900 dark:text-white">New Skill</h2>
@@ -746,10 +755,8 @@ function NewSkillModal({ open, onClose, onCreated }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={labelClass}>Brain region</label>
-              <select className={inputClass} value={form.brain_region} onChange={e => set('brain_region', e.target.value)}>
-                {BRAIN_REGION_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
+              <label htmlFor="skill-brain-region" className={labelClass}>Brain region</label>
+              <Select id="skill-brain-region" value={form.brain_region} onChange={(value) => set('brain_region', value)} options={BRAIN_REGION_OPTIONS} />
             </div>
             <div>
               <label className={labelClass}>Tags (comma-separated)</label>
@@ -1647,8 +1654,8 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
             )}
 
             {/* Search + filter bar */}
-            <div className="px-6 py-3 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 flex gap-2 items-center">
-              <div className="relative flex-1">
+            <div className="px-6 py-3 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 flex flex-wrap gap-2 items-center">
+              <div className="relative min-w-0 grow basis-64">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
                   type="text"
@@ -1659,21 +1666,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                 />
               </div>
               <MemoryOwnerSelect value={memoryScope} onChange={setMemoryScope} owners={memoryOwners} />
-              <select
-                value={memoryKind}
-                onChange={e => setMemoryKind(e.target.value)}
-                className="text-xs bg-white dark:bg-gray-800 midnight:bg-slate-900 border border-gray-200 dark:border-gray-700 midnight:border-slate-700 rounded-lg px-2 py-2 text-gray-600 dark:text-gray-300 midnight:text-slate-300 focus:outline-none"
-              >
-                <option value="all">All types</option>
-                <option value="user">user</option>
-                <option value="feedback">feedback</option>
-                <option value="project">project</option>
-                <option value="reference">reference</option>
-                <option value="fact">fact</option>
-                <option value="preference">preference</option>
-                <option value="context">context</option>
-                <option value="task_state">task_state</option>
-              </select>
+              <Select size="sm" fullWidth={false} value={memoryKind} onChange={setMemoryKind} options={MEMORY_KIND_FILTER} aria-label="Kind" />
               <span className="text-xs text-gray-400 whitespace-nowrap">{memories.length} entries</span>
               <button
                 type="button"

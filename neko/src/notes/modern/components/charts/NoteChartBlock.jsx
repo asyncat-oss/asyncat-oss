@@ -11,10 +11,17 @@ import {
 } from 'recharts';
 import { Download, Pencil, Plus, Trash2 } from 'lucide-react';
 import Button from '../../../../components/ui/Button.jsx';
-import { Input, Select } from '../../../../components/ui/Field.jsx';
+import { Input } from '../../../../components/ui/Field.jsx';
+import Select from '../../../../components/ui/Select.jsx';
 import { CHART_HEIGHT_OPTIONS, getHeightKey, getHeightValue } from './chartConstants';
 
 const PALETTE = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#f97316', '#84cc16', '#ec4899', '#6b7280'];
+
+const SIZE_OPTIONS = Object.entries(CHART_HEIGHT_OPTIONS).map(([key, option]) => ({ value: key, label: option.label }));
+const BAR_DIRECTIONS = [
+  { value: 'vertical', label: 'Vertical bars' },
+  { value: 'horizontal', label: 'Horizontal bars' },
+];
 
 const NAMES = { line: 'Line chart', area: 'Area chart', bar: 'Bar chart', pie: 'Pie chart', donut: 'Donut chart', scatter: 'Scatter chart' };
 
@@ -434,16 +441,12 @@ export default function NoteChartBlock({ type, block, onChange, readOnly = false
 
       {editing && (
         <div className="mt-3 space-y-3 border-t border-line pt-3">
-          <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
-            <Input value={config.title || ''} placeholder="Title" aria-label="Chart title" onChange={(e) => setConfig('title', e.target.value)} />
-            <Select aria-label="Chart size" value={config.heightSize || 'medium'} onChange={(e) => setConfig('heightSize', e.target.value)}>
-              {Object.entries(CHART_HEIGHT_OPTIONS).map(([key, option]) => <option key={key} value={key}>{option.label}</option>)}
-            </Select>
+          {/* Wraps instead of a fixed grid: the note can sit in a narrow side panel. */}
+          <div className="flex flex-wrap gap-2">
+            <Input className="min-w-40 flex-1" value={config.title || ''} placeholder="Title" aria-label="Chart title" onChange={(e) => setConfig('title', e.target.value)} />
+            <Select fullWidth={false} aria-label="Chart size" value={config.heightSize || 'medium'} onChange={(value) => setConfig('heightSize', value)} options={SIZE_OPTIONS} />
             {type === 'bar' && (
-              <Select aria-label="Bar direction" value={config.orientation || 'vertical'} onChange={(e) => setConfig('orientation', e.target.value)}>
-                <option value="vertical">Vertical bars</option>
-                <option value="horizontal">Horizontal bars</option>
-              </Select>
+              <Select fullWidth={false} aria-label="Bar direction" value={config.orientation || 'vertical'} onChange={(value) => setConfig('orientation', value)} options={BAR_DIRECTIONS} />
             )}
           </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1">

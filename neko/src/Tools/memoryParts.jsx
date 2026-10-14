@@ -2,38 +2,39 @@
 // project's, an agent's, a Cat's, or shared ones), write a memory by hand,
 // and edit one in place.
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
 import { Check, X } from 'lucide-react';
 import { agentApi } from '../CommandCenter/api';
 import Button from '../components/ui/Button.jsx';
+import Select from '../components/ui/Select.jsx';
 import { errorDetail, useToast } from '../components/toastContext.js';
+import { MEMORY_KIND_OPTIONS } from './memoryKinds.js';
 
-const MEMORY_KIND_OPTIONS = ['fact', 'preference', 'user', 'feedback', 'project', 'reference', 'context', 'task_state'];
-
-const SELECT = 'rounded-lg border border-line bg-canvas px-2 py-2 text-xs text-fg outline-none focus:border-accent';
+/** The choices for whose memories to show or save: everyone's, shared, then each project, agent and Cat. */
+function ownerOptions(owners, includeAll) {
+  return [
+    ...(includeAll ? [{ value: 'all', label: "Everyone's" }] : []),
+    { value: 'shared', label: includeAll ? 'Shared (every chat)' : 'Every chat' },
+    ...owners.projects.map((project) => ({ value: `project:${project.id}`, label: project.name, group: 'Projects' })),
+    ...owners.agents.map((agent) => ({ value: `agent:${agent.id}`, label: agent.name, group: 'Agents' })),
+    ...owners.cats.map((cat) => ({ value: `cat:${cat.id}`, label: cat.name, group: 'Cats' })),
+  ];
+}
 
 export function MemoryOwnerSelect({ value, onChange, owners, includeAll = true, label = 'Whose memories' }) {
+  const options = useMemo(() => ownerOptions(owners, includeAll), [owners, includeAll]);
   return (
-    <select value={value} onChange={(event) => onChange(event.target.value)} className={SELECT} aria-label={label} data-memory-owner>
-      {includeAll ? <option value="all">Everyone&apos;s</option> : null}
-      <option value="shared">{includeAll ? 'Shared (every chat)' : 'Every chat'}</option>
-      {owners.projects.length ? (
-        <optgroup label="Projects">
-          {owners.projects.map((project) => <option key={project.id} value={`project:${project.id}`}>{project.name}</option>)}
-        </optgroup>
-      ) : null}
-      {owners.agents.length ? (
-        <optgroup label="Agents">
-          {owners.agents.map((agent) => <option key={agent.id} value={`agent:${agent.id}`}>{agent.name}</option>)}
-        </optgroup>
-      ) : null}
-      {owners.cats.length ? (
-        <optgroup label="Cats">
-          {owners.cats.map((cat) => <option key={cat.id} value={`cat:${cat.id}`}>{cat.name}</option>)}
-        </optgroup>
-      ) : null}
-    </select>
+    <Select
+      size="sm"
+      fullWidth={false}
+      className="max-w-56"
+      value={value}
+      onChange={onChange}
+      options={options}
+      aria-label={label}
+      data-memory-owner
+    />
   );
 }
 
@@ -75,9 +76,7 @@ export function AddMemoryForm({ owners, defaultScope, onAdded, onCancel }) {
         className="w-full rounded-lg border border-line-strong bg-canvas px-3 py-2 text-sm text-fg outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
       />
       <div className="flex flex-wrap items-center gap-2">
-        <select value={kind} onChange={(event) => setKind(event.target.value)} className={SELECT} aria-label="Kind">
-          {MEMORY_KIND_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-        </select>
+        <Select size="sm" fullWidth={false} value={kind} onChange={setKind} options={MEMORY_KIND_OPTIONS} aria-label="Kind" />
         <span className="text-xs text-fg-muted">for</span>
         <MemoryOwnerSelect value={scope} onChange={setScope} owners={owners} includeAll={false} label="Who it is for" />
         <span className="ml-auto flex gap-1.5">
@@ -117,9 +116,7 @@ export function MemoryEditor({ mem, onSaved, onCancel }) {
         className="w-full rounded-md border border-line-strong bg-canvas px-3 py-2 text-sm text-fg outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
       />
       <div className="flex items-center gap-2">
-        <select value={kind} onChange={(event) => setKind(event.target.value)} className={SELECT} aria-label="Kind">
-          {MEMORY_KIND_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-        </select>
+        <Select size="sm" fullWidth={false} value={kind} onChange={setKind} options={MEMORY_KIND_OPTIONS} aria-label="Kind" />
         <span className="ml-auto flex gap-1.5">
           <Button size="sm" variant="ghost" icon={X} onClick={onCancel}>Cancel</Button>
           <Button size="sm" variant="primary" icon={Check} loading={saving} disabled={!content.trim()} onClick={save}>Save</Button>

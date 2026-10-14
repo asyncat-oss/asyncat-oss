@@ -8,7 +8,9 @@ import PropTypes from 'prop-types';
 import { Link } from 'react-router-dom';
 import { Brain, FolderOpen, Globe, ImagePlus, X } from 'lucide-react';
 import Button from '../components/ui/Button.jsx';
-import { Field, Input, Select } from '../components/ui/Field.jsx';
+import { Field, Input } from '../components/ui/Field.jsx';
+import Select from '../components/ui/Select.jsx';
+import Combobox from '../components/ui/Combobox.jsx';
 import { AVATARS, FREEDOM, FREEDOM_ORDER } from './catFormat.js';
 import { TEXTAREA } from './catFormState.js';
 import TriggerEditor from './TriggerEditor.jsx';
@@ -38,13 +40,20 @@ function shrinkImage(file, size = 160) {
   });
 }
 
-export function Chips({ value, onChange, placeholder, list = null, mono = false, label }) {
+const NO_SUGGESTIONS = [];
+
+/**
+ * A list of short entries (sites, tool names) typed into one field: Enter or
+ * a comma adds what's typed. `suggestions` ({ value, hint }) show under the
+ * field while typing.
+ */
+export function Chips({ value, onChange, placeholder, suggestions = NO_SUGGESTIONS, mono = false, label }) {
   const [draft, setDraft] = useState('');
-  const commit = () => {
-    const parts = draft.split(/[\s,]+/).map((part) => part.trim()).filter(Boolean);
-    if (parts.length) onChange([...new Set([...value, ...parts])]);
+  const add = (items) => {
+    if (items.length) onChange([...new Set([...value, ...items])]);
     setDraft('');
   };
+  const commit = () => add(draft.split(/[\s,]+/).map((part) => part.trim()).filter(Boolean));
   return (
     <div>
       {value.length ? (
@@ -59,12 +68,14 @@ export function Chips({ value, onChange, placeholder, list = null, mono = false,
           ))}
         </div>
       ) : null}
-      <Input
+      <Combobox
         value={draft}
-        list={list || undefined}
+        options={suggestions}
         placeholder={placeholder}
         aria-label={label}
-        onChange={(event) => setDraft(event.target.value)}
+        mono={mono}
+        onChange={setDraft}
+        onSelect={(option) => add([String(option.value)])}
         onBlur={commit}
         onKeyDown={(event) => {
           if (event.key === 'Enter' || event.key === ',') {
@@ -81,7 +92,7 @@ Chips.propTypes = {
   value: PropTypes.arrayOf(PropTypes.string).isRequired,
   onChange: PropTypes.func.isRequired,
   placeholder: PropTypes.string,
-  list: PropTypes.string,
+  suggestions: PropTypes.arrayOf(PropTypes.shape({ value: PropTypes.string.isRequired, hint: PropTypes.node })),
   mono: PropTypes.bool,
   label: PropTypes.string,
 };
@@ -156,16 +167,26 @@ export function BrainSection({ form, set, options }) {
         htmlFor="cat-brain"
         hint={agent ? `It thinks like ${agent.name}: its instructions, files${agent.model_profile_id ? ' and model' : ''}.` : 'One of your agents (Customize → Agents). Without one, it uses Asyncat\'s own.'}
       >
-        <Select id="cat-brain" value={form.profileId} onChange={(event) => set({ profileId: event.target.value })}>
-          <option value="">Asyncat (no agent)</option>
-          {options.agents.map((item) => <option key={item.id} value={item.id}>{item.icon ? `${item.icon} ` : ''}{item.name}</option>)}
-        </Select>
+        <Select
+          id="cat-brain"
+          value={form.profileId}
+          onChange={(profileId) => set({ profileId })}
+          options={[
+            { value: '', label: 'Asyncat (no agent)' },
+            ...options.agents.map((item) => ({ value: item.id, label: `${item.icon ? `${item.icon} ` : ''}${item.name}`, text: item.name })),
+          ]}
+        />
       </Field>
       <Field label="Model" htmlFor="cat-model" hint="Kept with the Cat, so changing the chat model later doesn't change it.">
-        <Select id="cat-model" value={form.providerProfileId} onChange={(event) => set({ providerProfileId: event.target.value })}>
-          <option value="">{agent?.model_profile_id ? `Its brain's model` : options.activeModel?.model ? `The model in use now (${options.activeModel.model})` : 'The model in use now'}</option>
-          {options.models.map((model) => <option key={model.id} value={model.id}>{model.name} · {model.model}</option>)}
-        </Select>
+        <Select
+          id="cat-model"
+          value={form.providerProfileId}
+          onChange={(providerProfileId) => set({ providerProfileId })}
+          options={[
+            { value: '', label: agent?.model_profile_id ? `Its brain's model` : options.activeModel?.model ? `The model in use now (${options.activeModel.model})` : 'The model in use now' },
+            ...options.models.map((model) => ({ value: model.id, label: `${model.name} · ${model.model}` })),
+          ]}
+        />
       </Field>
       <ConnectorPicker
         value={form.connectors}
@@ -176,10 +197,15 @@ export function BrainSection({ form, set, options }) {
           : 'Including ones you add later.'}
       />
       <Field label="Project it shares with you" htmlFor="cat-project" hint={form.projectId ? 'It gets the project\'s instructions and files, and its chat shows up in the project.' : 'Optional.'}>
-        <Select id="cat-project" value={form.projectId} onChange={(event) => set({ projectId: event.target.value, ...(event.target.value ? {} : { folderMode: form.folderMode === 'project' ? 'own' : form.folderMode }) })}>
-          <option value="">No project</option>
-          {options.projects.map((project) => <option key={project.id} value={project.id}>{project.emoji ? `${project.emoji} ` : ''}{project.name}</option>)}
-        </Select>
+        <Select
+          id="cat-project"
+          value={form.projectId}
+          onChange={(projectId) => set({ projectId, ...(projectId ? {} : { folderMode: form.folderMode === 'project' ? 'own' : form.folderMode }) })}
+          options={[
+            { value: '', label: 'No project' },
+            ...options.projects.map((project) => ({ value: project.id, label: `${project.emoji ? `${project.emoji} ` : ''}${project.name}`, text: project.name })),
+          ]}
+        />
       </Field>
     </div>
   );
@@ -284,10 +310,16 @@ export function FreedomSection({ form, set, options }) {
       </div>
 
       <Field label="When it asks, wait for your answer for" htmlFor="cat-wait" hint="After that it carries on without that step.">
-        <Select id="cat-wait" value={String(form.approvalTimeoutMinutes)} onChange={(event) => set({ approvalTimeoutMinutes: Number(event.target.value) })} className="w-48">
-          {WAIT_CHOICES.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
-          {!WAIT_CHOICES.some((choice) => choice.value === Number(form.approvalTimeoutMinutes)) ? <option value={form.approvalTimeoutMinutes}>{form.approvalTimeoutMinutes} minutes</option> : null}
-        </Select>
+        <Select
+          id="cat-wait"
+          fullWidth={false}
+          className="w-48"
+          value={Number(form.approvalTimeoutMinutes)}
+          onChange={(minutes) => set({ approvalTimeoutMinutes: Number(minutes) })}
+          options={WAIT_CHOICES.some((choice) => choice.value === Number(form.approvalTimeoutMinutes))
+            ? WAIT_CHOICES
+            : [...WAIT_CHOICES, { value: Number(form.approvalTimeoutMinutes), label: `${form.approvalTimeoutMinutes} minutes` }]}
+        />
       </Field>
 
       <Field label="Daily limits" hint="Leave empty for no limit. It stops for the day when one is reached and tells you.">
@@ -315,12 +347,17 @@ export function FreedomSection({ form, set, options }) {
       </Field>
 
       <Field label="Tools it may always use without asking" hint="On top of what its freedom allows. Answering “Always allow” adds one here.">
-        <Chips value={form.allowedTools} onChange={(allowedTools) => set({ allowedTools })} placeholder="e.g. mail_send_message" list="cat-tools" mono label="Add a tool" />
-        <datalist id="cat-tools">
-          {options.tools.filter((tool) => !form.allowedTools.includes(tool.name)).map((tool) => (
-            <option key={tool.name} value={tool.name}>{tool.permission === 'dangerous' ? 'Risky' : 'Changes things'}</option>
-          ))}
-        </datalist>
+        <Chips
+          value={form.allowedTools}
+          onChange={(allowedTools) => set({ allowedTools })}
+          placeholder="e.g. mail_send_message"
+          suggestions={options.tools.filter((tool) => !form.allowedTools.includes(tool.name)).map((tool) => ({
+            value: tool.name,
+            hint: tool.permission === 'dangerous' ? 'Risky' : 'Changes things',
+          }))}
+          mono
+          label="Add a tool"
+        />
       </Field>
     </div>
   );

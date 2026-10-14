@@ -6,9 +6,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Search, Loader2, FileCode, Hash, Box, AlertCircle } from 'lucide-react';
 import { codeApi } from '../../api';
+import Select from '../../../components/ui/Select.jsx';
 
 const KIND_OPTIONS = [
-  { value: 'any', label: 'Any' },
+  { value: 'any', label: 'Any kind' },
   { value: 'function', label: 'Function' },
   { value: 'class', label: 'Class' },
   { value: 'import', label: 'Import' },
@@ -16,7 +17,15 @@ const KIND_OPTIONS = [
 ];
 
 const LANG_OPTIONS = [
-  '', 'javascript', 'typescript', 'python', 'rust', 'go', 'java', 'css', 'sql',
+  { value: '', label: 'All languages' },
+  { value: 'javascript', label: 'JavaScript' },
+  { value: 'typescript', label: 'TypeScript' },
+  { value: 'python', label: 'Python' },
+  { value: 'rust', label: 'Rust' },
+  { value: 'go', label: 'Go' },
+  { value: 'java', label: 'Java' },
+  { value: 'css', label: 'CSS' },
+  { value: 'sql', label: 'SQL' },
 ];
 
 function ResultRow({ result, onLocate }) {
@@ -90,13 +99,6 @@ export default function CodeSearchPanel({ onLocateResult, workingDir = null, dis
     setQuery(e.target.value);
   };
 
-  const onKindChange = (e) => {
-    setKind(e.target.value);
-  };
-
-  const onLangChange = (e) => {
-    setLang(e.target.value);
-  };
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white dark:bg-slate-950 midnight:bg-slate-950">
@@ -117,21 +119,8 @@ export default function CodeSearchPanel({ onLocateResult, workingDir = null, dis
           />
         </div>
         <div className="flex gap-1.5">
-          <select
-            value={kind}
-            onChange={onKindChange}
-            className="flex-1 rounded border border-gray-200 bg-white px-1.5 py-1 text-[11px] text-gray-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-300 focus:outline-none"
-          >
-            {KIND_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-          <select
-            value={lang}
-            onChange={onLangChange}
-            className="flex-1 rounded border border-gray-200 bg-white px-1.5 py-1 text-[11px] text-gray-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-300 focus:outline-none"
-          >
-            <option value="">All langs</option>
-            {LANG_OPTIONS.filter(Boolean).map(l => <option key={l} value={l}>{l}</option>)}
-          </select>
+          <Select size="sm" className="min-w-0 flex-1" value={kind} onChange={setKind} options={KIND_OPTIONS} aria-label="Kind" />
+          <Select size="sm" className="min-w-0 flex-1" value={lang} onChange={setLang} options={LANG_OPTIONS} aria-label="Language" />
         </div>
       </div>
 

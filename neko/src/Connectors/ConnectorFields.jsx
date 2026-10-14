@@ -5,8 +5,14 @@
 import { useState } from 'react';
 import PropTypes from 'prop-types';
 import { ChevronDown, ChevronRight, FolderOpen } from 'lucide-react';
-import { Field, Input, Select } from '../components/ui/Field.jsx';
+import { Field, Input } from '../components/ui/Field.jsx';
+import Select from '../components/ui/Select.jsx';
 import Button from '../components/ui/Button.jsx';
+
+const TRANSPORTS = [
+  { value: 'http', label: 'Streamable HTTP (current servers)' },
+  { value: 'sse', label: 'SSE (older servers)' },
+];
 
 const TEXTAREA = 'w-full rounded-lg border border-line-strong bg-canvas px-3 py-2.5 font-mono text-[12px] leading-5 text-fg outline-none transition-[border-color,box-shadow] placeholder:text-fg-subtle focus:border-accent focus:ring-2 focus:ring-accent/20';
 
@@ -38,10 +44,12 @@ export function RemoteFields({ form, set, autoFocus = false }) {
             <textarea id="connector-headers" rows={3} className={TEXTAREA} value={form.headersText} onChange={(event) => set({ headersText: event.target.value })} placeholder="Authorization: Bearer …" spellCheck={false} />
           </Field>
           <Field label="Connection" htmlFor="connector-transport">
-            <Select id="connector-transport" value={form.transport} onChange={(event) => set({ transport: event.target.value })}>
-              <option value="http">Streamable HTTP (current servers)</option>
-              <option value="sse">SSE (older servers)</option>
-            </Select>
+            <Select
+              id="connector-transport"
+              value={form.transport}
+              onChange={(transport) => set({ transport })}
+              options={TRANSPORTS}
+            />
           </Field>
           <p className="text-[12px] leading-5 text-fg-subtle">
             Most services that need a sign-in register Asyncat themselves. Some ask you to make an app with them first: put its client ID here.

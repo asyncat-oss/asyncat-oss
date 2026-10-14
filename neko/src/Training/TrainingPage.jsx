@@ -4,17 +4,20 @@ import PropTypes from 'prop-types';
 import {
   HardDrive, Zap, AlertTriangle,
   Play, Square, Trash2, RefreshCw, ChevronDown, ChevronUp,
-  Download, XCircle, Settings2, Brain, Check, FileJson,
+  Download, XCircle, Settings2, Brain, FileJson,
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { trainingApi } from './trainingApi.js';
 import GuidedTraining from './GuidedTraining.jsx';
+import Select from '../components/ui/Select.jsx';
+import Combobox from '../components/ui/Combobox.jsx';
+import { Input } from '../components/ui/Field.jsx';
 
 // Matches the palette used elsewhere in the app (BlockBasedMessageRenderer).
 const CHART_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4'];
 
-// Curated, known-good fine-tuning bases — free text still works, this is just
-// autocomplete so users aren't stuck guessing a HF repo id from scratch.
+// Curated, known-good fine-tuning bases — free text still works, these are just
+// suggestions so users aren't stuck guessing a HF repo id from scratch.
 const SUGGESTED_MODELS = [
   { id: 'TinyLlama/TinyLlama-1.1B-Chat-v1.0', note: '1.1B — fastest, good for testing the pipeline' },
   { id: 'unsloth/Llama-3.2-1B-Instruct', note: '1B — low VRAM' },
@@ -24,6 +27,8 @@ const SUGGESTED_MODELS = [
   { id: 'unsloth/Mistral-7B-Instruct-v0.3', note: '7B — needs ~8GB+ VRAM (4-bit QLoRA)' },
   { id: 'unsloth/Llama-3.1-8B-Instruct', note: '8B — needs ~8GB+ VRAM (4-bit QLoRA)' },
 ];
+
+const BASE_MODEL_OPTIONS = SUGGESTED_MODELS.map((m) => ({ value: m.id, description: m.note }));
 
 const readinessShape = PropTypes.shape({
   backend: PropTypes.string,
@@ -216,70 +221,16 @@ ReadinessBanner.propTypes = {
 };
 
 // ── Dataset dropdown ────────────────────────────────────────────────────────
-// A native <select>'s open menu can't be styled (plain OS popup, breaks dark
-// mode). This matches the app's own popup pattern instead — see the mode
-// selector dropdown in MessageInputV2.jsx — for a panel that's actually ours.
 
-const DatasetSelect = ({ datasets, value, onChange }) => {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onClickOutside = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    const onEscape = (e) => { if (e.key === 'Escape') setOpen(false); };
-    document.addEventListener('mousedown', onClickOutside);
-    document.addEventListener('keydown', onEscape);
-    return () => {
-      document.removeEventListener('mousedown', onClickOutside);
-      document.removeEventListener('keydown', onEscape);
-    };
-  }, [open]);
-
-  const selected = datasets.find((d) => d.path === value);
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-gray-700
-          bg-white dark:bg-gray-900 midnight:bg-gray-900
-          focus:outline-none focus:border-gray-400 dark:focus:border-gray-500 transition-colors"
-      >
-        <span className={`flex items-center gap-2 truncate ${selected ? 'text-gray-900 dark:text-white midnight:text-white' : 'text-gray-400 dark:text-gray-500'}`}>
-          <FileJson className="w-3.5 h-3.5 flex-shrink-0 opacity-60" />
-          <span className="truncate">{selected ? selected.filename : 'Select a dataset…'}</span>
-          {selected && <span className="text-gray-400 dark:text-gray-500 flex-shrink-0">({selected.sizeMb} MB)</span>}
-        </span>
-        <ChevronDown className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-
-      {open && (
-        <div className="absolute left-0 right-0 z-30 mt-1.5 max-h-56 overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-800 midnight:border-slate-800
-          bg-white dark:bg-gray-950 midnight:bg-slate-950 p-1 shadow-xl">
-          {datasets.map((d) => (
-            <button
-              key={d.path}
-              type="button"
-              onClick={() => { onChange(d.path); setOpen(false); }}
-              className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-xs transition-colors ${
-                value === d.path
-                  ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800 midnight:text-slate-100'
-                  : 'text-gray-600 dark:text-gray-300 midnight:text-slate-300 hover:bg-gray-50 dark:hover:bg-gray-800 midnight:hover:bg-slate-800'
-              }`}
-            >
-              <FileJson className="w-3.5 h-3.5 flex-shrink-0 opacity-70" />
-              <span className="flex-1 min-w-0 truncate">{d.filename}</span>
-              <span className="text-[10px] opacity-60 flex-shrink-0">{d.sizeMb} MB</span>
-              {value === d.path && <Check className="w-3.5 h-3.5 flex-shrink-0" />}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
+const DatasetSelect = ({ datasets, value, onChange }) => (
+  <Select
+    value={value}
+    onChange={onChange}
+    placeholder="Choose a dataset…"
+    aria-label="Dataset"
+    options={datasets.map((d) => ({ value: d.path, label: d.filename, hint: `${d.sizeMb} MB`, icon: FileJson }))}
+  />
+);
 
 DatasetSelect.propTypes = {
   datasets: PropTypes.arrayOf(PropTypes.shape({
@@ -347,40 +298,26 @@ const NewJobForm = ({ readiness, onSubmit, submitting }) => {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
         <div>
-          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Job Name</label>
-          <input
+          <label htmlFor="training-job-name" className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Job Name</label>
+          <Input
+            id="training-job-name"
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. alpaca-qwen-lora"
-            className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-gray-700
-              bg-white dark:bg-gray-900 midnight:bg-gray-900
-              text-gray-900 dark:text-white midnight:text-white
-              placeholder-gray-400 dark:placeholder-gray-500
-              focus:outline-none focus:border-gray-400 dark:focus:border-gray-500"
             required
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Base Model</label>
-          <input
-            type="text"
-            list="suggested-base-models"
+          <label htmlFor="training-base-model" className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Base Model</label>
+          <Combobox
+            id="training-base-model"
             value={baseModel}
-            onChange={(e) => setBaseModel(e.target.value)}
+            onChange={setBaseModel}
+            options={BASE_MODEL_OPTIONS}
             placeholder="e.g. unsloth/Qwen3-1.7B"
-            className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-gray-700
-              bg-white dark:bg-gray-900 midnight:bg-gray-900
-              text-gray-900 dark:text-white midnight:text-white
-              placeholder-gray-400 dark:placeholder-gray-500
-              focus:outline-none focus:border-gray-400 dark:focus:border-gray-500"
             required
           />
-          <datalist id="suggested-base-models">
-            {SUGGESTED_MODELS.map((m) => (
-              <option key={m.id} value={m.id}>{m.note}</option>
-            ))}
-          </datalist>
           {vramHint && (
             <p className={`mt-1 text-[10px] ${
               vramHint.fit === 'risky' ? 'text-red-500' : vramHint.fit === 'tight' ? 'text-amber-500' : 'text-gray-400 dark:text-gray-500'
@@ -409,16 +346,12 @@ const NewJobForm = ({ readiness, onSubmit, submitting }) => {
         {datasetMode === 'pick' ? (
           <DatasetSelect datasets={datasets} value={datasetPath} onChange={setDatasetPath} />
         ) : (
-          <input
+          <Input
             type="text"
             value={datasetPath}
             onChange={(e) => setDatasetPath(e.target.value)}
             placeholder="e.g. ~/.asyncat/datasets/alpaca-train-alpaca.jsonl"
-            className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-gray-700
-              bg-white dark:bg-gray-900 midnight:bg-gray-900
-              text-gray-900 dark:text-white midnight:text-white
-              placeholder-gray-400 dark:placeholder-gray-500
-              focus:outline-none focus:border-gray-400 dark:focus:border-gray-500"
+            aria-label="Dataset path"
             required
           />
         )}

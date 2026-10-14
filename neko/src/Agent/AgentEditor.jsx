@@ -3,7 +3,8 @@ import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ChevronDown, ImagePlus, MessageSquare, Plus, Trash2, X } from 'lucide-react';
 import Button from '../components/ui/Button';
-import { Field, Input, Select } from '../components/ui/Field';
+import { Field, Input } from '../components/ui/Field';
+import Select from '../components/ui/Select.jsx';
 import ContextMeter from '../components/ContextMeter';
 import KnowledgeFiles from '../components/KnowledgeFiles';
 import { useConfirm } from '../components/confirmContext';
@@ -250,7 +251,10 @@ export default function AgentEditor({ agentId = null, template = null, onClose }
   };
   const capabilityOn = (key) => allCapabilities || capabilities.includes(key);
 
-  const modelOptions = useMemo(() => providers.map((p) => ({ id: p.id, label: `${p.name || p.provider_id} · ${p.model || 'default model'}` })), [providers]);
+  const modelOptions = useMemo(() => [
+    { value: '', label: "The chat's current model" },
+    ...providers.map((p) => ({ value: p.id, label: `${p.name || p.provider_id} · ${p.model || 'default model'}` })),
+  ], [providers]);
 
   if (loading) return <div className="h-full bg-canvas" aria-busy="true" />;
 
@@ -369,10 +373,7 @@ export default function AgentEditor({ agentId = null, template = null, onClose }
 
             <section>
               <Field label="Model" htmlFor="agent-model" hint="Use a specific model for this agent, or whichever model the chat uses.">
-                <Select id="agent-model" value={agent.model_profile_id || ''} onChange={(e) => update({ model_profile_id: e.target.value || null })}>
-                  <option value="">The chat&apos;s current model</option>
-                  {modelOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-                </Select>
+                <Select id="agent-model" value={agent.model_profile_id || ''} onChange={(value) => update({ model_profile_id: value || null })} options={modelOptions} />
               </Field>
             </section>
 

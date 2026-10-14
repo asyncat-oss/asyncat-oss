@@ -3,7 +3,8 @@ import PropTypes from 'prop-types';
 import { ChevronDown, ExternalLink, RefreshCw, Terminal } from 'lucide-react';
 import Dialog from '../components/ui/Dialog.jsx';
 import Button from '../components/ui/Button.jsx';
-import { Field, Input, Select } from '../components/ui/Field.jsx';
+import { Field, Input } from '../components/ui/Field.jsx';
+import Select from '../components/ui/Select.jsx';
 import { Segmented } from '../components/ui/Tabs.jsx';
 import { aiProviderApi } from '../Settings/settingApi.js';
 import { ProviderLogo } from './modelLogos.jsx';
@@ -162,9 +163,12 @@ export default function ProviderConnectDialog({ entry = null, profile = null, ca
                 items={variants.map(({ preset: item, label }) => ({ value: item.providerId, label }))}
               />
             ) : (
-              <Select value={providerId} onChange={(event) => chooseVariant(event.target.value)}>
-                {variants.map(({ preset: item, label }) => <option key={item.providerId} value={item.providerId}>{label}</option>)}
-              </Select>
+              <Select
+                value={providerId}
+                onChange={chooseVariant}
+                aria-label={entry.variantLabel || 'Variant'}
+                options={variants.map(({ preset: item, label }) => ({ value: item.providerId, label }))}
+              />
             )}
           </Field>
         ) : null}
