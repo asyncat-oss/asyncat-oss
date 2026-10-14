@@ -29,7 +29,7 @@ It is not a chatbot wrapper. It controls your screen, writes and runs code, mana
 | **Claude Code, Codex and ACP agents** | Hand a chat to Claude Code or Codex installed on your computer, signed in with your own account. Pick one, and its model, under the message box; follow-ups continue the same session and its steps show in the chat. Your existing Claude Code and Codex sessions (from the terminal or their apps) are listed in the sidebar: open one and carry on where you left off. In Action mode Claude Code asks through the usual approval card before running commands. Any agent that speaks the Agent Client Protocol (Gemini CLI, Qwen Code, Goose, …) can answer chats too: its edits show as diffs on the approval card, and its file access stays inside the chat's project folder. **Customize → Agents → Coding agents** shows install and sign-in status, plan usage limits, ACP agents and every session |
 | **Projects** | A home for related work, like Claude and ChatGPT Projects: custom instructions every chat in it follows, files it knows (text, PDF, Word and images), its chats, and optionally folders the agent can work in. Files that fit in the model's context window go in whole; bigger sets are searched and the relevant passages sent. The project page shows how much of the model's window they take and whether the model can see images. Things the agent remembers in a project stay with that project |
 | **Approvals** | Before a risky tool runs, the agent asks: approve once, trust it for the rest of the run, or always allow. File edits show the diff before you decide. **Settings → Privacy & safety** lists every always-allowed tool, in chats, agents and Cats, with a way to take it back. With nobody to ask (an API call), risky tools are refused; a Cat asks in your inbox |
-| **Privacy & safety** | The agent's shell commands run in a sandbox (bubblewrap on Linux, sandbox-exec on macOS) that can read your files but only write in the project folder, temporary folders and package caches. Commands only skip approval when a parser proves them read-only. Text from web pages, email and other outside sources is marked as information, not instructions. API keys and sign-in tokens are stored encrypted, with the key in your system keychain. **Settings → Privacy & safety** sets where new chats start (Plan or Action), lists sites no agent may open, shows where your data lives, exports everything to one zip and deletes everything |
+| **Privacy & safety** | The agent's shell commands run in a sandbox (bubblewrap on Linux, sandbox-exec on macOS) that can read your files but only write in the project folder, temporary folders and package caches. Commands only skip approval when a parser proves them read-only. Text from web pages, email and other outside sources is marked as information, not instructions. API keys and sign-in tokens are stored encrypted, with the key in your system keychain. **Settings → Privacy & safety** sets where new chats start (Plan or Action), lists sites no agent may open, links to where your data lives (**Files → System**), exports everything to one zip and deletes everything |
 | **Small prompts for local models** | Each agent step sends a core set of tools (about 40, or 24 for models that read tools from the prompt) instead of the full list. The agent finds the rest with `tool_search` when it needs them |
 | **35+ providers** | OpenAI, Anthropic, Gemini, Ollama, llama.cpp, MLX, LM Studio, OpenRouter, DeepSeek, Groq, Together AI, Mistral, Perplexity, Cohere, and more |
 | **Agents** | Make your own agents, like GPTs and Gems: a name and picture, instructions, files it knows, starter prompts, what it may do (web, files, documents, memory, integrations, computer), which connectors it may use and its own model. Start from a template, then pick an agent in the message box; a Cat can use one too. Coding agents (Claude Code, Codex, ACP agents) have their own tab |
@@ -42,11 +42,12 @@ It is not a chatbot wrapper. It controls your screen, writes and runs code, mana
 | **Connectors (MCP)** | Give agents and Cats tools from other apps: pick one from the catalog (GitHub, Notion, Linear, Sentry, Supabase, Stripe, …), add a remote server with OAuth sign-in or a key, or run a program on this computer. Commands that download first (`npx`, `uvx`, `docker`) show the size and wait for your OK. Tools that only read run without asking; others ask first. Each agent and Cat can be limited to the connectors it needs. **Settings → Connections → Connectors**; saved in `data/mcp.json`, the format other MCP apps use |
 | **Persistent memory** | SQLite-backed memory with types: `user`, `feedback`, `project`, `reference`, `fact`, `preference`, `context`, `task_state`. Memories made in a project stay in it; ones about you apply everywhere; a Cat's stay its own. **Tools & Skills → Memory** shows whose each memory is, filters by project, agent or Cat, and lets you edit or add memories |
 | **Notes** | The agent writes notes as documents in the chat; open one to edit it (rich text, tables, line, bar, area, pie, donut and scatter charts, export to DOCX/PDF). `Cmd/Ctrl+K` finds them |
+| **Files** | One page for what agents made (pictures, documents, pages, data and notes, each with a viewer) and everything else Asyncat keeps on this computer: uploads, models, training, exports, logs and caches, and its own files in **System**. It shows how much room each takes, and frees space after a confirm that names what goes (in the desktop app, what agents made goes to your Trash). It never lists your project folders' own files |
 | **System tray** | Left-click for Quick ask (on Linux it's in the menu); the menu shows Asyncat, opens Cats, restarts the backend, or quits. Closing the window leaves Asyncat in the tray while a Cat is on (**Settings → Background**), and it can start at login, hidden in the tray |
 | **Global shortcuts** | `Cmd/Ctrl+Shift+A` summons Asyncat from any app; `Cmd/Ctrl+Shift+Space` opens Quick ask. Change or turn off either one in **Settings → Appearance** |
 | **Quick ask** | A small window over any app: ask, and the answer streams in right there, saved as a normal chat. `Cmd/Ctrl+Enter` opens it in Asyncat, `Esc` hides it. On Wayland, where global shortcuts may not reach apps, bind Asyncat with `--quick-ask` in your desktop's keyboard settings (**Settings → Appearance** shows the exact command) |
 | **Training (Labs)** | **Customize → Models → Training** teaches a small local model your style in four steps: pick data (answers you rated 👍, notes, project files), see which model fits your GPU and roughly how long it takes, train, then load the adapter into llama.cpp and compare answers with it off and on. Works on NVIDIA GPUs with 6 GB or more for models up to about 3B. New, and so far only tested with stand-ins for the GPU parts |
-| **Voice and pictures** | **Models → Voice** and **Models → Images** set up speech to text, reading answers aloud and making pictures, on this computer (with the size shown before anything downloads) or through a provider. The mic is hands-free in voice mode. Everything agents make, pictures, documents, pages and data, is in the **Gallery** |
+| **Voice and pictures** | **Models → Voice** and **Models → Images** set up speech to text, reading answers aloud and making pictures, on this computer (with the size shown before anything downloads) or through a provider. The mic is hands-free in voice mode. Everything agents make, pictures, documents, pages and data, is in **Files** |
 | **Interactive answers** | Tables in answers sort, filter and copy as CSV; an answer can end with follow-up buttons; an agent's question can come as a small form. Rate answers 👍 or 👎 |
 | **Bring your chats** | Import ChatGPT and Claude data exports as chats, with their dates, and paste in your ChatGPT memories (**Settings → Privacy & safety**) |
 | **Native notifications** | System-level alerts when something finishes, an agent needs your OK, or asks you something; choose which in **Settings → Notifications**, and set quiet hours |
@@ -66,8 +67,8 @@ It is not a chatbot wrapper. It controls your screen, writes and runs code, mana
 | **Models**: the model in use, providers, local models, voice, images, usage and training. | **Voice**: listening and reading aloud on this computer, with sizes shown before anything downloads. |
 | ![A project page with its instructions and knowledge](docs/images/projects.png) | ![Agents page with two agents and templates](docs/images/agents.png) |
 | **Projects**: instructions every chat follows, files the agent knows, chats, and optional folders. | **Agents**: your own agents with instructions, files, starter prompts, abilities, connectors and a model. |
-| ![An answer with a sortable table and follow-up buttons](docs/images/interactive-table.png) | ![Gallery of pictures, documents, pages and data agents made](docs/images/gallery.png) |
-| **Interactive answers**: tables sort and filter, and follow-up buttons send the next message. | **Gallery**: everything agents made, from any project, agent or Cat, with a viewer for each. |
+| ![An answer with a sortable table and follow-up buttons](docs/images/interactive-table.png) | ![Files, with the pictures, documents, pages and data agents made](docs/images/files.png) |
+| **Interactive answers**: tables sort and filter, and follow-up buttons send the next message. | **Files**: everything agents made, from any project, agent or Cat, with a viewer for each, and everything else Asyncat keeps. |
 | ![Training, picking a model that fits the GPU](docs/images/training.png) | ![Settings, Privacy and safety](docs/images/privacy.png) |
 | **Training (Labs)**: which model fits your GPU, how long it takes, and what it downloads first. | **Privacy & safety**: where chats start, always-allowed tools, sites agents never open, your data. |
 | ![Memory page with memories marked by project and Cat](docs/images/memory.png) | ![Update screen with release notes](docs/images/update.png) |
@@ -139,7 +140,7 @@ npm run test:release     # desktop app and release scripts
 npm run test:e2e         # end-to-end smoke test in a headless browser
 ```
 
-The end-to-end test starts a throwaway copy of Asyncat (its own data folder and ports) with a fake model, a fake MCP server and a fake ACP agent, and clicks through chat, projects, agents, Cats, connectors, Privacy & safety, training and the main pages. It needs a Chromium-based browser (Chrome, Chromium, Edge or Brave) and never touches your data.
+The end-to-end test starts a throwaway copy of Asyncat (its own data folder and ports) with a fake model, a fake MCP server and a fake ACP agent, and clicks through chat, projects, agents, Cats, connectors, Privacy & safety, training, Files and the main pages. It needs a Chromium-based browser (Chrome, Chromium, Edge or Brave) and never touches your data.
 
 #### 3. Build & Package Distributables
 
@@ -324,13 +325,13 @@ asyncat-oss/
 │   │   ├── integrations/      # RSS, mail, outbound notifications
 │   │   ├── knowledge/         # Project and agent files: text extraction, search, context sizing
 │   │   ├── lib/               # Shared helpers: .env I/O, system deps, engine installs, secret encryption
-│   │   ├── made/              # Everything agents made, for the Gallery (/api/made)
+│   │   ├── made/              # Where agents' files and notes are found, for Files → Made by agents
 │   │   ├── media/             # Voice and picture setup, the picture gallery (/api/media)
 │   │   ├── middleware/        # Local profile context, cross-site request guard
 │   │   ├── notes/             # Delta-based notes, export (/api/notes)
 │   │   ├── privacy/           # Blocked sites, export everything, delete everything (/api/privacy)
 │   │   ├── search/            # Universal search (/api/search)
-│   │   ├── storage/           # Uploaded files (/files, /api/storage)
+│   │   ├── storage/           # Files: places, items, sizes and clean-ups (/api/storage); uploaded files (/files)
 │   │   ├── training/          # Guided training: data, plans, adapters (/api/training/guide)
 │   │   ├── update/            # Update status and graceful restart (/api/update)
 │   │   └── users/             # Local profile + workspace/project CRUD
@@ -345,7 +346,7 @@ asyncat-oss/
 │       ├── Connectors/        # Settings → Connections → Connectors
 │       ├── Tools/             # Tools & skills browser, the Memory page
 │       ├── Training/          # Guided training (shown as Models → Training)
-│       ├── made/              # Gallery: everything agents made
+│       ├── files/             # Files: what agents made and everything else Asyncat keeps
 │       ├── Settings/          # Settings tabs
 │       ├── projects/          # Projects: instructions, files, chats and folders
 │       ├── sidebar/           # Sidebar, Claude Code & Codex sessions, Cmd/Ctrl+K search
