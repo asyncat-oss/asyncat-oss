@@ -68,17 +68,26 @@ export function gpuLine(gpu) {
   return `${gpu.name || gpu.vendor}${gpu.vramGb ? ` · ${gpu.vramGb} GB` : ''}`;
 }
 
-/** Catalog voices grouped by language, the user's language first. */
+/**
+ * Catalog voices grouped by language, the user's language first: the exact
+ * one (English (US) for en-US), then the others of that language.
+ */
 export function voicesByLanguage(voices = [], language = 'en') {
-  const lang = String(language || 'en').slice(0, 2).toLowerCase();
+  const locale = String(language || 'en').toLowerCase();
+  const lang = locale.slice(0, 2);
   const groups = new Map();
   for (const voice of voices) {
     if (!groups.has(voice.language)) groups.set(voice.language, []);
     groups.get(voice.language).push(voice);
   }
+  const rank = (list) => {
+    if (list.some((voice) => voice.locale.toLowerCase() === locale)) return 2;
+    return list.some((voice) => voice.locale.slice(0, 2).toLowerCase() === lang) ? 1 : 0;
+  };
   return [...groups.entries()]
-    .map(([name, list]) => ({ language: name, voices: list, mine: list.some((voice) => voice.locale.slice(0, 2).toLowerCase() === lang) }))
-    .sort((a, b) => Number(b.mine) - Number(a.mine) || a.language.localeCompare(b.language));
+    .map(([name, list]) => ({ name, list, rank: rank(list) }))
+    .sort((a, b) => b.rank - a.rank || a.name.localeCompare(b.name))
+    .map(({ name, list, rank: mine }) => ({ language: name, voices: list, mine: mine > 0 }));
 }
 
 /** The browser's language, e.g. "en-GB". */

@@ -35,6 +35,12 @@ test('voices group by language, the user’s first', () => {
     { id: 'fr', language: 'French', locale: 'fr-FR' },
   ];
   assert.deepEqual(voicesByLanguage(voices, 'fr-FR').map((group) => group.language), ['French', 'English (US)', 'German']);
+  // The exact locale before the others of its language.
+  const english = [...voices, { id: 'b', language: 'English (UK)', locale: 'en-GB' }];
+  assert.deepEqual(voicesByLanguage(english, 'en-US').map((group) => group.language), ['English (US)', 'English (UK)', 'French', 'German']);
+  assert.deepEqual(voicesByLanguage(english, 'en-GB').map((group) => [group.language, group.mine]), [
+    ['English (UK)', true], ['English (US)', true], ['French', false], ['German', false],
+  ]);
   assert.equal(gpuLine({ vendor: 'NVIDIA', name: 'RTX 4050 Laptop', vramGb: 6 }), 'RTX 4050 Laptop · 6 GB');
   assert.equal(gpuLine(null), 'No graphics card found');
 });
