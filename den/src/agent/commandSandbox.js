@@ -195,7 +195,7 @@ export function bwrapFailureReason(result, { readFile = readSysctl } = {}) {
     return 'This system turns off the user namespaces bwrap needs.';
   }
   const line = String(result?.stderr || result?.error || '').trim().split('\n')[0];
-  return line ? `bwrap can't start here: ${line.replace(/^bwrap:\s*/, '')}` : "bwrap can't start here.";
+  return line ? `bwrap failed with "${line.replace(/^bwrap:\s*/, '')}".` : "bwrap failed to start.";
 }
 
 /**
@@ -282,6 +282,7 @@ export function sandboxStatus({ platform = process.platform, recheck = false, ho
     .filter((item) => item.exists || item.allowed);
   return {
     platform,
+    home,
     enabled: setting() !== 'off',
     state,
     reason,

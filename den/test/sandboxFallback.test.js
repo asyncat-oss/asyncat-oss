@@ -100,7 +100,7 @@ test('every command asks, every time, with the reason on the card', { skip: linu
   assert.equal(first.allowed, true);
   assert.equal(asked.length, 1, 'auto-approve and earlier approvals do not cover it');
   assert.equal(asked[0].unsandboxed, BLOCKED);
-  assert.match(asked[0].sandboxNote, /sandbox can't start: AppArmor/);
+  assert.match(asked[0].sandboxNote, /sandbox can't start here, so this command would run without it\. AppArmor/);
   await runtime._checkPermission(call('run_command'));
   assert.equal(asked.length, 2, '"Trust this run" does not cover the next command either');
 

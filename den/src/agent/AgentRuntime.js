@@ -1567,7 +1567,7 @@ export class AgentRuntime {
     // it is asked every time, whatever was approved before.
     const unsandboxed = SANDBOXED_TOOLS.has(toolCall.tool_name) ? sandboxCantStart() : null;
     const sandboxNote = unsandboxed
-      ? `Asyncat's sandbox can't start: ${unsandboxed} This command would run without it, so Asyncat asks each time.`
+      ? `Asyncat's sandbox can't start here, so this command would run without it. ${unsandboxed}`
       : null;
 
     if (this.autoApprove && !unsandboxed) {
