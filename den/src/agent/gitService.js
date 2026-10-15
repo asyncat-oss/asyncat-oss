@@ -383,13 +383,17 @@ export function unstageGitFiles(cwd, files = []) {
   return { ...result, command: `git ${args.join(' ')}`, files: paths, all: paths.length === 0 };
 }
 
-export function commitGit(cwd, { message, files = [], amend = false, workspaceRoot = null } = {}) {
+/**
+ * Commit what is staged, after staging `files` first, or every change in the
+ * repository (`git add -A`) with `all`.
+ */
+export function commitGit(cwd, { message, files = [], all = false, amend = false, workspaceRoot = null } = {}) {
   const repo = ensureRepo(cwd);
   if (!repo.success) return repo;
   const cleanMessage = String(message || '').trim();
   if (!amend && !cleanMessage) return { success: false, error: 'Commit message is required.' };
-  const paths = normalizeGitPaths(repo.root, files);
-  if (paths.length) {
+  const paths = all ? [] : normalizeGitPaths(repo.root, files);
+  if (all || paths.length) {
     const stage = stageGitFiles(repo.root, paths, { workspaceRoot });
     if (!stage.success) return stage;
   }
@@ -405,6 +409,7 @@ export function commitGit(cwd, { message, files = [], amend = false, workspaceRo
       : 'git commit -m <message>',
     commit: hash || null,
     files: paths,
+    all: Boolean(all),
     amend: Boolean(amend),
   };
 }

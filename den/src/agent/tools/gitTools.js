@@ -294,8 +294,11 @@ export const gitCommitTool = {
     if (args.amend) {
       return runGit(['commit', '--amend', '--no-edit'], repoDir(args, context), { asked: true, workspaceRoot: context.workingDir });
     }
-    const files = args.all || args.files === '.' ? [] : args.files ? [args.files] : [];
-    return commitGit(repoDir(args, context), { message: args.message, files, workspaceRoot: context.workingDir });
+    // "." and all: true both mean every change; without either, only what is
+    // staged (or the files named) goes in.
+    const all = args.all === true || args.all === 'true' || String(args.files ?? '').trim() === '.';
+    const files = !all && args.files ? [args.files] : [];
+    return commitGit(repoDir(args, context), { message: args.message, files, all, workspaceRoot: context.workingDir });
   },
 };
 
