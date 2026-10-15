@@ -929,6 +929,16 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     setSidePanelTab(prev => prev === 'artifact' ? prevSidePanelTab : prev);
   }, [prevSidePanelTab]);
 
+  // An artifact open in the side panel belongs to its chat: switching chats
+  // closes it (its Download and Delete would act on the other chat's note).
+  const artifactChatRef = useRef(currentConversationId);
+  useEffect(() => {
+    if (artifactChatRef.current === currentConversationId) return;
+    artifactChatRef.current = currentConversationId;
+    setSelectedArtifact(null);
+    setSidePanelTab(prev => (prev === 'artifact' ? prevSidePanelTab : prev));
+  }, [currentConversationId, prevSidePanelTab]);
+
   const handleGitChanged = useCallback(() => {
     refreshGitState();
   }, [refreshGitState]);
