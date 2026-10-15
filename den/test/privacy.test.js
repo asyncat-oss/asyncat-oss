@@ -28,6 +28,7 @@ function makeTree(root) {
   write(path.join(data, 'generated', 'images', 'a.png'));
   write(path.join(data, 'models', 'm.gguf'), 'model');
   write(path.join(home, 'skills', 'mine.md'));
+  write(path.join(home, 'souls', 'default.md'), '# My edited instructions');
   write(path.join(home, 'llama.cpp', 'current', 'llama-server'));
   write(path.join(home, 'training', 'outputs', 'job-1', 'final-adapter', 'adapter_model.safetensors'));
   write(path.join(home, 'training', 'python', 'bin', 'python'));
@@ -35,7 +36,7 @@ function makeTree(root) {
   return { data, home, uploads };
 }
 
-test('a reset waits for the next start, keeps models unless asked, and takes your skills', () => {
+test('a reset waits for the next start, keeps models unless asked, and takes your skills and instructions file', () => {
   const { data, home, uploads } = makeTree(path.join(scratch, 'one'));
   assert.equal(applyReset({ dataRoot: data, home }), null, 'nothing asked, nothing done');
 
@@ -45,6 +46,7 @@ test('a reset waits for the next start, keeps models unless asked, and takes you
   assert.ok(result.removed.length >= 4);
   assert.deepEqual(fs.readdirSync(data), ['models'], 'only the models are left');
   assert.equal(fs.existsSync(path.join(home, 'skills')), false, 'your own skills go');
+  assert.equal(fs.existsSync(path.join(home, 'souls')), false, 'your edited instructions file goes');
   assert.equal(fs.existsSync(path.join(home, 'llama.cpp')), true, 'engines stay');
   assert.equal(fs.existsSync(path.join(home, 'training', 'outputs')), false, 'what training made from your data goes');
   assert.equal(fs.existsSync(path.join(home, 'training', 'python')), true, 'the training tools stay');

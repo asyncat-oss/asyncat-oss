@@ -177,7 +177,7 @@ export function ExportEverything() {
         <div className="min-w-0">
           <p className="text-[13px] font-medium text-fg">Export everything</p>
           <p className="mt-0.5 text-[12px] leading-5 text-fg-muted">
-            One zip file in your Downloads folder with your chats, projects, notes, agents, Cats, memories, settings, uploads, generated pictures and skills.
+            One zip file in your Downloads folder with your chats, projects, notes, agents, Cats, memories, settings, uploads, generated pictures, skills and your edited instructions file.
             {estimate ? ` About ${formatBytes(estimate.bytes)} before zipping.` : ''}
             {estimate?.leftOut?.modelsBytes ? ` Downloaded models (${formatBytes(estimate.leftOut.modelsBytes)}) are left out.` : ' Downloaded models are left out.'}
             {' '}Saved keys stay encrypted in it.
@@ -279,7 +279,7 @@ export function DeleteEverything({ pending, onChanged }) {
         <div className="min-w-0">
           <p className="text-[13px] font-medium text-fg">Delete everything</p>
           <p className="mt-0.5 text-[12px] leading-5 text-fg-muted">
-            Start over as if Asyncat were new: your chats, projects, notes, agents, Cats, memories, settings, saved keys and sign-ins, uploads, generated pictures and skills go, and the built-in browser forgets its sign-ins and tabs. Project folders elsewhere on your computer are left alone.
+            Start over as if Asyncat were new: your chats, projects, notes, agents, Cats, memories, settings, saved keys and sign-ins, uploads, generated pictures, skills and your edited instructions file go, and the built-in browser forgets its sign-ins and tabs. Project folders elsewhere on your computer are left alone.
           </p>
         </div>
         <Button variant="danger" icon={Trash2} onClick={() => setOpen(true)}>Delete everything…</Button>
