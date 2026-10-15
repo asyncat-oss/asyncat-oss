@@ -646,7 +646,7 @@ const ChatsPage = () => {
   const sectionHeadingClass = 'mb-1 pl-2.5 text-xs font-medium text-fg-subtle sm:pl-10';
 
   return (
-    <div data-command-center className="flex flex-col h-full bg-transparent overflow-hidden">
+    <div className="flex flex-col h-full bg-transparent overflow-hidden">
       <div className="max-w-4xl w-full mx-auto p-4 md:p-8 flex flex-col h-full relative z-20">
         {/* Header */}
         <div className="flex items-center justify-between mb-5 flex-shrink-0">

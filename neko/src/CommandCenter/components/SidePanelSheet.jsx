@@ -57,10 +57,7 @@ export default function SidePanelSheet({ label, onClose, children }) {
   };
 
   return createPortal(
-    // data-command-center: the side panels still carry some older colour
-    // classes that rely on the chat page's midnight fallbacks.
     <div
-      data-command-center
       className="fixed inset-0 z-[60] flex justify-end bg-black/45 xl:hidden"
       onMouseDown={(event) => {
         if (backdropCloses(event, layerRef.current)) onClose();

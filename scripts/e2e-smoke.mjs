@@ -527,8 +527,8 @@ async function main() {
     const { conversations } = await api('GET', '/api/ai/chats?limit=80&mode=all');
     assert(conversations[0]?.id === saved.conversationId && conversations[0].is_pinned, 'the pinned chat is not first in the list');
     await page.goto(`${app}/all-chats`, { waitUntil: 'domcontentloaded' });
-    await waitFor(() => page.evaluate(() => Boolean(document.querySelector('[data-command-center] section[aria-label="Pinned chats"]')?.innerText.includes('Allotment plan'))), { timeout: 20000, what: 'the chat among pinned on All chats' });
-    await page.click('[data-command-center] button[aria-label="Options for Allotment plan"]');
+    await waitFor(() => page.evaluate(() => Boolean(document.querySelector('main section[aria-label="Pinned chats"]')?.innerText.includes('Allotment plan'))), { timeout: 20000, what: 'the chat among pinned on All chats' });
+    await page.click('main button[aria-label="Options for Allotment plan"]');
     await clickText('[role="menuitem"]', 'Unpin');
     await waitFor(async () => !(await pinnedInSidebar()), { timeout: 10000, what: 'the sidebar to drop the pin' });
     await waitFor(async () => !(await api('GET', '/api/ai/chats?limit=80&mode=all')).conversations.some((chat) => chat.is_pinned), { timeout: 10000, what: 'the unpin to be saved' });

@@ -172,7 +172,7 @@ const TrashPage = () => {
   };
 
   return (
-    <div data-command-center className="flex h-full flex-col overflow-hidden bg-transparent">
+    <div className="flex h-full flex-col overflow-hidden bg-transparent">
       <div className="mx-auto flex h-full w-full max-w-4xl flex-col p-4 md:p-8">
         <div className="mb-5 flex shrink-0 flex-wrap items-center justify-between gap-3">
           <div>
