@@ -2,10 +2,13 @@ import { useState, useEffect } from 'react';
 import {
   Pencil, Trash2, FilePlus, Terminal, FolderPlus,
   ChevronDown, ChevronRight, X, Loader2, AlertCircle,
-  RotateCcw, ShieldAlert, GitCompare,
+  RotateCcw, GitCompare,
 } from 'lucide-react';
 import { agentApi, gitApi } from '../../api';
-import Portal from '../../../components/Portal';
+import Button from '../../../components/ui/Button.jsx';
+import Dialog from '../../../components/ui/Dialog.jsx';
+import Notice from '../../../components/ui/Notice.jsx';
+import { Segmented } from '../../../components/ui/Tabs.jsx';
 import UnifiedDiffViewer from '../code/UnifiedDiffViewer';
 import { currentToolName, editedPaths } from '../../utils/toolNames.js';
 
@@ -32,24 +35,27 @@ function gitCommandLabel(tool, args = {}) {
   return tool;
 }
 
+// One neutral icon per kind of change; the label says what happened.
 const TYPE_META = {
-  written:   { label: 'Written',    icon: Pencil,     dot: 'bg-blue-400',    text: 'text-blue-600 dark:text-blue-400' },
-  edited:    { label: 'Edited',     icon: Pencil,     dot: 'bg-amber-400',   text: 'text-amber-600 dark:text-amber-400' },
-  deleted:   { label: 'Deleted',    icon: Trash2,     dot: 'bg-red-400',     text: 'text-red-600 dark:text-red-400'     },
-  created:   { label: 'Created',    icon: FilePlus,   dot: 'bg-emerald-400', text: 'text-emerald-600 dark:text-emerald-400' },
-  copied:    { label: 'Copied',     icon: FilePlus,   dot: 'bg-cyan-400',    text: 'text-cyan-600 dark:text-cyan-400' },
-  moved:     { label: 'Moved',      icon: Pencil,     dot: 'bg-violet-400',  text: 'text-violet-600 dark:text-violet-400' },
-  directory: { label: 'Dir',        icon: FolderPlus, dot: 'bg-indigo-400',  text: 'text-indigo-600 dark:text-indigo-400'  },
-  command:   { label: 'Command',    icon: Terminal,   dot: 'bg-gray-400',    text: 'text-gray-600 dark:text-gray-400'   },
+  written:   { label: 'Written',  icon: Pencil },
+  edited:    { label: 'Edited',   icon: Pencil },
+  deleted:   { label: 'Deleted',  icon: Trash2 },
+  created:   { label: 'Created',  icon: FilePlus },
+  copied:    { label: 'Copied',   icon: FilePlus },
+  moved:     { label: 'Moved',    icon: Pencil },
+  directory: { label: 'Folder',   icon: FolderPlus },
+  command:   { label: 'Command',  icon: Terminal },
 };
 
+// Where the file stands now. Only a problem gets a colour.
+const NEUTRAL_STATE = 'bg-hover text-fg-muted';
 const STATE_META = {
-  exists: { label: 'Exists', text: 'text-emerald-700 dark:text-emerald-300', bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
-  directory: { label: 'Directory', text: 'text-indigo-700 dark:text-indigo-300', bg: 'bg-indigo-50 dark:bg-indigo-900/20' },
-  missing: { label: 'Missing now', text: 'text-red-700 dark:text-red-300', bg: 'bg-red-50 dark:bg-red-900/20' },
-  deleted: { label: 'Deleted', text: 'text-red-700 dark:text-red-300', bg: 'bg-red-50 dark:bg-red-900/20' },
-  changed_since_agent: { label: 'Changed since agent', text: 'text-amber-700 dark:text-amber-300', bg: 'bg-amber-50 dark:bg-amber-900/20' },
-  unknown: { label: 'Unknown', text: 'text-gray-600 dark:text-gray-400', bg: 'bg-gray-50 dark:bg-gray-800' },
+  exists: { label: 'Exists', tone: NEUTRAL_STATE },
+  directory: { label: 'Folder', tone: NEUTRAL_STATE },
+  missing: { label: 'Missing now', tone: 'bg-red-500/10 text-red-700 dark:text-red-400' },
+  deleted: { label: 'Deleted', tone: 'bg-red-500/10 text-red-700 dark:text-red-400' },
+  changed_since_agent: { label: 'Changed since', tone: 'bg-amber-500/10 text-amber-700 dark:text-amber-400' },
+  unknown: { label: 'Unknown', tone: NEUTRAL_STATE },
 };
 
 export function extractChanges(events) {
@@ -125,24 +131,24 @@ function InlineDiffViewer({ path, workingDir, onClose }) {
   }, [path, workingDir]);
 
   return (
-    <div className="mt-2 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+    <div className="mt-2 rounded-lg border border-line overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-line bg-hover">
         <div className="flex items-center gap-1.5">
-          <GitCompare className="w-3 h-3 text-gray-400" />
-          <span className="text-[10px] font-mono text-gray-600 dark:text-gray-400 truncate">{path}</span>
+          <GitCompare className="w-3 h-3 text-fg-subtle" />
+          <span className="text-[11px] font-mono text-fg-muted truncate">{path}</span>
         </div>
-        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors ml-2">
-          <X className="w-3 h-3" />
+        <button type="button" onClick={onClose} aria-label="Close" className="ml-2 flex h-6 w-6 items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-hover hover:text-fg">
+          <X className="w-3.5 h-3.5" />
         </button>
       </div>
       {loading && (
-        <div className="flex items-center justify-center py-6 gap-2 text-gray-400 bg-white dark:bg-gray-900">
+        <div className="flex items-center justify-center py-6 gap-2 text-fg-subtle bg-surface">
           <Loader2 className="w-4 h-4 animate-spin" />
-          <span className="text-xs">Loading diff…</span>
+          <span className="text-[12px]">Loading the changes…</span>
         </div>
       )}
       {error && (
-        <div className="flex items-center gap-2 px-3 py-3 text-xs text-red-600 dark:text-red-400 bg-white dark:bg-gray-900">
+        <div className="flex items-center gap-2 px-3 py-3 text-[12px] text-red-600 dark:text-red-400 bg-surface">
           <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
           {error}
         </div>
@@ -150,7 +156,7 @@ function InlineDiffViewer({ path, workingDir, onClose }) {
       {!loading && !error && (
         diffText
           ? <UnifiedDiffViewer diff={diffText} filePath={path} className="rounded-none border-0 max-h-64 overflow-y-auto" />
-          : <div className="px-3 py-4 text-center text-xs text-gray-400 dark:text-slate-600 bg-white dark:bg-gray-900">No uncommitted changes found.</div>
+          : <div className="px-3 py-4 text-center text-[12px] text-fg-subtle bg-surface">No uncommitted changes.</div>
       )}
     </div>
   );
@@ -178,32 +184,32 @@ function FileViewer({ path, onClose }) {
   }, [path]);
 
   return (
-    <div className="mt-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-        <span className="text-[10px] font-mono text-gray-600 dark:text-gray-400 truncate">{path}</span>
-        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors ml-2">
-          <X className="w-3 h-3" />
+    <div className="mt-2 rounded-lg border border-line bg-hover overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-line bg-surface">
+        <span className="text-[11px] font-mono text-fg-muted truncate">{path}</span>
+        <button type="button" onClick={onClose} aria-label="Close" className="ml-2 flex h-6 w-6 items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-hover hover:text-fg">
+          <X className="w-3.5 h-3.5" />
         </button>
       </div>
       {loading && (
-        <div className="flex items-center justify-center py-6 gap-2 text-gray-400">
+        <div className="flex items-center justify-center py-6 gap-2 text-fg-subtle">
           <Loader2 className="w-4 h-4 animate-spin" />
-          <span className="text-xs">Loading…</span>
+          <span className="text-[12px]">Loading…</span>
         </div>
       )}
       {error && (
-        <div className="flex items-center gap-2 px-3 py-3 text-xs text-red-600 dark:text-red-400">
+        <div className="flex items-center gap-2 px-3 py-3 text-[12px] text-red-600 dark:text-red-400">
           <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
           {error}
         </div>
       )}
       {entry?.type === 'dir' && !loading && (
-        <div className="px-3 py-3 text-xs text-gray-500 dark:text-gray-400">
-          Directory only. {entry.entries?.length ? `${entry.entries.length} entries.` : 'No visible entries.'}
+        <div className="px-3 py-3 text-[12px] text-fg-muted">
+          A folder. {entry.entries?.length ? `${entry.entries.length} entries.` : 'No visible entries.'}
         </div>
       )}
       {entry?.type === 'file' && !loading && (
-        <pre className="text-[10px] font-mono text-gray-700 dark:text-gray-300 overflow-auto max-h-64 p-3 leading-relaxed">
+        <pre className="text-[11px] font-mono text-fg-muted overflow-auto max-h-64 p-3 leading-relaxed">
           {entry.content}
         </pre>
       )}
@@ -214,7 +220,7 @@ function FileViewer({ path, onClose }) {
 function StateBadge({ state }) {
   const meta = STATE_META[state?.state || 'unknown'] || STATE_META.unknown;
   return (
-    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${meta.bg} ${meta.text} flex-shrink-0`}>
+    <span className={`flex-shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-medium ${meta.tone}`}>
       {meta.label}
     </span>
   );
@@ -232,39 +238,34 @@ export function FileChangeRow({ change, state }) {
   return (
     <div>
       <button
+        type="button"
         onClick={() => canView && setOpen(v => !v)}
-        className={`w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors ${
-          canView ? 'hover:bg-gray-50 dark:hover:bg-gray-800/60 cursor-pointer' : 'cursor-default'
+        aria-expanded={canView ? open : undefined}
+        className={`group w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors ${
+          canView ? 'hover:bg-hover cursor-pointer' : 'cursor-default'
         }`}
       >
-        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${meta.dot}`} />
-        <Icon className={`w-3 h-3 flex-shrink-0 ${meta.text}`} />
-        <span className="flex-1 text-xs font-mono text-gray-700 dark:text-gray-300 truncate">{displayPath}</span>
-        <span className={`text-[10px] font-medium ${meta.text} flex-shrink-0`}>{meta.label}</span>
+        <Icon className="w-3.5 h-3.5 flex-shrink-0 text-fg-subtle" />
+        <span className="flex-1 text-[12px] font-mono text-fg truncate">{displayPath}</span>
+        <span className="text-[11px] text-fg-subtle flex-shrink-0">{meta.label}</span>
         <StateBadge state={state} />
         {canView && (
           open
-            ? <ChevronDown className="w-3 h-3 text-gray-400 flex-shrink-0" />
-            : <ChevronRight className="w-3 h-3 text-gray-400 flex-shrink-0 opacity-0 group-hover:opacity-100" />
+            ? <ChevronDown className="w-3 h-3 text-fg-subtle flex-shrink-0" />
+            : <ChevronRight className="w-3 h-3 text-fg-subtle flex-shrink-0 opacity-0 group-hover:opacity-100" />
         )}
       </button>
       {open && canView && (
         <div className="px-3 pb-2">
           {showsDiff && (
-            <div className="flex gap-1 mb-1.5">
-              <button
-                onClick={() => setViewMode('diff')}
-                className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${viewMode === 'diff' ? 'border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-300' : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-500 hover:border-gray-300'}`}
-              >
-                Diff
-              </button>
-              <button
-                onClick={() => setViewMode('content')}
-                className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${viewMode === 'content' ? 'border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-300' : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-500 hover:border-gray-300'}`}
-              >
-                Content
-              </button>
-            </div>
+            <Segmented
+              size="sm"
+              className="mb-1.5"
+              label="Show"
+              value={viewMode}
+              onChange={setViewMode}
+              items={[{ value: 'diff', label: 'Changes' }, { value: 'content', label: 'File' }]}
+            />
           )}
           {showsDiff && viewMode === 'diff'
             ? <InlineDiffViewer path={change.path} workingDir={change.workingDir} onClose={() => setOpen(false)} />
@@ -273,7 +274,7 @@ export function FileChangeRow({ change, state }) {
         </div>
       )}
       {!canView && state?.exists === false && (
-        <div className="px-3 pb-2 text-[11px] text-red-500 dark:text-red-400">
+        <div className="px-3 pb-2 text-[12px] text-red-600 dark:text-red-400">
           File no longer exists on disk.
         </div>
       )}
@@ -289,23 +290,24 @@ export function CommandRow({ change }) {
   return (
     <div>
       <button
+        type="button"
         onClick={() => hasOutput && setOpen(v => !v)}
+        aria-expanded={hasOutput ? open : undefined}
         className={`w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors ${
-          hasOutput ? 'hover:bg-gray-50 dark:hover:bg-gray-800/60 cursor-pointer' : 'cursor-default'
+          hasOutput ? 'hover:bg-hover cursor-pointer' : 'cursor-default'
         }`}
       >
-        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-gray-400" />
-        <Terminal className="w-3 h-3 flex-shrink-0 text-gray-500" />
-        <code className="flex-1 text-[10px] font-mono text-gray-600 dark:text-gray-400 truncate">{truncated}</code>
+        <Terminal className="w-3.5 h-3.5 flex-shrink-0 text-fg-subtle" />
+        <code className="flex-1 text-[12px] font-mono text-fg truncate">{truncated}</code>
         {hasOutput && (
           open
-            ? <ChevronDown className="w-3 h-3 text-gray-400 flex-shrink-0" />
-            : <ChevronRight className="w-3 h-3 text-gray-400 flex-shrink-0" />
+            ? <ChevronDown className="w-3 h-3 text-fg-subtle flex-shrink-0" />
+            : <ChevronRight className="w-3 h-3 text-fg-subtle flex-shrink-0" />
         )}
       </button>
       {open && hasOutput && (
         <div className="px-3 pb-2">
-          <pre className="text-[10px] font-mono text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 rounded p-2 max-h-32 overflow-y-auto leading-relaxed">
+          <pre className="text-[11px] font-mono text-fg-muted bg-hover rounded-md p-2 max-h-32 overflow-y-auto leading-relaxed">
             {change.output}
           </pre>
         </div>
@@ -315,93 +317,41 @@ export function CommandRow({ change }) {
 }
 
 export function RevertRunModal({ open, goal, total, checkpoint, reverting, onCancel, onConfirm }) {
-  if (!open) return null;
-
   return (
-    <Portal>
-      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-        <div
-          className="w-full max-w-lg rounded-2xl border border-gray-100 dark:border-gray-800 midnight:border-slate-800 bg-white dark:bg-gray-900 midnight:bg-slate-950 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800 bg-red-50/60 dark:bg-red-900/10 midnight:bg-red-950/20 flex items-start justify-between gap-4">
-            <div className="flex items-start gap-3 min-w-0">
-              <div className="mt-0.5 w-9 h-9 rounded-xl bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-300 flex items-center justify-center shrink-0">
-                <ShieldAlert className="w-4.5 h-4.5" />
-              </div>
-              <div className="min-w-0">
-                <h2 className="text-base font-semibold text-gray-950 dark:text-gray-100 midnight:text-slate-100">
-                  Revert this agent run?
-                </h2>
-                <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400 midnight:text-slate-400">
-                  This restores the workspace to the baseline captured before the run&apos;s first mutating tool.
-                </p>
-              </div>
-            </div>
-            {!reverting && (
-              <button
-                onClick={onCancel}
-                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-white/70 dark:hover:bg-gray-800 transition-colors"
-                title="Cancel"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-
-          <div className="px-5 py-4 space-y-3">
-            <div>
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                Goal
-              </div>
-              <p className="mt-1 text-sm leading-relaxed text-gray-800 dark:text-gray-200 midnight:text-slate-200 break-words">
-                {goal || 'Agent run'}
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div className="rounded-lg border border-gray-100 dark:border-gray-800 midnight:border-slate-800 bg-gray-50 dark:bg-gray-800/50 midnight:bg-slate-900/50 px-3 py-2">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                  Affected items
-                </div>
-                <div className="mt-1 text-sm font-semibold text-gray-800 dark:text-gray-200">
-                  {total}
-                </div>
-              </div>
-              <div className="rounded-lg border border-gray-100 dark:border-gray-800 midnight:border-slate-800 bg-gray-50 dark:bg-gray-800/50 midnight:bg-slate-900/50 px-3 py-2">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                  Checkpoint
-                </div>
-                <div className="mt-1 text-sm font-semibold text-gray-800 dark:text-gray-200">
-                  {checkpoint?.kind === 'dir_snapshot' ? 'Snapshot' : checkpoint?.kind || 'Baseline'}
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-red-100 dark:border-red-900/50 bg-red-50/70 dark:bg-red-900/10 px-3 py-2 text-xs leading-relaxed text-red-700 dark:text-red-300">
-              Any changes made after the checkpoint may be overwritten. This cannot be undone from this dialog.
-            </div>
-          </div>
-
-          <div className="px-5 py-4 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 bg-gray-50 dark:bg-gray-800/50 midnight:bg-slate-900/50 flex justify-end gap-2">
-            <button
-              onClick={onCancel}
-              disabled={reverting}
-              className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-white dark:bg-gray-900 midnight:bg-slate-950 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-60 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={onConfirm}
-              disabled={reverting}
-              className="px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-sm font-medium text-white inline-flex items-center gap-2 transition-colors"
-            >
-              {reverting ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
-              {reverting ? 'Reverting...' : 'Revert run'}
-            </button>
-          </div>
+    <Dialog
+      open={open}
+      size="sm"
+      role="alertdialog"
+      title="Revert this run?"
+      description="This puts the project back as it was before the run's first change."
+      onClose={onCancel}
+      closeButton={!reverting}
+      footer={(
+        <>
+          <Button variant="ghost" onClick={onCancel} disabled={reverting}>Cancel</Button>
+          <Button variant="destructive" icon={RotateCcw} loading={reverting} onClick={onConfirm}>
+            {reverting ? 'Reverting…' : 'Revert run'}
+          </Button>
+        </>
+      )}
+    >
+      <dl className="divide-y divide-line rounded-xl border border-line text-[13px]">
+        <div className="px-3.5 py-2.5">
+          <dt className="text-[12px] text-fg-subtle">Goal</dt>
+          <dd className="mt-0.5 break-words leading-5 text-fg">{goal || 'Agent run'}</dd>
         </div>
-      </div>
-    </Portal>
+        <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
+          <dt className="text-fg-muted">Items it changed</dt>
+          <dd className="tabular-nums text-fg">{total}</dd>
+        </div>
+        <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
+          <dt className="text-fg-muted">Restore point</dt>
+          <dd className="text-fg">{checkpoint?.kind === 'dir_snapshot' ? 'Snapshot' : checkpoint?.kind || 'Baseline'}</dd>
+        </div>
+      </dl>
+      <Notice tone="warning" className="mt-3">
+        Changes made after that point may be overwritten, and this can&apos;t be undone here.
+      </Notice>
+    </Dialog>
   );
 }
