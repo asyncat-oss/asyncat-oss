@@ -63,6 +63,7 @@ export function listSouls() {
  * @param {string} [opts.soul] - Soul/persona content loaded from souls/*.md
  * @param {boolean} [opts.temporary] - A temporary chat: nothing from it is saved or remembered
  * @param {boolean} [opts.rememberChats] - Off when the user turned off "Remember things from chats"
+ * @param {string} [opts.preferences] - The user's own preferences (users/personalization.js)
  * @returns {string}
  */
 function getShellName(platform) {
@@ -87,6 +88,7 @@ export function buildAgentSystemPrompt(opts = {}) {
     temporalContext = '',
     temporary = false,
     rememberChats = true,
+    preferences = '',
   } = opts;
 
   const shellName = getShellName(platform);
@@ -208,6 +210,9 @@ When NOT to save:
   const timeSection = temporalContext
     ? `\n## Time Context\n${temporalContext}\n`
     : '';
+  // Near the end, so it is fresh when the chat starts; a project's or
+  // agent's instructions follow it (AgentRuntime appends them).
+  const preferencesSection = preferences ? `\n${preferences}\n` : '';
 
   return `${identity}
 
@@ -380,7 +385,7 @@ ${memorySection}
 ${scratchpadSection}
 ${skillsSection}
 ${mentionedAgentsSection}
-
+${preferencesSection}
 Begin by thinking about the task and deciding your first action.`;
 }
 

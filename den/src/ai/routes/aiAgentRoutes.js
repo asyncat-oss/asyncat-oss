@@ -36,6 +36,7 @@ import { toolRegistry } from '../../agent/tools/toolRegistry.js';
 import { formatMultimodalCapabilityPrompt, getMultimodalCapabilities } from '../../agent/multimodalCapabilities.js';
 import { normalizeApprovalDecision } from '../../agent/approvalDecisions.js';
 import { buildChatContext, projectForChat } from '../../knowledge/chatContext.js';
+import { personalizationPromptFor } from '../../users/personalization.js';
 import { getModelCapabilities, normalizeReasoningEffort } from '../controllers/ai/modelCapabilities.js';
 import { getModelRuntimeStatus } from '../controllers/ai/modelRuntimeStatus.js';
 import { listProfiles, getProfile, getProfileByHandle, createProfile, updateProfile, deleteProfile, toolsForCapabilities, AGENT_CAPABILITIES } from '../../agent/ProfileManager.js';
@@ -449,11 +450,14 @@ router.post('/chat/stream', withWorkspaceContext, async (req, res) => {
     // Project instructions and knowledge apply to plain chats as well.
     const chatProject = projectForChat(req.user.id, req.body?.projectId || req.body?.workingContext?.projectId || null);
     const chatContext = buildChatContext({ project: chatProject, agent: chatAgent, query: message, resolvedClient });
+    // The user's own preferences (Settings → Personalization), then the
+    // project's and agent's instructions.
+    const systemPrompt = [personalizationPromptFor(req.user.id), chatContext.prompt].filter(Boolean).join('\n\n');
     const currentContent = modelCapabilities.supportsImageInput
       ? messageContentWithImages(message, req.body?.fileAttachments)
       : message;
     const messages = [
-      ...(chatContext.prompt ? [{ role: 'system', content: chatContext.prompt }] : []),
+      ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
       ...history.map(item => ({
         role: item.role,
         content: item.role === 'user' && modelCapabilities.supportsImageInput

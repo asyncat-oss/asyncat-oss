@@ -27,6 +27,9 @@ CREATE TABLE IF NOT EXISTS users (
   email           TEXT NOT NULL UNIQUE,
   name            TEXT,
   profile_picture TEXT,
+  -- Settings → Personalization, added to the agent's prompt (users/personalization.js).
+  about_me        TEXT NOT NULL DEFAULT '',
+  answer_style    TEXT NOT NULL DEFAULT '',
   created_at      TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );

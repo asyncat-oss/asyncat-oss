@@ -328,6 +328,11 @@ function ensureLocalProfileSchema() {
   // Passwords belonged to the removed login flow. The profile now exists only
   // as the stable owner referenced by local content.
   dropColumnIfPresent('users', 'password_hash');
+  // Settings → Personalization: what Asyncat should know about you and how
+  // it should answer (users/personalization.js).
+  const columns = tableColumns('users');
+  if (!columns.has('about_me')) db.exec("ALTER TABLE users ADD COLUMN about_me TEXT NOT NULL DEFAULT ''");
+  if (!columns.has('answer_style')) db.exec("ALTER TABLE users ADD COLUMN answer_style TEXT NOT NULL DEFAULT ''");
 }
 
 function ensureModelPathsSchema() {

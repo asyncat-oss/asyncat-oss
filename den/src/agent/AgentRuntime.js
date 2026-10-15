@@ -18,6 +18,7 @@ import { buildAgentSystemPrompt, loadSoul } from './prompts/agentSystemPrompt.js
 import { Compactor } from './Compactor.js';
 import { normalizeTags, selectRelevantSkillsWithLlm } from './skills.js';
 import { learningSettings } from './learningSettings.js';
+import { personalizationPromptFor } from '../users/personalization.js';
 import { suggestSkillFromRun } from './skillSuggestions.js';
 import { listMemories, searchMemories, enforceMemoryCap, decayMemoryImportance, memoryProjectFor, memoryCatFor } from './tools/memoryTools.js';
 import { planEdit, planPatch, patchTargets } from './tools/fileTools.js';
@@ -313,6 +314,7 @@ export class AgentRuntime {
    * @param {(event: AgentEvent) => void} [opts.onEvent] - Event callback for streaming
    * @param {string} [opts.continueSessionId] - Existing session ID to continue
    * @param {boolean} [opts.ephemeral] - A temporary chat: nothing is kept once the run ends
+   * @param {string} [opts.preferences] - The user's preferences for the prompt; read from their profile when left out
    */
   constructor(opts) {
     this.aiClient = opts.aiClient;
@@ -337,6 +339,9 @@ export class AgentRuntime {
     this.ephemeral = opts.ephemeral === true;
     this.continueSessionId = this.ephemeral ? null : (opts.continueSessionId || null);
     this.soulOverride = opts.soul || null;
+    // Settings → Personalization. A temporary chat uses them too: it only
+    // reads them.
+    this.preferences = typeof opts.preferences === 'string' ? opts.preferences : null;
     this.providerInfo = opts.providerInfo || null;
     this.reasoningEffort = opts.reasoningEffort || 'auto';
     // Some models only take native tool calls in some settings (gpt-6.1-sol
@@ -588,6 +593,7 @@ export class AgentRuntime {
       temporalContext: this._buildTemporalContext(),
       temporary: this.ephemeral,
       rememberChats: this.learning.rememberChats,
+      preferences: this.preferences ?? personalizationPromptFor(this.userId),
     }) + (this.knowledgeContext ? `\n\n${this.knowledgeContext}` : '');
 
     // Auto-detect and store corrections from user's latest message in continued conversations
