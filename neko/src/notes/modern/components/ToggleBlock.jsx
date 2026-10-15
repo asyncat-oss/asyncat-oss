@@ -56,7 +56,7 @@ const ToggleBlock = ({ block, onChange, contentRef, commonProps }) => {
             contentEditable
             className="text-fg outline-none"
             style={{ minHeight: '1.5em', overflowWrap: 'anywhere', wordBreak: 'break-word', hyphens: 'none' }}
-            placeholder="Type your toggle content..."
+            placeholder="Type what it hides…"
             {...commonProps}
           />
         </div>

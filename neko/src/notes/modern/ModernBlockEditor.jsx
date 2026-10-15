@@ -121,9 +121,9 @@ const getBlockTypeLabel = (type) => {
     case BlockType.HEADING3:
       return "Heading 3";
     case BlockType.NUMBERED_LIST:
-      return "Numbered List";
+      return "Numbered list";
     case BlockType.BULLET_LIST:
-      return "Bullet List";
+      return "Bullet list";
     case BlockType.TODO:
       return "To-do";
     case BlockType.CALLOUT:

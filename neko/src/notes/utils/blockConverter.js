@@ -272,7 +272,6 @@ export const htmlToBlocks = (html) => {
           const isCollapsible = node.classList.contains('callout-collapsible');
           const isCollapsed = node.classList.contains('callout-collapsed');
           const titleElement = node.querySelector('.callout-title');
-          const iconElement = node.querySelector('.callout-icon');
           const contentElement = node.querySelector('.callout-content');
           
           blocks.push({
@@ -281,8 +280,8 @@ export const htmlToBlocks = (html) => {
             content: contentElement ? contentElement.innerHTML : '',
             properties: {
               type,
-              title: titleElement ? titleElement.textContent : type.toUpperCase(),
-              icon: iconElement ? iconElement.textContent : getCalloutIcon(type),
+              // The callout draws its own icon from its type.
+              title: titleElement ? titleElement.textContent : type.charAt(0).toUpperCase() + type.slice(1),
               collapsible: isCollapsible,
               collapsed: isCollapsed
             }
@@ -377,7 +376,7 @@ export const htmlToBlocks = (html) => {
             blocks.push({
               id: generateId(),
               type: BlockType.TEXT,
-              content: '📊 Chart data could not be loaded',
+              content: 'Chart data could not be loaded',
               properties: {}
             });
           }
@@ -536,17 +535,4 @@ export const htmlToBlocks = (html) => {
 // Helper functions
 function generateId() {
   return `block-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-}
-
-function getCalloutIcon(type) {
-  const icons = {
-    info: 'ℹ️',
-    warning: '⚠️',
-    error: '❌',
-    success: '✅',
-    note: '📝',
-    tip: '💡',
-    question: '❓'
-  };
-  return icons[type] || 'ℹ️';
 }

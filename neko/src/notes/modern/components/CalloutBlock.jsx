@@ -231,7 +231,7 @@ const CalloutBlock = ({ block, onChange, contentRef, commonProps }) => {
             contentEditable
             className="text-fg outline-none"
             style={{ minHeight: "1.5em", overflowWrap: "anywhere", wordBreak: "break-word", hyphens: "none" }}
-            placeholder="Type your callout content..."
+            placeholder="Type your callout…"
             {...commonProps}
           />
         </div>

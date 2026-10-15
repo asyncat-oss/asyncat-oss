@@ -107,7 +107,7 @@ const MathBlock = ({ block, onChange, contentRef, commonProps }) => {
           ref={contentRef}
           contentEditable
           className="min-h-[2.5rem] bg-canvas p-3 font-mono text-[13px] text-fg outline-none"
-          placeholder={`Enter LaTeX math notation (e.g., ${randomExample})`}
+          placeholder={`LaTeX, for example ${randomExample}`}
           onInput={handleContentChange}
           style={{ overflowWrap: 'anywhere', wordBreak: 'break-word', hyphens: 'none' }}
           {...commonProps}

@@ -69,7 +69,7 @@ const DividerBlock = ({ block, onChange }) => {
       case "dots":
         return (
           <div className="flex items-center justify-center py-4">
-            <div className="text-xl font-bold tracking-wider text-fg-subtle">
+            <div className="text-xl font-bold tracking-[0.25em] text-fg-subtle">
               • • •
             </div>
           </div>
@@ -78,7 +78,7 @@ const DividerBlock = ({ block, onChange }) => {
       case "wave":
         return (
           <div className="flex items-center justify-center py-4">
-            <div className="text-xl font-bold tracking-wider text-fg-subtle">
+            <div className="text-xl font-bold tracking-[0.25em] text-fg-subtle">
               ~~~
             </div>
           </div>

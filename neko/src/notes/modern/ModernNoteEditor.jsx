@@ -30,6 +30,9 @@ import KeyboardShortcutsDropdown from "./components/KeyboardShortcutsDropdown";
 import { htmlToBlocks } from "../utils/blockConverter";
 import { useAutoSave, hasContentChanged } from "../utils/autoSaveUtils";
 
+// What a note with an empty title is called.
+const UNTITLED = "Untitled note";
+
 // The saved metadata of a note as an object (the API may send it as JSON text).
 const parseMetadata = (metadata) => {
   if (!metadata) return {};
@@ -113,7 +116,7 @@ const ModernNoteEditor = ({ note, onBack }) => {
 
               if (!result.conflicts) {
                 initialStateRef.current = {
-                  title: content.title || "Untitled Note",
+                  title: content.title || UNTITLED,
                   blocks: [...content.blocks],
                 };
               }
@@ -160,7 +163,7 @@ const ModernNoteEditor = ({ note, onBack }) => {
                 },
                 {
                   type: "update_title",
-                  data: { to: content.title.trim() || "Untitled Note" },
+                  data: { to: content.title.trim() || UNTITLED },
                 },
               ],
               baselineVersion: lastSyncVersion,
@@ -173,7 +176,7 @@ const ModernNoteEditor = ({ note, onBack }) => {
 
             if (result && result.success) {
               initialStateRef.current = {
-                title: content.title.trim() || "Untitled Note",
+                title: content.title.trim() || UNTITLED,
                 blocks: [...content.blocks],
               };
             }
@@ -275,7 +278,7 @@ const ModernNoteEditor = ({ note, onBack }) => {
       isInitializedRef.current = true;
 
       const initializeContent = (noteData) => {
-        const noteTitle = noteData.title || "Untitled Note";
+        const noteTitle = noteData.title || UNTITLED;
         let initialBlocks = [];
 
         if (noteData.content) {
@@ -347,7 +350,7 @@ const ModernNoteEditor = ({ note, onBack }) => {
             console.warn("fetchNoteWithContent returned null, using fallback initialization");
             initializeContent({ 
               id: note.id,
-              title: note.title || "Untitled Note", 
+              title: note.title || UNTITLED, 
               content: note.content || "" 
             });
           }
@@ -357,7 +360,7 @@ const ModernNoteEditor = ({ note, onBack }) => {
           if (note.id) {
             initializeContent({ 
               id: note.id,
-              title: note.title || "Untitled Note", 
+              title: note.title || UNTITLED, 
               content: "" 
             });
           }
@@ -457,7 +460,7 @@ const ModernNoteEditor = ({ note, onBack }) => {
           }
 
           // Update the editor with fresh content
-          const freshTitle = freshNote.title || "Untitled Note";
+          const freshTitle = freshNote.title || UNTITLED;
           setTitle(freshTitle);
           setBlocks(freshBlocks);
           setNoteMetadata(parseMetadata(freshNote.metadata));
@@ -584,7 +587,7 @@ const ModernNoteEditor = ({ note, onBack }) => {
   const handleDeleteClick = useCallback(async () => {
     const confirmed = await confirm({
       title: "Delete this note?",
-      message: `"${title || "Untitled Note"}" and its attachments will be gone for good.`,
+      message: `"${title || UNTITLED}" and its attachments will be gone for good.`,
       confirmLabel: "Delete",
       destructive: true,
     });
@@ -728,7 +731,7 @@ const ModernNoteEditor = ({ note, onBack }) => {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `${title || "Untitled Note"}.${format}`;
+        a.download = `${title || UNTITLED}.${format}`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -789,7 +792,7 @@ const ModernNoteEditor = ({ note, onBack }) => {
                         },
                         {
                           type: "update_title",
-                          data: { to: saveData.title || "Untitled Note" },
+                          data: { to: saveData.title || UNTITLED },
                         },
                       ],
                       baselineVersion: null,
@@ -840,7 +843,7 @@ const ModernNoteEditor = ({ note, onBack }) => {
                       },
                       {
                         type: "update_title",
-                        data: { to: saveData.title || "Untitled Note" },
+                        data: { to: saveData.title || UNTITLED },
                       },
                     ],
                     baselineVersion: null,
@@ -1098,7 +1101,7 @@ const ModernNoteEditor = ({ note, onBack }) => {
             initialBlocks={blocks}
             onContentChange={handleContentChange}
             onDeltaChange={handleDeltaChange}
-            placeholder="Type '/' for commands..."
+            placeholder="Type '/' for commands…"
             noteId={note?.id}
           />
         </div>

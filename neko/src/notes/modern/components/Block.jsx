@@ -1653,7 +1653,7 @@ const Block = forwardRef(
               contentEditable={!readOnly}
               className={`${baseClasses} ${textClasses} ${readOnlyClasses}`}
               style={{ minHeight: "1.2em", overflowWrap: "anywhere", wordBreak: "break-word", hyphens: "none" }}
-              placeholder={readOnly ? "" : "Type '/' for commands..."}
+              placeholder={readOnly ? "" : "Type '/' for commands…"}
               {...commonProps}
             />
           );

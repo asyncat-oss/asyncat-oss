@@ -958,7 +958,7 @@ const CodeBlock = ({ block, onChange, contentRef, commonProps }) => {
               wordWrap: "break-word",
               display: "block",
             }}
-            placeholder={`Type your ${language} code here...`}
+            placeholder={`Type your ${language} code here…`}
             spellCheck={false}
             onKeyDown={(e) => handleKeyDown(e, contentRef, updateHighlighting)}
             onInput={(e) => {

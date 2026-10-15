@@ -263,7 +263,7 @@ const FileBlock = ({ block, onChange, contentRef }) => {
               contentEditable
               className="text-[13px] text-fg-muted outline-none"
               style={{ minHeight: '1.2em', overflowWrap: 'anywhere', wordBreak: 'break-word', hyphens: 'none' }}
-              placeholder="Add a description..."
+              placeholder="Add a description…"
               onInput={(e) => handleDescriptionChange(e.target.textContent)}
               suppressContentEditableWarning={true}
             />
