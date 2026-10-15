@@ -1,10 +1,11 @@
-// MessageInputV2.jsx
+// MessageInputV2.jsx — the chat composer: the message box, its pickers and
+// menus, attachments, the mic, and the agent's questions and permission asks.
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import PropTypes from "prop-types";
 import { connectorToolLabel, connectorToolParts } from "../../../Connectors/connectorFormat.js";
 import { startWavRecording } from "../../../utils/wavRecorder.js";
-import { ArrowUp, Bell, Bookmark, ChevronDown, Hammer, ClipboardPen, Cpu, Headphones, ImagePlus, Loader2, Mail, MessageCircle, Mic, Paperclip, Rss, Send, ShieldAlert, ShieldOff, Square, Wrench, X, Zap, Plus, Check, Folder, Sparkles } from "lucide-react";
+import { ArrowUp, Bell, Bookmark, Bot, Cat as CatIcon, ChevronDown, Hammer, ClipboardPen, Cpu, Headphones, ImagePlus, Loader2, Mail, MessageCircle, Mic, Paperclip, Rss, Send, ShieldAlert, ShieldOff, Square, Wrench, X, Zap, Plus, Folder, FolderSearch } from "lucide-react";
 import { Menu, MenuItem, MenuLabel, MenuSeparator } from "../../../components/ui/Menu.jsx";
 import AgentAvatar from "../../../Agent/AgentAvatar.jsx";
 import { useAgents } from "../../../Agent/useAgents.js";
@@ -17,12 +18,17 @@ import { projectApi } from "../../../projects/projectApi.js";
 import { useActiveBrainStatus } from "../../hooks/useActiveBrainStatus.js";
 import { audioApi } from "../../../Settings/settingApi.js";
 import { modelBlockReason } from "../../utils/chatModel.js";
+import { contextMeter } from "../../utils/contextMeter.js";
 import ChatModelPicker from "./ChatModelPicker.jsx";
 import { filesApi } from "../../api";
 import { dirname, basename, fileIconMeta, rootIcon } from "../../../files/fileUtils.js";
 import { attachmentKind, AttachmentChip, ImageLightbox } from "../shared/AttachmentComponents.jsx";
 import AskUserForm from "../agent/AskUserForm.jsx";
 import Switch from "../../../components/ui/Switch.jsx";
+import Button from "../../../components/ui/Button.jsx";
+import Notice from "../../../components/ui/Notice.jsx";
+import AsyncatMark from "../../../components/ui/AsyncatMark.jsx";
+import { CONTROL_CLASS } from "../../../components/ui/Field.jsx";
 
 function getAgentTrigger(value, cursor) {
   const beforeCursor = value.slice(0, cursor);
@@ -123,10 +129,13 @@ function relativeToContext(entryPath, contextPath = ".") {
 }
 
 
+// The # (agents) and @ (files) suggestion lists above the box: the Menu's look.
 const suggestionPanelClass =
-  "absolute bottom-full left-0 right-0 z-30 mb-2 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-[#2a2a2a] dark:bg-[#1a1a1a] midnight:border-[#2a2a2a] midnight:bg-[#1a1a1a]";
-const suggestionActiveClass = "bg-gray-100 dark:bg-[#2a2a2a] midnight:bg-[#2a2a2a]";
-const suggestionIdleClass = "hover:bg-gray-50 dark:hover:bg-[#242424] midnight:hover:bg-[#242424]";
+  "absolute bottom-full left-0 right-0 z-30 mb-2 overflow-hidden rounded-xl border border-line bg-elevated text-fg shadow-xl shadow-black/10 dark:shadow-black/40";
+const suggestionActiveClass = "bg-hover text-fg";
+const suggestionIdleClass = "text-fg-muted hover:bg-hover hover:text-fg";
+// A composer chip that opens a menu: neutral, the same in every theme.
+const chipClass = "inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-fg-muted outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-60";
 
 const INTEGRATION_TOOL_PACKS = [
   {
@@ -160,26 +169,13 @@ const INTEGRATION_TOOL_PACKS = [
 ];
 
 function TokenBar({ usage }) {
-  const ctx = usage.contextWindow || 128000;
-  const contextTokens = usage.currentContextTokens || usage.lastInputTokens || usage.inputTokens || 0;
-  const totalTokens = usage.cumulativeTotalTokens || usage.totalTokens || usage.lastTotalTokens || 0;
-  const pct = Math.min((contextTokens / ctx) * 100, 100);
-  const color = pct >= 90 ? 'bg-red-400' : pct >= 80 ? 'bg-amber-400' : pct >= 70 ? 'bg-yellow-300' : 'bg-emerald-400';
-  const textColor = pct >= 90 ? 'text-red-400' : pct >= 80 ? 'text-amber-400' : 'text-fg-subtle';
-  const label = `${usage.estimated ? '~' : ''}${(contextTokens / 1000).toFixed(1)}k`;
-  const tooltip = `${usage.estimated ? 'Estimated — ' : ''}${(contextTokens / 1000).toFixed(1)}k current context · ${(totalTokens / 1000).toFixed(1)}k total used · ${pct.toFixed(0)}% of ${(ctx / 1000).toFixed(0)}k context (${usage.contextWindowSource || 'unknown'})`;
-
+  const { label, percent, nearlyFull, title } = contextMeter(usage);
   return (
-    <span className="inline-flex items-center gap-1" title={tooltip}>
-      <span className={`text-[10px] tabular-nums ${textColor}`}>{label}</span>
-      <span className="relative h-1 w-10 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700 midnight:bg-slate-700">
-        <span className={`absolute inset-y-0 left-0 rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} />
+    <span className="inline-flex items-center gap-1.5" title={title}>
+      <span className={`text-[11px] tabular-nums ${nearlyFull ? 'text-amber-600 dark:text-amber-400' : 'text-fg-subtle'}`}>{label}</span>
+      <span className="relative h-1 w-10 overflow-hidden rounded-full bg-line-strong">
+        <span className={`absolute inset-y-0 left-0 rounded-full transition-all duration-500 ${nearlyFull ? 'bg-amber-500' : 'bg-fg-subtle'}`} style={{ width: `${percent}%` }} />
       </span>
-      {pct >= 80 && (
-        <span className={`text-[9px] font-medium ${pct >= 90 ? 'text-red-400' : 'text-amber-400'}`} title="Context window is getting full — history may be compacted soon">
-          {pct >= 90 ? 'Full' : 'Filling'}
-        </span>
-      )}
     </span>
   );
 }
@@ -243,7 +239,7 @@ function PermissionDiff({ diff }) {
     <div
       ref={scrollRef}
       aria-label="Proposed changes"
-      className="relative mt-2 max-h-40 overflow-auto rounded-xl border border-gray-200 bg-gray-950 py-2 font-mono text-[11px] leading-relaxed dark:border-gray-800 midnight:border-slate-800"
+      className="relative mt-2 max-h-40 overflow-auto rounded-xl border border-line bg-canvas py-2 font-mono text-[11px] leading-relaxed"
     >
       {lines.map((line, index) => {
         const header = line.startsWith("---") || line.startsWith("+++");
@@ -254,9 +250,9 @@ function PermissionDiff({ diff }) {
             key={index}
             data-changed={added || removed ? "" : undefined}
             className={`whitespace-pre px-3 ${
-              added ? "bg-emerald-500/15 text-emerald-300"
-                : removed ? "bg-rose-500/15 text-rose-300"
-                  : header ? "text-gray-500" : "text-gray-400"
+              added ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                : removed ? "bg-red-500/10 text-red-700 dark:text-red-300"
+                  : header ? "text-fg-subtle" : "text-fg-muted"
             }`}
           >
             {line || " "}
@@ -311,19 +307,17 @@ function PendingInteractionInput({ interaction, onPermissionDecision, onAskUserA
     return (
       <div className="bg-transparent">
         <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 py-3">
-          <div className="overflow-hidden rounded-[1.35rem] border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-900">
+          <div className="overflow-hidden rounded-[1.4rem] border border-line-strong bg-surface shadow-sm">
             <div className="flex items-start gap-3 px-4 pt-4">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center text-gray-500 dark:text-gray-400">
-                <MessageCircle className="h-4 w-4" />
-              </div>
+              <MessageCircle className="mt-0.5 h-4 w-4 shrink-0 text-fg-subtle" />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">Agent question</span>
-                  <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500">{waitText}</span>
+                  <span className="text-[12px] font-medium text-fg-muted">Agent question</span>
+                  <span className="text-[11px] text-fg-subtle">{waitText}</span>
                 </div>
-                <p className="mt-1 text-sm leading-relaxed text-gray-800 dark:text-gray-100 midnight:text-slate-100">{data.question}</p>
+                <p className="mt-1 text-[15px] leading-relaxed text-fg">{data.question}</p>
                 {data.error && (
-                  <p role="alert" className="mt-1.5 text-xs text-red-600 dark:text-red-400 midnight:text-red-400">
+                  <p role="alert" className="mt-1.5 text-[12px] text-red-600 dark:text-red-400">
                     Couldn&apos;t send your answer ({data.error}). Try again.
                   </p>
                 )}
@@ -335,7 +329,7 @@ function PendingInteractionInput({ interaction, onPermissionDecision, onAskUserA
                         type="button"
                         onClick={() => submit(choice)}
                         disabled={resolving}
-                        className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                        className="rounded-lg border border-line-strong px-2.5 py-1 text-[13px] text-fg transition-colors hover:bg-hover disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
                       >
                         {choice}
                       </button>
@@ -344,7 +338,7 @@ function PendingInteractionInput({ interaction, onPermissionDecision, onAskUserA
                 )}
               </div>
             </div>
-            <div className="mt-3 border-t border-gray-100 bg-gray-50/80 px-4 py-3 dark:border-gray-800 dark:bg-gray-950/40 midnight:border-slate-800 midnight:bg-slate-950/40">
+            <div className="mt-3 border-t border-line bg-canvas/40 px-4 py-3">
               {Array.isArray(data.fields) && data.fields.length > 0 ? (
                 <AskUserForm fields={data.fields} onSubmit={(text) => submit(text)} />
               ) : (
@@ -356,26 +350,23 @@ function PendingInteractionInput({ interaction, onPermissionDecision, onAskUserA
                     if (event.key === "Enter") submit();
                   }}
                   disabled={resolving}
-                  placeholder={data.default ? `Default: ${data.default}` : "Type your answer..."}
-                  className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-gray-400 focus:ring-2 focus:ring-gray-100 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:focus:border-gray-600 dark:focus:ring-gray-800 midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-100"
+                  placeholder={data.default ? `Default: ${data.default}` : "Type your answer…"}
+                  aria-label="Your answer"
+                  className={`h-9 min-w-0 flex-1 ${CONTROL_CLASS}`}
                   autoFocus
                 />
                 {data.default && (
-                  <button
-                    type="button"
-                    onClick={() => submit(data.default)}
-                    disabled={resolving}
-                    className="rounded-xl border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 transition-colors hover:bg-white disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900"
-                  >
-                    Default
-                  </button>
+                  <Button variant="secondary" onClick={() => submit(data.default)} disabled={resolving}>
+                    Use default
+                  </Button>
                 )}
                 <button
                   type="button"
                   onClick={() => submit()}
                   disabled={resolving || (!answer.trim() && !data.default)}
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-900 text-white transition hover:bg-gray-800 disabled:bg-gray-300 disabled:text-white dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white dark:disabled:bg-gray-700 dark:disabled:text-gray-400"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-fg text-canvas transition-opacity hover:opacity-90 disabled:bg-hover disabled:text-fg-subtle outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
                   title="Send answer"
+                  aria-label="Send answer"
                 >
                   {resolving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 </button>
@@ -390,106 +381,83 @@ function PendingInteractionInput({ interaction, onPermissionDecision, onAskUserA
 
   const intent = summarizePermissionRequest(data);
   const dangerous = data.permission === "dangerous";
-  const approveClass = dangerous
-    ? "bg-rose-600 text-white hover:bg-rose-700"
-    : "bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white";
 
   return (
     <div className="bg-transparent">
       <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 py-3">
-        <div className={`overflow-hidden rounded-[1.35rem] border bg-white shadow-sm dark:bg-gray-900 midnight:bg-slate-900 ${
-          dangerous
-            ? "border-rose-200 dark:border-rose-900/60 midnight:border-rose-900/60"
-            : "border-amber-200 dark:border-amber-900/60 midnight:border-amber-900/60"
+        <div className={`overflow-hidden rounded-[1.4rem] border bg-surface shadow-sm ${
+          dangerous ? "border-red-500/40" : "border-amber-500/40"
         }`}>
           <div className="flex items-start gap-3 px-4 py-4">
-            <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${
-              dangerous
-                ? "border-rose-200 bg-rose-50 text-rose-600 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300"
-                : "border-amber-200 bg-amber-50 text-amber-600 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
-            }`}>
-              <ShieldAlert className="h-4 w-4" />
-            </div>
+            <ShieldAlert className={`mt-0.5 h-4 w-4 shrink-0 ${dangerous ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`} />
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-semibold text-gray-800 dark:text-gray-100 midnight:text-slate-100">Permission needed</span>
-                <span className="rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-400">
+                <span className="text-[12px] font-medium text-fg-muted">Permission needed</span>
+                <span className="rounded-md bg-hover px-1.5 py-0.5 font-mono text-[11px] text-fg-muted">
                   {connectorToolLabel(data.tool) || data.tool || data.toolName || "tool"}
                 </span>
-                <span className={`text-[10px] font-medium ${expired ? "text-red-500" : "text-gray-400 dark:text-gray-500"}`}>{statusText}</span>
+                <span className={`text-[11px] ${expired ? "text-red-600 dark:text-red-400" : "text-fg-subtle"}`}>{statusText}</span>
               </div>
-              <p className="mt-1 text-sm text-gray-800 dark:text-gray-100 midnight:text-slate-100">{intent.label}</p>
+              <p className="mt-1 text-[15px] text-fg">{intent.label}</p>
               {typeof data.diff === "string" && data.diff ? (
                 <PermissionDiff diff={data.diff} />
               ) : (
-                <div className="mt-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-950/50 midnight:border-slate-800 midnight:bg-slate-950/50">
-                  <code className="block max-h-24 overflow-y-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-gray-700 dark:text-gray-300 midnight:text-slate-300">
+                <div className="mt-2 rounded-xl border border-line bg-canvas px-3 py-2">
+                  <code className="block max-h-24 overflow-y-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-fg">
                     {intent.value}
                   </code>
                 </div>
               )}
               {data.workingDir && (
-                <p className="mt-1 truncate text-[10px] text-fg-subtle">{data.workingDir}</p>
+                <p className="mt-1 truncate text-[11px] text-fg-subtle">{data.workingDir}</p>
               )}
               {data.sandboxNote && (
                 <p className="mt-1.5 text-xs leading-5 text-amber-700 dark:text-amber-400" data-sandbox-note>{data.sandboxNote}</p>
               )}
               {data.error && (
-                <p role="alert" className="mt-1.5 text-xs text-red-600 dark:text-red-400 midnight:text-red-400">
+                <p role="alert" className="mt-1.5 text-[12px] text-red-600 dark:text-red-400">
                   Couldn&apos;t send your choice ({data.error}). Try again.
                 </p>
               )}
             </div>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 bg-gray-50/80 px-4 py-3 dark:border-gray-800 dark:bg-gray-950/40 midnight:border-slate-800 midnight:bg-slate-950/40">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line bg-canvas/40 px-4 py-3">
             <div className="flex items-center gap-2">
               {tokenUsage?.totalTokens > 0 && <TokenBar usage={tokenUsage} />}
               {isRunning && onStop && (
                 <button
                   type="button"
                   onClick={onStop}
-                  className="flex h-7 w-7 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-white hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200"
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-fg-subtle transition-colors hover:bg-hover hover:text-fg outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
                   title="Stop run"
+                  aria-label="Stop run"
                 >
                   <Square className="h-3 w-3 fill-current" />
                 </button>
               )}
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => onPermissionDecision?.(data.requestId, "deny")}
-                disabled={resolving || expired}
-                className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-white disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900"
-              >
+              <Button variant="secondary" onClick={() => onPermissionDecision?.(data.requestId, "deny")} disabled={resolving || expired}>
                 Deny
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant={dangerous ? "destructive" : "primary"}
                 onClick={() => onPermissionDecision?.(data.requestId, "allow")}
-                disabled={resolving || expired}
-                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${approveClass}`}
+                disabled={expired}
+                loading={resolving}
               >
-                {resolving && <Loader2 className="h-3 w-3 animate-spin" />}
                 Approve once
-              </button>
-              {!data.unsandboxed && <button
-                type="button"
-                onClick={() => onPermissionDecision?.(data.requestId, "allow_session")}
-                disabled={resolving || expired}
-                className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-white disabled:opacity-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-900"
-              >
-                Trust run
-              </button>}
-              {!data.unsandboxed && <button
-                type="button"
-                onClick={() => onPermissionDecision?.(data.requestId, "allow_always")}
-                disabled={resolving || expired}
-                className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-950/20"
-              >
-                <ShieldOff className="h-3 w-3" />
-                Always
-              </button>}
+              </Button>
+              {!data.unsandboxed && (
+                <Button variant="secondary" onClick={() => onPermissionDecision?.(data.requestId, "allow_session")} disabled={resolving || expired}>
+                  Trust run
+                </Button>
+              )}
+              {!data.unsandboxed && (
+                <Button variant="danger" icon={ShieldOff} onClick={() => onPermissionDecision?.(data.requestId, "allow_always")} disabled={resolving || expired}>
+                  Always
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -548,7 +516,7 @@ function EnginePicker({ engine, engines, onChange, disabled }) {
         aria-haspopup={locked ? undefined : "menu"}
         aria-expanded={locked ? undefined : open}
         title={locked ? `${current.name} answers this conversation` : ENGINE_DESCRIPTIONS[current.id] || current.description}
-        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium text-fg-muted transition-colors disabled:cursor-not-allowed ${locked ? "cursor-default" : "hover:bg-hover hover:text-fg"}`}
+        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium text-fg-muted outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/40 disabled:cursor-not-allowed ${locked ? "cursor-default" : "hover:bg-hover hover:text-fg"}`}
       >
         <ProviderGlyph providerId={current.id} className="h-3.5 w-3.5" />
         <span>{current.name}</span>
@@ -596,6 +564,11 @@ EnginePicker.propTypes = {
 };
 
 // Which agent (custom instructions, knowledge, model, capabilities) answers.
+// Asyncat's own mark, as a MenuItem icon for "No agent".
+function AsyncatGlyphIcon({ className }) {
+  return <AsyncatMark variant="glyph" className={className} />;
+}
+
 function AgentPicker({ agents, selectedAgentId, onChange, onManage, disabled }) {
   const buttonRef = useRef(null);
   const [open, setOpen] = useState(false);
@@ -611,16 +584,16 @@ function AgentPicker({ agents, selectedAgentId, onChange, onManage, disabled }) 
         aria-haspopup="menu"
         aria-expanded={open}
         title={current ? `${current.name}${current.description ? ` — ${current.description}` : ""}` : "Pick an agent for this chat"}
-        className="inline-flex max-w-[11rem] items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium text-fg-muted transition-colors hover:bg-hover hover:text-fg disabled:cursor-not-allowed"
+        className="inline-flex max-w-[11rem] items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium text-fg-muted outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/40 disabled:cursor-not-allowed"
       >
-        {current ? <AgentAvatar agent={current} size="xs" /> : <Sparkles className="h-3.5 w-3.5" />}
+        {current ? <AgentAvatar agent={current} size="xs" /> : <Bot className="h-3.5 w-3.5" />}
         <span className="truncate">{current ? current.name : "Agent"}</span>
         <ChevronDown className="h-3 w-3 shrink-0 opacity-50" />
       </button>
       <Menu anchorRef={buttonRef} open={open} onClose={() => setOpen(false)} placement="top-start" width={290} label="Agent">
         <MenuLabel>Agent for this chat</MenuLabel>
         <MenuItem
-          icon={Sparkles}
+          icon={AsyncatGlyphIcon}
           label={(
             <span className="flex flex-col py-0.5">
               <span className="text-fg">No agent</span>
@@ -680,7 +653,7 @@ function EngineModelPicker({ engine, engines, value, onChange, disabled }) {
         aria-haspopup="menu"
         aria-expanded={open}
         title="Model"
-        className="inline-flex items-center gap-1 rounded-full px-2.5 py-1.5 text-xs font-medium text-fg-muted transition-colors hover:bg-hover hover:text-fg disabled:cursor-not-allowed"
+        className="inline-flex items-center gap-1 rounded-full px-2.5 py-1.5 text-xs font-medium text-fg-muted outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/40 disabled:cursor-not-allowed"
       >
         <span>{current.label}</span>
         <ChevronDown className="h-3 w-3 opacity-50" />
@@ -734,7 +707,7 @@ function ToolsPreferenceControl({ value, onChange, disabled }) {
         aria-haspopup="menu"
         aria-expanded={open}
         title={current.hint}
-        className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-fg-muted transition-colors hover:bg-hover hover:text-fg disabled:opacity-60"
+        className={chipClass}
       >
         <Hammer className="h-3.5 w-3.5 shrink-0" />
         <span>Tools: {current.short}</span>
@@ -883,8 +856,8 @@ export const MessageInputV2 = ({
     },
   }), [activeBrain.model, answeringModel?.name, multimodalCapabilities, supportsImageInput]);
   const textareaRef = useRef(null);
-  const toolbarRef = useRef(null);
-  const modeMenuRef = useRef(null);
+  const plusButtonRef = useRef(null);
+  const modeButtonRef = useRef(null);
   const filePickerRef = useRef(null);
   // Workspace-access toggle UI is unfinished; keep it hidden. Declaring this
   // avoids a ReferenceError when the tools menu renders (it was referenced in
@@ -1446,16 +1419,6 @@ export const MessageInputV2 = ({
     onEnabledIntegrationToolsChange([...next]);
   }, [enabledIntegrationSet, onEnabledIntegrationToolsChange]);
 
-  useEffect(() => {
-    const handlePointerDown = (event) => {
-      if (!toolbarRef.current?.contains(event.target)) setOpenMenu(null);
-      if (!modeMenuRef.current?.contains(event.target)) setModeMenuOpen(false);
-    };
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, []);
-
   const selectWorkingContext = useCallback((rootId, relativePath = ".") => {
     if (rootId && typeof rootId === 'object' && rootId.projectOnly) {
       const project = rootId.project || {};
@@ -1657,18 +1620,22 @@ export const MessageInputV2 = ({
               }`}
             >
               {error && (
-                <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 midnight:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2">
-                  <p className="text-sm text-red-800 dark:text-red-200 flex-1">
-                    {error}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setError(null)}
-                    className="text-red-400 hover:text-red-600"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
+                <Notice
+                  tone="error"
+                  className="mb-3"
+                  action={(
+                    <button
+                      type="button"
+                      onClick={() => setError(null)}
+                      aria-label="Dismiss"
+                      className="flex h-6 w-6 items-center justify-center rounded-md opacity-70 outline-none transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-red-500/40"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                >
+                  {error}
+                </Notice>
               )}
 
               {localModelSendBlockReason && !disabled && (
@@ -1682,13 +1649,9 @@ export const MessageInputV2 = ({
                     <span className="min-w-0 truncate">{localModelSendBlockReason}</span>
                   </div>
                   {!(activeBrain.isLoadingModel || activeBrain.loading) && (
-                    <button
-                      type="button"
-                      onClick={() => navigate('/models')}
-                      className="shrink-0 rounded-lg bg-fg px-2.5 py-1 text-[12px] font-medium text-canvas transition-opacity hover:opacity-90"
-                    >
+                    <Button variant="primary" size="xs" onClick={() => navigate('/models')}>
                       {activeBrain.rawModel ? "Change model" : "Choose a model"}
-                    </button>
+                    </Button>
                   )}
                 </div>
               )}
@@ -1697,12 +1660,12 @@ export const MessageInputV2 = ({
                 {highlightedSegments && (
                   <div
                     aria-hidden="true"
-                    className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words text-base leading-relaxed text-gray-900 dark:text-gray-100 midnight:text-gray-100"
+                    className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words text-base leading-relaxed text-fg"
                     style={{ padding: 0, fontFamily: "inherit", fontSize: "inherit", lineHeight: "inherit" }}
                   >
                     {highlightedSegments.map((part, i) =>
                       part.type === "mention" ? (
-                        <span key={i} className="text-blue-500/90 dark:text-blue-400 midnight:text-blue-400">
+                        <span key={i} className="text-accent">
                           {part.content}
                         </span>
                       ) : (
@@ -1731,10 +1694,8 @@ export const MessageInputV2 = ({
                   autoCapitalize="off"
                   rows={isWorkExperience ? 2 : 1}
                   style={{ padding: 0 }}
-                  className={`w-full resize-none bg-transparent focus:outline-none text-base leading-relaxed max-h-45 disabled:opacity-50 caret-gray-900 placeholder-gray-400 dark:caret-gray-100 dark:placeholder-gray-500 midnight:caret-gray-100 midnight:placeholder-gray-500 ${isWorkExperience ? "min-h-12" : "min-h-8"} ${
-                    highlightedSegments
-                      ? "text-transparent"
-                      : "text-gray-900 dark:text-gray-100 midnight:text-gray-100"
+                  className={`w-full resize-none bg-transparent focus:outline-none text-base leading-relaxed max-h-45 disabled:opacity-50 caret-fg placeholder:text-fg-subtle ${isWorkExperience ? "min-h-12" : "min-h-8"} ${
+                    highlightedSegments ? "text-transparent" : "text-fg"
                   }`}
                 />
 
@@ -1754,14 +1715,14 @@ export const MessageInputV2 = ({
                                 : suggestionIdleClass
                             }`}
                           >
-                            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-gray-100 text-sm dark:bg-[#2a2a2a] midnight:bg-[#2a2a2a]">
-                              {profile.icon || "🤖"}
+                            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-surface text-sm ring-1 ring-inset ring-line">
+                              {profile.icon || <span className="text-[11px] font-medium text-fg-muted">{String(profile.name || "#").charAt(0).toUpperCase()}</span>}
                             </span>
                             <span className="min-w-0 flex-1">
-                              <span className="block truncate text-[13px] font-medium text-gray-800 dark:text-gray-100 midnight:text-gray-100">
+                              <span className="block truncate text-[13px] font-medium text-fg">
                                 {profile.name}
                               </span>
-                              <span className="block truncate text-[11px] text-gray-400 dark:text-[#666666] midnight:text-[#666666]">
+                              <span className="block truncate text-[11px] text-fg-subtle">
                                 #{profile.handle}{profile.description ? ` · ${profile.description}` : ''}
                               </span>
                             </span>
@@ -1769,8 +1730,8 @@ export const MessageInputV2 = ({
                         ))}
                       </div>
                     ) : (
-                      <div className="px-3 py-2 text-xs text-gray-400 dark:text-gray-500">
-                        {profilesLoaded ? 'No matching agent profiles' : 'Loading agent profiles...'}
+                      <div className="px-3 py-2 text-xs text-fg-subtle">
+                        {!profilesLoaded ? 'Loading agents…' : agentProfiles.length ? 'No agents match' : 'No agents yet'}
                       </div>
                     )}
                   </div>
@@ -1779,14 +1740,14 @@ export const MessageInputV2 = ({
                 {fileTrigger && (
                   <div className={suggestionPanelClass}>
                     {fileSearchLoading ? (
-                      <div className="px-3 py-2 text-xs text-gray-400 dark:text-gray-500 flex items-center gap-2">
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                        Searching files...
+                      <div className="flex items-center gap-2 px-3 py-2 text-xs text-fg-subtle">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Searching files…
                       </div>
                     ) : fileSearchResults.length > 0 ? (
                       <div className="max-h-72 overflow-y-auto p-1">
                         {fileSearchResults.map((file, index) => {
-                          const { Icon, color } = fileIconMeta(file.ext, file.type);
+                          const { Icon } = fileIconMeta(file.ext, file.type);
                           return (
                             <button
                               key={file.path}
@@ -1800,17 +1761,17 @@ export const MessageInputV2 = ({
                               }`}
                             >
                               <span className="flex h-5 w-5 shrink-0 items-center justify-center">
-                                <Icon className={`h-5 w-5 ${color}`} />
+                                <Icon className="h-4 w-4 text-fg-subtle" />
                               </span>
                               <span className="min-w-0 flex-1">
                                 <span className="flex min-w-0 items-baseline gap-2">
-                                  <span className="truncate text-[13px] font-medium text-gray-800 dark:text-gray-100 midnight:text-gray-100">
+                                  <span className="truncate text-[13px] font-medium text-fg">
                                     {file.path === '.' || file.type === 'dir' ? file.name : (
                                       <>
                                         {dirname(file.path) !== '.' && (
-                                          <span className="text-gray-400 dark:text-[#666666] font-normal">{dirname(file.path)}/</span>
+                                          <span className="font-normal text-fg-subtle">{dirname(file.path)}/</span>
                                         )}
-                                        <span className="text-gray-900 dark:text-gray-100">{basename(file.path)}</span>
+                                        <span>{basename(file.path)}</span>
                                       </>
                                     )}
                                   </span>
@@ -1821,8 +1782,8 @@ export const MessageInputV2 = ({
                         })}
                       </div>
                     ) : (
-                      <div className="px-3 py-2 text-xs text-gray-400 dark:text-gray-500">
-                        {fileSearchLoaded ? 'No matching files' : 'Searching files...'}
+                      <div className="px-3 py-2 text-xs text-fg-subtle">
+                        {fileSearchLoaded ? 'No files match' : 'Searching files…'}
                       </div>
                     )}
                   </div>
@@ -1844,153 +1805,117 @@ export const MessageInputV2 = ({
               )}
 
 
-            <div ref={toolbarRef} className={`${isWorkExperience ? "mt-2.5" : "mt-1.5"} flex items-center justify-between gap-2 bg-transparent text-gray-500 select-none`}>
+            <div className={`${isWorkExperience ? "mt-2.5" : "mt-1.5"} flex items-center justify-between gap-2 bg-transparent text-fg-muted select-none`}>
               {/* On a narrow window the pickers wrap, and the model's name shortens. */}
               <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setOpenMenu((current) => (current === "plus" ? null : "plus"))}
-                    disabled={disabled}
-                    className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300 midnight:text-slate-500 midnight:hover:bg-slate-800 midnight:hover:text-slate-300 transition-colors"
-                    title="Options"
-                  >
-                    <Plus className="h-5 w-5" />
-                  </button>
-                  {openMenu === "plus" && (
-                    <div className="absolute left-0 bottom-full z-30 mb-2 w-64 overflow-hidden rounded-xl border border-gray-200 bg-white p-1 shadow-xl dark:border-gray-800 dark:bg-gray-950 midnight:border-slate-800 midnight:bg-slate-950">
-                      {(isWorkExperience || supportsImageInput) && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setOpenMenu(null);
-                            filePickerRef.current?.click();
-                          }}
-                          className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800"
-                        >
-                          <Paperclip className="h-4 w-4 text-fg-subtle" />
-                          <span className="flex-1 font-medium">
-                            {isWorkExperience ? (supportsImageInput ? 'Add photos & files' : 'Add files') : 'Add photos'}
+                <button
+                  ref={plusButtonRef}
+                  type="button"
+                  onClick={() => setOpenMenu((current) => (current === "plus" ? null : "plus"))}
+                  disabled={disabled}
+                  aria-haspopup="menu"
+                  aria-expanded={openMenu === "plus"}
+                  aria-label="Add files and more"
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-fg-muted outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-50"
+                  title="Add files and more"
+                >
+                  <Plus className="h-5 w-5" strokeWidth={1.75} />
+                </button>
+                <Menu anchorRef={plusButtonRef} open={openMenu === "plus"} onClose={() => setOpenMenu(null)} placement="top-start" width={256} label="Add files and more">
+                  {(isWorkExperience || supportsImageInput) && (
+                    <MenuItem
+                      icon={Paperclip}
+                      label={isWorkExperience ? (supportsImageInput ? 'Add photos and files' : 'Add files') : 'Add photos'}
+                      onSelect={() => filePickerRef.current?.click()}
+                    />
+                  )}
+                  {isWorkExperience && window?.electronAPI?.openFilesDialog && (
+                    <MenuItem
+                      icon={FolderSearch}
+                      label="Browse this computer"
+                      onSelect={async () => {
+                        const result = await window.electronAPI.openFilesDialog({ multiSelections: false });
+                        if (result?.canceled || !result?.filePaths?.length) return;
+                        const filePath = result.filePaths[0];
+                        const name = filePath.split('/').pop() || filePath.split('\\').pop() || 'file';
+                        if (onNativeFileAttach) {
+                          onNativeFileAttach({ name, path: filePath, type: 'file', nonce: Date.now() });
+                        }
+                      }}
+                    />
+                  )}
+                  {voiceConversationAvailable && onToggleVoiceMode && (
+                    <div className="flex items-center justify-between gap-3 rounded-lg px-2.5 py-1.5">
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <Headphones className="h-4 w-4 shrink-0 text-fg-muted" strokeWidth={1.75} />
+                        <div className="min-w-0">
+                          <span className="block text-[13px] text-fg">Voice mode</span>
+                          <span className="block text-[11px] leading-4 text-fg-subtle">
+                            {voiceConversationActive ? "On: talk hands-free" : "Talk hands-free"}
                           </span>
-                        </button>
-                      )}
-
-                      {isWorkExperience && window?.electronAPI?.openFilesDialog && (
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            setOpenMenu(null);
-                            const result = await window.electronAPI.openFilesDialog({ multiSelections: false });
-                            if (result?.canceled || !result?.filePaths?.length) return;
-                            const filePath = result.filePaths[0];
-                            const name = filePath.split('/').pop() || filePath.split('\\').pop() || 'file';
-                            if (onNativeFileAttach) {
-                              onNativeFileAttach({ name, path: filePath, type: 'file', nonce: Date.now() });
-                            }
-                          }}
-                          className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800"
-                        >
-                          <Folder className="h-4 w-4 text-fg-subtle" />
-                          <span className="flex-1 font-medium">Browse with Finder</span>
-                        </button>
-                      )}
-
-
-
-                      {voiceConversationAvailable && onToggleVoiceMode && (
-                        <div className="flex items-center justify-between rounded-md px-3 py-2 transition-colors">
-                          <div className="flex items-center gap-3">
-                            <Headphones className="h-4 w-4 text-fg-subtle" />
-                            <div className="text-left">
-                              <span className="block text-xs font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300">Voice mode</span>
-                              <span className="block text-[10px] text-fg-subtle">
-                                {voiceConversationActive ? "Hands-free conversation active" : "Enable hands-free conversation"}
-                              </span>
-                            </div>
-                          </div>
-                          <Switch
-                            checked={Boolean(voiceConversationActive)}
-                            onChange={() => onToggleVoiceMode()}
-                            disabled={disabled}
-                            label="Voice mode"
-                          />
                         </div>
-                      )}
-
-                      {(supportsReasoningControl || onEnabledIntegrationToolsChange) && (
-                        <div className="my-1 border-t border-line" />
-                      )}
-
-                      {onReasoningEffortChange && supportsReasoningControl && (
-                        <div className="px-3 py-2">
-                          <span className="block text-[10px] font-semibold uppercase tracking-wider text-fg-subtle mb-1.5">
-                            Reasoning effort
-                          </span>
-                          <div className="flex flex-wrap gap-1">
-                            {currentReasoningOptions.map((option) => (
-                              <button
-                                key={option.value}
-                                type="button"
-                                onClick={() => onReasoningEffortChange(option.value)}
-                                className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
-                                  option.value === reasoningEffort
-                                    ? "bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800 midnight:text-slate-100"
-                                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 midnight:text-slate-400 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
-                                }`}
-                              >
-                                {option.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {onEnabledIntegrationToolsChange && allowWorkspaceAccess && supportsReasoningControl && (
-                        <div className="my-1 border-t border-line" />
-                      )}
-
-                      {onEnabledIntegrationToolsChange && allowWorkspaceAccess && (
-                        <div className="px-3 py-2">
-                          <span className="block text-[10px] font-semibold uppercase tracking-wider text-fg-subtle mb-1">
-                            Plugins
-                          </span>
-                          <div className="space-y-0.5">
-                            {INTEGRATION_TOOL_PACKS.map((pack) => {
-                              const PackIcon = pack.icon;
-                              const isEnabled = pack.tools.some(tool => enabledIntegrationSet.has(tool));
-                              return (
-                                <button
-                                  key={pack.id}
-                                  type="button"
-                                  onClick={() => toggleIntegrationPack(pack)}
-                                  className={`flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors ${
-                                    isEnabled
-                                      ? "text-fg"
-                                      : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800 midnight:hover:text-slate-100"
-                                  }`}
-                                >
-                                  <PackIcon className="h-3.5 w-3.5 shrink-0 opacity-70" />
-                                  <span className="flex-1 font-medium">{pack.label}</span>
-                                  <span className={`h-3 w-3 shrink-0 rounded-full border ${
-                                    isEnabled
-                                      ? "border-gray-900 bg-gray-900 shadow-[inset_0_0_0_2px_rgba(255,255,255,0.9)] dark:border-gray-100 dark:bg-gray-100 dark:shadow-[inset_0_0_0_2px_rgba(17,24,39,0.95)] midnight:border-slate-100 midnight:bg-slate-100 midnight:shadow-[inset_0_0_0_2px_rgba(15,23,42,0.95)]"
-                                      : "border-gray-300 dark:border-gray-600 midnight:border-slate-600"
-                                  }`} />
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
+                      </div>
+                      <Switch
+                        checked={Boolean(voiceConversationActive)}
+                        onChange={() => onToggleVoiceMode()}
+                        disabled={disabled}
+                        label="Voice mode"
+                      />
                     </div>
                   )}
-                </div>
+
+                  {onReasoningEffortChange && supportsReasoningControl && (
+                    <>
+                      <MenuSeparator />
+                      <MenuLabel>Reasoning effort</MenuLabel>
+                      <div role="radiogroup" aria-label="Reasoning effort" className="flex flex-wrap gap-1 px-2 pb-1.5">
+                        {currentReasoningOptions.map((option) => {
+                          const selected = option.value === reasoningEffort;
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              role="radio"
+                              aria-checked={selected}
+                              title={option.description}
+                              onClick={() => onReasoningEffortChange(option.value)}
+                              className={`rounded-md px-2 py-1 text-[12px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/40 ${
+                                selected ? "bg-selected text-fg" : "text-fg-muted hover:bg-hover hover:text-fg"
+                              }`}
+                            >
+                              {option.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+
+                  {onEnabledIntegrationToolsChange && allowWorkspaceAccess && (
+                    <>
+                      <MenuSeparator />
+                      <MenuLabel>Plugins</MenuLabel>
+                      {INTEGRATION_TOOL_PACKS.map((pack) => (
+                        <MenuItem
+                          key={pack.id}
+                          icon={pack.icon}
+                          label={pack.label}
+                          checked={pack.tools.some(tool => enabledIntegrationSet.has(tool))}
+                          keepOpen
+                          onSelect={() => toggleIntegrationPack(pack)}
+                        />
+                      ))}
+                    </>
+                  )}
+                </Menu>
 
                 {lockedTo ? (
                   <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium text-fg-muted" title={`Messages go to ${lockedTo.name}, which uses its own brain, model and freedom`}>
                     {lockedTo.avatar?.startsWith?.('data:image/')
                       ? <img src={lockedTo.avatar} alt="" className="h-4 w-4 rounded object-cover" />
-                      : <span aria-hidden="true">{lockedTo.avatar || '🐱'}</span>}
+                      : lockedTo.avatar
+                        ? <span aria-hidden="true">{lockedTo.avatar}</span>
+                        : <CatIcon className="h-3.5 w-3.5" aria-hidden="true" />}
                     To {lockedTo.name}
                   </span>
                 ) : null}
@@ -2044,7 +1969,8 @@ export const MessageInputV2 = ({
                     onClick={() => filePickerRef.current?.click()}
                     disabled={disabled || uploadingAttachment}
                     title={`Add an image for ${answeringModel?.name || activeBrain.model || "this chat's model"}`}
-                    className="flex h-8 w-8 items-center justify-center rounded-full text-blue-500 transition-colors hover:bg-blue-50 hover:text-blue-700 disabled:opacity-40 dark:text-blue-400 dark:hover:bg-blue-950/30 dark:hover:text-blue-300 midnight:text-blue-400 midnight:hover:bg-blue-950/30"
+                    aria-label="Add an image"
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-fg-muted outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-40"
                   >
                     {uploadingAttachment ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
                   </button>
@@ -2055,15 +1981,17 @@ export const MessageInputV2 = ({
                     type="button"
                     onClick={isRecording ? stopRecording : () => startRecording({ handsFree: voiceConversationActive })}
                     disabled={disabled && !isRecording}
-                    title={isRecording ? "Stop recording" : voiceConversationActive ? "Voice mode active" : "Record voice input"}
-                    className={`flex h-8 items-center justify-center gap-2 rounded-full transition-all duration-200 ${
+                    title={isRecording ? "Stop recording" : voiceConversationActive ? "Voice mode is on" : "Speak instead of typing"}
+                    aria-label={isRecording ? "Stop recording" : "Speak instead of typing"}
+                    aria-pressed={voiceConversationActive || undefined}
+                    className={`flex h-8 items-center justify-center gap-2 rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/40 ${
                       isRecording
-                        ? "w-auto px-2.5 bg-red-50 text-red-500 ring-1 ring-red-200 dark:bg-red-900/20 dark:text-red-300 dark:ring-red-800/70"
+                        ? "w-auto bg-red-500/10 px-2.5 text-red-600 dark:text-red-400"
                         : autoRecordPrompt
-                          ? "w-8 bg-violet-100 text-violet-600 ring-2 ring-violet-300 dark:bg-violet-900/30 dark:text-violet-300 dark:ring-violet-700"
+                          ? "w-8 bg-selected text-fg ring-1 ring-line-strong"
                           : voiceConversationActive
-                            ? "w-8 bg-violet-50 text-violet-500 ring-1 ring-violet-200 dark:bg-violet-900/20 dark:text-violet-300 dark:ring-violet-800"
-                            : "w-8 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300 midnight:text-slate-500 midnight:hover:bg-slate-800 midnight:hover:text-slate-300"
+                            ? "w-8 bg-selected text-fg"
+                            : "w-8 text-fg-muted hover:bg-hover hover:text-fg"
                     }`}
                   >
                     {isRecording ? (
@@ -2122,16 +2050,16 @@ export const MessageInputV2 = ({
                 title={activeWorkingContext.workingDir
                   ? `This chat can access: ${activeWorkingContext.workingDir}`
                   : "Uses this project's instructions and knowledge. No folder is selected, so local files are unavailable."}
-                className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:text-slate-400 midnight:hover:bg-slate-800 midnight:hover:text-slate-100 disabled:opacity-60"
+                className={`${chipClass} min-w-0 max-w-full`}
               >
                 {(() => {
                   const RootIcon = rootIcon(activeRoot?.kind);
                   return <RootIcon className="h-3.5 w-3.5 shrink-0 opacity-80" />;
                 })()}
-                <span className="truncate">{activeWorkingContext.projectEmoji || '📁'} {activeWorkingContext.projectName || "Project"}</span>
+                <span className="truncate">{activeWorkingContext.projectEmoji ? `${activeWorkingContext.projectEmoji} ` : ''}{activeWorkingContext.projectName || "Project"}</span>
                 {activeWorkingContext.rootId ? (
                   <>
-                    <span className="text-gray-300 dark:text-gray-700 midnight:text-slate-700">/</span>
+                    <span className="text-fg-subtle/60">/</span>
                     <Folder className="h-3.5 w-3.5 shrink-0 opacity-70" />
                     <span className="truncate">{activeContextLabel}</span>
                   </>
@@ -2155,8 +2083,8 @@ export const MessageInputV2 = ({
                 type="button"
                 onClick={openWorkingContextMenu}
                 disabled={disabled || !onWorkingContextChange}
-                title="No Project selected; local files are unavailable to this chat"
-                className="inline-flex min-w-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+                title="No project, so this chat can't use your files"
+                className={`${chipClass} min-w-0`}
               >
                 <ShieldOff className="h-3.5 w-3.5" /> No project
               </button>
@@ -2166,14 +2094,17 @@ export const MessageInputV2 = ({
               <ToolsPreferenceControl value={toolsPreference} onChange={onToolsPreferenceChange} disabled={disabled} />
             )}
 
-            {/* Mode Selector Dropdown */}
+            {/* How freely the agent acts: Plan, Action or Yolo. */}
             {(usesExternalEngine || toolsPreference !== "off") && (onAgentModeChange || onToggleAgentMode || onToggleTools) && (
-              <div ref={modeMenuRef} className="relative">
+              <>
                 <button
+                  ref={modeButtonRef}
                   type="button"
                   onClick={() => setModeMenuOpen(open => !open)}
                   disabled={disabled}
-                  className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:text-slate-400 midnight:hover:bg-slate-800 midnight:hover:text-slate-100 disabled:opacity-60"
+                  aria-haspopup="menu"
+                  aria-expanded={modeMenuOpen}
+                  className={chipClass}
                 >
                   {!isActionMode ? (
                     <>
@@ -2193,78 +2124,50 @@ export const MessageInputV2 = ({
                   )}
                   <ChevronDown className="h-3 w-3 opacity-60" />
                 </button>
-
-                {modeMenuOpen && (
-                  <div className="absolute left-0 bottom-full z-30 mb-2 w-52 overflow-hidden rounded-xl border border-gray-200 bg-white p-1 shadow-xl dark:border-gray-800 dark:bg-gray-950 midnight:border-slate-800 midnight:bg-slate-950">
-                    {/* Plan */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAgentMode('plan');
-                        setModeMenuOpen(false);
-                      }}
-                      className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-xs transition-colors ${
-                        !isActionMode
-                          ? "bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800 midnight:text-slate-100"
-                          : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800"
-                      }`}
-                    >
-                      <ClipboardPen className="h-3.5 w-3.5 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <span className="block font-medium">Plan</span>
-                        <span className="block text-[10px] opacity-60">Read-only tools only</span>
-                      </div>
-                      {!isActionMode && <Check className="h-3.5 w-3.5 shrink-0" />}
-                    </button>
-
-                    {/* Action */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAgentMode('action');
-                        if (autoApprove && onToggleAutoApprove) onToggleAutoApprove();
-                        setModeMenuOpen(false);
-                      }}
-                      className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-xs transition-colors ${
-                        isActionMode && !autoApprove
-                          ? "bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800 midnight:text-slate-100"
-                          : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800"
-                      }`}
-                    >
-                      <Wrench className="h-3.5 w-3.5 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <span className="block font-medium">Action</span>
-                        <span className="block text-[10px] opacity-60">Ask before each tool call</span>
-                      </div>
-                      {isActionMode && !autoApprove && <Check className="h-3.5 w-3.5 shrink-0" />}
-                    </button>
-
-                    {/* Yolo */}
-                    {onToggleAutoApprove && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAgentMode('action');
-                          if (!autoApprove) onToggleAutoApprove();
-                          setModeMenuOpen(false);
-                        }}
-                        className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-xs transition-colors ${
-                          isActionMode && autoApprove
-                            ? "bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800 midnight:text-slate-100"
-                            : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 midnight:text-slate-300 midnight:hover:bg-slate-800"
-                        }`}
-                      >
-                        <Zap className="h-3.5 w-3.5 shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <span className="block font-medium">Yolo</span>
-                          <span className="block text-[10px] opacity-60">Auto-approve all tools</span>
-                        </div>
-                        {isActionMode && autoApprove && <Check className="h-3.5 w-3.5 shrink-0" />}
-                      </button>
+                <Menu anchorRef={modeButtonRef} open={modeMenuOpen} onClose={() => setModeMenuOpen(false)} placement="top-start" width={240} label="How the agent works">
+                  <MenuItem
+                    icon={ClipboardPen}
+                    label={(
+                      <span className="flex flex-col py-0.5">
+                        <span className="text-fg">Plan</span>
+                        <span className="whitespace-normal text-[11px] leading-4 text-fg-subtle">Read-only tools only</span>
+                      </span>
                     )}
-                  </div>
-                )}
-              </div>
+                    checked={!isActionMode}
+                    onSelect={() => setAgentMode('plan')}
+                  />
+                  <MenuItem
+                    icon={Wrench}
+                    label={(
+                      <span className="flex flex-col py-0.5">
+                        <span className="text-fg">Action</span>
+                        <span className="whitespace-normal text-[11px] leading-4 text-fg-subtle">Asks before each tool call</span>
+                      </span>
+                    )}
+                    checked={isActionMode && !autoApprove}
+                    onSelect={() => {
+                      setAgentMode('action');
+                      if (autoApprove && onToggleAutoApprove) onToggleAutoApprove();
+                    }}
+                  />
+                  {onToggleAutoApprove && (
+                    <MenuItem
+                      icon={Zap}
+                      label={(
+                        <span className="flex flex-col py-0.5">
+                          <span className="text-fg">Yolo</span>
+                          <span className="whitespace-normal text-[11px] leading-4 text-fg-subtle">Approves every tool call itself</span>
+                        </span>
+                      )}
+                      checked={isActionMode && autoApprove}
+                      onSelect={() => {
+                        setAgentMode('action');
+                        if (!autoApprove) onToggleAutoApprove();
+                      }}
+                    />
+                  )}
+                </Menu>
+              </>
             )}
                 </div>
               )}
@@ -2298,9 +2201,9 @@ export const MessageInputV2 = ({
         isOpen={!!pendingContextSwitch}
         onClose={cancelContextSwitch}
         onConfirm={confirmContextSwitch}
-        title="Change this chat's Project?"
-        message="Future messages will use the new Project scope. Earlier messages and edits remain in this chat's history."
-        confirmLabel="Change Project"
+        title="Change this chat's project?"
+        message="New messages use the new project. Earlier messages stay in this chat."
+        confirmLabel="Change project"
         cancelLabel="Keep current"
       />
     </div>

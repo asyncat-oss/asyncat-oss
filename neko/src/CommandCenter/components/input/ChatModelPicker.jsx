@@ -73,7 +73,7 @@ export default function ChatModelPicker({ model, options = [], agentModel = null
         aria-haspopup="menu"
         aria-expanded={open}
         title={title}
-        className={`inline-flex min-w-0 max-w-[15rem] items-center gap-1.5 overflow-hidden rounded-full px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-hover hover:text-fg disabled:cursor-not-allowed ${
+        className={`inline-flex min-w-0 max-w-[15rem] items-center gap-1.5 overflow-hidden rounded-full px-2.5 py-1.5 text-xs font-medium outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/40 disabled:cursor-not-allowed ${
           model?.missing && !agentModel ? "text-amber-600 dark:text-amber-400" : "text-fg-muted"
         }`}
       >
