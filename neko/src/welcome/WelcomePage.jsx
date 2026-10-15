@@ -20,7 +20,7 @@ import eventBus from '../utils/eventBus.js';
 import ModelStep from './ModelStep.jsx';
 import SafetyStep from './SafetyStep.jsx';
 import { setupApi } from './setupApi.js';
-import { SETUP_STEPS, doneText, localSetupState, nameToPrefill, stepIndex } from './setupFlow.js';
+import { SETUP_STEPS, doneNeedsModel, doneText, localSetupState, nameToPrefill, stepIndex } from './setupFlow.js';
 import { useLocalModelSetup } from './useLocalModelSetup.js';
 
 const MAX_NAME = 50;
@@ -104,17 +104,19 @@ export default function WelcomePage() {
   };
 
   // Finishing and skipping are the same to den: don't open it again.
-  const finish = async () => {
+  const finish = async (to = '/home') => {
     setBusy(true);
     try {
       await setupApi.setDone(true);
     } catch { /* it opens again next time, which is harmless */ }
-    navigate('/home', { replace: true });
+    navigate(to, { replace: true });
   };
 
   const localState = localSetupState(local.job, brain);
   const localName = local.job?.steps?.find((item) => item.key === 'model')?.label || '';
   const description = step.id === 'done' ? doneText({ brain, localState, localName }) : DESCRIPTIONS[step.id];
+  // Nothing can answer yet: the last step leads to Models instead of a chat.
+  const needsModel = step.id === 'done' && doneNeedsModel({ brain, localState });
   const showCat = step.id === 'welcome' || step.id === 'done';
 
   return (
@@ -123,14 +125,14 @@ export default function WelcomePage() {
         <span />
         <StepBars index={index} />
         <div className="flex justify-end">
-          {step.id !== 'done' ? <Button variant="ghost" size="sm" onClick={finish} disabled={busy}>Skip setup</Button> : null}
+          {step.id !== 'done' ? <Button variant="ghost" size="sm" onClick={() => finish()} disabled={busy}>Skip setup</Button> : null}
         </div>
       </div>
 
       <main className="mx-auto w-full max-w-[480px] px-4 pb-16 pt-6 sm:pt-[9vh]">
         {showCat ? <Cat pose="sit" className="mb-5 w-16" outline={6} /> : null}
         <h1 ref={headingRef} tabIndex={-1} className="text-[22px] font-semibold tracking-[-0.02em] text-fg outline-none">
-          {TITLES[step.id] || step.label}
+          {needsModel ? 'Almost done' : TITLES[step.id] || step.label}
         </h1>
         <p className="mt-1.5 text-[14px] leading-6 text-fg-muted">{description}</p>
 
@@ -159,8 +161,13 @@ export default function WelcomePage() {
           {index > 0 ? (
             <Button variant="ghost" size="md" icon={ArrowLeft} onClick={() => go(index - 1)} disabled={busy}>Back</Button>
           ) : <span />}
-          {step.id === 'done' ? (
-            <Button variant="primary" size="md" onClick={finish} loading={busy}>Start chatting</Button>
+          {needsModel ? (
+            <span className="flex items-center gap-2">
+              <Button variant="ghost" size="md" onClick={() => finish('/home')} disabled={busy}>Start anyway</Button>
+              <Button variant="primary" size="md" onClick={() => finish('/models')} loading={busy}>Choose a model</Button>
+            </span>
+          ) : step.id === 'done' ? (
+            <Button variant="primary" size="md" onClick={() => finish()} loading={busy}>Start chatting</Button>
           ) : (
             <Button variant="primary" size="md" onClick={next} loading={busy && step.id === 'welcome'}>Continue</Button>
           )}

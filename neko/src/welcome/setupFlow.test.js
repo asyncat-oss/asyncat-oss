@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { NETWORK_CHOICES } from '../Settings/sandboxText.js';
 import {
-  CHAT_MODE_CHOICES, FIT_TEXT, NETWORK_DESCRIPTIONS, SETUP_STEPS, chatModelName, doneText, downloadBytes, downloadLabel,
+  CHAT_MODE_CHOICES, FIT_TEXT, NETWORK_DESCRIPTIONS, SETUP_STEPS, chatModelName, doneNeedsModel, doneText, downloadBytes, downloadLabel,
   hardwareText, isLandingPath, laterJob, localModelName, localSetupState, nameToPrefill, networkPendingNote, pickedModel,
   sandboxSentence, shouldOpenSetup, stepIndex,
 } from './setupFlow.js';
@@ -128,7 +128,10 @@ test('the last step says whether chats can start now', () => {
   );
   assert.match(doneText({ brain: { isReady: true }, localState: 'running' }), /^Ask anything\. Your local model keeps downloading/);
   assert.match(doneText({ brain: { isLoadingModel: true }, localState: 'loading' }), /^Ask anything/);
-  assert.match(doneText({ brain: { isReady: false }, localState: 'idle' }), /Choose a model in Models/);
+  assert.match(doneText({ brain: { isReady: false }, localState: 'idle' }), /^Nothing can answer yet\. Choose a model now/);
+  assert.equal(doneNeedsModel({ brain: { isReady: false }, localState: 'idle' }), true);
+  assert.equal(doneNeedsModel({ brain: {}, localState: 'running' }), false, 'a download on its way will answer');
+  assert.equal(doneNeedsModel({ brain: { isReady: true }, localState: 'idle' }), false);
 });
 
 test('where new chats start, and the network choices, in one sentence each', () => {

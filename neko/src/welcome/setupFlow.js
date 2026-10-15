@@ -132,7 +132,12 @@ export function doneText({ brain, localState, localName = '' }) {
   if (localState === 'running' && answers) return `Ask anything. ${localName || 'Your local model'} keeps downloading; switch to it in Models when it's done.`;
   if (localState === 'running') return "Your model is still downloading. You can look around meanwhile, and start chatting once it's ready.";
   if (answers || localState === 'loading') return 'Ask anything, or open a project when you want Asyncat to work with your files.';
-  return 'Choose a model in Models whenever you are ready, then ask anything.';
+  return 'Nothing can answer yet. Choose a model now, or start anyway and pick one in Models later.';
+}
+
+/** Whether the last step ends with no model: nothing answers and none is on its way. */
+export function doneNeedsModel({ brain, localState }) {
+  return !(brain?.isReady || brain?.isLoadingModel) && localState !== 'running' && localState !== 'loading';
 }
 
 /** Where new chats start (services/chatDefaults.js), one sentence each. */
