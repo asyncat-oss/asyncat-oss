@@ -11,7 +11,9 @@ import {
 } from 'lucide-react';
 import Button from '../components/ui/Button.jsx';
 import IconButton from '../components/ui/IconButton.jsx';
+import Checkbox from '../components/ui/Checkbox.jsx';
 import { Field, Input } from '../components/ui/Field.jsx';
+import Switch from '../components/ui/Switch.jsx';
 import Skeleton from '../components/ui/Skeleton.jsx';
 import { errorDetail, useToast } from '../components/toastContext.js';
 import { LogoTile, ProviderLogo } from '../Models/modelLogos.jsx';
@@ -50,14 +52,35 @@ TextLink.propTypes = { href: PropTypes.string.isRequired, children: PropTypes.no
 
 // ── Entering keys ────────────────────────────────────────────────────────────
 
+// The settings' own names (MAIL_IMAP_HOST …) show only with Settings →
+// About → Developer options on.
+function developerOptionsOn() {
+  try { return localStorage.getItem('asyncat_developer_options') === 'true'; } catch { return false; }
+}
+
+function initialValue(field) {
+  if (field.type === 'switch') return field.defaultValue !== false;
+  if (field.type === 'channels') return [];
+  return '';
+}
+
+/**
+ * A service's settings as a plain form: text fields, a switch for a yes/no
+ * setting (type: 'switch') and ticks for a list (type: 'channels', with
+ * `options`). Switches are saved along with the fields filled in.
+ */
 function CredentialSetup({ fields, helpUrl, helpText, onSaved }) {
-  const [values, setValues] = useState(() => Object.fromEntries(fields.map((field) => [field.key, ''])));
+  const [values, setValues] = useState(() => Object.fromEntries(fields.map((field) => [field.key, initialValue(field)])));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const [showKeys] = useState(developerOptionsOn);
+  const setValue = (key, value) => setValues((current) => ({ ...current, [key]: value }));
 
   const save = async (event) => {
     event.preventDefault();
-    const filled = fields.filter((field) => values[field.key]?.trim());
+    const filled = fields.filter((field) => (
+      field.type === 'channels' ? values[field.key].length > 0 : field.type !== 'switch' && values[field.key]?.trim()
+    ));
     if (filled.length === 0) {
       setError('Fill in at least one field.');
       return;
@@ -65,8 +88,9 @@ function CredentialSetup({ fields, helpUrl, helpText, onSaved }) {
     setSaving(true);
     setError(null);
     try {
-      for (const field of filled) {
-        const value = values[field.key].trim();
+      for (const field of [...filled, ...fields.filter((item) => item.type === 'switch')]) {
+        const raw = values[field.key];
+        const value = field.type === 'switch' ? String(Boolean(raw)) : field.type === 'channels' ? raw.join(',') : raw.trim();
         if (field.configType === 'config') await configApi.updateConfig(field.key, value);
         else await configApi.updateSecret(field.key, value);
       }
@@ -78,27 +102,57 @@ function CredentialSetup({ fields, helpUrl, helpText, onSaved }) {
     }
   };
 
+  const label = (field) => (
+    <>
+      {field.label}
+      {showKeys ? <span className="ml-1.5 font-mono text-[11px] font-normal text-fg-subtle">{field.key}</span> : null}
+    </>
+  );
+
   return (
     <form onSubmit={save} className="space-y-3 border-t border-line px-4 py-4">
       <div className={`grid gap-3 ${fields.length > 2 ? 'sm:grid-cols-2' : ''}`}>
-        {fields.map((field) => (
-          <Field
-            key={field.key}
-            htmlFor={`service-${field.key}`}
-            label={<>{field.label} <span className="ml-1 font-mono text-[11px] font-normal text-fg-subtle">{field.key}</span></>}
-          >
-            <Input
-              id={`service-${field.key}`}
-              type={field.configType === 'secret' ? 'password' : 'text'}
-              value={values[field.key]}
-              onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.value }))}
-              placeholder={field.placeholder}
-              autoComplete="off"
-              spellCheck={false}
-              className="font-mono text-[12px]"
-            />
-          </Field>
-        ))}
+        {fields.map((field) => {
+          const id = `service-${field.key}`;
+          if (field.type === 'switch') {
+            return (
+              <div key={field.key} className="flex items-center justify-between gap-3 self-end rounded-lg px-0.5 py-1.5">
+                <span id={`${id}-label`} className="text-[12px] font-medium text-fg-muted">{label(field)}</span>
+                <Switch size="sm" checked={Boolean(values[field.key])} onChange={(value) => setValue(field.key, value)} aria-labelledby={`${id}-label`} />
+              </div>
+            );
+          }
+          if (field.type === 'channels') {
+            const picked = values[field.key];
+            return (
+              <Field key={field.key} label={label(field)}>
+                <div role="group" aria-label={field.label} className="flex min-h-9 flex-wrap items-center gap-x-4 gap-y-1.5">
+                  {field.options.map((option) => (
+                    <Checkbox
+                      key={option.id}
+                      label={option.label}
+                      checked={picked.includes(option.id)}
+                      onChange={(on) => setValue(field.key, on ? [...picked, option.id] : picked.filter((item) => item !== option.id))}
+                    />
+                  ))}
+                </div>
+              </Field>
+            );
+          }
+          return (
+            <Field key={field.key} htmlFor={id} label={label(field)}>
+              <Input
+                id={id}
+                type={field.configType === 'secret' ? 'password' : 'text'}
+                value={values[field.key]}
+                onChange={(event) => setValue(field.key, event.target.value)}
+                placeholder={field.placeholder}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </Field>
+          );
+        })}
       </div>
       {error ? <p role="alert" className="text-[12px] text-red-600 dark:text-red-400">{error}</p> : null}
       <div className="flex flex-wrap items-center gap-3">
@@ -113,6 +167,9 @@ const setupFieldShape = PropTypes.shape({
   key: PropTypes.string.isRequired,
   label: PropTypes.string.isRequired,
   configType: PropTypes.oneOf(['config', 'secret']),
+  type: PropTypes.oneOf(['text', 'switch', 'channels']),
+  defaultValue: PropTypes.bool,
+  options: PropTypes.arrayOf(PropTypes.shape({ id: PropTypes.string.isRequired, label: PropTypes.string.isRequired })),
   placeholder: PropTypes.string,
 });
 
@@ -609,12 +666,12 @@ export default function IntegrationsSection() {
         setupFields={[
           { key: 'MAIL_IMAP_HOST', label: 'IMAP server', configType: 'config', placeholder: 'imap.example.com' },
           { key: 'MAIL_IMAP_PORT', label: 'IMAP port', configType: 'config', placeholder: '993' },
-          { key: 'MAIL_IMAP_SECURE', label: 'IMAP over TLS', configType: 'config', placeholder: 'true' },
+          { key: 'MAIL_IMAP_SECURE', label: 'Use TLS for IMAP', configType: 'config', type: 'switch', defaultValue: true },
           { key: 'MAIL_IMAP_USER', label: 'IMAP user name', configType: 'config', placeholder: 'you@example.com' },
           { key: 'MAIL_IMAP_PASSWORD', label: 'IMAP password or app password', configType: 'secret', placeholder: '••••••••' },
           { key: 'MAIL_SMTP_HOST', label: 'SMTP server', configType: 'config', placeholder: 'smtp.example.com' },
           { key: 'MAIL_SMTP_PORT', label: 'SMTP port', configType: 'config', placeholder: '465' },
-          { key: 'MAIL_SMTP_SECURE', label: 'SMTP over TLS', configType: 'config', placeholder: 'true' },
+          { key: 'MAIL_SMTP_SECURE', label: 'Use TLS for SMTP', configType: 'config', type: 'switch', defaultValue: true },
           { key: 'MAIL_SMTP_USER', label: 'SMTP user name', configType: 'config', placeholder: 'you@example.com' },
           { key: 'MAIL_SMTP_PASSWORD', label: 'SMTP password or app password', configType: 'secret', placeholder: '••••••••' },
           { key: 'MAIL_FROM_EMAIL', label: 'Send from', configType: 'config', placeholder: 'you@example.com' },
@@ -647,7 +704,7 @@ export default function IntegrationsSection() {
         disconnecting={notifyDisconnecting}
         onCredsSaved={loadNotifyStatus}
         setupFields={[
-          { key: 'NOTIFY_DEFAULT_CHANNELS', label: 'Send to', configType: 'config', placeholder: 'discord,slack,telegram,email' },
+          { key: 'NOTIFY_DEFAULT_CHANNELS', label: 'Send to', configType: 'config', type: 'channels', options: CHANNELS },
           { key: 'NOTIFY_EMAIL_TO', label: 'Email address', configType: 'config', placeholder: 'you@example.com' },
           { key: 'NOTIFY_DISCORD_WEBHOOK', label: 'Discord webhook address', configType: 'secret', placeholder: 'https://discord.com/api/webhooks/…' },
           { key: 'NOTIFY_SLACK_WEBHOOK', label: 'Slack webhook address', configType: 'secret', placeholder: 'https://hooks.slack.com/services/…' },
