@@ -548,7 +548,10 @@ body.browser-fullscreen-active [data-app-sidebar] {
   animation: slideInUp 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
-/* Smooth page transitions for modern UX */
+/* Pages and new answers rise in. With no fill mode nothing is left once it
+   ends: a leftover transform would make the page the box its position:fixed
+   children (full-screen views, the browser) are placed and stacked in, so
+   they opened under the sidebar. */
 @keyframes fadeInContent {
   from {
     opacity: 0;
@@ -556,12 +559,12 @@ body.browser-fullscreen-active [data-app-sidebar] {
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 
 .animate-fadeIn {
-  animation: fadeInContent 0.25s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: fadeInContent 0.25s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @media (prefers-reduced-motion: reduce) {
