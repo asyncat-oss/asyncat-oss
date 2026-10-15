@@ -58,6 +58,7 @@ import { runAcpAgent } from '../../agent/acp/acpRunner.js';
 import { downloadSize } from '../../connectors/launchers.js';
 import { listExternalSessions, readExternalSession } from '../../agent/externalSessions.js';
 import { getExternalUsage } from '../../agent/externalUsage.js';
+import { cleanChatTitle } from '../chatTitle.js';
 
 const router = express.Router();
 const pendingPermissions = new Map();
@@ -534,8 +535,7 @@ router.post('/generate-title', withWorkspaceContext, async (req, res) => {
       messages: [{ role: 'user', content: `User said: "${(userMessage || '').slice(0, 200)}"` }]
     });
 
-    const raw = (response.content?.[0]?.text || '').trim().replace(/^["']|["']$/g, '');
-    const title = raw.slice(0, 60) || null;
+    const title = cleanChatTitle(response.content?.[0]?.text || '');
     res.json({ success: true, title });
   } catch (error) {
     console.error('Title generation error:', error);
