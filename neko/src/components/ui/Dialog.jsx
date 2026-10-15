@@ -4,6 +4,30 @@ import PropTypes from 'prop-types';
 import { X } from 'lucide-react';
 import { backdropCloses, isTopLayer, useLayer } from './floating.js';
 
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), [contenteditable="true"]';
+const FIELD = 'input:not([disabled]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), textarea:not([disabled]), select:not([disabled]), [contenteditable="true"]';
+
+const visible = (element) => element.getClientRects().length > 0;
+
+/** What Tab moves between inside a panel, in order. */
+function focusablesIn(panel) {
+  return [...(panel?.querySelectorAll(FOCUSABLE) || [])].filter(visible);
+}
+
+/**
+ * Where a dialog's keyboard focus starts: something marked autofocus, else
+ * the first field in its body (the key, the address, the name), else its
+ * close button, else its first button.
+ */
+function initialFocusIn(panel, body) {
+  if (!panel) return null;
+  return panel.querySelector('[data-autofocus], [autofocus]')
+    || [...(body?.querySelectorAll(FIELD) || [])].find(visible)
+    || panel.querySelector('[data-dialog-close]')
+    || focusablesIn(panel)[0]
+    || null;
+}
+
 /**
  * A centred modal dialog. Escape and a click on the backdrop close it, unless
  * something is open on top of it: with a Select open in it, or dialogs
@@ -33,6 +57,7 @@ export default function Dialog({
   children,
 }) {
   const panelRef = useRef(null);
+  const bodyRef = useRef(null);
   const layerRef = useLayer(open, panelRef);
   const descriptionId = useId();
   const onCloseRef = useRef(onClose);
@@ -43,8 +68,10 @@ export default function Dialog({
   useEffect(() => {
     if (!open) return undefined;
     const previous = document.activeElement;
-    const target = panelRef.current?.querySelector('[autofocus], input:not([type="hidden"]), select, textarea, button');
-    target?.focus({ preventScroll: true });
+    // A field that took focus as it mounted (autoFocus) keeps it.
+    if (!panelRef.current?.contains(document.activeElement)) {
+      initialFocusIn(panelRef.current, bodyRef.current)?.focus({ preventScroll: true });
+    }
     const onKeyDown = (event) => {
       if (event.key === 'Escape' && isTopLayer(layerRef.current)) {
         event.stopPropagation();
@@ -97,6 +124,7 @@ export default function Dialog({
             <button
               type="button"
               onClick={onClose}
+              data-dialog-close
               aria-label="Close"
               className="-mr-1.5 -mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-fg-subtle outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/40"
             >
@@ -104,7 +132,7 @@ export default function Dialog({
             </button>
           ) : null}
         </div>
-        {children ? <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-1">{children}</div> : <div className="pb-2" />}
+        {children ? <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-1">{children}</div> : <div className="pb-2" />}
         {footer ? <div className="flex items-center justify-end gap-2 border-t border-line bg-canvas/40 px-5 py-3">{footer}</div> : null}
       </Panel>
     </div>,
