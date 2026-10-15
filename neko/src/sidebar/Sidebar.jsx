@@ -1029,7 +1029,7 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
       </aside>
       {searchLoaded && (
         <Suspense fallback={null}>
-          <UniversalSearch isOpen={isSearchOpen} onClose={() => onSearchOpen(false)} />
+          <UniversalSearch isOpen={isSearchOpen} onClose={() => onSearchOpen(false)} onNewChat={onNewChat} />
         </Suspense>
       )}
     </>

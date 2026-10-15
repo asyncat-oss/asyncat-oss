@@ -1,6 +1,7 @@
 // The search palette (Ctrl+K): jump to a page, or find a project, a note, a
 // memory or a chat. Chats are found by title and by what was said in them;
-// a message hit opens the chat at that message.
+// a message hit opens the chat at that message. It looks like the app's
+// menus and lists: one floating panel, grouped rows, a grey active row.
 import {
   useState,
   useEffect,
@@ -10,25 +11,27 @@ import {
   useMemo,
   forwardRef,
 } from 'react';
+import { createPortal } from 'react-dom';
 import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import {
   Search,
   X,
   FolderOpen,
+  FolderKanban,
   MessageSquare,
   FileText,
-  SquareCheck,
   Brain,
   Cpu,
   Wrench,
   Settings,
   BrainCircuit,
-  CalendarPlus,
   GraduationCap,
   Folder,
   Loader2,
   Pin,
+  Plus,
+  SquarePen,
   Cat as CatIcon,
 } from 'lucide-react';
 import { useWorkspace } from '../contexts/WorkspaceContext';
@@ -37,6 +40,7 @@ import { searchApi } from '../CommandCenter/api/searchApi.js';
 import SearchSnippet from '../components/SearchSnippet.jsx';
 import { chatLink, isPinned, markTitle } from './chatSearch.js';
 import { latestSearch } from '../utils/latestSearch.js';
+import { keepTabInside } from './focusLoop.js';
 
 // ─── Kinds of result ──────────────────────────────────────────────────────────
 
@@ -51,16 +55,17 @@ const TYPE_CONFIG = {
 const SECTION_ORDER = ['command', 'project', 'note', 'conversation', 'memory'];
 
 // Navigation commands surfaced in the palette (always available, filtered by query).
+// New chat runs the sidebar's New chat, so the chat on screen is put away.
 const COMMANDS = [
-  { id: 'cmd-home',      label: 'Go to Chat',           to: '/home',         icon: MessageSquare },
-  { id: 'cmd-cats', label: 'Go to Cats',               to: '/cats',         icon: CatIcon },
-  { id: 'cmd-cats-new', label: 'New Cat',               to: '/cats?new=1',   icon: CalendarPlus },
-  { id: 'cmd-agents',    label: 'Go to Agents',         to: '/agents', icon: BrainCircuit },
+  { id: 'cmd-home',      label: 'New chat',             to: '/home',         icon: SquarePen, newChat: true },
+  { id: 'cmd-cats',      label: 'Go to Cats',           to: '/cats',         icon: CatIcon },
+  { id: 'cmd-cats-new',  label: 'New Cat',              to: '/cats?new=1',   icon: Plus },
+  { id: 'cmd-agents',    label: 'Go to Agents',         to: '/agents',       icon: BrainCircuit },
   { id: 'cmd-models',    label: 'Go to Models',         to: '/models',       icon: Cpu },
   { id: 'cmd-training',  label: 'Go to Training',       to: '/models?tab=training', icon: GraduationCap },
   { id: 'cmd-tools',     label: 'Go to Tools & Skills', to: '/tools',        icon: Wrench },
   { id: 'cmd-files',     label: 'Go to Files',          to: '/files',        icon: Folder },
-  { id: 'cmd-projects',  label: 'Go to Projects',       to: '/projects',     icon: SquareCheck },
+  { id: 'cmd-projects',  label: 'Go to Projects',       to: '/projects',     icon: FolderKanban },
   { id: 'cmd-settings',  label: 'Go to Settings',       to: '/settings',     icon: Settings },
 ];
 
@@ -87,15 +92,15 @@ const SearchResultItem = memo(
         id={optionId(index)}
         role="option"
         aria-selected={isSelected}
-        className={`mx-1.5 flex cursor-default items-start gap-2.5 rounded-lg px-2.5 py-2 transition-colors duration-75 ${
-          isSelected ? 'bg-selected' : 'hover:bg-hover'
+        className={`flex min-h-8 cursor-default select-none items-start gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] ${
+          isSelected ? 'bg-hover text-fg' : 'text-fg-muted'
         }`}
         onClick={() => onSelect(item)}
         onMouseMove={() => { if (!isSelected) onHover(index); }}
       >
-        <span className="mt-px flex h-[18px] w-[18px] shrink-0 items-center justify-center text-fg-subtle">
+        <span className="flex h-5 w-4 shrink-0 items-center justify-center">
           {item._type === 'project' && item.emoji ? (
-            <span className="text-sm leading-none">{item.emoji}</span>
+            <span className="text-[13px] leading-none">{item.emoji}</span>
           ) : (
             <Icon className="h-4 w-4" strokeWidth={1.75} />
           )}
@@ -104,12 +109,12 @@ const SearchResultItem = memo(
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1.5">
             {markedLabel
-              ? <SearchSnippet snippet={markedLabel} className="truncate text-[13px] leading-[18px] text-fg" />
-              : <span className="truncate text-[13px] leading-[18px] text-fg">{label}</span>}
+              ? <SearchSnippet snippet={markedLabel} className="truncate leading-5" />
+              : <span className="truncate leading-5">{label}</span>}
             {pinned ? <Pin aria-label="Pinned" className="h-3 w-3 shrink-0 text-fg-subtle" /> : null}
           </div>
           {detail ? (
-            <SearchSnippet snippet={detail} className="mt-0.5 line-clamp-2 text-xs leading-[17px] text-fg-muted" />
+            <SearchSnippet snippet={detail} className="line-clamp-2 text-[12px] leading-5 text-fg-subtle" />
           ) : null}
         </div>
       </div>
@@ -128,20 +133,20 @@ SearchResultItem.propTypes = {
 };
 
 const SectionHeader = ({ label }) => (
-  <div className="px-4 pb-1 pt-2 text-xs font-medium text-fg-subtle">{label}</div>
+  <div className="px-2.5 pb-1 pt-1.5 text-[11px] font-medium text-fg-subtle">{label}</div>
 );
 
 SectionHeader.propTypes = { label: PropTypes.string.isRequired };
 
 const Key = ({ children }) => (
-  <kbd className="rounded border border-line bg-surface px-1 font-sans text-[10px] text-fg-muted">{children}</kbd>
+  <kbd className="inline-flex h-4 min-w-4 items-center justify-center rounded border border-line px-1 font-sans text-[11px] leading-none text-fg-muted">{children}</kbd>
 );
 
 Key.propTypes = { children: PropTypes.node };
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 
-const UniversalSearch = ({ isOpen, onClose }) => {
+const UniversalSearch = ({ isOpen, onClose, onNewChat }) => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [localProjects, setLocalProjects] = useState([]);
@@ -288,7 +293,8 @@ const UniversalSearch = ({ isOpen, onClose }) => {
   const handleSelect = useCallback(
     (item) => {
       if (item._type === 'command') {
-        if (item.to) navigate(item.to);
+        if (item.newChat && onNewChat) onNewChat();
+        else if (item.to) navigate(item.to);
       } else if (item._type === 'memory') {
         navigate('/tools?tab=memory');
       } else if (item._type === 'project') {
@@ -303,7 +309,7 @@ const UniversalSearch = ({ isOpen, onClose }) => {
       }
       onClose();
     },
-    [navigate, onClose]
+    [navigate, onClose, onNewChat]
   );
 
   // ── Keyboard navigation ───────────────────────────────────────────────────
@@ -327,6 +333,10 @@ const UniversalSearch = ({ isOpen, onClose }) => {
         case 'Escape':
           e.preventDefault();
           onClose();
+          break;
+        case 'Tab':
+          // The page behind is out of reach while the palette is open.
+          keepTabInside(e, modalRef.current);
           break;
       }
     };
@@ -364,16 +374,19 @@ const UniversalSearch = ({ isOpen, onClose }) => {
   const stillIndexing = indexing && !pending;
   const indexingNote = 'Still indexing older chats, so some may be missing.';
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 px-4 pt-[14vh]">
+  // Not a Dialog: a palette has no title or close button, just the field
+  // and its list, so it keeps its own scrim and the Menu panel's look.
+  return createPortal(
+    <div className="fixed inset-0 z-[200] flex items-start justify-center bg-black/30 px-4 pt-[14vh] animate-[fadeIn_120ms_ease-out]">
       <div
         ref={modalRef}
         role="dialog"
+        aria-modal="true"
         aria-label="Search"
-        className="w-full max-w-[620px] overflow-hidden rounded-xl border border-line bg-elevated shadow-lg"
+        className="w-full max-w-[620px] overflow-hidden rounded-xl border border-line bg-elevated text-fg shadow-xl shadow-black/10 dark:shadow-black/40"
       >
         {/* ── Search input ────────────────────────────────────────────────── */}
-        <div className="flex h-[52px] items-center gap-3 px-4">
+        <div className="flex h-12 items-center gap-2.5 px-3.5">
           {isSpinning
             ? <Loader2 className="h-4 w-4 shrink-0 animate-spin text-fg-subtle" />
             : <Search className="h-4 w-4 shrink-0 text-fg-subtle" />
@@ -390,14 +403,14 @@ const UniversalSearch = ({ isOpen, onClose }) => {
             placeholder="Search chats, projects and notes"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="min-w-0 flex-1 border-none bg-transparent text-[15px] text-fg outline-none placeholder:text-fg-subtle"
+            className="min-w-0 flex-1 border-none bg-transparent text-[14px] text-fg outline-none placeholder:text-fg-subtle"
           />
           {searchTerm && (
             <button
               type="button"
               aria-label="Clear search"
               onClick={() => { setSearchTerm(''); setServerResults(null); inputRef.current?.focus(); }}
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-hover hover:text-fg"
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-fg-subtle outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/40"
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -408,16 +421,18 @@ const UniversalSearch = ({ isOpen, onClose }) => {
         {(!isEmpty || query) && (
           <div className="border-t border-line">
             {isEmpty ? (
-              <p role="status" className="px-4 py-10 text-center text-sm text-fg-muted">
+              <p role="status" className="px-4 py-8 text-center text-[13px] text-fg-muted">
                 {isSpinning ? 'Searching…' : (
                   <>Nothing found for &ldquo;<span className="text-fg">{query}</span>&rdquo;</>
                 )}
-                {stillIndexing ? <span className="mt-1 block text-xs text-fg-subtle">{indexingNote}</span> : null}
+                {stillIndexing ? <span className="mt-1 block text-[12px] text-fg-subtle">{indexingNote}</span> : null}
               </p>
             ) : (
-              <div id={LISTBOX_ID} role="listbox" aria-label="Results" className="max-h-[min(440px,60vh)] overflow-y-auto py-1.5">
-                {sections.map(({ type, items }) => (
-                  <div key={type} role="group" aria-label={TYPE_CONFIG[type].label} className="mb-1">
+              <div id={LISTBOX_ID} role="listbox" aria-label="Results" className="max-h-[min(440px,60vh)] overflow-y-auto p-1">
+                {sections.map(({ type, items }, sectionIndex) => (
+                  <div key={type} role="group" aria-label={TYPE_CONFIG[type].label}>
+                    {/* Only options and groups may sit in a listbox, so the divider is hidden from screen readers. */}
+                    {sectionIndex ? <div aria-hidden="true" className="-mx-1 my-1 h-px bg-line" /> : null}
                     <SectionHeader label={TYPE_CONFIG[type].label} />
                     {items.map((item) => {
                       const gi = filteredResults.indexOf(item);
@@ -439,27 +454,29 @@ const UniversalSearch = ({ isOpen, onClose }) => {
               </div>
             )}
             {stillIndexing && !isEmpty ? (
-              <p role="status" className="border-t border-line px-4 py-2 text-xs text-fg-subtle">{indexingNote}</p>
+              <p role="status" className="border-t border-line px-3.5 py-2 text-[12px] text-fg-subtle">{indexingNote}</p>
             ) : null}
           </div>
         )}
 
         {/* ── Footer ──────────────────────────────────────────────────────── */}
         {!isEmpty && (
-          <div className="hidden items-center gap-3 border-t border-line px-4 py-2 text-[11px] text-fg-subtle sm:flex">
+          <div className="hidden items-center gap-3 border-t border-line px-3.5 py-2 text-[11px] text-fg-subtle sm:flex">
             <span className="flex items-center gap-1"><Key>↑</Key><Key>↓</Key> to move</span>
             <span className="flex items-center gap-1"><Key>↵</Key> to open</span>
             <span className="flex items-center gap-1"><Key>Esc</Key> to close</span>
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
 
 UniversalSearch.propTypes = {
   isOpen: PropTypes.bool,
   onClose: PropTypes.func.isRequired,
+  onNewChat: PropTypes.func,
 };
 
 export default memo(UniversalSearch);
