@@ -4,7 +4,7 @@
 
 > **v0.8.0-beta.8** · MIT · [Install](#quick-start) · [Screenshots](#screenshots) · [Website](https://asyncat.com)
 
-![Asyncat after fixing a failing test: the steps it took, folded under "Worked for", and its answer](docs/images/chat.png)
+![Asyncat after fixing a failing test: the steps it took, under "Worked for", and its answer](docs/images/chat.png)
 
 <sub>A finished agent run: what the agent did (it ran the tests, read and edited a file, ran them again) and its answer. Screenshots use a demo workspace with example chats.</sub>
 
@@ -63,20 +63,26 @@ It is not a chatbot wrapper. It controls your screen, writes and runs code, mana
 
 | | |
 |---|---|
-| ![Home screen with the sidebar, light theme](docs/images/home.png) | ![Cats page with two Cats and what each did last](docs/images/cats.png) |
-| **One chat box**: pick who answers (Asyncat, Claude Code, Codex or an ACP agent), the model, a project and Plan or Action. | **Cats**: agents that work on their own, each with a mission, what wakes it, and what it did last. |
-| ![Coding agents page with Claude Code, Codex and an ACP agent](docs/images/coding-agents.png) | ![Settings, Connectors, with a connected connector and the catalog](docs/images/connectors.png) |
+| ![Home screen with pinned chats, projects and recent chats in the sidebar](docs/images/home.png) | ![Cats page with three Cats and their latest results](docs/images/cats.png) |
+| **One chat box**: pick who answers (Asyncat, Claude Code, Codex or an ACP agent), this chat's model, a project and Plan or Action. | **Cats**: agents that work on their own, each with a mission, what wakes it, and what it did last. |
+| ![Files, with the pictures, documents, pages and data agents made](docs/images/files.png) | ![Search finding a word said in a chat, with the sentence around it](docs/images/search.png) |
+| **Files**: everything agents made, from any project, agent or Cat, with a viewer for each, and everything else Asyncat keeps. | **Search**: `Cmd/Ctrl+K` finds words said in your chats and opens the chat at that message. |
+| ![Models page with the default model for new chats and two providers](docs/images/models.png) | ![Models, Voice: listening and speaking on this computer, with sizes](docs/images/voice.png) |
+| **Models**: the default model for new chats, providers, local models, voice, images, usage and training. | **Voice**: listening and reading aloud in one column, with sizes shown before anything downloads. |
+| ![Models, Images: the image model and engine offered for this graphics card](docs/images/images.png) | ![Quick ask window with a question and its answer](docs/images/quick-ask.png) |
+| **Images**: where pictures are made, and the model that suits your graphics card, with its size, before anything downloads. | **Quick ask**: a small window over any app that answers in place and saves the chat. |
+| ![First-run setup offering a model to run on this computer, with download sizes](docs/images/setup.png) | ![Settings, Personalization, with what Asyncat should know and how it should answer](docs/images/personalization.png) |
+| **First-run setup**: a model that fits this computer or a provider, your old chats, and how careful Asyncat is. | **Personalization**: what Asyncat should know about you and how it should answer, for every chat, Cat and Quick ask. |
+| ![Coding agents page with Claude Code, Codex and an ACP agent](docs/images/coding-agents.png) | ![Settings, Connections, with a connected connector and the catalog](docs/images/connectors.png) |
 | **Coding agents**: Claude Code and Codex with their sign-in status, plus any Agent Client Protocol agent. | **Connectors**: tools from other apps for agents and Cats, from the catalog, a remote server or a program on this computer. |
-| ![Models page with the model in use and providers](docs/images/models.png) | ![Voice setup with listening models and voices](docs/images/voice.png) |
-| **Models**: the model in use, providers, local models, voice, images, usage and training. | **Voice**: listening and reading aloud on this computer, with sizes shown before anything downloads. |
-| ![A project page with its instructions and knowledge](docs/images/projects.png) | ![Agents page with two agents and templates](docs/images/agents.png) |
+| ![A project page with its instructions, knowledge files and chats](docs/images/projects.png) | ![Agents page with two agents and templates](docs/images/agents.png) |
 | **Projects**: instructions every chat follows, files the agent knows, chats, and optional folders. | **Agents**: your own agents with instructions, files, starter prompts, abilities, connectors and a model. |
-| ![An answer with a sortable table and follow-up buttons](docs/images/interactive-table.png) | ![Files, with the pictures, documents, pages and data agents made](docs/images/files.png) |
-| **Interactive answers**: tables sort and filter, and follow-up buttons send the next message. | **Files**: everything agents made, from any project, agent or Cat, with a viewer for each, and everything else Asyncat keeps. |
-| ![Training, picking a model that fits the GPU](docs/images/training.png) | ![Settings, Privacy and safety](docs/images/privacy.png) |
-| **Training (Labs)**: which model fits your GPU, how long it takes, and what it downloads first. | **Privacy & safety**: where chats start, always-allowed tools, sites agents never open, your data. |
-| ![Memory page with memories marked by project and Cat](docs/images/memory.png) | ![Update screen with release notes](docs/images/update.png) |
-| **Memory**: whose each memory is, filtered by project, agent or Cat; edit or add your own. | **Updates** download, get checked against the release checksums, and install from inside the app. |
+| ![An answer with a sortable table and follow-up buttons](docs/images/interactive-table.png) | ![Training, with what this computer can use and the first step](docs/images/training.png) |
+| **Interactive answers**: tables sort and filter, and follow-up buttons send the next message. | **Training (Labs)**: what your graphics card can train, and the answers, notes and files it learns from. |
+| ![Settings, Privacy and safety: the command sandbox and its network](docs/images/privacy.png) | ![Memory page with memories marked by project and Cat](docs/images/memory.png) |
+| **Privacy & safety**: the command sandbox, its network, and the folders commands can't read. | **Memory**: whose each memory is, filtered by project, agent or Cat; edit or add your own. |
+| ![Update screen with release notes](docs/images/update.png) | |
+| **Updates** download, get checked against the release checksums, and install from inside the app. | |
 
 ---
 
