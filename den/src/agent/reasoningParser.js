@@ -75,18 +75,23 @@ function extractTaggedReasoning(text) {
   };
 }
 
+// A ReAct label counts only at the start of a line. In a normal sentence
+// ("The short answer: yes", "Food for thought:", "Call to action:") the words
+// are part of the answer and must stay where they are.
+const LABEL_RE = /(?:^|\n)[ \t]*(?:\*\*)?(Thought|Action|Final Answer|Answer)(?:\*\*)?:(?:\*\*)?[ \t]*/gi;
+
 function extractMarkdownThought(text) {
   const raw = String(text || '');
-  const labelRe = /(?:\*\*)?(Thought|Action|Final Answer|Answer):(?:\*\*)?\s*/gi;
-  const matches = [...raw.matchAll(labelRe)];
-  if (!matches.length) return { thinking: null, answer: text };
+  const matches = [...raw.matchAll(LABEL_RE)];
+  // Only a reply that starts a line with "Thought:" is written in ReAct form.
+  if (!matches.some(match => match[1]?.toLowerCase() === 'thought')) return { thinking: null, answer: text };
 
-  const hasThought = matches.some(match => match[1]?.toLowerCase() === 'thought');
   const hasAnswer = matches.some(match => /^(?:final answer|answer)$/i.test(match[1] || ''));
-  if (!hasThought && !hasAnswer) return { thinking: null, answer: text };
-
   const thinkingParts = [];
   const answerParts = [];
+
+  const preamble = raw.slice(0, matches[0].index).trim();
+  if (preamble) thinkingParts.push(preamble);
 
   matches.forEach((match, index) => {
     const label = String(match[1] || '').toLowerCase();
@@ -110,9 +115,9 @@ function extractMarkdownThought(text) {
 
 export function cleanReasoningAnswer(text) {
   return stripSpuriousGemmaThoughtLabel(stripToolWrappers(text))
-    .replace(/^\s*(?:\*\*)?(?:Final Answer|Answer):(?:\*\*)?\s*/i, '')
-    .replace(/(?:\*\*)?Action:(?:\*\*)?\s*/gi, '')
-    .replace(/(?:\*\*)?Thought:(?:\*\*)?\s*/gi, '')
+    .replace(/^\s*(?:\*\*)?(?:Final Answer|Answer)(?:\*\*)?:(?:\*\*)?\s*/i, '')
+    // A bare "Action:" left on the last line once its tool call is gone.
+    .replace(/(?:^|\n)[ \t]*(?:\*\*)?Action(?:\*\*)?:(?:\*\*)?[ \t]*$/i, '')
     .replace(/<\|channel\>thought\s*\n?<channel\|>/gi, '')
     .replace(/<\|turn\|>|<turn\|>|<eos>|<\/s>/gi, '')
     .trim();

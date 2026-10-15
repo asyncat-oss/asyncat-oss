@@ -191,12 +191,13 @@ export class Compactor {
       if (!m || typeof m.content !== 'string') continue;
 
       if (m.role === 'assistant') {
-        const thought = m.content.match(/(?:\*\*)?Thought:(?:\*\*)?\s*([\s\S]*?)(?=(?:\*\*)?(?:Action|Answer):(?:\*\*)?|<tool_call>|<think>|$)/i);
+        // Labels count only at the start of a line ("Food for thought:" in a sentence is not one).
+        const thought = m.content.match(/(?:^|\n)[ \t]*(?:\*\*)?Thought(?:\*\*)?:(?:\*\*)?\s*([\s\S]*?)(?=\n[ \t]*(?:\*\*)?(?:Action|Answer|Final Answer)(?:\*\*)?:|<tool_call>|<think>|$)/i);
         if (thought) {
           const trimmed = thought[1].trim();
           if (trimmed) thoughts.push(trimmed.slice(0, 180));
         }
-        const answer = m.content.match(/(?:\*\*)?Answer:(?:\*\*)?\s*([\s\S]+)$/i);
+        const answer = m.content.match(/(?:^|\n)[ \t]*(?:\*\*)?(?:Final )?Answer(?:\*\*)?:(?:\*\*)?\s*([\s\S]+)$/i);
         if (answer) answers.push(answer[1].trim().slice(0, 160));
       }
 

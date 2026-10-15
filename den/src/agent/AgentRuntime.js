@@ -2495,7 +2495,9 @@ export class AgentRuntime {
     let finalAnswer = null;
 
     // Extract Answer: section (signals task completion)
-    const answerMatch = parsed.answer.match(/(?:\*\*)?Answer:(?:\*\*)?\s*([\s\S]*?)$/i);
+    // Only a line that starts with "Answer:" counts; "The short answer: yes"
+    // inside a sentence is part of the reply.
+    const answerMatch = parsed.answer.match(/(?:^|\n)[ \t]*(?:\*\*)?(?:Final )?Answer(?:\*\*)?:(?:\*\*)?\s*([\s\S]*?)$/i);
     if (answerMatch) {
       finalAnswer = cleanReasoningAnswer(answerMatch[1]);
     } else if (parsed.answer !== text) {
@@ -2508,9 +2510,9 @@ export class AgentRuntime {
   }
 
   _looksLikeUnfinishedAction(text) {
-    if (!text || /(?:\*\*)?Answer:(?:\*\*)?/i.test(text)) return false;
+    if (!text || /(?:^|\n)[ \t]*(?:\*\*)?(?:Final )?Answer(?:\*\*)?:/i.test(text)) return false;
     return (
-      /(?:\*\*)?Action:(?:\*\*)?/i.test(text) ||
+      /(?:^|\n)[ \t]*(?:\*\*)?Action(?:\*\*)?:/i.test(text) ||
       /\b(i'?ll|i will|going to|need to|should)\s+(use|run|execute|create|make)\b/i.test(text) ||
       /\b(mkdir|run_command|write_file|create_directory|tool_call)\b/i.test(text)
     );
