@@ -164,7 +164,7 @@ const CalloutBlock = ({ block, onChange, contentRef, commonProps }) => {
           isDropdownOpen ? "opacity-100 max-h-20 p-2 border-b" : "opacity-0 max-h-0 p-0 group-hover:opacity-100 group-hover:max-h-20 group-hover:p-2 group-hover:border-b"
         } flex items-center justify-between overflow-hidden border-line transition-all duration-200`}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           {/* Kind */}
           <button
             ref={dropdownRef}
@@ -207,13 +207,13 @@ const CalloutBlock = ({ block, onChange, contentRef, commonProps }) => {
           type="text"
           value={title}
           onChange={(e) => handleTitleChange(e.target.value)}
-          className="flex-1 border-none bg-transparent font-medium text-fg outline-none placeholder:text-fg-subtle"
+          className="w-0 min-w-0 flex-1 border-none bg-transparent font-medium text-fg outline-none placeholder:text-fg-subtle"
           placeholder="Callout title"
           onClick={(e) => isCollapsible && e.stopPropagation()}
         />
 
         {isCollapsible && (
-          <div className="text-fg-subtle">
+          <div className="flex-shrink-0 text-fg-subtle">
             {isCollapsed ? (
               <ChevronsRight className="h-4 w-4" />
             ) : (

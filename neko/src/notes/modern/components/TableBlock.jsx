@@ -2402,7 +2402,10 @@ const TableBlock = forwardRef(({ block, onChange, commonProps }, ref) => {
           padding-right: 2.5rem;
           padding-top: 2rem;
           padding-bottom: 3.5rem;
-          overflow: visible;
+          /* The hover buttons of columns scrolled out of view sit past the
+             edge; clip them so the note itself never scrolls sideways. */
+          overflow-x: clip;
+          overflow-y: visible;
           max-width: 100%;
         }
 

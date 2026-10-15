@@ -193,18 +193,18 @@ const FileBlock = ({ block, onChange, contentRef }) => {
 
       {/* File display or upload area */}
       {fileUrl ? (
-        <div className="rounded-xl border border-line bg-surface p-4">
+        <div className="relative rounded-xl border border-line bg-surface p-4">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 flex-1 items-center gap-3">
               <KindIcon className="h-7 w-7 flex-shrink-0 text-fg-subtle" strokeWidth={1.5} />
 
               <div className="min-w-0 flex-1">
-                <div className="mb-0.5 flex items-center gap-2">
-                  <h4 className="truncate text-[14px] font-medium text-fg">
+                <div className="mb-0.5 flex min-w-0 items-center gap-2">
+                  <h4 className="min-w-0 truncate text-[14px] font-medium text-fg">
                     {originalName || filename}
                   </h4>
                   {isPreviewable() && (
-                    <span className="rounded-md bg-hover px-1.5 py-0.5 text-[11px] font-medium text-fg-muted">
+                    <span className="shrink-0 rounded-md bg-hover px-1.5 py-0.5 text-[11px] font-medium text-fg-muted">
                       Previewable
                     </span>
                   )}
@@ -224,7 +224,8 @@ const FileBlock = ({ block, onChange, contentRef }) => {
               </div>
             </div>
 
-            <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+            {/* Over the card's corner, so a narrow card keeps its width for the name. */}
+            <div className="absolute right-2 top-2 flex items-center gap-0.5 rounded-lg bg-surface opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
               <button
                 onClick={handleDownload}
                 className={ICON_BUTTON}

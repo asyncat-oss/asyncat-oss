@@ -887,32 +887,31 @@ const CodeBlock = ({ block, onChange, contentRef, commonProps }) => {
       style={{ overflow: "visible" }}
     >
       {/* Code block header */}
-      <div className="flex items-center justify-between gap-2 rounded-t-xl border-b border-line bg-hover px-2 py-1">
-        <div className="flex min-w-0 items-center gap-1">
-          <div className="ml-2.5 w-36">
-            <Select
-              variant="inline"
-              size="sm"
-              value={language}
-              onChange={handleLanguageChange}
-              options={LANGUAGE_OPTIONS}
-              aria-label="Language"
-              searchPlaceholder="Find a language"
-              className="font-mono text-[12px] text-fg-muted"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={toggleLineNumbers}
-            className="h-7 rounded-md px-2 text-[12px] text-fg-muted outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/40"
-          >
-            {showLineNumbers ? "Hide" : "Show"} line numbers
-          </button>
+      {/* One row that wraps in a narrow note: Copy stays on the right. */}
+      <div className="flex flex-wrap items-center gap-x-1 rounded-t-xl border-b border-line bg-hover px-2 py-1">
+        <div className="ml-2.5 w-32 shrink-0">
+          <Select
+            variant="inline"
+            size="sm"
+            value={language}
+            onChange={handleLanguageChange}
+            options={LANGUAGE_OPTIONS}
+            aria-label="Language"
+            searchPlaceholder="Find a language"
+            className="font-mono text-[12px] text-fg-muted"
+          />
         </div>
         <button
           type="button"
+          onClick={toggleLineNumbers}
+          className="h-7 whitespace-nowrap rounded-md px-2 text-[12px] text-fg-muted outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/40"
+        >
+          {showLineNumbers ? "Hide" : "Show"} line numbers
+        </button>
+        <button
+          type="button"
           onClick={copyCode}
-          className="flex h-7 items-center gap-1 rounded-md px-2 text-[12px] text-fg-muted outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/40"
+          className="ml-auto flex h-7 items-center gap-1 rounded-md px-2 text-[12px] text-fg-muted outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/40"
         >
           {copied ? (
             <Check className="h-3.5 w-3.5" />
