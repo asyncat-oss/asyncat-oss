@@ -11,7 +11,7 @@ export function normalizeWebLink(value) {
 
 /**
  * Open an HTTP(S) link using the user's Workbench preference.
- * Internal links are handed to Command Center's embedded browser; system links
+ * Internal links are handed to the chat's built-in browser; system links
  * use Electron's validated shell bridge, with a normal browser-tab fallback.
  */
 export function openWebLink(value, mode = 'internal') {

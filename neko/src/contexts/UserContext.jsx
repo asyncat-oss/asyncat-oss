@@ -33,7 +33,7 @@ export const UserProvider = ({ children }) => {
     fetchUserProfile();
   }, [fetchUserProfile]);
 
-  // Settings → Profile emits this after saving, so the sidebar avatar and name
+  // Settings → General emits this after saving, so the sidebar avatar and name
   // update without a reload.
   useEffect(() => eventBus.on('profile-updated', (update = {}) => {
     setProfileData((current) => ({
