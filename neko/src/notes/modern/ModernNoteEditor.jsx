@@ -30,6 +30,17 @@ import KeyboardShortcutsDropdown from "./components/KeyboardShortcutsDropdown";
 import { htmlToBlocks } from "../utils/blockConverter";
 import { useAutoSave, hasContentChanged } from "../utils/autoSaveUtils";
 
+// The saved metadata of a note as an object (the API may send it as JSON text).
+const parseMetadata = (metadata) => {
+  if (!metadata) return {};
+  if (typeof metadata !== "string") return metadata;
+  try {
+    return JSON.parse(metadata) || {};
+  } catch {
+    return {};
+  }
+};
+
 // Always shown inside a chat's side panel; onBack closes it (after a delete).
 const ModernNoteEditor = ({ note, onBack }) => {
   const {
@@ -51,6 +62,9 @@ const ModernNoteEditor = ({ note, onBack }) => {
   // Delta tracking state
   const [lastSyncVersion, setLastSyncVersion] = useState(null);
   const [isApplyingRemoteChanges, setIsApplyingRemoteChanges] = useState(false);
+
+  // The note's saved metadata (its banner, mainly), as loaded from den.
+  const [noteMetadata, setNoteMetadata] = useState({});
 
   // UI state
   const [showShortcutsInfo, setShowShortcutsInfo] = useState(false);
@@ -299,6 +313,7 @@ const ModernNoteEditor = ({ note, onBack }) => {
 
         setTitle(noteTitle);
         setBlocks(initialBlocks);
+        setNoteMetadata(parseMetadata(noteData.metadata));
 
         initialStateRef.current = {
           title: noteTitle,
@@ -368,6 +383,7 @@ const ModernNoteEditor = ({ note, onBack }) => {
       setLastSaveError(null);
       setTitle("");
       setBlocks([]);
+      setNoteMetadata({});
       setIsApplyingRemoteChanges(false);
     }
 
@@ -444,6 +460,7 @@ const ModernNoteEditor = ({ note, onBack }) => {
           const freshTitle = freshNote.title || "Untitled Note";
           setTitle(freshTitle);
           setBlocks(freshBlocks);
+          setNoteMetadata(parseMetadata(freshNote.metadata));
 
           // Update the editor component directly
           if (editorRef.current?.setContent) {
@@ -1048,21 +1065,17 @@ const ModernNoteEditor = ({ note, onBack }) => {
       <div className="relative flex flex-1 overflow-hidden">
         <div className="flex-1 overflow-y-auto editor-fullscreen">
           <NoteBanner
-            note={note}
+            note={{ ...note, metadata: noteMetadata }}
             onBannerChange={(bannerData) => {
               if (note && editorRef.current?.getDeltaStats) {
-                const currentMetadata = note.metadata || {};
-                const newMetadata = {
-                  ...currentMetadata,
-                  banner: bannerData,
-                };
-                note.metadata = newMetadata;
+                setNoteMetadata((current) => ({ ...current, banner: bannerData }));
 
+                // den merges this into the note's metadata.
                 const changeset = {
                   operations: [
                     {
                       type: "update_metadata",
-                      data: { metadata: newMetadata },
+                      data: { metadata: { banner: bannerData } },
                     },
                   ],
                   baselineVersion: lastSyncVersion,
