@@ -1,92 +1,46 @@
+// Settings → Appearance: the theme, page motion, and what the sidebar shows.
+
+import PropTypes from 'prop-types';
 import {
   BrainCircuit,
+  Cat as CatIcon,
   Cpu,
-  Layout,
-  Moon,
-  PanelLeft,
-  Palette,
-  Sparkles,
-  Star,
-  Sun,
-  Trash2,
-  Wrench,
   Folder,
   FolderKanban,
-  Cat as CatIcon,
+  Palette,
+  PanelLeft,
+  Trash2,
+  Wrench,
 } from 'lucide-react';
-import PropTypes from "prop-types";
-import { useUiPreferences } from "../contexts/UiPreferencesContext.jsx";
+import { Segmented } from '../components/ui/Tabs.jsx';
+import Switch from '../components/ui/Switch.jsx';
+import { RowGroup, SettingsRow, SettingsSection } from '../components/ui/Rows.jsx';
+import { useUiPreferences } from '../contexts/UiPreferencesContext.jsx';
 
-const cardClasses =
-  "overflow-hidden rounded-xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950";
-const insetClasses =
-  "p-4";
-const textClasses = "text-gray-700 dark:text-gray-200 midnight:text-gray-200";
+const THEMES = [
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+  { value: 'midnight', label: 'Midnight' },
+  { value: 'system', label: 'System' },
+];
 
-const PreferenceCard = ({ icon: Icon, title, description, children }) => (
-  <section className={cardClasses}>
-    <div className="border-b border-gray-100 px-5 py-4 dark:border-gray-800 midnight:border-slate-800">
-      <div className="flex items-center gap-2">
-        <Icon size={16} className="text-gray-500 dark:text-gray-400 midnight:text-slate-400" />
-        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">
-          {title}
-        </h3>
-      </div>
-      {description ? <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400 midnight:text-slate-400">{description}</p> : null}
-    </div>
-    <div className={insetClasses}>
-      <div className="flex flex-col gap-3">{children}</div>
-    </div>
-  </section>
-);
+const THEME_HINTS = {
+  light: 'Dark text on a light background.',
+  dark: 'Light text on a dark grey background.',
+  midnight: 'Darker than Dark, for dim rooms.',
+  system: "Follows your computer's light or dark setting.",
+};
 
-const RadioRow = ({ name, checked, onChange, icon: Icon, label }) => (
-  <label className="flex items-center justify-between gap-4 p-3 rounded-lg border border-transparent hover:border-gray-300/70 dark:hover:border-gray-600/70 midnight:hover:border-gray-600/70 hover:bg-gray-200/70 dark:hover:bg-gray-700/70 midnight:hover:bg-gray-700/70 cursor-pointer transition-colors">
-    <span className="flex min-w-0 items-center gap-3">
-      {Icon ? (
-        <Icon className="w-5 h-5 shrink-0 text-gray-500 dark:text-gray-400 midnight:text-gray-400" />
-      ) : null}
-      <span className={`${textClasses} truncate`}>{label}</span>
-    </span>
-    <input
-      type="radio"
-      name={name}
-      checked={checked}
-      onChange={onChange}
-      className="w-4 h-4 text-blue-600 focus:ring-blue-500 dark:text-blue-500 dark:focus:ring-blue-400 midnight:text-blue-400 midnight:focus:ring-blue-400"
-    />
-  </label>
-);
-
-const CheckboxRow = ({ checked, onChange, icon: Icon, label, description, locked }) => (
-  <label
-    className={`flex items-center justify-between gap-4 p-3 rounded-lg border border-transparent transition-colors ${locked ? "opacity-50 cursor-not-allowed" : "hover:border-gray-300/70 dark:hover:border-gray-600/70 midnight:hover:border-gray-600/70 hover:bg-gray-200/70 dark:hover:bg-gray-700/70 midnight:hover:bg-gray-700/70 cursor-pointer"}`}
-  >
-    <span className="flex min-w-0 items-center gap-3">
-      {Icon ? (
-        <Icon className="w-5 h-5 shrink-0 text-gray-500 dark:text-gray-400 midnight:text-gray-400" />
-      ) : null}
-      <span className={`${textClasses} truncate`}>{label}</span>
-      {description ? (
-        <span className="hidden truncate text-xs text-gray-400 sm:inline dark:text-gray-500 midnight:text-slate-500">
-          {description}
-        </span>
-      ) : null}
-      {locked && (
-        <span className="text-xs text-gray-400 dark:text-gray-500 midnight:text-gray-500 ml-1">
-          (always shown)
-        </span>
-      )}
-    </span>
-    <input
-      type="checkbox"
-      checked={checked}
-      onChange={onChange}
-      disabled={locked}
-      className="w-4 h-4 text-blue-600 focus:ring-blue-500 dark:text-blue-500 dark:focus:ring-blue-400 midnight:text-blue-400 midnight:focus:ring-blue-400 rounded"
-    />
-  </label>
-);
+// The sidebar's optional destinations (contexts/navItems.js has the keys).
+const DESTINATIONS = [
+  { key: 'projects', label: 'Projects', icon: FolderKanban },
+  { key: 'cats', label: 'Cats', icon: CatIcon, hint: 'Agents that work on their own.' },
+  { key: 'files', label: 'Files', icon: Folder },
+  { key: 'models', label: 'Models', icon: Cpu },
+  { key: 'tools', label: 'Tools & Skills', icon: Wrench },
+  { key: 'agent', label: 'Agents', icon: BrainCircuit },
+  { key: 'trash', label: 'Trash', icon: Trash2 },
+];
 
 const AppearanceSection = ({ theme, setThemeMode }) => {
   const {
@@ -99,159 +53,56 @@ const AppearanceSection = ({ theme, setThemeMode }) => {
   } = useUiPreferences();
 
   return (
-    <div className="space-y-5">
-      <PreferenceCard
-        icon={Palette}
-        title="Theme"
-        description="Use a fixed theme or follow your operating system preference."
-      >
-        <RadioRow
-          name="theme"
-          icon={Sun}
-          label="Light Mode"
-          checked={theme === "light"}
-          onChange={() => setThemeMode("light")}
-        />
-        <RadioRow
-          name="theme"
-          icon={Moon}
-          label="Dark Mode"
-          checked={theme === "dark"}
-          onChange={() => setThemeMode("dark")}
-        />
-        <RadioRow
-          name="theme"
-          icon={Star}
-          label="Midnight"
-          checked={theme === "midnight"}
-          onChange={() => setThemeMode("midnight")}
-        />
-        <RadioRow
-          name="theme"
-          icon={Sun}
-          label="System Preference"
-          checked={theme === "system"}
-          onChange={() => setThemeMode("system")}
-        />
-      </PreferenceCard>
+    <div className="space-y-8" data-appearance>
+      <SettingsSection icon={Palette} title="Theme and motion">
+        <RowGroup>
+          <SettingsRow label="Theme" hint={THEME_HINTS[theme]}>
+            <Segmented value={theme} onChange={setThemeMode} items={THEMES} label="Theme" role="radiogroup" />
+          </SettingsRow>
+          <SettingsRow label="Fade between pages" hint="A light fade when you move between main sections." stack={false}>
+            <Switch checked={pageTransitionsEnabled} onChange={setPageTransitionsEnabled} label="Fade between pages" />
+          </SettingsRow>
+        </RowGroup>
+      </SettingsSection>
 
-      <PreferenceCard
-        icon={Layout}
-        title="Navigation"
-        description="Choose whether the sidebar shows labels, then keep only the destinations you use. Command Center and Settings are always available."
-      >
-        <div className="grid gap-2 sm:grid-cols-2">
-          <RadioRow
-            name="sidebarState"
-            icon={PanelLeft}
-            label="Show labels"
-            checked={sidebarState === "expanded"}
-            onChange={() => setSidebarState("expanded")}
-          />
-          <RadioRow
-            name="sidebarState"
-            label="Compact icons"
-            checked={sidebarState === "collapsed"}
-            onChange={() => setSidebarState("collapsed")}
-          />
+      <SettingsSection icon={PanelLeft} title="Sidebar" hint="New chat, Search, your chats and Settings are always there.">
+        <div className="space-y-3">
+          <RowGroup>
+            <SettingsRow label="Show" hint={sidebarState === 'collapsed' ? 'A narrow column of icons; hover one for its name.' : 'Icons with their names.'}>
+              <Segmented
+                value={sidebarState === 'collapsed' ? 'collapsed' : 'expanded'}
+                onChange={setSidebarState}
+                items={[{ value: 'expanded', label: 'Icons and names' }, { value: 'collapsed', label: 'Icons only' }]}
+                label="Sidebar shows"
+                role="radiogroup"
+              />
+            </SettingsRow>
+          </RowGroup>
+          <RowGroup aria-label="Pages in the sidebar">
+            {DESTINATIONS.map(({ key, label, icon: Icon, hint }) => (
+              <SettingsRow
+                key={key}
+                label={(
+                  <span className="flex items-center gap-2.5">
+                    <Icon className="h-4 w-4 shrink-0 text-fg-subtle" strokeWidth={1.75} />
+                    {label}
+                  </span>
+                )}
+                hint={hint ? <span className="block pl-[26px]">{hint}</span> : null}
+                stack={false}
+              >
+                <Switch checked={navItemsVisibility[key] !== false} onChange={() => toggleNavItem(key)} label={`Show ${label} in the sidebar`} />
+              </SettingsRow>
+            ))}
+          </RowGroup>
         </div>
-        <div className="mt-1 border-t border-gray-100 pt-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400 dark:border-gray-800 dark:text-gray-600 midnight:border-slate-800 midnight:text-slate-600">
-          Visible destinations
-        </div>
-        <CheckboxRow
-          icon={FolderKanban}
-          label="Projects"
-          checked={navItemsVisibility.projects}
-          onChange={() => toggleNavItem("projects")}
-        />
-        <CheckboxRow
-          icon={CatIcon}
-          label="Cats"
-          description="Agents that work on their own"
-          checked={navItemsVisibility.cats}
-          onChange={() => toggleNavItem("cats")}
-        />
-        <CheckboxRow
-          icon={Folder}
-          label="Files"
-          checked={navItemsVisibility.files}
-          onChange={() => toggleNavItem("files")}
-        />
-        <CheckboxRow
-          icon={Cpu}
-          label="Models"
-          checked={navItemsVisibility.models}
-          onChange={() => toggleNavItem("models")}
-        />
-        <CheckboxRow
-          icon={Wrench}
-          label="Tools & Skills"
-          checked={navItemsVisibility.tools}
-          onChange={() => toggleNavItem("tools")}
-        />
-        <CheckboxRow
-          icon={BrainCircuit}
-          label="Agents"
-          checked={navItemsVisibility.agent}
-          onChange={() => toggleNavItem("agent")}
-        />
-        <CheckboxRow
-          icon={Trash2}
-          label="Trash"
-          checked={navItemsVisibility.trash}
-          onChange={() => toggleNavItem("trash")}
-        />
-      </PreferenceCard>
-
-      <PreferenceCard
-        icon={Sparkles}
-        title="Page Motion"
-        description="Add a light fade when moving between main sections."
-      >
-        <RadioRow
-          name="pageTransitions"
-          label="Subtle Transitions"
-          checked={pageTransitionsEnabled}
-          onChange={() => setPageTransitionsEnabled(true)}
-        />
-        <RadioRow
-          name="pageTransitions"
-          label="No Page Motion"
-          checked={!pageTransitionsEnabled}
-          onChange={() => setPageTransitionsEnabled(false)}
-        />
-      </PreferenceCard>
-
+      </SettingsSection>
     </div>
   );
 };
 
-PreferenceCard.propTypes = {
-  icon: PropTypes.elementType.isRequired,
-  title: PropTypes.string.isRequired,
-  description: PropTypes.string,
-  children: PropTypes.node,
-};
-
-RadioRow.propTypes = {
-  name: PropTypes.string.isRequired,
-  checked: PropTypes.bool.isRequired,
-  onChange: PropTypes.func.isRequired,
-  icon: PropTypes.elementType,
-  label: PropTypes.string.isRequired,
-};
-
-CheckboxRow.propTypes = {
-  checked: PropTypes.bool.isRequired,
-  onChange: PropTypes.func.isRequired,
-  icon: PropTypes.elementType,
-  label: PropTypes.string.isRequired,
-  description: PropTypes.string,
-  locked: PropTypes.bool,
-};
-
 AppearanceSection.propTypes = {
-  theme: PropTypes.oneOf(["light", "dark", "midnight", "system"]).isRequired,
+  theme: PropTypes.oneOf(['light', 'dark', 'midnight', 'system']).isRequired,
   setThemeMode: PropTypes.func.isRequired,
 };
 
