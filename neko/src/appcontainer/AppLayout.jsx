@@ -1,7 +1,7 @@
 import { Suspense, useState, useCallback, useEffect, useRef } from "react";
 import { Outlet, useNavigate, useParams, useLocation } from "react-router-dom";
 import PropTypes from 'prop-types';
-import { RotateCw, ServerCrash, WifiOff } from 'lucide-react';
+import { RotateCw } from 'lucide-react';
 import { useWorkspace } from '../contexts/WorkspaceContext.jsx';
 import { useCommandCenter } from '../CommandCenter/context/CommandCenterContextEnhanced';
 import { useUiPreferences } from '../contexts/UiPreferencesContext.jsx';
@@ -12,10 +12,13 @@ import { useNetworkStatus } from '../hooks/useNetworkStatus.js';
 import Sidebar from '../sidebar/Sidebar.jsx';
 import Button from '../components/ui/Button.jsx';
 import Cat from '../components/ui/Cat.jsx';
+import StatusLine from '../components/ui/StatusLine.jsx';
 import UpdateScreen from '../components/UpdateScreen.jsx';
 import FolderDropProject from '../projects/FolderDropProject.jsx';
 import { useFirstRunSetup } from '../welcome/useFirstRunSetup.js';
 
+// A slim line at the top right while the internet or Asyncat's own local
+// service can't be reached.
 const ConnectionNotice = () => {
   const network = useNetworkStatus({ pollMs: 6000 });
   const [isRestarting, setIsRestarting] = useState(false);
@@ -23,11 +26,8 @@ const ConnectionNotice = () => {
 
   if (network.online && network.backendOnline) return null;
 
-  const Icon = network.backendOnline ? WifiOff : ServerCrash;
-  const title = network.backendOnline ? 'Internet connection unavailable' : 'Local services are offline';
-  const detail = network.backendOnline
-    ? 'Local features remain available.'
-    : 'Asyncat will reconnect automatically.';
+  const title = network.backendOnline ? "You're offline" : "Can't reach Asyncat's local service";
+  const detail = network.backendOnline ? 'Local models and files still work.' : 'Trying again…';
 
   const restart = async () => {
     if (!canRestart || isRestarting) return;
@@ -40,23 +40,15 @@ const ConnectionNotice = () => {
   };
 
   return (
-    <div className="fixed right-3 top-3 z-[80] flex max-w-sm items-center gap-3 rounded-xl border border-amber-200 bg-white/95 px-3 py-2.5 shadow-lg backdrop-blur dark:border-amber-900/60 dark:bg-gray-900/95 midnight:border-amber-900/60 midnight:bg-slate-950/95">
-      <Icon className="h-4 w-4 shrink-0 text-amber-500" />
-      <div className="min-w-0">
-        <div className="text-xs font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">{title}</div>
-        <div className="text-[11px] text-gray-500 dark:text-gray-400 midnight:text-slate-400">{detail}</div>
-      </div>
-      {canRestart && (
-        <button
-          type="button"
-          onClick={restart}
-          disabled={isRestarting}
-          className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-700 hover:bg-amber-100 disabled:opacity-50 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-950/70"
-        >
-          <RotateCw className={`h-3 w-3 ${isRestarting ? 'animate-spin' : ''}`} />
-          Restart
-        </button>
-      )}
+    <div className={`fixed right-3 top-3 z-[80] w-max max-w-[calc(100vw-1.5rem)] rounded-xl border border-line bg-elevated shadow-xl shadow-black/10 dark:shadow-black/40 sm:max-w-md ${canRestart ? 'py-1 pl-3 pr-1' : 'px-3 py-2'}`}>
+      <StatusLine
+        tone="warning"
+        text={title}
+        detail={detail}
+        action={canRestart ? (
+          <Button variant="ghost" size="xs" icon={RotateCw} loading={isRestarting} onClick={restart}>Restart</Button>
+        ) : null}
+      />
     </div>
   );
 };
