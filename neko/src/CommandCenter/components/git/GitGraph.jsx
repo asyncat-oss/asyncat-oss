@@ -1,13 +1,22 @@
+// Git → History: the commit graph with a filter, and a commit's details.
+
 import { useCallback, useEffect, useState, useMemo } from 'react';
-import { Loader2, AlertCircle, X, Copy, Check, GitCommit, User, Clock, FileCode, Search, Eye } from 'lucide-react';
+import { Loader2, Copy, Check, FileCode, Eye } from 'lucide-react';
 import { gitApi } from '../../api';
-import Portal from '../../../components/Portal';
+import Dialog from '../../../components/ui/Dialog.jsx';
+import Button from '../../../components/ui/Button.jsx';
+import IconButton from '../../../components/ui/IconButton.jsx';
+import Notice from '../../../components/ui/Notice.jsx';
+import SearchField from '../../../components/ui/SearchField.jsx';
 import DiffModal from './DiffModal';
+import { rowRefs } from './gitLabels.js';
 
 const COL_WIDTH = 14;
 const ROW_HEIGHT = 32;
+// One colour per lane, so branches can be told apart, like series in a
+// chart. The first lane, usually the main branch, takes the accent.
 const COLORS = [
-  '#0ea5e9', // sky
+  'var(--as-accent)',
   '#8b5cf6', // violet
   '#10b981', // emerald
   '#f59e0b', // amber
@@ -16,14 +25,30 @@ const COLORS = [
   '#06b6d4', // cyan
 ];
 
+// The checked-out branch is "in use", so it takes the accent; the rest stay neutral.
+const REF_LOOK = {
+  current: 'bg-accent-soft text-accent',
+  tag: 'border border-line-strong text-fg-muted',
+  branch: 'bg-hover text-fg-muted',
+};
+
 function Path({ x1, y1, x2, y2, color }) {
   if (x1 === x2) {
-    return <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={color} strokeWidth="2" />;
+    return <line x1={x1} y1={y1} x2={x2} y2={y2} style={{ stroke: color }} strokeWidth="2" />;
   }
   const cy1 = y1 + (y2 - y1) / 2;
   const cy2 = y2 - (y2 - y1) / 2;
   const d = `M ${x1} ${y1} C ${x1} ${cy1}, ${x2} ${cy2}, ${x2} ${y2}`;
-  return <path d={d} fill="none" stroke={color} strokeWidth="2" />;
+  return <path d={d} fill="none" style={{ stroke: color }} strokeWidth="2" />;
+}
+
+function MetaRow({ label, children }) {
+  return (
+    <div className="flex items-baseline gap-3 px-3 py-2">
+      <span className="w-16 shrink-0 text-[12px] text-fg-subtle">{label}</span>
+      <div className="min-w-0 flex-1 text-[13px] text-fg">{children}</div>
+    </div>
+  );
 }
 
 function CommitDetailModal({ hash, workingDir, onClose, onViewDiff }) {
@@ -61,133 +86,62 @@ function CommitDetailModal({ hash, workingDir, onClose, onViewDiff }) {
   };
 
   return (
-    <Portal>
-      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4" onClick={onClose}>
-        <div
-          className="w-full max-w-lg overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950"
-          onClick={e => e.stopPropagation()}
-        >
-          <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-3 dark:border-gray-800 midnight:border-slate-800">
-            <div className="flex items-center gap-2">
-              <GitCommit className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Commit Details</h2>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-
-          <div className="max-h-[70vh] overflow-y-auto px-4 py-3">
-            {loading && (
-              <div className="flex items-center justify-center gap-2 py-8 text-sm text-gray-500">
-                <Loader2 className="h-4 w-4 animate-spin" /> Loading commit...
-              </div>
-            )}
-            {error && (
-              <div className="flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950/30 dark:text-red-300">
-                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                {error}
-              </div>
-            )}
-            {data && (
-              <div className="space-y-4">
-                {/* Hash */}
-                <div className="flex items-center gap-2">
-                  <code className="rounded-md bg-gray-100 px-2 py-1 text-xs font-mono text-gray-700 dark:bg-slate-800 dark:text-slate-300">
-                    {data.hash}
-                  </code>
-                  <button
-                    type="button"
-                    onClick={copyHash}
-                    className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-                    title="Copy hash"
-                  >
-                    {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
-                  </button>
-                </div>
-
-                {/* Message */}
-                <div>
-                  <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{data.subject}</p>
-                  {data.body && (
-                    <pre className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-gray-600 dark:text-gray-400">
-                      {data.body}
-                    </pre>
-                  )}
-                </div>
-
-                {/* Meta */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-lg border border-gray-100 p-2.5 dark:border-gray-800">
-                    <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                      <User className="h-3 w-3" /> Author
-                    </div>
-                    <p className="mt-1 text-xs font-medium text-gray-800 dark:text-gray-200">{data.author}</p>
-                    <p className="text-[10px] text-gray-500 dark:text-gray-400">{data.authorEmail}</p>
-                  </div>
-                  <div className="rounded-lg border border-gray-100 p-2.5 dark:border-gray-800">
-                    <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                      <Clock className="h-3 w-3" /> Date
-                    </div>
-                    <p className="mt-1 text-xs font-medium text-gray-800 dark:text-gray-200">
-                      {new Date(data.authorDate).toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-
-                {data.parents.length > 0 && (
-                  <div>
-                    <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                      Parents
-                    </p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {data.parents.map(p => (
-                        <code key={p} className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono text-gray-600 dark:bg-slate-800 dark:text-slate-400">
-                          {p.slice(0, 7)}
-                        </code>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Changed files */}
-                {data.changedFiles.length > 0 && (
-                  <div>
-                    <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                      <FileCode className="h-3 w-3" /> Changed Files ({data.changedFiles.length})
-                    </div>
-                    <div className="space-y-1">
-                      {data.changedFiles.map(f => (
-                        <div key={f.path} className="flex items-center justify-between rounded-md bg-gray-50 px-2.5 py-1.5 text-xs dark:bg-slate-800/50">
-                          <span className="min-w-0 truncate font-medium text-gray-700 dark:text-gray-300" title={f.path}>
-                            {f.path}
-                          </span>
-                          <div className="ml-2 flex shrink-0 items-center gap-2">
-                            <span className="text-[10px] tabular-nums text-gray-500 dark:text-gray-400">{f.changes}</span>
-                            <button
-                              type="button"
-                              onClick={() => onViewDiff({ path: f.path }, hash)}
-                              className="rounded p-0.5 text-gray-400 hover:bg-gray-200 hover:text-gray-700 dark:hover:bg-slate-700 dark:hover:text-slate-200"
-                              title="View diff"
-                            >
-                              <Eye className="h-3 w-3" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+    <Dialog open title={data?.subject || 'Commit'} onClose={onClose}>
+      {loading && (
+        <div className="flex items-center justify-center gap-2 py-8 text-[13px] text-fg-subtle">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
         </div>
-      </div>
-    </Portal>
+      )}
+      {error && <Notice tone="error">{error}</Notice>}
+      {data && (
+        <div className="space-y-4">
+          {data.body && (
+            <p className="whitespace-pre-wrap text-[13px] leading-5 text-fg-muted">{data.body}</p>
+          )}
+
+          <div className="divide-y divide-line rounded-xl border border-line">
+            <MetaRow label="Commit">
+              <span className="inline-flex items-center gap-1">
+                <code className="break-all font-mono text-[12px] text-fg-muted">{data.hash}</code>
+                <IconButton size="sm" icon={copied ? Check : Copy} label={copied ? 'Copied' : 'Copy the hash'} onClick={copyHash} />
+              </span>
+            </MetaRow>
+            <MetaRow label="Author">
+              {data.author}
+              {data.authorEmail ? <span className="ml-1.5 text-[12px] text-fg-subtle">{data.authorEmail}</span> : null}
+            </MetaRow>
+            <MetaRow label="Date">{new Date(data.authorDate).toLocaleString()}</MetaRow>
+            {data.parents.length > 0 && (
+              <MetaRow label={data.parents.length > 1 ? 'Parents' : 'Parent'}>
+                <span className="flex flex-wrap gap-1.5">
+                  {data.parents.map(p => (
+                    <code key={p} className="rounded-md bg-hover px-1.5 py-0.5 font-mono text-[11px] text-fg-muted">{p.slice(0, 7)}</code>
+                  ))}
+                </span>
+              </MetaRow>
+            )}
+          </div>
+
+          {data.changedFiles.length > 0 && (
+            <section>
+              <h3 className="mb-1.5 text-[13px] font-semibold text-fg">
+                Changed files <span className="font-normal text-fg-subtle">{data.changedFiles.length}</span>
+              </h3>
+              <div className="space-y-px">
+                {data.changedFiles.map(f => (
+                  <div key={f.path} className="group flex items-center gap-2 rounded-lg py-1 pl-2.5 pr-1 hover:bg-hover">
+                    <FileCode className="h-3.5 w-3.5 shrink-0 text-fg-subtle" strokeWidth={1.75} />
+                    <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-fg" title={f.path}>{f.path}</span>
+                    <span className="shrink-0 text-[11px] tabular-nums text-fg-subtle">{f.changes}</span>
+                    <IconButton size="sm" icon={Eye} label="View diff" onClick={() => onViewDiff({ path: f.path }, hash)} />
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+      )}
+    </Dialog>
   );
 }
 
@@ -308,46 +262,35 @@ export default function GitGraph({ workingDir = null }) {
 
   if (loading && commits.length === 0) {
     return (
-      <div className="flex h-32 items-center justify-center text-sm text-gray-500">
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading history...
+      <div className="flex h-32 items-center justify-center gap-2 text-[13px] text-fg-subtle">
+        <Loader2 className="h-4 w-4 animate-spin" /> Loading…
       </div>
     );
   }
 
   if (error && commits.length === 0) {
-    return (
-      <div className="flex h-32 items-center justify-center text-sm text-red-500">
-        <AlertCircle className="mr-2 h-4 w-4" /> {error}
-      </div>
-    );
+    return <Notice tone="error" className="mx-3 mt-2">{error}</Notice>;
   }
 
   return (
-    <div className="flex flex-col">
+    <div className="@container flex flex-col">
       {/* Search */}
-      <div className="px-2 pb-2 pt-1">
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400 dark:text-slate-500" />
-          <input
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Filter commits..."
-            className="w-full rounded-md border border-gray-200 bg-gray-50 py-1.5 pl-8 pr-3 text-xs text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-300 focus:bg-white dark:border-slate-800 dark:bg-[#0b1220] dark:text-slate-100 dark:placeholder:text-slate-600 dark:focus:border-slate-700"
-          />
-        </div>
+      <div className="px-3 pb-2 pt-1">
+        <SearchField size="sm" value={searchQuery} onChange={setSearchQuery} placeholder="Filter commits" />
       </div>
 
-      <div className="flex-1 px-1 py-1 text-sm text-slate-300">
+      <div className="flex-1 px-1.5 py-1">
         <div className="relative pb-2">
           {filteredRows.map((row) => {
             const maxW = Math.max(row.incoming.length, row.outgoing.length);
             const svgWidth = (maxW + 1) * COL_WIDTH;
+            const refs = rowRefs(row.commit.refs);
             return (
               <div
                 key={row.commit.hash}
                 onClick={() => setSelectedHash(row.commit.hash)}
-                className="group relative flex h-8 cursor-pointer items-center overflow-hidden rounded-md px-2 transition-colors hover:bg-gray-100/80 dark:hover:bg-slate-800/70"
-                title={`${row.commit.subject} — ${row.commit.author}`}
+                className="group relative flex h-8 cursor-pointer items-center overflow-hidden rounded-lg px-2 transition-colors hover:bg-hover"
+                title={`${row.commit.hash.slice(0, 7)} ${row.commit.subject} — ${row.commit.author}`}
               >
                 <div className="relative h-8 shrink-0" style={{ width: svgWidth }}>
                   <svg width={svgWidth} height={ROW_HEIGHT} className="absolute left-0 top-0">
@@ -373,34 +316,36 @@ export default function GitGraph({ workingDir = null }) {
                       cx={row.col * COL_WIDTH + COL_WIDTH / 2}
                       cy={ROW_HEIGHT / 2}
                       r="3.5"
-                      fill={row.color}
-                      stroke="currentColor"
-                      className="text-white dark:text-[#0b1220]"
+                      style={{ fill: row.color, stroke: 'var(--as-canvas)' }}
                       strokeWidth="2"
                     />
                   </svg>
                 </div>
                 
+                {/* The subject keeps at least 6rem: the ref chip shrinks first, and
+                    the hash and author only show when the panel is wide enough. */}
                 <div className="ml-3 flex min-w-0 flex-1 items-center gap-2">
-                  <span className="shrink-0 font-mono text-[10px] font-medium text-gray-400 dark:text-slate-500">{row.commit.hash.slice(0, 7)}</span>
-                  <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                    <span className="truncate text-xs font-medium text-gray-800 dark:text-slate-200" title={row.commit.subject}>
-                      {row.commit.subject}
-                    </span>
-                    {row.commit.refs.map(ref => {
-                      const isTag = ref.startsWith('tag: ');
-                      const displayRef = ref.replace('HEAD -> ', '').replace('origin/', '').replace('tag: ', '');
-                      return (
-                        <span key={ref} className={`shrink-0 rounded-sm border px-1 py-[1px] text-[9px] font-medium leading-none tracking-wide ${isTag ? 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400' : 'border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400'}`}>
-                          {displayRef}
+                  <span className="hidden shrink-0 font-mono text-[11px] text-fg-subtle @sm:block">{row.commit.hash.slice(0, 7)}</span>
+                  <span className="min-w-[6rem] flex-1 truncate text-[12px] font-medium text-fg">
+                    {row.commit.subject}
+                  </span>
+                  {refs.shown && (
+                    <span className="flex min-w-0 items-center gap-1 overflow-hidden">
+                      <span
+                        title={refs.shown.kind === 'tag' ? `Tag ${refs.shown.label}` : `Branch ${refs.shown.label}`}
+                        className={`min-w-0 max-w-[8rem] truncate rounded-md px-1.5 py-px text-[11px] font-medium leading-4 ${REF_LOOK[refs.shown.kind]}`}
+                      >
+                        {refs.shown.label}
+                      </span>
+                      {refs.rest.length > 0 && (
+                        <span title={refs.rest.map(chip => chip.label).join(', ')} className="shrink-0 rounded-md bg-hover px-1 py-px text-[11px] font-medium leading-4 tabular-nums text-fg-subtle">
+                          +{refs.rest.length}
                         </span>
-                      );
-                    })}
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2 text-[10px] text-gray-500 dark:text-slate-500">
-                    <span className="truncate max-w-[80px]" title={row.commit.author}>{row.commit.author}</span>
-                    <span className="w-16 text-right tabular-nums">{row.commit.date}</span>
-                  </div>
+                      )}
+                    </span>
+                  )}
+                  <span className="hidden max-w-[80px] shrink-0 truncate text-[11px] text-fg-subtle @md:block">{row.commit.author}</span>
+                  <span className="w-[4.75rem] shrink-0 whitespace-nowrap text-right text-[11px] tabular-nums text-fg-subtle">{row.commit.date}</span>
                 </div>
               </div>
             );
@@ -409,21 +354,15 @@ export default function GitGraph({ workingDir = null }) {
         
         {hasMore && (
           <div className="mt-1 pb-2 text-center">
-            <button
-              type="button"
-              onClick={loadMore}
-              disabled={loading}
-              className="inline-flex items-center gap-2 rounded border border-gray-200 bg-gray-50 px-4 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-            >
-              {loading && <Loader2 className="h-3 w-3 animate-spin" />}
-              {loading ? 'Loading...' : 'Load older commits'}
-            </button>
+            <Button variant="secondary" size="xs" onClick={loadMore} loading={loading}>
+              {loading ? 'Loading…' : 'Load older commits'}
+            </Button>
           </div>
         )}
         {!hasMore && commits.length > 0 && (
-           <div className="pb-2 text-center text-xs text-gray-400 dark:text-slate-600">
-             End of history
-           </div>
+          <p className="pb-2 text-center text-[12px] text-fg-subtle">
+            End of history
+          </p>
         )}
       </div>
 
