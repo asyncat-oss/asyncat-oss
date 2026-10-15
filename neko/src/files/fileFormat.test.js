@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  defaultSort, filterChips, formatBytes, groupLogs, isPlace, isPlaceKind, metaLine, openId, pictureDetails, previewKind, runtimeLabel, shortDate,
+  defaultSort, diskUsesText, filterChips, formatBytes, groupLogs, isPlace, isPlaceKind, metaLine, openId, pictureDetails, previewKind, runtimeLabel, shortDate,
   steadySizes,
 } from './fileFormat.js';
 
@@ -98,4 +98,13 @@ test('a place counted again keeps its last full size until the new count is done
   assert.equal(steadySizes(steady, done).appBytes, 250);
   // Nothing counted before: the partial count shows, with its "+".
   assert.deepEqual(steadySizes(null, recounting).places[0], { id: 'made', bytes: 12, partial: true });
+});
+
+test('the disk summary counts until the big places have sizes', () => {
+  const summary = (places, appBytes = 0) => ({ places, appBytes });
+  assert.equal(diskUsesText(null), null);
+  assert.equal(diskUsesText(summary([{ id: 'made', bytes: 0 }, { id: 'system', bytes: null }, { id: 'models', bytes: null }])), 'Counting…');
+  assert.equal(diskUsesText(summary([{ id: 'made', bytes: 0 }, { id: 'system', bytes: 2_000_000, partial: true }, { id: 'models', bytes: 0 }])), 'Counting…');
+  assert.equal(diskUsesText(summary([{ id: 'made', bytes: null }, { id: 'system', bytes: 2_700_000 }, { id: 'models', bytes: 0 }], 2_700_000)), 'Asyncat uses 2.6 MB+');
+  assert.equal(diskUsesText(summary([{ id: 'made', bytes: 0 }, { id: 'system', bytes: 2_700_000 }, { id: 'models', bytes: 0 }], 2_700_000)), 'Asyncat uses 2.6 MB');
 });

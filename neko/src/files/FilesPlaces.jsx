@@ -5,7 +5,7 @@
 import { useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
 import Skeleton from '../components/ui/Skeleton.jsx';
-import { formatBytes, PLACES } from './fileFormat.js';
+import { diskUsesText, formatBytes, PLACES } from './fileFormat.js';
 import { PLACE_ICONS } from './fileIcons.js';
 
 function sizeOf(summary, id) {
@@ -25,9 +25,8 @@ PlaceSize.propTypes = { size: PropTypes.object };
 /** "Asyncat uses 23.4 GB", a bar of the disk, and what is free. */
 export function DiskSummary({ summary, compact = false }) {
   const disk = summary?.disk;
-  const known = summary && !summary.error && summary.places?.some((place) => place.bytes !== null);
-  const partial = summary?.places?.some((place) => place.partial || place.bytes === null);
-  const uses = known ? `Asyncat uses ${formatBytes(summary.appBytes)}${partial ? '+' : ''}` : null;
+  const uses = diskUsesText(summary);
+  const partial = uses === 'Counting…' || Boolean(uses?.endsWith('+'));
   const free = disk?.totalBytes ? `${formatBytes(disk.freeBytes)} free of ${formatBytes(disk.totalBytes)}` : null;
 
   if (compact) {

@@ -231,6 +231,24 @@ export function pictureDetails(item, dateOptions = {}) {
  * delete, say) its last full count stays up instead of a partial one that
  * starts from zero. appBytes is the places added up again.
  */
+// The places that hold most of Asyncat's room: until they are counted, a
+// total would be a small, wrong number.
+const BIG_PLACES = ['system', 'models'];
+
+/**
+ * "Asyncat uses 2.6 MB" (with "+" while small places are still counted),
+ * "Counting…" until the big places have sizes, or null before anything
+ * is known.
+ */
+export function diskUsesText(summary) {
+  if (!summary || summary.error || !summary.places?.length) return null;
+  const counted = (place) => place && place.bytes !== null && place.bytes !== undefined && !place.partial;
+  const big = BIG_PLACES.map((id) => summary.places.find((place) => place.id === id)).filter(Boolean);
+  if (!big.every(counted) || !summary.places.some(counted)) return 'Counting…';
+  const partial = summary.places.some((place) => !counted(place));
+  return `Asyncat uses ${formatBytes(summary.appBytes)}${partial ? '+' : ''}`;
+}
+
 export function steadySizes(previous, next) {
   if (!next?.places) return next;
   const before = new Map((previous?.places || []).map((place) => [place.id, place]));
