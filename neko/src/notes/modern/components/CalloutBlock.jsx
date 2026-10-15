@@ -1,5 +1,9 @@
+// A callout: a short note set apart with an icon and a title, in one of a
+// few kinds. Info, warning, error and success keep a light tint of their
+// status colour (the user picks the kind); the rest are neutral.
+
 import { useState, useRef, useEffect } from "react";
-import { createPortal } from "react-dom";
+import PropTypes from "prop-types";
 import {
   Info,
   AlertTriangle,
@@ -12,6 +16,47 @@ import {
   ChevronsRight,
   ChevronsDown,
 } from "lucide-react";
+import { Menu, MenuItem } from "../../../components/ui/Menu.jsx";
+import Switch from "../../../components/ui/Switch.jsx";
+
+const NEUTRAL = {
+  box: "bg-hover border-line-strong",
+  icon: "text-fg-muted",
+};
+
+const CALLOUT_TYPES = [
+  {
+    type: "info",
+    icon: Info,
+    label: "Info",
+    box: "bg-accent-soft border-accent/50",
+    iconColor: "text-accent",
+  },
+  {
+    type: "warning",
+    icon: AlertTriangle,
+    label: "Warning",
+    box: "bg-amber-500/10 border-amber-500/60",
+    iconColor: "text-amber-700 dark:text-amber-400",
+  },
+  {
+    type: "error",
+    icon: AlertCircle,
+    label: "Error",
+    box: "bg-red-500/10 border-red-500/60",
+    iconColor: "text-red-600 dark:text-red-400",
+  },
+  {
+    type: "success",
+    icon: CheckCircle,
+    label: "Success",
+    box: "bg-emerald-500/10 border-emerald-500/60",
+    iconColor: "text-emerald-700 dark:text-emerald-400",
+  },
+  { type: "question", icon: HelpCircle, label: "Question", box: NEUTRAL.box, iconColor: NEUTRAL.icon },
+  { type: "tip", icon: Lightbulb, label: "Tip", box: NEUTRAL.box, iconColor: NEUTRAL.icon },
+  { type: "note", icon: NotepadText, label: "Note", box: NEUTRAL.box, iconColor: NEUTRAL.icon },
+];
 
 const CALLOUT_SELECTION_STYLE_ID = "callout-selection-overlay-style";
 
@@ -48,9 +93,7 @@ const CalloutBlock = ({ block, onChange, contentRef, commonProps }) => {
     block.properties?.collapsed || false
   );
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [dropdownPosition, setDropdownPosition] = useState(null);
   const dropdownRef = useRef(null);
-  const dropdownMenuRef = useRef(null);
 
   const calloutType = block.properties?.type || "info";
   const title =
@@ -58,139 +101,14 @@ const CalloutBlock = ({ block, onChange, contentRef, commonProps }) => {
     calloutType.charAt(0).toUpperCase() + calloutType.slice(1);
   const isCollapsible = block.properties?.collapsible || false;
 
-  const calloutTypes = [
-    {
-      type: "info",
-      icon: Info,
-      label: "Info",
-      bgColor: "bg-blue-50 dark:bg-blue-900/20 midnight:bg-blue-950/30",
-      borderColor:
-        "border-blue-200 dark:border-blue-800 midnight:border-blue-900",
-      textColor: "text-blue-800 dark:text-blue-200 midnight:text-blue-300",
-    },
-    {
-      type: "warning",
-      icon: AlertTriangle,
-      label: "Warning",
-      bgColor: "bg-yellow-50 dark:bg-yellow-900/20 midnight:bg-yellow-950/30",
-      borderColor:
-        "border-yellow-200 dark:border-yellow-800 midnight:border-yellow-900",
-      textColor:
-        "text-yellow-800 dark:text-yellow-200 midnight:text-yellow-300",
-    },
-    {
-      type: "error",
-      icon: AlertCircle,
-      label: "Error",
-      bgColor: "bg-red-50 dark:bg-red-900/20 midnight:bg-red-950/30",
-      borderColor: "border-red-200 dark:border-red-800 midnight:border-red-900",
-      textColor: "text-red-800 dark:text-red-200 midnight:text-red-300",
-    },
-    {
-      type: "success",
-      icon: CheckCircle,
-      label: "Success",
-      bgColor: "bg-green-50 dark:bg-green-900/20 midnight:bg-green-950/30",
-      borderColor:
-        "border-green-200 dark:border-green-800 midnight:border-green-900",
-      textColor: "text-green-800 dark:text-green-200 midnight:text-green-300",
-    },
-    {
-      type: "question",
-      icon: HelpCircle,
-      label: "Question",
-      bgColor: "bg-purple-50 dark:bg-purple-900/20 midnight:bg-purple-950/30",
-      borderColor:
-        "border-purple-200 dark:border-purple-800 midnight:border-purple-900",
-      textColor:
-        "text-purple-800 dark:text-purple-200 midnight:text-purple-300",
-    },
-    {
-      type: "tip",
-      icon: Lightbulb,
-      label: "Tip",
-      bgColor:
-        "bg-emerald-50 dark:bg-emerald-900/20 midnight:bg-emerald-950/30",
-      borderColor:
-        "border-emerald-200 dark:border-emerald-800 midnight:border-emerald-900",
-      textColor:
-        "text-emerald-800 dark:text-emerald-200 midnight:text-emerald-300",
-    },
-    {
-      type: "note",
-      icon: NotepadText,
-      label: "Note",
-      bgColor: "bg-gray-50 dark:bg-gray-800/50 midnight:bg-gray-900/60",
-      borderColor:
-        "border-gray-200 dark:border-gray-700 midnight:border-gray-800",
-      textColor: "text-gray-800 dark:text-gray-200 midnight:text-gray-300",
-    },
-  ];
-
   const currentCallout =
-    calloutTypes.find((c) => c.type === calloutType) || calloutTypes[0];
+    CALLOUT_TYPES.find((c) => c.type === calloutType) || CALLOUT_TYPES[0];
   const Icon = currentCallout.icon;
 
   // Ensure selection style is injected
   useEffect(() => {
     ensureCalloutSelectionStyle();
   }, []);
-
-  // Function to calculate and update dropdown position
-  const updateDropdownPosition = () => {
-    if (dropdownRef.current) {
-      const buttonRect = dropdownRef.current.getBoundingClientRect();
-      setDropdownPosition({
-        top: buttonRect.bottom + 2,
-        left: buttonRect.left,
-      });
-    }
-  };
-
-  // Close dropdown on scroll, resize, or visibility change
-  useEffect(() => {
-    if (isDropdownOpen) {
-      const handleScroll = () => setIsDropdownOpen(false);
-      const handleResize = () => setIsDropdownOpen(false);
-      const handleVisibilityChange = () => setIsDropdownOpen(false);
-
-      window.addEventListener("scroll", handleScroll, true);
-      window.addEventListener("resize", handleResize);
-      document.addEventListener("visibilitychange", handleVisibilityChange);
-
-      return () => {
-        window.removeEventListener("scroll", handleScroll, true);
-        window.removeEventListener("resize", handleResize);
-        document.removeEventListener(
-          "visibilitychange",
-          handleVisibilityChange
-        );
-      };
-    }
-  }, [isDropdownOpen]);
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target) &&
-        dropdownMenuRef.current &&
-        !dropdownMenuRef.current.contains(event.target)
-      ) {
-        setIsDropdownOpen(false);
-      }
-    };
-
-    if (isDropdownOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () => {
-        document.removeEventListener("mousedown", handleClickOutside);
-      };
-    }
-  }, [isDropdownOpen]);
-
-  // Close dropdown when mouse leaves the callout block
-  // (handleMouseLeave logic is handled by onMouseLeave on the div)
 
   const handleTypeChange = (newType) => {
     onChange(block.id, {
@@ -238,60 +156,41 @@ const CalloutBlock = ({ block, onChange, contentRef, commonProps }) => {
 
   return (
     <div
-      className={`callout-block border-l-4 rounded-lg ${currentCallout.bgColor} ${currentCallout.borderColor} group`}
-      onMouseLeave={(e) => {
-        // Check if mouse is entering the dropdown menu
-        const dropdownMenu = dropdownMenuRef.current;
-        if (dropdownMenu && dropdownMenu.contains(e.relatedTarget)) {
-          return; // Don't close if moving to dropdown menu
-        }
-        setIsDropdownOpen(false);
-      }}
+      className={`callout-block group rounded-lg border-l-[3px] ${currentCallout.box}`}
     >
-      {/* Controls - shown on hover or when dropdown is open */}
+      {/* Controls - shown on hover or while the kind menu is open */}
       <div
         className={`callout-unselectable ${
           isDropdownOpen ? "opacity-100 max-h-20 p-2 border-b" : "opacity-0 max-h-0 p-0 group-hover:opacity-100 group-hover:max-h-20 group-hover:p-2 group-hover:border-b"
-        } transition-all duration-200 flex justify-between items-center overflow-hidden border-gray-200 dark:border-gray-700`}
+        } flex items-center justify-between overflow-hidden border-line transition-all duration-200`}
       >
-        <div className="flex items-center gap-2">
-          {/* Type selector */}
-          <div className="relative" ref={dropdownRef}>
-            <button
-              onClick={() => {
-                if (isDropdownOpen) {
-                  setIsDropdownOpen(false);
-                  return;
-                }
-                // Calculate initial position and show dropdown
-                updateDropdownPosition();
-                setIsDropdownOpen(true);
-              }}
-              className="text-xs bg-white dark:bg-gray-800 midnight:bg-gray-900 border border-gray-300 dark:border-gray-600 midnight:border-gray-700 rounded px-2 py-1 text-gray-600 dark:text-gray-400 midnight:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 midnight:focus:ring-indigo-500 flex items-center justify-between w-24"
-            >
-              <div className="flex items-center gap-1 min-w-0">
-                <Icon className="w-3 h-3 flex-shrink-0" />
-                <span className="truncate">{currentCallout.label}</span>
-              </div>
-              <ChevronDown
-                className={`w-3 h-3 flex-shrink-0 transition-transform ${
-                  isDropdownOpen ? "rotate-180" : ""
-                }`}
-              />
-            </button>
-          </div>
-
-          {/* Collapsible toggle */}
+        <div className="flex items-center gap-3">
+          {/* Kind */}
           <button
-            onClick={toggleCollapsible}
-            className={`text-xs px-2 py-1 rounded border ${
-              isCollapsible
-                ? "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700"
-                : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-600"
-            }`}
+            ref={dropdownRef}
+            type="button"
+            onClick={() => setIsDropdownOpen((open) => !open)}
+            aria-haspopup="menu"
+            aria-expanded={isDropdownOpen}
+            className="flex h-7 w-28 items-center justify-between gap-1 rounded-md border border-line-strong bg-canvas px-2 text-[12px] text-fg-muted outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/40"
           >
-            {isCollapsible ? "Collapsible" : "Make collapsible"}
+            <span className="flex min-w-0 items-center gap-1.5">
+              <Icon className={`h-3.5 w-3.5 flex-shrink-0 ${currentCallout.iconColor}`} />
+              <span className="truncate">{currentCallout.label}</span>
+            </span>
+            <ChevronDown className="h-3 w-3 flex-shrink-0" />
           </button>
+
+          {/* Collapsible */}
+          <label className="flex items-center gap-2 text-[12px] text-fg-muted">
+            <Switch
+              size="sm"
+              checked={isCollapsible}
+              onChange={toggleCollapsible}
+              label="Collapsible"
+            />
+            Collapsible
+          </label>
         </div>
       </div>
 
@@ -302,23 +201,23 @@ const CalloutBlock = ({ block, onChange, contentRef, commonProps }) => {
         }`}
         onClick={isCollapsible ? toggleCollapsed : undefined}
       >
-        <Icon className={`w-5 h-5 ${currentCallout.textColor} flex-shrink-0`} />
+        <Icon className={`h-[18px] w-[18px] flex-shrink-0 ${currentCallout.iconColor}`} />
 
         <input
           type="text"
           value={title}
           onChange={(e) => handleTitleChange(e.target.value)}
-          className={`flex-1 font-medium bg-transparent border-none outline-none ${currentCallout.textColor}`}
+          className="flex-1 border-none bg-transparent font-medium text-fg outline-none placeholder:text-fg-subtle"
           placeholder="Callout title"
           onClick={(e) => isCollapsible && e.stopPropagation()}
         />
 
         {isCollapsible && (
-          <div className={`${currentCallout.textColor}`}>
+          <div className="text-fg-subtle">
             {isCollapsed ? (
-              <ChevronsRight className="w-4 h-4" />
+              <ChevronsRight className="h-4 w-4" />
             ) : (
-              <ChevronsDown className="w-4 h-4" />
+              <ChevronsDown className="h-4 w-4" />
             )}
           </div>
         )}
@@ -330,7 +229,7 @@ const CalloutBlock = ({ block, onChange, contentRef, commonProps }) => {
           <div
             ref={contentRef}
             contentEditable
-            className={`outline-none ${currentCallout.textColor} opacity-90`}
+            className="text-fg outline-none"
             style={{ minHeight: "1.5em", overflowWrap: "anywhere", wordBreak: "break-word", hyphens: "none" }}
             placeholder="Type your callout content..."
             {...commonProps}
@@ -338,42 +237,35 @@ const CalloutBlock = ({ block, onChange, contentRef, commonProps }) => {
         </div>
       )}
 
-      {/* Dropdown portal */}
-      {isDropdownOpen &&
-        dropdownPosition &&
-        createPortal(
-          <div
-            ref={dropdownMenuRef}
-            onMouseLeave={() => setIsDropdownOpen(false)}
-            className="fixed bg-white dark:bg-gray-800 midnight:bg-gray-900 border border-gray-300 dark:border-gray-600 midnight:border-gray-700 rounded shadow-lg z-[40] w-24"
-            style={{
-              top: dropdownPosition.top,
-              left: dropdownPosition.left,
-              animation: "fadeIn 0.1s ease-out",
-            }}
-          >
-            {calloutTypes.map((type) => {
-              const TypeIcon = type.icon;
-              return (
-                <button
-                  key={type.type}
-                  onClick={() => handleTypeChange(type.type)}
-                  className={`w-full text-left px-3 py-2 text-xs hover:bg-gray-100 dark:hover:bg-gray-700 midnight:hover:bg-gray-800 flex items-center gap-2 ${
-                    type.type === calloutType
-                      ? "bg-blue-50 dark:bg-blue-900/20 midnight:bg-blue-950/30 text-blue-700 dark:text-blue-300 midnight:text-blue-400"
-                      : "text-gray-600 dark:text-gray-400 midnight:text-gray-500"
-                  }`}
-                >
-                  <TypeIcon className="w-3 h-3" />
-                  {type.label}
-                </button>
-              );
-            })}
-          </div>,
-          document.body
-        )}
+      <Menu
+        anchorRef={dropdownRef}
+        open={isDropdownOpen}
+        onClose={() => setIsDropdownOpen(false)}
+        width={168}
+        label="Callout kind"
+      >
+        {CALLOUT_TYPES.map((type) => (
+          <MenuItem
+            key={type.type}
+            icon={type.icon}
+            label={type.label}
+            checked={type.type === calloutType}
+            onSelect={() => handleTypeChange(type.type)}
+          />
+        ))}
+      </Menu>
     </div>
   );
+};
+
+CalloutBlock.propTypes = {
+  block: PropTypes.shape({
+    id: PropTypes.string.isRequired,
+    properties: PropTypes.object,
+  }).isRequired,
+  onChange: PropTypes.func.isRequired,
+  contentRef: PropTypes.oneOfType([PropTypes.func, PropTypes.object]),
+  commonProps: PropTypes.object,
 };
 
 export default CalloutBlock;
