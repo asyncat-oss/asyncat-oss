@@ -5,9 +5,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
-import { ArrowLeft, ArrowRight, Check, Cpu, Database, Download, FileText, GitCompare, Loader2, MessageSquare, Play, Sparkles, Square, Trash2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Cpu, Database, Download, FileText, GitCompare, Layers, Loader2, MessageSquare, Play, Square, Trash2 } from 'lucide-react';
 import Button from '../components/ui/Button.jsx';
-import { Field, Input } from '../components/ui/Field.jsx';
+import Checkbox from '../components/ui/Checkbox.jsx';
+import { CONTROL_CLASS, Field, Input } from '../components/ui/Field.jsx';
+import { Progress } from '../components/ui/Progress.jsx';
+import RadioGroup from '../components/ui/RadioGroup.jsx';
 import { useConfirm } from '../components/confirmContext.js';
 import { errorDetail, useToast } from '../components/toastContext.js';
 import Switch from '../components/ui/Switch.jsx';
@@ -23,6 +26,14 @@ const STEPS = [
   { id: 4, label: 'Use it' },
 ];
 const SAVED_KEY = 'asyncat_training_guide';
+
+const JOB_STATUS = {
+  queued: 'Queued',
+  running: 'Running',
+  completed: 'Completed',
+  failed: 'Failed',
+  cancelled: 'Cancelled',
+};
 
 const FIT = {
   ok: { label: 'Fits', color: 'green' },
@@ -55,9 +66,9 @@ function Stepper({ step, reached, onPick }) {
               disabled={!clickable}
               onClick={() => onPick(item.id)}
               aria-current={current ? 'step' : undefined}
-              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium transition-colors ${current ? 'bg-accent text-white' : done ? 'bg-accent/10 text-accent hover:bg-accent/15' : 'text-fg-subtle'} disabled:cursor-default`}
+              className={`inline-flex items-center gap-1.5 rounded-full py-1 pl-1 pr-2.5 text-[12px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/40 ${current ? 'bg-selected text-fg' : done ? 'text-fg-muted hover:bg-hover hover:text-fg' : 'text-fg-subtle'} disabled:cursor-default`}
             >
-              <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] ${current ? 'bg-white/20' : 'bg-hover'}`}>{done ? <Check className="h-2.5 w-2.5" /> : item.id}</span>
+              <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[11px] tabular-nums ${current ? 'bg-fg text-canvas' : done ? 'bg-accent text-canvas' : 'bg-hover'}`}>{done ? <Check className="h-2.5 w-2.5" strokeWidth={3} /> : item.id}</span>
               {item.label}
             </button>
           </li>
@@ -69,11 +80,13 @@ function Stepper({ step, reached, onPick }) {
 
 Stepper.propTypes = { step: PropTypes.number.isRequired, reached: PropTypes.number.isRequired, onPick: PropTypes.func.isRequired };
 
+// One row in the list of what to learn from: the label around the checkbox
+// names it, so a click anywhere on the row ticks it.
 function Choice({ checked, onChange, disabled = false, icon: Icon, title, hint }) {
   return (
-    <label className={`flex items-start gap-3 rounded-xl border px-3.5 py-3 ${disabled ? 'cursor-not-allowed border-line opacity-60' : checked ? 'cursor-pointer border-accent bg-accent/5' : 'cursor-pointer border-line hover:bg-hover'}`}>
-      <input type="checkbox" className="mt-0.5 h-4 w-4 accent-[var(--as-accent)]" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
-      <Icon className="mt-0.5 h-4 w-4 shrink-0 text-fg-subtle" />
+    <label className={`flex items-start gap-3 px-3.5 py-2.5 transition-colors ${disabled ? 'cursor-default opacity-50' : 'cursor-pointer hover:bg-hover'}`}>
+      <span className="flex h-5 shrink-0 items-center"><Checkbox checked={checked} disabled={disabled} onChange={onChange} /></span>
+      <Icon className="mt-0.5 h-4 w-4 shrink-0 text-fg-subtle" strokeWidth={1.75} />
       <span className="min-w-0">
         <span className="block text-[13px] font-medium text-fg">{title}</span>
         {hint ? <span className="block text-[12px] leading-5 text-fg-muted">{hint}</span> : null}
@@ -108,14 +121,14 @@ function DataStep({ onBuilt }) {
   };
 
   if (!sources) return <p className="flex items-center gap-2 text-[13px] text-fg-muted"><Loader2 className="h-4 w-4 animate-spin" /> Looking at your data…</p>;
-  if (sources.error) return <p role="alert" className="text-[13px] text-red-600">{sources.error}</p>;
+  if (sources.error) return <p role="alert" className="text-[13px] text-red-600 dark:text-red-400">{sources.error}</p>;
   const picked = choice.ratedChats || choice.notes || choice.projectIds.length > 0;
   const toggleProject = (id, on) => setChoice((current) => ({ ...current, projectIds: on ? [...current.projectIds, id] : current.projectIds.filter((item) => item !== id) }));
 
   return (
     <div className="space-y-4" data-guide-step="data">
       <p className="text-[13px] leading-5 text-fg-muted">Pick what the model should learn from. It learns how answers should sound and look; for facts, a project&apos;s knowledge files work better.</p>
-      <div className="space-y-2">
+      <div className="divide-y divide-line overflow-hidden rounded-xl border border-line">
         <Choice
           checked={choice.ratedChats && sources.ratedAnswers > 0}
           disabled={!sources.ratedAnswers}
@@ -179,7 +192,7 @@ DatasetSummary.propTypes = { dataset: PropTypes.object.isRequired };
 
 function ModelStep({ dataset, modelId, onPick, onNext, plan }) {
   if (!plan) return <p className="flex items-center gap-2 text-[13px] text-fg-muted"><Loader2 className="h-4 w-4 animate-spin" /> Checking this computer…</p>;
-  if (plan.error) return <p role="alert" className="text-[13px] text-red-600">{plan.error}</p>;
+  if (plan.error) return <p role="alert" className="text-[13px] text-red-600 dark:text-red-400">{plan.error}</p>;
   const { readiness } = plan;
   const gpu = readiness.gpu;
   return (
@@ -195,28 +208,33 @@ function ModelStep({ dataset, modelId, onPick, onNext, plan }) {
             ? <span>On a Mac these steps can&apos;t load the result into llama.cpp yet. The Advanced form below trains with MLX.</span>
             : <span>No NVIDIA GPU is available, so training would run on the processor and take hours. If this computer has an NVIDIA GPU, check that its driver works (<code className="font-mono">nvidia-smi</code> in a terminal), then come back.</span>}
       </p>
-      <div className="space-y-2" role="radiogroup" aria-label="Model">
-        {plan.models.map((model) => {
+      <RadioGroup
+        label="Model"
+        value={modelId}
+        onChange={onPick}
+        options={plan.models.map((model) => {
           const fit = FIT[model.plan.fit] || FIT.cpu;
-          return (
-            <label key={model.id} className={`flex cursor-pointer items-start gap-3 rounded-xl border px-3.5 py-3 ${modelId === model.id ? 'border-accent bg-accent/5' : 'border-line hover:bg-hover'}`} data-guide-model={model.id}>
-              <input type="radio" name="guide-model" className="mt-0.5 h-4 w-4 accent-[var(--as-accent)]" checked={modelId === model.id} onChange={() => onPick(model.id)} />
-              <span className="min-w-0 flex-1">
-                <span className="flex flex-wrap items-center gap-2">
-                  <span className="text-[13px] font-medium text-fg">{model.label}</span>
-                  <Badge color={fit.color}>{fit.label}</Badge>
-                  {plan.recommended === model.id ? <Badge color="blue">Suggested</Badge> : null}
-                </span>
-                <span className="block text-[12px] leading-5 text-fg-muted">{model.note} Needs about {model.plan.vramNeedGb} GB of GPU memory.</span>
-                <span className="block text-[12px] leading-5 text-fg-muted">Training: {minutesText(model.plan.minutes)}, {model.plan.epochs} pass{model.plan.epochs === 1 ? '' : 'es'} over your data.</span>
-                <span className="block text-[12px] leading-5 text-fg-subtle">
+          return {
+            value: model.id,
+            label: model.label,
+            aside: (
+              <span className="inline-flex flex-wrap gap-1.5">
+                <Badge color={fit.color}>{fit.label}</Badge>
+                {plan.recommended === model.id ? <Badge color="blue">Suggested</Badge> : null}
+              </span>
+            ),
+            description: (
+              <>
+                <span className="block">{model.note} Needs about {model.plan.vramNeedGb} GB of GPU memory.</span>
+                <span className="block">Training: {minutesText(model.plan.minutes)}, {model.plan.epochs} pass{model.plan.epochs === 1 ? '' : 'es'} over your data.</span>
+                <span className="block text-fg-subtle">
                   {model.plan.downloads.length ? `Downloads first: ${model.plan.downloads.map((item) => `${item.what} ${formatBytes(item.bytes)}`).join(' · ')}` : 'Nothing to download.'}
                 </span>
-              </span>
-            </label>
-          );
+              </>
+            ),
+          };
         })}
-      </div>
+      />
       <p className="text-[12px] text-fg-subtle">Times are rough guesses from the data size and the GPU; the first run also spends a few minutes loading.</p>
       <div className="flex justify-end">
         <Button variant="primary" icon={ArrowRight} disabled={!modelId || readiness.backend === 'mlx'} onClick={onNext}>Next</Button>
@@ -301,11 +319,11 @@ function TrainStep({ dataset, model, readiness, onInstall, installing, job, onSt
         <div className="rounded-xl border border-line px-3.5 py-3" data-guide-job={job.status}>
           <div className="flex items-center justify-between gap-3">
             <p className="text-[13px] font-medium text-fg">{job.name}</p>
-            <Badge color={job.status === 'completed' ? 'green' : job.status === 'failed' ? 'red' : 'blue'}>{job.status}</Badge>
+            <Badge color={job.status === 'completed' ? 'green' : job.status === 'failed' ? 'red' : 'blue'}>{JOB_STATUS[job.status] || job.status}</Badge>
           </div>
           {running ? (
             <>
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-hover"><div className="h-full rounded-full bg-accent transition-[width]" style={{ width: `${Math.min(100, job.progress?.percent || 0)}%` }} /></div>
+              <Progress className="mt-2" value={job.progress?.percent || 0} label="Training progress" />
               <p className="mt-1 text-[12px] text-fg-muted">{job.progress?.message || (job.progress?.totalSteps ? `Step ${job.progress.step} of ${job.progress.totalSteps}${job.progress.loss != null ? ` · loss ${Number(job.progress.loss).toFixed(3)}` : ''}` : 'Starting… the first run downloads and loads the model.')}</p>
               <Button className="mt-2" size="sm" variant="ghost" icon={Square} onClick={() => onStop(job.id)}>Stop</Button>
             </>
@@ -401,7 +419,7 @@ export function AdapterCard({ adapter, onChanged, defaultPrompt = '' }) {
   return (
     <div className="rounded-xl border border-line px-3.5 py-3" data-adapter={adapter.id}>
       <div className="flex flex-wrap items-center gap-2">
-        <Sparkles className="h-4 w-4 text-fg-subtle" />
+        <Layers className="h-4 w-4 text-fg-subtle" strokeWidth={1.75} />
         <span className="text-[13px] font-medium text-fg">{adapter.name}</span>
         <span className="text-[12px] text-fg-subtle">for {adapter.modelLabel}</span>
         {adapter.loaded ? <Badge color="green">Loaded</Badge> : null}
@@ -418,14 +436,14 @@ export function AdapterCard({ adapter, onChanged, defaultPrompt = '' }) {
       ) : (
         <div className="mt-3 space-y-2">
           <Field label="Ask both" htmlFor={`compare-${adapter.id}`} hint="The same question, answered without the adapter and with it.">
-            <textarea id={`compare-${adapter.id}`} rows={2} value={prompt} onChange={(event) => setPrompt(event.target.value)} className="w-full rounded-lg border border-line-strong bg-canvas px-3 py-2 text-[13px] text-fg outline-none focus:border-accent focus:ring-2 focus:ring-accent/20" />
+            <textarea id={`compare-${adapter.id}`} rows={2} value={prompt} onChange={(event) => setPrompt(event.target.value)} className={`${CONTROL_CLASS} block py-2`} />
           </Field>
           <Button size="sm" icon={GitCompare} loading={comparing} disabled={!prompt.trim()} onClick={compare}>Compare</Button>
           {result ? (
             <div className="grid gap-2 sm:grid-cols-2" data-compare>
               {[['Without the adapter', result.before], ['With the adapter', result.after]].map(([title, text]) => (
                 <div key={title} className="rounded-lg bg-hover/50 px-3 py-2">
-                  <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-fg-subtle">{title}</p>
+                  <p className="mb-1 text-[12px] font-medium text-fg-subtle">{title}</p>
                   <p className="whitespace-pre-wrap text-[13px] leading-5 text-fg">{text || '(no answer)'}</p>
                 </div>
               ))}
@@ -466,7 +484,7 @@ function UseStep({ job, adapters, onChanged, defaultPrompt }) {
         <div className="rounded-xl border border-line px-3.5 py-3">
           <p className="text-[13px] font-medium text-fg">Training finished</p>
           <p className="mt-0.5 text-[12px] leading-5 text-fg-muted">Turn the result into an adapter llama.cpp can load. It stays small and sits on top of the model, so the model itself is unchanged.</p>
-          <Button className="mt-2" variant="primary" icon={Sparkles} loading={making} onClick={make}>Make the adapter</Button>
+          <Button className="mt-2" variant="primary" icon={Layers} loading={making} onClick={make}>Make the adapter</Button>
         </div>
       )}
     </div>
