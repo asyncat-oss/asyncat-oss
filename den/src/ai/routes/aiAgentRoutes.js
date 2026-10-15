@@ -2295,7 +2295,9 @@ router.get('/memory', withWorkspaceContext, async (req, res) => {
         query: q,
         kind,
         limit: scope === 'all' ? limit : 200,
-        bumpAccess: true,
+        // Looking through memories on Tools & Skills isn't using them: a
+        // bump here would also spare them from consolidation.
+        bumpAccess: false,
       }).filter(row => ownedBy(row, scope)).slice(0, limit);
     } else if (scope !== 'all') {
       const filter = ownerFilter(scope);
