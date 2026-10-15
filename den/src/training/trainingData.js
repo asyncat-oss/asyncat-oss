@@ -222,7 +222,7 @@ export function buildDataset(userId, choice = {}, now = new Date()) {
     ...files.map((example) => ({ text: example.text })),
   ];
   if (!rows.length) {
-    throw Object.assign(new Error('Nothing to train on yet. Rate some answers 👍, or pick notes or project files.'), { status: 400 });
+    throw Object.assign(new Error('Nothing to train on yet. Mark some answers as good with the thumbs up under them, or pick notes or project files.'), { status: 400 });
   }
   const tokens = rows.reduce((sum, row) => sum + (row.messages ? row.messages.reduce((n, m) => n + approxTokens(m.content), 0) : approxTokens(row.text)), 0);
   fs.mkdirSync(datasetsDir(), { recursive: true });

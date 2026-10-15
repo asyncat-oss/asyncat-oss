@@ -111,7 +111,12 @@ function DataStep({ onBuilt }) {
   const build = async () => {
     setBuilding(true);
     try {
-      const res = await guideApi.buildDataset({ ...choice, name });
+      const res = await guideApi.buildDataset({
+        ratedChats: choice.ratedChats && sources.ratedAnswers > 0,
+        notes: choice.notes && sources.notes > 0,
+        projectIds: choice.projectIds,
+        name,
+      });
       onBuilt({ ...res.dataset, name: name.trim() || 'My style' });
     } catch (err) {
       toast.error("Couldn't build the training data", { detail: errorDetail(err) });
@@ -122,7 +127,12 @@ function DataStep({ onBuilt }) {
 
   if (!sources) return <p className="flex items-center gap-2 text-[13px] text-fg-muted"><Loader2 className="h-4 w-4 animate-spin" /> Looking at your data…</p>;
   if (sources.error) return <p role="alert" className="text-[13px] text-red-600 dark:text-red-400">{sources.error}</p>;
-  const picked = choice.ratedChats || choice.notes || choice.projectIds.length > 0;
+  // Only a source with something in it counts as picked (rated answers start
+  // ticked, but not when there are none).
+  const projectFiles = new Map(sources.projects.map((project) => [project.id, project.files]));
+  const picked = (choice.ratedChats && sources.ratedAnswers > 0)
+    || (choice.notes && sources.notes > 0)
+    || choice.projectIds.some((id) => projectFiles.get(id) > 0);
   const toggleProject = (id, on) => setChoice((current) => ({ ...current, projectIds: on ? [...current.projectIds, id] : current.projectIds.filter((item) => item !== id) }));
 
   return (
