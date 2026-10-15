@@ -1,15 +1,17 @@
-// neko/src/CommandCenter/components/ArtifactRenderer.jsx
+// neko/src/CommandCenter/components/renderers/ArtifactRenderer.jsx
 // ─── Artifact Preview & Download Component ──────────────────────────────────
 // Renders agent-created artifacts inline with preview and download.
 // Matches the minimal, compact design language of the AgentRunFeed.
 
-import { lazy, Suspense, useEffect, useState, useMemo } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, useMemo } from 'react';
 import {
   Download, FileText, Table2, Code2,
   BarChart3, Globe, Image, ChevronDown, ChevronRight,
   X, Maximize2, Copy, Check, FileDown, PanelRight, BookOpen, Palette, FileArchive,
-  Film, Music, Video,
+  Film, Music, Video, Loader2,
 } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import Button from '../../../components/ui/Button.jsx';
 import { parseAIResponseToBlocks, BlockRenderer, headingId } from './BlockBasedMessageRenderer';
 import { agentApi } from '../../api';
 import { notesApi } from '../../../notes/noteApi';
@@ -17,23 +19,24 @@ import { NoteProvider } from '../../../notes/context/NoteProvider';
 import { sanitizeSvg } from '../../../utils/sanitizer';
 
 // ── Type config ─────────────────────────────────────────────────────────────
+// One neutral icon per type and a plain name; no colour per kind.
 const TYPE_META = {
-  markdown: { icon: FileText,    label: 'Document',   accent: 'bg-blue-500' },
-  html:     { icon: Globe,       label: 'HTML',        accent: 'bg-orange-500' },
-  design:   { icon: Palette,     label: 'Design',      accent: 'bg-fuchsia-500' },
-  animation:{ icon: Film,        label: 'Animation',   accent: 'bg-cyan-500' },
-  image:    { icon: Image,       label: 'Image',       accent: 'bg-pink-500' },
-  video:    { icon: Video,       label: 'Video',       accent: 'bg-rose-500' },
-  audio:    { icon: Music,       label: 'Audio',       accent: 'bg-violet-500' },
-  mermaid:  { icon: BarChart3,   label: 'Diagram',     accent: 'bg-violet-500' },
-  csv:      { icon: Table2,      label: 'CSV Data',    accent: 'bg-emerald-500' },
-  json:     { icon: Code2,       label: 'JSON',        accent: 'bg-amber-500' },
-  code:     { icon: Code2,       label: 'Code',        accent: 'bg-cyan-500' },
-  svg:      { icon: Image,       label: 'SVG',         accent: 'bg-pink-500' },
-  pdf:      { icon: FileDown,    label: 'PDF',         accent: 'bg-red-500' },
-  zip:      { icon: FileArchive, label: 'Bundle',      accent: 'bg-fuchsia-500' },
-  text:     { icon: FileText,    label: 'Text',        accent: 'bg-gray-500' },
-  note:     { icon: BookOpen,    label: 'Note',        accent: 'bg-indigo-500' },
+  markdown: { icon: FileText,    label: 'Document' },
+  html:     { icon: Globe,       label: 'HTML' },
+  design:   { icon: Palette,     label: 'Design' },
+  animation:{ icon: Film,        label: 'Animation' },
+  image:    { icon: Image,       label: 'Image' },
+  video:    { icon: Video,       label: 'Video' },
+  audio:    { icon: Music,       label: 'Audio' },
+  mermaid:  { icon: BarChart3,   label: 'Diagram' },
+  csv:      { icon: Table2,      label: 'CSV' },
+  json:     { icon: Code2,       label: 'JSON' },
+  code:     { icon: Code2,       label: 'Code' },
+  svg:      { icon: Image,       label: 'SVG' },
+  pdf:      { icon: FileDown,    label: 'PDF' },
+  zip:      { icon: FileArchive, label: 'Bundle' },
+  text:     { icon: FileText,    label: 'Text' },
+  note:     { icon: BookOpen,    label: 'Note' },
 };
 
 function getTypeMeta(type) {
@@ -65,7 +68,7 @@ function CsvPreview({ content, maxRows = 15 }) {
     });
   }, [content]);
 
-  if (rows.length < 2) return <pre className="text-[11px] text-gray-500 font-mono">{content}</pre>;
+  if (rows.length < 2) return <pre className="text-[12px] text-fg-muted font-mono">{content}</pre>;
 
   const headers = rows[0];
   const dataRows = rows.slice(1, maxRows + 1);
@@ -73,21 +76,21 @@ function CsvPreview({ content, maxRows = 15 }) {
 
   return (
     <div className="overflow-x-auto -mx-1">
-      <table className="w-full text-[11px] border-collapse">
+      <table className="w-full text-[12px] border-collapse">
         <thead>
           <tr>
             {headers.map((h, i) => (
-              <th key={i} className="px-2.5 py-1.5 text-left font-semibold text-gray-500 dark:text-gray-400 bg-gray-50/80 dark:bg-gray-800/60 border-b border-gray-150 dark:border-gray-700/80 whitespace-nowrap first:rounded-tl last:rounded-tr">
+              <th key={i} className="px-2.5 py-1.5 text-left font-medium text-fg bg-hover border-b border-line whitespace-nowrap first:rounded-tl last:rounded-tr">
                 {h}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100 dark:divide-gray-800/60">
+        <tbody className="divide-y divide-line">
           {dataRows.map((row, ri) => (
-            <tr key={ri} className="hover:bg-gray-50/60 dark:hover:bg-gray-800/30 transition-colors">
+            <tr key={ri} className="hover:bg-hover transition-colors">
               {row.map((cell, ci) => (
-                <td key={ci} className="px-2.5 py-1 text-gray-600 dark:text-gray-400 whitespace-nowrap font-mono">
+                <td key={ci} className="px-2.5 py-1 text-fg whitespace-nowrap font-mono">
                   {cell}
                 </td>
               ))}
@@ -96,7 +99,7 @@ function CsvPreview({ content, maxRows = 15 }) {
         </tbody>
       </table>
       {truncated && (
-        <p className="text-[10px] text-gray-400 dark:text-gray-600 mt-1.5 text-center">
+        <p className="text-[11px] text-fg-subtle mt-1.5 text-center">
           {maxRows} of {rows.length - 1} rows shown
         </p>
       )}
@@ -116,13 +119,15 @@ function CodePreview({ content, fullHeight = false }) {
   return (
     <div className={`relative group ${fullHeight ? 'h-full min-h-[320px]' : ''}`}>
       <button
+        type="button"
         onClick={handleCopy}
-        className="absolute right-1.5 top-1.5 p-1 rounded text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity hover:text-gray-300 hover:bg-gray-800"
+        className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-md border border-line bg-surface text-fg-subtle opacity-0 transition-opacity hover:text-fg focus-visible:opacity-100 group-hover:opacity-100"
         title="Copy"
+        aria-label={copied ? 'Copied' : 'Copy'}
       >
-        {copied ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+        {copied ? <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
       </button>
-      <pre className={`${fullHeight ? 'h-full min-h-[320px]' : 'max-h-64'} overflow-auto whitespace-pre-wrap break-words rounded bg-gray-900 p-2.5 font-mono text-[11px] leading-relaxed text-gray-300`}>
+      <pre className={`${fullHeight ? 'h-full min-h-[320px]' : 'max-h-64'} overflow-auto whitespace-pre-wrap break-words rounded-lg bg-hover p-2.5 font-mono text-[12px] leading-relaxed text-fg`}>
         {content?.slice(0, 5000)}
         {content?.length > 5000 && '\n\n… [truncated]'}
       </pre>
@@ -136,7 +141,7 @@ function MarkdownPreview({ content }) {
   try { blocks = parseAIResponseToBlocks(content || ''); } catch { blocks = []; }
 
   return (
-    <div className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+    <div className="text-[14px] leading-relaxed text-fg">
       {blocks.length > 0
         ? blocks.map((block, i) => <BlockRenderer key={i} block={block} />)
         : <pre className="whitespace-pre-wrap text-[12px]">{content}</pre>}
@@ -162,7 +167,8 @@ function HtmlPreview({ content, title, fullHeight = false, allowFullscreen = tru
 
   return (
     <>
-      <div className={`relative rounded overflow-hidden border border-gray-200 dark:border-gray-700 ${fullHeight ? 'h-full min-h-[360px]' : ''}`}>
+      <div className={`relative overflow-hidden rounded-lg border border-line ${fullHeight ? 'h-full min-h-[360px]' : ''}`}>
+        {/* White like a browser page: agent-written HTML expects it. */}
         <iframe
           src={blob}
           title={title || 'Preview'}
@@ -172,26 +178,78 @@ function HtmlPreview({ content, title, fullHeight = false, allowFullscreen = tru
         />
         {allowFullscreen && (
           <button
+            type="button"
             onClick={() => setFullscreen(true)}
-            className="absolute bottom-1.5 right-1.5 p-1 rounded bg-black/40 text-white/80 hover:bg-black/60 transition-colors"
+            className="absolute bottom-1.5 right-1.5 flex h-6 w-6 items-center justify-center rounded-md border border-line bg-surface text-fg-subtle transition-colors hover:text-fg"
             title="Full screen"
+            aria-label="Full screen"
           >
-            <Maximize2 className="w-3 h-3" />
+            <Maximize2 className="w-3.5 h-3.5" />
           </button>
         )}
       </div>
       {fullscreen && (
-        <div className="fixed inset-0 z-[9999] flex flex-col bg-black/80 backdrop-blur-sm">
-          <div className="flex items-center justify-between px-4 py-2 bg-gray-900">
-            <span className="text-sm font-medium text-white">{title}</span>
-            <button onClick={() => setFullscreen(false)} className="p-1 rounded hover:bg-gray-700 text-gray-300">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <iframe src={blob} title={title} className="flex-1 w-full bg-white" sandbox="allow-scripts allow-downloads allow-popups allow-presentation" allow="autoplay" />
-        </div>
+        <FullscreenViewer title={title} onClose={() => setFullscreen(false)}>
+          <iframe src={blob} title={title} className="h-full w-full bg-white" sandbox="allow-scripts allow-downloads allow-popups allow-presentation" allow="autoplay" />
+        </FullscreenViewer>
       )}
     </>
+  );
+}
+
+// ── Full-window viewer ──────────────────────────────────────────────────────
+// Not a dialog: the artifact takes the whole window, with a title bar on top.
+// Escape closes it and focus goes back where it was.
+function FullscreenViewer({ title, subtitle = '', onClose, children }) {
+  // Read while rendering, before the viewer takes focus, so the button that
+  // opened it gets focus back on close.
+  const [opener] = useState(() => document.activeElement);
+  const closeRef = useRef(null);
+  const onCloseRef = useRef(onClose);
+  useLayoutEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    // Focus lands on Close, so Escape and Enter work straight away.
+    closeRef.current?.focus({ preventScroll: true });
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        onCloseRef.current?.();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      opener?.focus?.({ preventScroll: true });
+    };
+    // Once per opening: a new onClose from a parent re-render is read from the ref.
+  }, [opener]);
+
+  return createPortal(
+    <div role="dialog" aria-modal="true" aria-label={title || 'Artifact'} className="fixed inset-0 z-[200] flex flex-col bg-canvas animate-[fadeIn_120ms_ease-out]">
+      <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-line px-4">
+        <div className="min-w-0">
+          <p className="truncate text-[13px] font-medium text-fg">{title}</p>
+          {subtitle ? <p className="truncate font-mono text-[11px] text-fg-subtle">{subtitle}</p> : null}
+        </div>
+        <button
+          ref={closeRef}
+          type="button"
+          onClick={onClose}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-fg-subtle outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/40"
+          title="Close full screen"
+          aria-label="Close full screen"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="min-h-0 flex-1">
+        {children}
+      </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -211,12 +269,12 @@ function VideoPreview({ filename, root = null, fullHeight = false }) {
     return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [filename, root]);
 
-  if (error) return <p className="py-2 text-[11px] text-red-500">{error}</p>;
+  if (error) return <p className="py-2 text-[12px] text-red-600 dark:text-red-400">{error}</p>;
   if (!src) return (
-    <div className="py-4 flex items-center justify-center text-[11px] text-gray-400">Loading video…</div>
+    <div className="py-4 flex items-center justify-center text-[12px] text-fg-subtle">Loading video…</div>
   );
   return (
-    <div className={`rounded overflow-hidden bg-black ${fullHeight ? 'h-full flex items-center justify-center' : ''}`}>
+    <div className={`rounded-lg overflow-hidden bg-black ${fullHeight ? 'h-full flex items-center justify-center' : ''}`}>
       <video controls src={src} className={`w-full block ${fullHeight ? 'max-h-full' : 'max-h-64'}`} />
     </div>
   );
@@ -238,9 +296,9 @@ function AudioPreview({ filename, root = null }) {
     return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [filename, root]);
 
-  if (error) return <p className="py-2 text-[11px] text-red-500">{error}</p>;
+  if (error) return <p className="py-2 text-[12px] text-red-600 dark:text-red-400">{error}</p>;
   if (!src) return (
-    <div className="py-3 flex items-center justify-center text-[11px] text-gray-400">Loading audio…</div>
+    <div className="py-3 flex items-center justify-center text-[12px] text-fg-subtle">Loading audio…</div>
   );
   return (
     <div className="py-2 px-1">
@@ -265,12 +323,12 @@ function ImagePreview({ filename, root = null, fullHeight = false }) {
     return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [filename, root]);
 
-  if (error) return <p className="py-2 text-[11px] text-red-500">{error}</p>;
+  if (error) return <p className="py-2 text-[12px] text-red-600 dark:text-red-400">{error}</p>;
   if (!src) return (
-    <div className="py-4 flex items-center justify-center text-[11px] text-gray-400">Loading image…</div>
+    <div className="py-4 flex items-center justify-center text-[12px] text-fg-subtle">Loading image…</div>
   );
   return (
-    <div className={`rounded overflow-hidden bg-gray-100 dark:bg-gray-900 flex items-center justify-center ${fullHeight ? 'h-full' : ''}`}>
+    <div className={`rounded-lg overflow-hidden bg-hover flex items-center justify-center ${fullHeight ? 'h-full' : ''}`}>
       <img src={src} alt={filename} className={`object-contain ${fullHeight ? 'max-h-full max-w-full' : 'max-h-64 w-full'}`} />
     </div>
   );
@@ -284,8 +342,10 @@ function ArtifactFullscreenOverlay({ artifact, content, type, title, onClose }) 
       case 'markdown':
       case 'pdf_source':
         return (
-          <div className="h-full overflow-auto bg-white px-8 py-7 dark:bg-gray-950">
-            <MarkdownPreview content={content} />
+          <div className="h-full overflow-auto px-8 py-7">
+            <div className="mx-auto max-w-3xl">
+              <MarkdownPreview content={content} />
+            </div>
           </div>
         );
       case 'html':
@@ -295,7 +355,7 @@ function ArtifactFullscreenOverlay({ artifact, content, type, title, onClose }) 
         return <HtmlPreview content={content} title={title} fullHeight allowFullscreen={false} />;
       case 'image':
         return (
-          <div className="flex h-full items-center justify-center bg-gray-950">
+          <div className="flex h-full items-center justify-center bg-hover">
             <ImagePreview filename={artifact.filename} root={artifact.root} fullHeight />
           </div>
         );
@@ -307,52 +367,36 @@ function ArtifactFullscreenOverlay({ artifact, content, type, title, onClose }) 
         );
       case 'audio':
         return (
-          <div className="flex h-full items-center justify-center bg-gray-900 p-8">
+          <div className="flex h-full items-center justify-center p-8">
             <div className="w-full max-w-lg">
-              <p className="mb-4 text-center text-sm font-medium text-gray-300">{title}</p>
+              <p className="mb-4 text-center text-[13px] font-medium text-fg">{title}</p>
               <AudioPreview filename={artifact.filename} root={artifact.root} />
             </div>
           </div>
         );
       case 'csv':
         return (
-          <div className="h-full overflow-auto bg-white p-6 dark:bg-gray-950">
+          <div className="h-full overflow-auto p-6">
             <CsvPreview content={content} maxRows={500} />
           </div>
         );
       case 'svg':
         return (
-          <div className="flex h-full items-center justify-center overflow-auto bg-white p-6 dark:bg-gray-950">
+          <div className="flex h-full items-center justify-center overflow-auto p-6">
             <div dangerouslySetInnerHTML={{ __html: sanitizeSvg(content) }} className="max-h-full max-w-full" />
           </div>
         );
       case 'json':
       case 'code':
       default:
-        return <CodePreview content={content} fullHeight />;
+        return <div className="h-full p-4"><CodePreview content={content} fullHeight /></div>;
     }
   };
 
   return (
-    <div className="fixed inset-0 z-[9998] flex flex-col bg-gray-950/90 backdrop-blur-sm">
-      <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-gray-950 px-4">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-white">{title}</p>
-          <p className="truncate text-[10px] text-gray-400">{artifact.path || artifact.filename || type}</p>
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex h-8 w-8 items-center justify-center rounded-md text-gray-300 transition-colors hover:bg-white/10 hover:text-white"
-          title="Close full screen"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-      <div className="min-h-0 flex-1 bg-white dark:bg-gray-950">
-        {renderFullscreenContent()}
-      </div>
-    </div>
+    <FullscreenViewer title={title} subtitle={artifact.path || artifact.filename || type} onClose={onClose}>
+      {renderFullscreenContent()}
+    </FullscreenViewer>
   );
 }
 
@@ -505,31 +549,21 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
   const renderPreview = () => {
     if (loading) {
       return (
-        <div className="py-4 flex items-center justify-center gap-2 text-[11px] text-gray-400 dark:text-gray-600">
-          <span className="flex gap-0.5">
-            <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 animate-bounce" style={{ animationDelay: '0ms' }} />
-            <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 animate-bounce" style={{ animationDelay: '150ms' }} />
-            <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 animate-bounce" style={{ animationDelay: '300ms' }} />
-          </span>
+        <div className="py-4 flex items-center justify-center gap-2 text-[12px] text-fg-subtle">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
           Loading preview…
         </div>
       );
     }
     if (downloadOnly) {
       return (
-        <div className="rounded-md border border-gray-100 bg-gray-50 px-3 py-3 text-[11px] text-gray-500 dark:border-gray-800 dark:bg-gray-900/50 dark:text-gray-400">
+        <div className="px-1 py-1 text-[13px] text-fg-muted">
           <p className="mb-2">
-            {type === 'zip' ? 'This bundle is available as a download.' : 'This PDF is available as a download.'}
+            {type === 'zip' ? 'This bundle is a download.' : 'This PDF is a download.'}
           </p>
-          <button
-            type="button"
-            onClick={handleDownload}
-            disabled={downloading}
-            className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900"
-          >
-            <Download className="h-3 w-3" />
-            {downloading ? 'Downloading...' : 'Download'}
-          </button>
+          <Button variant="secondary" size="xs" icon={Download} loading={downloading} onClick={handleDownload}>
+            {downloading ? 'Downloading…' : 'Download'}
+          </Button>
         </div>
       );
     }
@@ -540,17 +574,13 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
       return (
         <div className="py-3 text-center">
           {fetchError && (
-            <p className="mb-2 text-[11px] text-red-500 dark:text-red-400">
+            <p className="mb-2 text-[12px] text-red-600 dark:text-red-400">
               {fetchError}
             </p>
           )}
-          <button
-            type="button"
-            onClick={loadContent}
-            className="rounded-md border border-gray-200 px-2.5 py-1 text-[11px] font-medium text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700 dark:border-gray-800 dark:text-gray-400 dark:hover:bg-gray-900 dark:hover:text-gray-200"
-          >
+          <Button variant="secondary" size="xs" onClick={loadContent}>
             Load preview
-          </button>
+          </Button>
         </div>
       );
     }
@@ -573,7 +603,7 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
         return <CodePreview content={content} fullHeight={fullHeight} />;
       case 'svg':
         return (
-          <div className={`flex items-center justify-center p-3 bg-white dark:bg-gray-900 rounded ${fullHeight ? 'h-full min-h-[320px]' : ''}`}>
+          <div className={`flex items-center justify-center rounded-lg p-3 ${fullHeight ? 'h-full min-h-[320px]' : ''}`}>
             <div dangerouslySetInnerHTML={{ __html: sanitizeSvg(content) }} className={`max-w-full ${fullHeight ? 'max-h-full' : 'max-h-52'}`} />
           </div>
         );
@@ -583,7 +613,9 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
   };
 
   return (
-    <div className={`overflow-hidden rounded-lg border border-gray-100 bg-white/80 dark:border-gray-800 dark:bg-gray-950/30 ${fullHeight ? 'flex flex-col h-full' : ''}`}>
+    // A container, so a narrow card (a phone, a side panel) gives the title the
+    // room and drops the type label and button words first.
+    <div className={`@container overflow-hidden rounded-xl border border-line bg-surface ${fullHeight ? 'flex flex-col h-full' : ''}`}>
       {/* Header — interactive only when inline toggle is active */}
       <div
         {...((!onOpen && !fullHeight) ? {
@@ -591,28 +623,25 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
           tabIndex: 0,
           onClick: handleToggle,
           onKeyDown: (e) => (e.key === 'Enter' || e.key === ' ') && handleToggle(),
-          className: 'flex w-full items-center gap-2.5 px-3 py-2.5 text-left cursor-pointer select-none transition-colors hover:bg-gray-50 dark:hover:bg-gray-900/40',
+          'aria-expanded': expanded,
+          className: 'flex w-full items-center gap-2.5 px-3 py-2.5 text-left cursor-pointer select-none outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40',
         } : {
           className: 'flex w-full items-center gap-2.5 px-3 py-2.5',
         })}
       >
-        {/* Accent dot */}
-        <div className={`h-2 w-2 rounded-full flex-shrink-0 ${meta.accent}`} />
-
-        {/* Icon */}
-        <Icon className="h-3.5 w-3.5 flex-shrink-0 text-gray-400 dark:text-gray-500" />
+        <Icon className="h-4 w-4 flex-shrink-0 text-fg-subtle" strokeWidth={1.75} />
 
         {/* Title and meta */}
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-gray-700 dark:text-gray-200 truncate">
+          <div className="flex items-baseline gap-2">
+            <span className="text-[13px] font-medium text-fg truncate">
               {title}
             </span>
-            <span className="flex-shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+            <span className="hidden flex-shrink-0 text-[12px] text-fg-subtle @sm:inline">
               {meta.label}
             </span>
           </div>
-          <p className="mt-0.5 truncate text-[10px] text-gray-400 dark:text-gray-600 font-mono">
+          <p className="mt-0.5 truncate text-[11px] text-fg-subtle font-mono">
             {type === 'note'
               ? (artifactData.noteId ? `note:${artifactData.noteId.slice(0, 8)}…` : 'saved note')
               : (artifactPath || filename)}
@@ -627,10 +656,11 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
               type="button"
               onClick={handleDownload}
               disabled={downloading}
-              className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-hover hover:text-fg disabled:opacity-50"
               title={downloading ? 'Downloading…' : `Download ${filename}`}
+              aria-label={`Download ${filename}`}
             >
-              {downloading ? <span className="block h-3.5 w-3.5 animate-pulse rounded-full bg-current opacity-50" /> : <Download className="h-3.5 w-3.5" />}
+              {downloading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
             </button>
           )}
           {canFullscreen && (
@@ -638,8 +668,9 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
               type="button"
               onClick={handleFullscreen}
               disabled={loading}
-              className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-hover hover:text-fg disabled:opacity-50"
               title="Open full screen"
+              aria-label="Open full screen"
             >
               <Maximize2 className="h-3.5 w-3.5" />
             </button>
@@ -648,13 +679,15 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onOpen(); }}
-              className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-medium text-gray-400 transition-colors hover:bg-gray-100 hover:text-indigo-500 dark:hover:bg-gray-800 dark:hover:text-indigo-400"
+              className="inline-flex h-7 min-w-7 items-center justify-center gap-1 rounded-md px-1.5 text-[12px] font-medium text-fg-muted transition-colors hover:bg-hover hover:text-fg @xs:px-2"
+              title="Open in side panel"
+              aria-label="Open in side panel"
             >
-              Open <PanelRight className="h-3 w-3" />
+              <span className="hidden @xs:inline">Open</span><PanelRight className="h-3.5 w-3.5" />
             </button>
           ) : !fullHeight && (
-            <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-medium text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300">
-              {expanded ? 'Hide' : 'View'}
+            <span className="inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-[12px] font-medium text-fg-muted @xs:px-2">
+              <span className="hidden @xs:inline">{expanded ? 'Hide' : 'View'}</span>
               {expanded
                 ? <ChevronDown className="h-3.5 w-3.5" />
                 : <ChevronRight className="h-3.5 w-3.5" />}
@@ -665,26 +698,26 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
 
       {/* Description (always visible if present) */}
       {artifactData.description && !expanded && (
-        <p className="px-3 pb-2 -mt-0.5 text-[10px] text-gray-400 dark:text-gray-600 italic pl-[2.25rem]">
+        <p className="px-3 pb-2.5 -mt-1 text-[12px] text-fg-muted pl-[2.375rem]">
           {artifactData.description}
         </p>
       )}
 
       {/* TOC navigation — only in full-height (side panel) mode with headings */}
       {expanded && !onOpen && fullHeight && tocItems.length > 0 && (
-        <div className="shrink-0 overflow-x-auto border-t border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/50 px-3 py-1.5">
+        <div className="shrink-0 overflow-x-auto border-t border-line px-3 py-1.5">
           <div className="flex items-center gap-x-1 min-w-max">
             {tocItems.map((item, i) => (
               <button
                 key={`${item.id}-${i}`}
                 type="button"
                 onClick={() => document.getElementById(item.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] transition-colors hover:bg-gray-200/70 hover:text-indigo-600 dark:hover:bg-gray-800 dark:hover:text-indigo-400 ${
+                className={`whitespace-nowrap rounded-md px-1.5 py-0.5 text-[12px] transition-colors hover:bg-hover hover:text-fg ${
                   item.level === 1
-                    ? 'font-semibold text-gray-600 dark:text-gray-300'
+                    ? 'font-medium text-fg'
                     : item.level === 2
-                    ? 'font-medium text-gray-500 dark:text-gray-400 pl-3'
-                    : 'text-gray-400 dark:text-gray-500 pl-5'
+                    ? 'font-medium text-fg-muted pl-3'
+                    : 'text-fg-subtle pl-5'
                 }`}
               >
                 {item.text}
@@ -696,7 +729,7 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
 
       {/* Expandable preview */}
       {expanded && !onOpen && (
-        <div className={`border-t border-gray-100 dark:border-gray-800 px-3 py-2.5 overflow-y-auto ${fullHeight ? 'flex-1 min-h-0' : 'max-h-80'}`}>
+        <div className={`border-t border-line px-3 py-2.5 overflow-y-auto ${fullHeight ? 'flex-1 min-h-0' : 'max-h-80'}`}>
           {renderPreview()}
         </div>
       )}
