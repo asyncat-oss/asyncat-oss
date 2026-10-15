@@ -7,7 +7,7 @@ import { Check, Send } from 'lucide-react';
 import Button from '../../../components/ui/Button.jsx';
 import { formAnswer, formHasAnswer } from './askForm.js';
 
-const INPUT = 'w-full rounded-lg border border-line-strong bg-canvas px-2.5 py-1.5 text-[13px] text-fg outline-none placeholder:text-fg-subtle focus:border-accent focus:ring-2 focus:ring-accent/20';
+const INPUT = 'w-full rounded-lg border border-line-strong bg-canvas px-2.5 py-1.5 text-[13px] text-fg outline-none placeholder:text-fg-subtle focus:border-accent focus:ring-2 focus:ring-accent/20 dark:[color-scheme:dark]';
 
 export default function AskUserForm({ fields, onSubmit }) {
   const [values, setValues] = useState({});
