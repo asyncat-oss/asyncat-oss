@@ -1,7 +1,7 @@
 // Models: language models, voice, images, usage and training under one page,
 // with one search across the models and providers on it.
 
-import { lazy, Suspense, useState, useEffect, useMemo, useCallback } from 'react';
+import { lazy, Suspense, useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { RefreshCw, X, Loader2 } from 'lucide-react';
 import Button from '../components/ui/Button.jsx';
@@ -22,6 +22,7 @@ import {
   providerLabel
 } from './modelPageShared.jsx';
 import { useModelsPageController } from './useModelsPageController.js';
+import { keepActiveInView } from './keepActiveInView.js';
 import { audioApi, visualModelsApi, aiProviderApi } from '../Settings/settingApi.js';
 
 // Fine-tuning lives under Models but loads its own chunk (it brings charts).
@@ -167,6 +168,13 @@ const ModelsPage = () => {
       return next;
     }, { replace: true });
   }, [setSearchParams]);
+
+  // On a phone the tab row and the source switch scroll sideways; the one
+  // that is on always shows.
+  const tabRowRef = useRef(null);
+  const viewSwitchRef = useRef(null);
+  useLayoutEffect(() => keepActiveInView(tabRowRef.current), [activeTab]);
+  useLayoutEffect(() => keepActiveInView(viewSwitchRef.current), [activeTab, activeView, models.length, providerProfiles.length]);
 
   // A search's highlight shows once: leaving its tab drops it, so coming
   // back doesn't flash the row and scroll to it again.
@@ -342,7 +350,7 @@ const ModelsPage = () => {
             Refresh
           </Button>
         </div>
-        <div className="mx-auto mt-4 max-w-5xl">
+        <div ref={tabRowRef} className="mx-auto mt-4 max-w-5xl">
           <Tabs value={activeTab} onChange={setActiveTab} items={tabItems} label="Model types" />
         </div>
       </header>
@@ -392,7 +400,9 @@ const ModelsPage = () => {
                   onBrowseProviders={() => setActiveView('add')}
                 />
 
-                <Segmented value={activeView} onChange={setActiveView} items={viewItems} label="Language model sources" className="max-w-full overflow-x-auto [&>button]:shrink-0 [&>button]:whitespace-nowrap" />
+                <div ref={viewSwitchRef}>
+                  <Segmented value={activeView} onChange={setActiveView} items={viewItems} label="Language model sources" className="max-w-full overflow-x-auto [&>button]:shrink-0 [&>button]:whitespace-nowrap" />
+                </div>
 
                 {activeView === 'local' ? (
                   <div className="space-y-6">

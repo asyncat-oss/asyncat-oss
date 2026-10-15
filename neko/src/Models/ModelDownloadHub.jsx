@@ -2,7 +2,7 @@
 // providers already here and over Hugging Face, the files of a Hugging Face
 // repo to download, and the downloads in progress.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import {
   Cloud,
@@ -28,6 +28,7 @@ import SearchField from '../components/ui/SearchField.jsx';
 import { Segmented } from '../components/ui/Tabs.jsx';
 import { Badge, Panel, SectionHeader } from './modelPageShared.jsx';
 import { HFAuthorLogo } from './modelLogos.jsx';
+import { keepActiveInView } from './keepActiveInView.js';
 
 // Voice and image files are found and added on Models → Voice and Images;
 // this hub downloads language models only.
@@ -293,6 +294,9 @@ const ModelDownloadHub = ({
   const [expandedRepo, setExpandedRepo] = useState(null);
   const [activeFilter, setActiveFilter] = useState('all');
   const cleanupFnsRef = useRef({});
+  // The filter scrolls sideways on a phone; the chosen one always shows.
+  const filterRef = useRef(null);
+  useLayoutEffect(() => keepActiveInView(filterRef.current), [activeFilter]);
 
   const {
     handleQueryChange,
@@ -444,7 +448,9 @@ const ModelDownloadHub = ({
       )}
 
       <div className="mt-4 space-y-3">
-        <Segmented value={activeFilter} onChange={setActiveFilter} items={FILTER_CHIPS} label="Show" size="sm" className="max-w-full overflow-x-auto [&>button]:shrink-0 [&>button]:whitespace-nowrap" />
+        <div ref={filterRef}>
+          <Segmented value={activeFilter} onChange={setActiveFilter} items={FILTER_CHIPS} label="Show" size="sm" className="max-w-full overflow-x-auto [&>button]:shrink-0 [&>button]:whitespace-nowrap" />
+        </div>
         <SearchField
           value={searchQuery}
           onChange={onSearchChange}
