@@ -40,6 +40,17 @@ for (const theme of [':root', '.dark', '.midnight']) {
   });
 }
 
+// An unticked checkbox or radio is a control: its edge needs 3:1 (WCAG 1.4.11).
+for (const theme of [':root', '.dark', '.midnight']) {
+  test(`${theme}: an unticked box's edge stands out from every background`, () => {
+    const tokens = themeTokens(theme);
+    for (const background of ['canvas', 'surface', 'elevated']) {
+      const ratio = contrast(tokens['control-border'], tokens[background]);
+      assert.ok(ratio >= 3, `control-border ${tokens['control-border']} on ${background} ${tokens[background]} is ${ratio.toFixed(2)}:1`);
+    }
+  });
+}
+
 for (const theme of ['.dark', '.midnight']) {
   test(`${theme}: backgrounds and text are plain greys`, () => {
     const tokens = themeTokens(theme);

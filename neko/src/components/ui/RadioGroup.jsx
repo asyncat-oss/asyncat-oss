@@ -75,7 +75,7 @@ export default function RadioGroup({ value, onChange, label, options, maxHeight,
                 onKeyDown={(event) => onKeyDown(event, index)}
                 className="flex min-w-0 flex-1 items-start gap-3 outline-none"
               >
-                <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border bg-canvas ${checked ? 'border-accent' : 'border-line-strong'}`}>
+                <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border bg-canvas ${checked ? 'border-accent' : 'border-control-border'}`}>
                   {checked ? <span className="h-1.5 w-1.5 rounded-full bg-accent" /> : null}
                 </span>
                 <span className="min-w-0 flex-1">

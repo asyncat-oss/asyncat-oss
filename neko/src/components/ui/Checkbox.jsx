@@ -20,7 +20,7 @@ export default function Checkbox({ checked, onChange, label, description, disabl
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/40 disabled:cursor-default ${
-        checked ? 'border-accent bg-accent' : 'border-line-strong bg-canvas'
+        checked ? 'border-accent bg-accent' : 'border-control-border bg-canvas'
       }`}
     >
       {checked ? <Check className="h-3 w-3 text-canvas" strokeWidth={3} /> : null}

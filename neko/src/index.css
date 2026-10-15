@@ -81,6 +81,9 @@
   --as-accent: #2456dc;
   --as-accent-soft: rgb(36 86 220 / 0.08);
   --as-bubble: #f2f3f5;
+  /* The edge of an unticked checkbox or radio: 3:1 or more on canvas,
+     surface and elevated, as a control's edge needs. */
+  --as-control-border: #8c8c8c;
 }
 .dark {
   --as-canvas: #181818;
@@ -97,6 +100,7 @@
   --as-accent: #8aa8ff;
   --as-accent-soft: rgb(110 147 255 / 0.12);
   --as-bubble: #282828;
+  --as-control-border: #767676;
 }
 .midnight {
   --as-canvas: #070707;
@@ -113,6 +117,7 @@
   --as-accent: #8aa8ff;
   --as-accent-soft: rgb(110 147 255 / 0.12);
   --as-bubble: #292929;
+  --as-control-border: #767676;
 }
 
 @theme inline {
@@ -130,6 +135,7 @@
   --color-accent: var(--as-accent);
   --color-accent-soft: var(--as-accent-soft);
   --color-bubble: var(--as-bubble);
+  --color-control-border: var(--as-control-border);
 }
 
 /* ── Cat mascot (components/ui/Cat.jsx) ─────────────────────────────────────

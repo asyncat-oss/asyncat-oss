@@ -616,7 +616,7 @@ export const BlockRenderer = ({ block, onTermClick }) => {
           <span
             role="img"
             aria-label={done ? 'Done' : 'Not done'}
-            className={`mt-1.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border ${done ? 'border-accent bg-accent' : 'border-line-strong bg-canvas'}`}
+            className={`mt-1.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border ${done ? 'border-accent bg-accent' : 'border-control-border bg-canvas'}`}
           >
             {done ? <Check className="h-3 w-3 text-canvas" strokeWidth={3} /> : null}
           </span>
