@@ -171,6 +171,12 @@ export async function getTrainingReadiness() {
     cpuWarning = 'No GPU detected. CPU training is extremely slow — useful only for testing the pipeline with tiny models (<1B). For real training, use a machine with an NVIDIA GPU.';
   }
 
+  // The reason Install is off when there isn't room.
+  const neededGb = estimatedVenvSizeGb + 2;
+  const diskWarning = diskOk
+    ? null
+    : `The training tools need about ${neededGb} GB free; this disk has ${freeGb} GB. Free some space, then refresh.`;
+
   // An NVIDIA card whose driver isn't answering can't train until it's fixed.
   const driverWarning = gpu?.driverIssue
     ? `${gpu.name} is installed, but its driver is not responding (nvidia-smi failed), so training would run on the CPU. Restarting the computer usually fixes it.`
@@ -187,7 +193,7 @@ export async function getTrainingReadiness() {
       estimatedVenvSizeGb,
       ok: diskOk,
     },
-    warnings: [driverWarning, vramWarning, cpuWarning].filter(Boolean),
+    warnings: [driverWarning, vramWarning, cpuWarning, diskWarning].filter(Boolean),
     canInstall: diskOk,
     canTrain: envReady && diskOk,
   };
