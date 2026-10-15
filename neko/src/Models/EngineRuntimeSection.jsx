@@ -16,6 +16,7 @@ import Select from '../components/ui/Select.jsx';
 import { useConfirm } from '../components/confirmContext.js';
 import { downloadProgressText, formatBytes } from './engineProgress.js';
 import { buildsBehind, buildsNewerText, profileForCapability } from './engineVersions.js';
+import { gpuName } from '../welcome/setupFlow.js';
 
 const INSTALL_PROFILE_LABELS = {
   cpu_safe: 'CPU-safe build',
@@ -42,11 +43,19 @@ const engineTitle = (candidate) => {
   return readableRuntime(candidate);
 };
 
+const PLATFORM_NAMES = { linux: 'Linux', darwin: 'macOS', win32: 'Windows' };
+
+// "Linux · x64 · NVIDIA GeForce RTX 4050 Laptop GPU · 6 GB", in the app's
+// separators, naming the vendor once.
 const hardwareSummary = (hardware) => {
+  const platform = PLATFORM_NAMES[hardware?.platform] || hardware?.platform || 'Unknown system';
   const gpu = hardware?.gpu;
-  if (!gpu) return `${hardware?.platform || 'unknown'} / ${hardware?.arch || 'unknown'} / CPU`;
-  const vram = gpu.vramGb ? ` / ${gpu.vramGb} GB VRAM` : '';
-  return `${hardware?.platform || 'unknown'} / ${hardware?.arch || 'unknown'} / ${gpu.vendor} ${gpu.name}${vram}`;
+  return [
+    platform,
+    hardware?.arch || null,
+    gpu ? gpuName(gpu) : 'Processor only',
+    gpu?.vramGb ? `${gpu.vramGb} GB` : null,
+  ].filter(Boolean).join(' · ');
 };
 
 const installStatusTone = (status) => {
@@ -415,11 +424,11 @@ const EngineRuntimeSection = ({
           // llama.cpp tags a new build several times a day: only a newer
           // build is an update, and the row says how much newer.
           const behind = installed && assetInfo ? buildsBehind(installedVersion, assetInfo.release.tagName) : 0;
-          const installedDetail = [installedVersion, installedAsset].filter(Boolean).join(' / ') || row.installed?.path;
+          const installedDetail = [installedVersion, installedAsset].filter(Boolean).join(' · ') || row.installed?.path;
           const detail = installed
             ? (behind > 0 ? `${installedDetail} · ${assetInfo.release.tagName} is out, ${buildsNewerText(behind)}` : installedDetail)
             : assetInfo
-              ? `${assetInfo.release.tagName} / ${formatBytes(assetInfo.asset.sizeBytes ?? assetInfo.asset.size)} / ${assetInfo.asset.name}`
+              ? `${assetInfo.release.tagName} · ${formatBytes(assetInfo.asset.sizeBytes ?? assetInfo.asset.size)} · ${assetInfo.asset.name}`
               : 'Installed manually or from an older Asyncat layout.';
           return (
             <SettingRow

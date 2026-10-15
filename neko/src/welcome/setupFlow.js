@@ -43,7 +43,7 @@ export function nameToPrefill(name) {
   return PLACEHOLDER_NAMES.has(text.toLowerCase()) ? '' : text;
 }
 
-function gpuName(gpu) {
+export function gpuName(gpu) {
   if (gpu.vendor === 'Apple') return 'Apple silicon';
   const name = String(gpu.name || '').trim();
   // Some cards are only known as "AMD GPU with ROCm detected" and the like.
