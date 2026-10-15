@@ -284,7 +284,8 @@ Open **Cats** in the sidebar and make one: its mission, what wakes it (a schedul
 
 ### 6. Make it yours
 
-- **Customize → Tools & Skills** browses the tools, loads skills, edits the agent's soul, and shows memories by project, agent or Cat (edit or add your own).
+- **Settings → Personalization** tells Asyncat what to know about you and how to answer, in two short fields that every chat, Cat and Quick ask reads (Claude Code, Codex and ACP agents don't). Under **Advanced**, the instructions file sets who the agent is and the rules it keeps; your edits are kept apart from the file Asyncat ships, and **Reset to default** brings that back.
+- **Customize → Tools & Skills** browses the tools, loads skills (grouped as Planning, Workflow, Recall, Risk checks, Habits and Tone), and shows memories by project, agent or Cat (edit or add your own).
 - **Settings → Privacy & safety** revokes always-allowed tools, lists sites agents never open, imports your ChatGPT or Claude chats, and exports or deletes everything.
 - **Settings → Notifications** picks what notifies you, with quiet hours. The search box at the top of Settings finds any setting.
 
@@ -380,7 +381,7 @@ Electron starts
 ```text
 User goal
   → AgentRuntime.run() — ReAct loop (up to 25 rounds)
-  → System prompt: soul + skills + memory + capabilities
+  → System prompt: instructions file + skills + memory + capabilities + your preferences
   → Core tool set for the task; tool_search loads others on demand
   → Any model provider (local or cloud)
   → Tool execution with permission guards
