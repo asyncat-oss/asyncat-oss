@@ -354,6 +354,8 @@ function PlaceView({ place, desktop: desktopHint, onChanged }) {
     if (entry.action === 'unfinished-downloads') return counts.unfinished > 0;
     if (entry.action === 'unused-attachments') return counts.unused > 0;
     if (entry.action === 'old-logs') return (data?.items || []).some((item) => item.kind === 'log' && item.can?.delete);
+    // Caches: only when one holds something (or its size isn't known yet).
+    if (entry.action === 'caches') return (data?.items || []).some((item) => item.kind === 'cache' && (item.bytes == null || Number(item.bytes) > 0));
     return true;
   });
   const hasAny = Boolean(data && (data.total > 0 || filtered));
