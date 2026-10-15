@@ -24,6 +24,7 @@ import {
 import { useModelsPageController } from './useModelsPageController.js';
 import { keepActiveInView } from './keepActiveInView.js';
 import { audioApi, visualModelsApi, aiProviderApi } from '../Settings/settingApi.js';
+import PageHeader from '../components/ui/PageHeader.jsx';
 
 // Fine-tuning lives under Models but loads its own chunk (it brings charts).
 const TrainingPage = lazy(() => import('../Training/TrainingPage.jsx'));
@@ -340,20 +341,21 @@ const ModelsPage = () => {
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="flex h-full w-full flex-col bg-canvas text-fg dark:scheme-dark">
-      <header className="shrink-0 border-b border-line px-6 pt-6 lg:px-10">
-        <div className="mx-auto flex max-w-5xl items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-fg">Models</h1>
-            <p className="mt-1 max-w-2xl text-[13px] leading-5 text-fg-muted">{TAB_SUBTITLES[activeTab]}</p>
-          </div>
+      {/* The same header as the other pages; every tab's content starts at
+          its left edge, at one width, so switching tabs doesn't move it. */}
+      <PageHeader
+        title="Models"
+        description={TAB_SUBTITLES[activeTab]}
+        actions={(
           <Button variant="ghost" size="sm" icon={RefreshCw} onClick={handleRefresh} loading={isLoading} disabled={isBusy}>
             Refresh
           </Button>
-        </div>
-        <div ref={tabRowRef} className="mx-auto mt-4 max-w-5xl">
+        )}
+      >
+        <div ref={tabRowRef} className="mt-4">
           <Tabs value={activeTab} onChange={setActiveTab} items={tabItems} label="Model types" />
         </div>
-      </header>
+      </PageHeader>
 
       {activeTab === 'training' ? (
         <div className="min-h-0 flex-1 overflow-hidden">
@@ -367,7 +369,7 @@ const ModelsPage = () => {
         </div>
       ) : (
         <main className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-5xl space-y-6 px-6 py-6 lg:px-10">
+          <div className="w-full max-w-4xl space-y-6 px-6 py-6 lg:px-8">
             {deleteError ? (
               <Notice tone="error" action={<IconButton icon={X} label="Dismiss" size="sm" onClick={() => setDeleteError('')} />}>
                 {deleteError}

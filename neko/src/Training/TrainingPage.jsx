@@ -760,7 +760,7 @@ const TrainingPage = ({ refreshKey = 0 }) => {
   if (loading) {
     return (
       <div className="h-full overflow-y-auto" role="status" aria-label="Loading training">
-        <div className="mx-auto max-w-4xl space-y-4 px-4 py-6 sm:px-6">
+        <div className="max-w-4xl space-y-4 px-6 py-6 lg:px-8">
           <Skeleton className="h-36 rounded-2xl" />
           <Skeleton className="h-72 rounded-2xl" />
         </div>
@@ -770,7 +770,7 @@ const TrainingPage = ({ refreshKey = 0 }) => {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-4xl space-y-4 px-4 py-6 sm:px-6">
+      <div className="max-w-4xl space-y-4 px-6 py-6 lg:px-8">
         {error && (
           <Notice
             tone="error"

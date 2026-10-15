@@ -252,7 +252,7 @@ function VoiceSettings({ highlight, refreshKey }) {
   const top = offline || lines.length > 0 || firstRun;
 
   return (
-    <div data-voice-page className="mx-auto max-w-3xl space-y-8">
+    <div data-voice-page className="space-y-8">
       {top ? (
         <div className="space-y-3">
           <OfflineNotice offline={offline} />

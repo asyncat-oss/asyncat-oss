@@ -210,7 +210,7 @@ function ImagesSettings({ highlight, refreshKey }) {
   const showTry = Boolean(status) && (status.ready || !settingUp);
 
   return (
-    <div data-images-page className="mx-auto max-w-3xl space-y-8">
+    <div data-images-page className="space-y-8">
       {top ? (
         <div className="space-y-3">
           <OfflineNotice offline={offline} />
