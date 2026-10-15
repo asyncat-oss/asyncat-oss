@@ -1,19 +1,22 @@
-// Settings → Background: what closing the window does, and starting Asyncat
-// at login. Cats only work while Asyncat is running, so by default it stays
-// in the tray while a Cat is on. Desktop app only; the rules live in
-// electron/background-config.js.
+// Settings → General → Closing the window: what closing the window does, and
+// starting Asyncat at login. Cats only work while Asyncat is running, so by
+// default it stays in the tray while a Cat is on. Desktop app only; the rules
+// live in electron/background-config.js.
 
 import { useCallback, useEffect, useState } from 'react';
-import { Cat, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { Panel } from '../Models/modelPageShared.jsx';
+import { Loader2, Power } from 'lucide-react';
 import { catsApi } from '../CommandCenter/api/catsApi.js';
+import Notice from '../components/ui/Notice.jsx';
+import RadioGroup from '../components/ui/RadioGroup.jsx';
 import Switch from '../components/ui/Switch.jsx';
+import { RowGroup, SettingsRow, SettingsSection } from '../components/ui/Rows.jsx';
 
 const CHOICES = [
   {
     value: 'scheduled',
     label: 'Keep running for Cats',
+    aside: 'Recommended',
     description: 'Asyncat stays in the tray while at least one Cat is on, and quits when none are.',
   },
   {
@@ -39,6 +42,9 @@ function closingSummary(settings, enabledTasks) {
     ? `${enabledTasks} Cat${enabledTasks === 1 ? ' is' : 's are'} on, so closing the window leaves Asyncat running in the tray.`
     : 'No Cat is on, so closing the window quits Asyncat.';
 }
+
+const TITLE = 'When you close the window';
+const HINT = 'Cats only work while Asyncat is running. Closing the window always frees the memory it used.';
 
 export default function BackgroundSection() {
   const navigate = useNavigate();
@@ -84,82 +90,59 @@ export default function BackgroundSection() {
 
   if (!available) {
     return (
-      <Panel className="p-5">
-        <p className="text-[13px] text-fg-muted">
-          These settings are for the Asyncat desktop app. In a browser, Cats work while the Asyncat server is running.
-        </p>
-      </Panel>
+      <SettingsSection icon={Power} title={TITLE}>
+        <Notice>These settings are for the Asyncat desktop app. In a browser, Cats work while the Asyncat server is running.</Notice>
+      </SettingsSection>
     );
   }
 
   if (!settings) {
-    return <div className="flex items-center gap-2 text-[13px] text-fg-muted"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</div>;
+    return (
+      <SettingsSection icon={Power} title={TITLE} hint={HINT}>
+        {error ? <Notice tone="error">{error}</Notice> : (
+          <p className="flex items-center gap-2 text-[13px] text-fg-muted"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</p>
+        )}
+      </SettingsSection>
+    );
   }
 
   const isMac = settings.platform === 'darwin';
+  const summary = closingSummary(settings, enabledTasks);
 
   return (
-    <div className="space-y-6">
-      <Panel>
-        <div className="border-b border-line px-5 py-4">
-          <h3 className="text-[15px] font-semibold tracking-[-0.01em] text-fg">When the window is closed</h3>
-          <p className="mt-1 text-[13px] leading-5 text-fg-muted">
-            Cats only work while Asyncat is running. Closing the window always frees the memory it used.
-          </p>
-        </div>
-        <div role="radiogroup" aria-label="When the window is closed" className="divide-y divide-line">
-          {CHOICES.map((choice) => {
-            const selected = settings.whenClosed === choice.value;
-            return (
-              <label key={choice.value} className="flex cursor-pointer items-start gap-3 px-5 py-3.5 transition-colors hover:bg-hover">
-                <input
-                  type="radio"
-                  name="when-closed"
-                  value={choice.value}
-                  checked={selected}
-                  disabled={saving === 'whenClosed'}
-                  onChange={() => update('whenClosed', { whenClosed: choice.value })}
-                  className="mt-0.5 h-4 w-4 accent-[var(--as-accent)]"
-                />
-                <span className="min-w-0">
-                  <span className="block text-sm font-medium text-fg">
-                    {choice.label}
-                    {choice.value === 'scheduled' ? <span className="ml-2 text-[12px] font-normal text-fg-subtle">Recommended</span> : null}
-                  </span>
-                  <span className="mt-0.5 block text-[13px] leading-5 text-fg-muted">{choice.description}</span>
-                </span>
-              </label>
-            );
-          })}
-        </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line px-5 py-3 text-[12px] text-fg-subtle">
-          <Cat className="h-3.5 w-3.5" />
-          <span>{closingSummary(settings, enabledTasks)}</span>
-          {isMac ? <span>On a Mac, Asyncat stays in the Dock after the window closes unless you choose Quit.</span> : null}
-          <button type="button" onClick={() => navigate('/cats')} className="font-medium text-fg-muted underline-offset-2 hover:text-fg hover:underline">
-            Cats
-          </button>
-        </div>
-      </Panel>
-
-      <Panel className="flex items-start justify-between gap-4 px-5 py-4">
-        <div className="min-w-0">
-          <h3 className="text-sm font-medium text-fg">Start Asyncat when you log in</h3>
-          <p className="mt-0.5 text-[13px] leading-5 text-fg-muted">
-            {settings.loginSupported
-              ? 'Opens in the tray without a window, so Cats keep working after a restart.'
-              : 'Available in the installed app.'}
-          </p>
-        </div>
-        <Switch
-          checked={Boolean(settings.openAtLogin)}
-          disabled={!settings.loginSupported || saving === 'openAtLogin'}
-          onChange={(openAtLogin) => update('openAtLogin', { openAtLogin })}
-          label="Start Asyncat when you log in"
+    <SettingsSection icon={Power} title={TITLE} hint={HINT} data-background>
+      <div className="space-y-3">
+        <RadioGroup
+          value={settings.whenClosed}
+          onChange={(whenClosed) => update('whenClosed', { whenClosed })}
+          label={TITLE}
+          options={CHOICES}
+          disabled={saving === 'whenClosed'}
         />
-      </Panel>
-
-      {error ? <p role="alert" className="text-[13px] text-red-600 dark:text-red-400">{error}</p> : null}
-    </div>
+        {summary || isMac ? (
+          <p className="text-[12px] leading-5 text-fg-subtle">
+            {summary}
+            {isMac ? ' On a Mac, Asyncat stays in the Dock after the window closes unless you choose Quit.' : ''}
+            {' '}
+            <button type="button" onClick={() => navigate('/cats')} className="text-accent hover:underline">Open Cats</button>
+          </p>
+        ) : null}
+        <RowGroup>
+          <SettingsRow
+            label="Start Asyncat when you log in"
+            hint={settings.loginSupported ? 'Opens in the tray without a window, so Cats keep working after a restart.' : 'Available in the installed app.'}
+            stack={false}
+          >
+            <Switch
+              checked={Boolean(settings.openAtLogin)}
+              disabled={!settings.loginSupported || saving === 'openAtLogin'}
+              onChange={(openAtLogin) => update('openAtLogin', { openAtLogin })}
+              label="Start Asyncat when you log in"
+            />
+          </SettingsRow>
+        </RowGroup>
+        {error ? <Notice tone="error">{error}</Notice> : null}
+      </div>
+    </SettingsSection>
   );
 }
