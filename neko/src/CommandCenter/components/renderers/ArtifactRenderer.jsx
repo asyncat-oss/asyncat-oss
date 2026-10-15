@@ -17,6 +17,14 @@ import { agentApi } from '../../api';
 import { notesApi } from '../../../notes/noteApi';
 import { NoteProvider } from '../../../notes/context/NoteProvider';
 import { sanitizeSvg } from '../../../utils/sanitizer';
+import { getRelativeTime } from '../../utils/conversationUtils.js';
+
+// A note's line under its title: "Note · edited 5 min ago", in words (its
+// id means nothing to a reader).
+function noteMeta(artifact) {
+  const when = getRelativeTime(artifact?.updatedAt || artifact?.createdAt);
+  return when ? `Note · edited ${when.charAt(0).toLowerCase()}${when.slice(1)}` : 'Note';
+}
 
 // ── Type config ─────────────────────────────────────────────────────────────
 // One neutral icon per type and a plain name; no colour per kind.
@@ -200,7 +208,7 @@ function HtmlPreview({ content, title, fullHeight = false, allowFullscreen = tru
 // ── Full-window viewer ──────────────────────────────────────────────────────
 // Not a dialog: the artifact takes the whole window, with a title bar on top.
 // Escape closes it and focus goes back where it was.
-function FullscreenViewer({ title, subtitle = '', onClose, children }) {
+function FullscreenViewer({ title, subtitle = '', subtitleMono = true, onClose, children }) {
   // Read while rendering, before the viewer takes focus, so the button that
   // opened it gets focus back on close.
   const [opener] = useState(() => document.activeElement);
@@ -232,7 +240,7 @@ function FullscreenViewer({ title, subtitle = '', onClose, children }) {
       <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-line px-4">
         <div className="min-w-0">
           <p className="truncate text-[13px] font-medium text-fg">{title}</p>
-          {subtitle ? <p className="truncate font-mono text-[11px] text-fg-subtle">{subtitle}</p> : null}
+          {subtitle ? <p className={`truncate text-[11px] text-fg-subtle ${subtitleMono ? 'font-mono' : ''}`}>{subtitle}</p> : null}
         </div>
         <button
           ref={closeRef}
@@ -394,7 +402,12 @@ function ArtifactFullscreenOverlay({ artifact, content, type, title, onClose }) 
   };
 
   return (
-    <FullscreenViewer title={title} subtitle={artifact.path || artifact.filename || type} onClose={onClose}>
+    <FullscreenViewer
+      title={title}
+      subtitle={type === 'note' ? noteMeta(artifact) : (artifact.path || artifact.filename || type)}
+      subtitleMono={type !== 'note'}
+      onClose={onClose}
+    >
       {renderFullscreenContent()}
     </FullscreenViewer>
   );
@@ -641,10 +654,8 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
               {meta.label}
             </span>
           </div>
-          <p className="mt-0.5 truncate text-[11px] text-fg-subtle font-mono">
-            {type === 'note'
-              ? (artifactData.noteId ? `note:${artifactData.noteId.slice(0, 8)}…` : 'saved note')
-              : (artifactPath || filename)}
+          <p className={`mt-0.5 truncate text-[11px] text-fg-subtle ${type === 'note' ? '' : 'font-mono'}`}>
+            {type === 'note' ? noteMeta(artifactData) : (artifactPath || filename)}
             {size && <span className="ml-1.5">· {size}</span>}
           </p>
         </div>
