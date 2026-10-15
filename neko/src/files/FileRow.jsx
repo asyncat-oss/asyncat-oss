@@ -15,6 +15,10 @@ const CELL = 'truncate text-[12px] tabular-nums text-fg-subtle';
 export function FileRow({ item, desktop, onOpen, onAction }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const title = item.title || item.name || 'Untitled';
+  // Where the Kind column (or the details line) already says "Unfinished",
+  // the same badge would only take the name's room.
+  const badges = item.badges || [];
+  const otherBadges = badges.filter((badge) => badge.label !== item.kindLabel);
   return (
     <div
       role="listitem"
@@ -31,11 +35,12 @@ export function FileRow({ item, desktop, onOpen, onAction }) {
         <span className="min-w-0 flex-1">
           <span className="flex min-w-0 items-center gap-2">
             <span className="truncate text-[13px] text-fg">{title}</span>
-            <span className="hidden @md:contents"><Badges badges={item.badges} /></span>
+            <span className="hidden @md:contents @2xl:hidden"><Badges badges={badges} /></span>
+            <span className="hidden @2xl:contents"><Badges badges={otherBadges} /></span>
           </span>
           {/* A narrow list: badges join the details, so the name keeps its room. */}
           <span className="flex min-w-0 items-center gap-1.5 text-[12px] tabular-nums text-fg-subtle @md:hidden">
-            <Badges badges={item.badges} />
+            <Badges badges={otherBadges} />
             <span className="truncate">{metaLine(item)}</span>
           </span>
         </span>
