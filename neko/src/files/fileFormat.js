@@ -112,17 +112,26 @@ const FLAGS = new Set(Object.values(PLACE_FILTERS).flatMap((filters) => filters.
 
 /**
  * The chips for a place: "Everything" (all of it) first, then each kind or
- * flag that has something in it. None for a place without kinds, or an empty one.
+ * flag that has something in it, and the one picked (`selected`, from a
+ * link such as ?kind=picture) even when it has nothing, so a filter is never
+ * hidden. None for a place without kinds, or an empty one.
  */
-export function filterChips(place, counts = {}) {
+export function filterChips(place, counts = {}, { selected = '' } = {}) {
   const filters = PLACE_FILTERS[place];
   if (!filters) return [];
   const all = Object.entries(counts || {}).reduce((sum, [key, count]) => (FLAGS.has(key) ? sum : sum + (Number(count) || 0)), 0);
   if (!all) return [];
   return [
     { value: '', label: filters.all, count: all },
-    ...filters.kinds.filter((kind) => counts[kind.value] > 0).map((kind) => ({ value: kind.value, label: kind.label, count: counts[kind.value] })),
+    ...filters.kinds
+      .filter((kind) => counts[kind.value] > 0 || (selected && kind.value === selected))
+      .map((kind) => ({ value: kind.value, label: kind.label, count: Number(counts[kind.value]) || 0 })),
   ];
+}
+
+/** The label of a place's kind ("Pictures"), or null. */
+export function kindLabel(place, kind) {
+  return PLACE_FILTERS[place]?.kinds.find((entry) => entry.value === kind)?.label || null;
 }
 
 /** Whether `kind` is one of the place's filters ("" is everything). */

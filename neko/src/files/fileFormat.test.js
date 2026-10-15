@@ -34,6 +34,8 @@ test('chips: everything first, then the kinds there are; flags are not counted i
   ]);
   assert.deepEqual(filterChips('uploads', { 'note-file': 3, unused: 2 }).map((chip) => [chip.label, chip.count]), [['All', 3], ['Note attachments', 3], ['Not used', 2]]);
   assert.deepEqual(filterChips('made', {}), []);
+  // A kind asked for by a link shows, picked, even with nothing in it.
+  assert.deepEqual(filterChips('made', { document: 5 }, { selected: 'picture' }).map((chip) => [chip.label, chip.count]), [['Everything', 5], ['Pictures', 0], ['Documents', 5]]);
   assert.deepEqual(filterChips('exports', { export: 2 }), [], 'exports has no chips');
   assert.equal(isPlaceKind('made', 'picture'), true);
   assert.equal(isPlaceKind('made', 'language'), false);

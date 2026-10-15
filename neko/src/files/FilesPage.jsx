@@ -27,7 +27,7 @@ import {
   cleanConfirm, cleanedMessage, goesToTrash, placeCleans, removeConfirm, removedMessage, TRASH_FAILED_CONFIRM,
 } from './fileActions.js';
 import {
-  defaultSort, filterChips, groupLogs, isPlace, isPlaceKind, openId, PLACE_FILTERS, PLACES, SORTS, steadySizes,
+  defaultSort, filterChips, groupLogs, isPlace, isPlaceKind, kindLabel, openId, PLACE_FILTERS, PLACES, SORTS, steadySizes,
 } from './fileFormat.js';
 import FilesPlaces, { DiskSummary, PlacesRow } from './FilesPlaces.jsx';
 import FileList from './FileRow.jsx';
@@ -129,7 +129,20 @@ const EMPTY = {
   logs: 'No logs yet.',
 };
 
-function Empty({ place, filtered }) {
+// What a filter that finds nothing says, by kind.
+const EMPTY_KIND = {
+  picture: 'No pictures yet. Pictures you make in chats or on Models → Images show up here.',
+};
+
+function Empty({ place, filtered, kind = '' }) {
+  if (kind) {
+    const label = kindLabel(place, kind);
+    return (
+      <p className="rounded-xl border border-dashed border-line-strong px-4 py-5 text-center text-[13px] text-fg-muted" data-files-empty>
+        {EMPTY_KIND[kind] || `No ${String(label || 'items').toLowerCase()} yet.`}
+      </p>
+    );
+  }
   if (place === 'made' && !filtered) {
     return (
       <div className="mx-auto mt-8 max-w-md text-center" data-files-empty>
@@ -146,7 +159,7 @@ function Empty({ place, filtered }) {
   );
 }
 
-Empty.propTypes = { place: PropTypes.string.isRequired, filtered: PropTypes.bool };
+Empty.propTypes = { place: PropTypes.string.isRequired, filtered: PropTypes.bool, kind: PropTypes.string };
 
 /** One place: its header, filters, items and viewer. Mounted afresh for each place. */
 function PlaceView({ place, desktop: desktopHint, onChanged }) {
@@ -326,7 +339,7 @@ function PlaceView({ place, desktop: desktopHint, onChanged }) {
   };
 
   const counts = useMemo(() => data?.counts || {}, [data]);
-  const chips = filterChips(place, counts);
+  const chips = filterChips(place, counts, { selected: kind });
   const items = useMemo(() => {
     const all = data?.items || [];
     const needle = query.trim().toLowerCase();
@@ -411,7 +424,7 @@ function PlaceView({ place, desktop: desktopHint, onChanged }) {
           ) : !data ? (
             <Loading grid={grid} />
           ) : !items.length ? (
-            <Empty place={place} filtered={filtered || Boolean(query.trim())} />
+            <Empty place={place} filtered={filtered || Boolean(query.trim())} kind={kind && !where && !query.trim() && !Number(counts[kind]) ? kind : ''} />
           ) : place === 'logs' ? (
             <div className="space-y-6">
               {groupLogs(items).map((group) => (
