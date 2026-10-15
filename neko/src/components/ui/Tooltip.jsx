@@ -59,7 +59,7 @@ export default function Tooltip({ label, shortcut, side = 'right', disabled = fa
           <div
             role="tooltip"
             style={{ position: 'fixed', left: position.left, top: position.top, transform: TRANSFORMS[side] || TRANSFORMS.right }}
-            className="pointer-events-none z-[300] flex animate-[fadeIn_120ms_ease-out] items-center gap-2 whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-xs font-medium text-white shadow-lg dark:bg-elevated dark:text-fg dark:ring-1 dark:ring-line-strong"
+            className="pointer-events-none z-[300] flex animate-[fadeIn_120ms_ease-out] items-center gap-2 whitespace-nowrap rounded-md bg-fg px-2 py-1 text-xs font-medium text-canvas shadow-lg dark:bg-elevated dark:text-fg dark:ring-1 dark:ring-line-strong"
           >
             {label}
             {shortcut ? <span className="font-normal text-white/55 dark:text-fg-subtle">{shortcut}</span> : null}

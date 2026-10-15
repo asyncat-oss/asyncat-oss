@@ -85,7 +85,7 @@ export default function Dialog({
         aria-label={typeof title === 'string' ? title : undefined}
         aria-describedby={description ? descriptionId : undefined}
         onSubmit={onSubmit}
-        className={`flex max-h-[min(90vh,820px)] w-full ${width} flex-col overflow-hidden rounded-2xl border border-line bg-elevated text-fg shadow-2xl shadow-black/20`}
+        className={`flex max-h-[min(90vh,820px)] w-full ${width} flex-col overflow-hidden rounded-2xl border border-line bg-elevated text-fg shadow-xl shadow-black/10 dark:shadow-black/40`}
       >
         <div className="flex items-start gap-3 px-5 pb-3 pt-5">
           {icon}

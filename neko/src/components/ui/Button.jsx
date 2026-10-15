@@ -4,7 +4,7 @@ import { Loader2 } from 'lucide-react';
 
 const VARIANTS = {
   primary: 'bg-fg text-canvas hover:opacity-90 shadow-sm',
-  accent: 'bg-accent text-white hover:opacity-90 shadow-sm dark:text-gray-950',
+  accent: 'bg-accent text-white hover:opacity-90 shadow-sm dark:text-canvas',
   secondary: 'border border-line-strong bg-surface text-fg hover:bg-hover',
   ghost: 'text-fg-muted hover:bg-hover hover:text-fg',
   danger: 'text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10',
