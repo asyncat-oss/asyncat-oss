@@ -1,16 +1,26 @@
+// Code panel → Git: the branch, a commit box, and the working tree, history
+// and stashes. Staging runs at once; everything else asks first.
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertCircle, CheckCircle2, ChevronDown, ChevronRight, GitBranch,
-  GitCommitHorizontal, GitCompare, GitPullRequestArrow, GitPullRequestDraft, Loader2,
-  Paperclip, Plus, RefreshCw, Save, Sparkles, Upload, X, Trash2, CheckSquare, Square,
+  Archive, ArrowDown, ArrowDownUp, ArrowUp, ChevronDown, ChevronRight, File, GitBranch, GitCommitHorizontal, Loader2,
+  Minus, Paperclip, PenLine, Plus, RefreshCw, Trash2, X,
 } from 'lucide-react';
 import { gitApi } from '../../api';
-import Portal from '../../../components/Portal';
-import { basename, fileIconMeta } from '../../../files/fileUtils.js';
+import { basename } from '../../../files/fileUtils.js';
+import Dialog from '../../../components/ui/Dialog.jsx';
+import Button from '../../../components/ui/Button.jsx';
+import IconButton from '../../../components/ui/IconButton.jsx';
+import Checkbox from '../../../components/ui/Checkbox.jsx';
+import Notice from '../../../components/ui/Notice.jsx';
+import { Menu, MenuItem } from '../../../components/ui/Menu.jsx';
+import { Tabs } from '../../../components/ui/Tabs.jsx';
+import { CONTROL_CLASS, Input } from '../../../components/ui/Field.jsx';
 import GitGraph from './GitGraph';
 import StashManager from './StashManager';
 import BranchManager from './BranchManager';
 import DiffModal from './DiffModal';
+import { confirmLabel, statusMeta } from './gitLabels.js';
 
 const COMMIT_ACTIONS = new Set([
   'commit',
@@ -60,13 +70,13 @@ function splitPath(filePath = '') {
   return { name, dir };
 }
 
-function statusMeta(file = {}) {
-  if (file.untracked) return { label: 'U', text: 'text-sky-500 dark:text-sky-300 midnight:text-sky-300', title: 'Untracked' };
-  if (file.renamed) return { label: 'R', text: 'text-violet-500 dark:text-violet-300 midnight:text-violet-300', title: 'Renamed' };
-  if (file.deleted) return { label: 'D', text: 'text-red-500 dark:text-red-300 midnight:text-red-300', title: 'Deleted' };
-  if (file.staged && !file.unstaged) return { label: 'S', text: 'text-emerald-600 dark:text-emerald-300 midnight:text-emerald-300', title: 'Staged' };
-  return { label: 'M', text: 'text-amber-600 dark:text-amber-300 midnight:text-amber-300', title: 'Modified' };
-}
+// The status letter's colour: status hues only, renames stay neutral.
+const STATUS_TEXT = {
+  added: 'text-emerald-600 dark:text-emerald-400',
+  deleted: 'text-red-600 dark:text-red-400',
+  modified: 'text-amber-600 dark:text-amber-400',
+  renamed: 'text-fg-muted',
+};
 
 function canDiscard(file = {}) {
   return !file.staged && !file.untracked && (file.unstaged || file.deleted);
@@ -81,20 +91,6 @@ function normalizeGeneratedCommitMessage(value = '') {
     .replace(/<analysis>[\s\S]*$/i, '')
     .replace(/<reasoning>[\s\S]*$/i, '')
     .trim();
-}
-
-function IconButton({ title, onClick, disabled, children }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-35 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100 midnight:text-slate-400 midnight:hover:bg-slate-800 midnight:hover:text-slate-100"
-    >
-      {children}
-    </button>
-  );
 }
 
 function commandForAction(action, payload = {}) {
@@ -169,104 +165,113 @@ function ConfirmModal({ action, payload, busy, error, onClose, onConfirm, onPayl
     || (needsBranch && !payload.name?.trim());
 
   return (
-    <Portal>
-      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4">
-        <div className="w-full max-w-md overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
-          <div className="flex items-start justify-between gap-3 border-b border-gray-100 px-4 py-3 dark:border-gray-800 midnight:border-slate-800">
-            <div>
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">{title}</h2>
-              <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400 midnight:text-slate-400">{actionCopy(action)}</p>
-            </div>
-            {!busy && (
-              <button type="button" onClick={onClose} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200 midnight:hover:bg-slate-800 midnight:hover:text-slate-200">
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-          <div className="space-y-3 px-4 py-3">
-            <div className="rounded-lg bg-gray-950 px-3 py-2">
-              <code className="break-all text-[11px] text-gray-100">{commandForAction(action, payload)}</code>
-            </div>
-            {(needsMessage || optionalMessage) && (
-              <textarea
-                value={payload.message || ''}
-                onChange={event => onPayloadChange({ ...payload, message: event.target.value })}
-                rows={3}
-                placeholder={action === 'stash-save' ? 'Stash message' : optionalMessage ? 'New commit message, or leave empty to keep current' : 'Commit message'}
-                className="w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-gray-400 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100 midnight:border-slate-700 midnight:bg-slate-950 midnight:text-slate-100 midnight:focus:border-slate-500"
-              />
-            )}
-            {needsBranch && (
-              <input
-                value={payload.name || ''}
-                onChange={event => onPayloadChange({ ...payload, name: event.target.value })}
-                placeholder="branch-name"
-                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-gray-400 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100 midnight:border-slate-700 midnight:bg-slate-950 midnight:text-slate-100 midnight:focus:border-slate-500"
-              />
-            )}
-            {error && (
-              <div className="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950/30 dark:text-red-300 midnight:bg-red-950/30 midnight:text-red-300">
-                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                <span>{error}</span>
-              </div>
-            )}
-          </div>
-          <div className="flex justify-end gap-2 border-t border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-800 dark:bg-gray-900/60 midnight:border-slate-800 midnight:bg-slate-900/60">
-            <button type="button" onClick={onClose} disabled={busy} className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-800 midnight:border-slate-700 midnight:bg-slate-950 midnight:text-slate-300 midnight:hover:bg-slate-800">
-              Cancel
-            </button>
-            <button type="button" onClick={onConfirm} disabled={disabled} className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 midnight:bg-indigo-600 midnight:text-white midnight:hover:bg-indigo-500">
-              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-              Confirm
-            </button>
-          </div>
-        </div>
+    <Dialog
+      open
+      size="sm"
+      title={title}
+      description={actionCopy(action)}
+      // While it runs, Escape and the backdrop don't cancel. No close
+      // button, so focus starts in the message field (or on Cancel).
+      onClose={busy ? undefined : onClose}
+      closeButton={false}
+      footer={(
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button variant={action === 'discard' ? 'destructive' : 'primary'} onClick={onConfirm} disabled={disabled} loading={busy}>
+            {busy ? 'Working…' : confirmLabel(action)}
+          </Button>
+        </>
+      )}
+    >
+      <div className="space-y-3">
+        <code className="block break-all rounded-lg bg-hover px-3 py-2 font-mono text-[12px] leading-5 text-fg-muted">
+          {commandForAction(action, payload)}
+        </code>
+        {(needsMessage || optionalMessage) && (
+          <textarea
+            value={payload.message || ''}
+            onChange={event => onPayloadChange({ ...payload, message: event.target.value })}
+            rows={3}
+            aria-label={action === 'stash-save' ? 'Stash message' : 'Commit message'}
+            placeholder={action === 'stash-save' ? 'Stash message' : optionalMessage ? 'New commit message, or leave empty to keep current' : 'Commit message'}
+            className={`${CONTROL_CLASS} resize-none py-2 leading-5`}
+          />
+        )}
+        {needsBranch && (
+          <Input
+            value={payload.name || ''}
+            onChange={event => onPayloadChange({ ...payload, name: event.target.value })}
+            placeholder="branch-name"
+            aria-label="Branch name"
+            spellCheck={false}
+            className="font-mono"
+          />
+        )}
+        {error && <Notice tone="error">{error}</Notice>}
       </div>
-    </Portal>
+    </Dialog>
   );
 }
 
 function ChangeRow({ file, checked, onToggleCheck, onSelect, onAction, onAttach, onDiscard }) {
   const { name, dir } = splitPath(file.path || '');
-  const ext = name.split('.').pop();
-  const { Icon, color } = fileIconMeta(ext, 'file');
   const meta = statusMeta(file);
+  const staged = file.staged && !file.unstaged;
   return (
-    <div className="group flex items-center gap-1.5 rounded-md px-2 py-1.5 transition-colors hover:bg-gray-100/80 dark:hover:bg-slate-800/70 midnight:hover:bg-slate-800/70">
-      <button
-        type="button"
-        onClick={onToggleCheck}
-        className="shrink-0 rounded p-0.5 text-gray-400 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-200 midnight:text-slate-500 midnight:hover:text-slate-200"
-        title={checked ? 'Deselect' : 'Select'}
-      >
-        {checked ? <CheckSquare className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400 midnight:text-sky-400" /> : <Square className="h-3.5 w-3.5" />}
-      </button>
+    <div className="group flex items-center gap-2 rounded-lg py-0.5 pl-2 pr-1.5 transition-colors hover:bg-hover">
+      <Checkbox checked={checked} onChange={() => onToggleCheck()} aria-label={checked ? `Deselect ${name}` : `Select ${name}`} />
       <button
         type="button"
         onClick={onSelect}
-        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+        className="flex min-h-7 min-w-0 flex-1 items-center gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+        title={`Show the changes in ${file.path}`}
       >
-        <Icon className={`h-4 w-4 shrink-0 ${color}`} />
-        <span className="min-w-0 flex-1 truncate text-sm text-gray-800 dark:text-slate-200 midnight:text-slate-200" title={file.path}>
-          <span className="font-medium">{name}</span>
-          {dir && <span className="ml-2 text-xs text-gray-400 dark:text-slate-500 midnight:text-slate-500">{compactPath(dir)}</span>}
-        </span>
-        <span className={`w-4 shrink-0 text-right text-xs font-semibold ${meta.text}`} title={meta.title}>
-          {meta.label}
+        <File className="h-3.5 w-3.5 shrink-0 text-fg-subtle" strokeWidth={1.75} />
+        <span className="min-w-0 flex-1 truncate text-[13px] text-fg" title={file.path}>
+          {name}
+          {dir && <span className="ml-1.5 text-[12px] text-fg-subtle">{compactPath(dir)}</span>}
         </span>
       </button>
-      <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-        <button type="button" onClick={() => onAttach(file)} className="rounded p-1 text-gray-400 hover:bg-gray-200/70 hover:text-gray-700 dark:hover:bg-slate-700 dark:hover:text-slate-100 midnight:hover:bg-slate-700 midnight:hover:text-slate-100" title="Attach to composer">
-          <Paperclip className="h-3.5 w-3.5" />
-        </button>
+      <div className="flex shrink-0 items-center opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+        <IconButton size="sm" icon={Paperclip} label="Attach to the message" onClick={() => onAttach(file)} />
         {onDiscard && (
-          <button type="button" onClick={() => onDiscard(file)} className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400 midnight:hover:bg-red-500/10 midnight:hover:text-red-400" title="Discard changes">
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          <IconButton size="sm" icon={Trash2} label="Discard changes" onClick={() => onDiscard(file)} className="hover:!text-red-600 dark:hover:!text-red-400" />
         )}
-        <button type="button" onClick={() => onAction(file)} className="rounded p-1 text-gray-400 hover:bg-gray-200/70 hover:text-gray-700 dark:hover:bg-slate-700 dark:hover:text-slate-100 midnight:hover:bg-slate-700 midnight:hover:text-slate-100" title={file.staged && !file.unstaged ? 'Unstage' : 'Stage'}>
-          {file.staged && !file.unstaged ? <Upload className="h-3.5 w-3.5 rotate-180" /> : <Plus className="h-3.5 w-3.5" />}
-        </button>
+        <IconButton size="sm" icon={staged ? Minus : Plus} label={staged ? 'Unstage' : 'Stage'} onClick={() => onAction(file)} />
+      </div>
+      <span className={`w-4 shrink-0 text-center font-mono text-[11px] font-semibold ${STATUS_TEXT[meta.tone]}`} title={meta.title}>
+        {meta.label}
+      </span>
+    </div>
+  );
+}
+
+function SectionHeader({ label, count, expanded, onToggle, allChecked, onCheckAll, checkAllLabel, action }) {
+  return (
+    <div className="mb-0.5 flex items-center gap-2 pl-1 pr-1">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        className="flex min-h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-1 text-left text-[12px] font-medium text-fg-muted outline-none transition-colors hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/40"
+      >
+        {expanded ? <ChevronDown className="h-3.5 w-3.5 text-fg-subtle" /> : <ChevronRight className="h-3.5 w-3.5 text-fg-subtle" />}
+        {label}
+        <span className="font-normal tabular-nums text-fg-subtle">{count}</span>
+      </button>
+      <Checkbox checked={allChecked} onChange={onCheckAll} aria-label={checkAllLabel} />
+      {action}
+    </div>
+  );
+}
+
+function SelectionBar({ count, children, onClear }) {
+  return (
+    <div className="mx-1 mb-1 flex items-center gap-1 rounded-lg bg-hover py-0.5 pl-2.5 pr-1">
+      <span className="text-[12px] tabular-nums text-fg-muted">{count} selected</span>
+      <div className="ml-auto flex items-center gap-0.5">
+        {children}
+        <Button variant="ghost" size="xs" onClick={onClear}>Clear</Button>
       </div>
     </div>
   );
@@ -287,6 +292,7 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
   const [checkedStaged, setCheckedStaged] = useState(new Set());
   const [checkedChanges, setCheckedChanges] = useState(new Set());
   const commitMessageTextareaRef = useRef(null);
+  const commitMenuRef = useRef(null);
   const files = useMemo(() => state?.changes?.all || [], [state?.changes?.all]);
   const stagedFiles = useMemo(() => state?.changes?.staged || [], [state?.changes?.staged]);
   const workingFiles = useMemo(() => files.filter(file => !file.staged || file.unstaged), [files]);
@@ -490,231 +496,168 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
 
   if (loading && !state) {
     return (
-      <div className="flex h-full items-center justify-center gap-2 text-sm text-gray-400 midnight:text-slate-500">
+      <div className="flex h-full items-center justify-center gap-2 text-[13px] text-fg-subtle">
         <Loader2 className="h-4 w-4 animate-spin" />
-        Loading Git state
+        Loading…
       </div>
     );
   }
 
   if (error) {
-    return (
-      <div className="p-4 text-sm text-red-600 dark:text-red-400 midnight:text-red-400">
-        <AlertCircle className="mb-2 h-5 w-5" />
-        {error}
-      </div>
-    );
+    return <Notice tone="error" className="m-3">{error}</Notice>;
   }
 
   if (!state?.detected) {
     return (
-      <div className="p-4 text-sm text-gray-500 dark:text-gray-400 midnight:text-slate-400">
-        No Git repository detected in this workspace.
-      </div>
+      <p className="p-4 text-[13px] text-fg-muted">
+        No Git repository in this folder.
+      </p>
     );
   }
 
   const hasStagedChecked = checkedStaged.size > 0;
   const hasChangesChecked = checkedChanges.size > 0;
+  const stashCount = state.stashCount || 0;
 
   return (
-    <div className="flex h-full min-h-0 flex-col text-gray-800 dark:text-slate-200 midnight:text-slate-200">
-      <div className="shrink-0 border-b border-gray-200 px-4 py-3 dark:border-slate-800 midnight:border-slate-800">
+    <div className="flex h-full min-h-0 flex-col text-fg">
+      <div className="shrink-0 border-b border-line px-4 py-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <GitBranch className="h-4 w-4 text-orange-500" />
-              <span className="truncate text-sm font-semibold text-gray-900 dark:text-slate-100 midnight:text-slate-100">{state.branch || 'Detached'}</span>
+              <GitBranch className="h-4 w-4 shrink-0 text-fg-subtle" strokeWidth={1.75} />
+              <span className="truncate text-[14px] font-semibold text-fg">{state.branch || 'Detached'}</span>
             </div>
-            <p className="mt-1 truncate text-xs text-gray-500 dark:text-slate-500 midnight:text-slate-500" title={state.root}>
+            <p className="mt-0.5 truncate text-[12px] text-fg-subtle" title={state.root}>
               {state.upstream || 'No upstream'} · {state.clean ? 'Clean' : `${state.changedCount} changed`}
             </p>
           </div>
-          <button type="button" onClick={onRefresh} disabled={loading} className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-60 dark:hover:bg-slate-800 dark:hover:text-slate-200 midnight:hover:bg-slate-800 midnight:hover:text-slate-200" title="Refresh Git state">
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+          <IconButton size="sm" icon={RefreshCw} label="Refresh Git state" onClick={onRefresh} loading={loading} />
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-slate-500 midnight:text-slate-500">
-          <span className={syncNeeded ? 'inline-flex items-center gap-1 font-medium text-sky-600 dark:text-sky-300 midnight:text-sky-300' : ''}>
-            {syncNeeded && <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />}
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-fg-subtle">
+          <span className={syncNeeded ? 'inline-flex items-center gap-1.5 text-fg-muted' : ''}>
+            {syncNeeded && <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true" />}
             {aheadCount} ahead · {behindCount} behind
           </span>
-          <span>{state.stashCount || 0} stash</span>
-          <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-300 midnight:text-emerald-300">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            coding ready
-          </span>
+          <span>{stashCount} {stashCount === 1 ? 'stash' : 'stashes'}</span>
         </div>
       </div>
 
       {actionError && !action && (
-        <div className="shrink-0 border-b border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700 dark:border-red-900/30 dark:bg-red-950/30 dark:text-red-300 midnight:border-red-900/30 midnight:bg-red-950/30 midnight:text-red-300">
-          <div className="flex items-start gap-2">
-            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            <span className="flex-1">{actionError}</span>
-            <button type="button" onClick={() => setActionError(null)} className="rounded-md p-0.5 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/50 midnight:hover:bg-red-900/50">
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
+        <div className="shrink-0 px-3 pt-3">
+          <Notice tone="error" action={<IconButton size="sm" icon={X} label="Dismiss" onClick={() => setActionError(null)} className="-my-1 !text-current hover:!bg-red-500/10" />}>
+            {actionError}
+          </Notice>
         </div>
       )}
 
-      <div className="shrink-0 border-b border-gray-200 px-3 py-3 dark:border-slate-800 midnight:border-slate-800">
+      <div className="shrink-0 border-b border-line px-3 py-3">
         <div className="relative">
           <textarea
             ref={commitMessageTextareaRef}
             value={commitMessage}
             onChange={handleCommitMessageChange}
             rows={1}
+            aria-label="Commit message"
             placeholder={`Message${state.branch ? ` for ${state.branch}` : ''}`}
-            className="w-full resize-none rounded-md border border-gray-200 bg-gray-50 py-2 pl-3 pr-10 text-sm leading-5 text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-300 focus:bg-white dark:border-slate-800 dark:bg-[#0b1220] dark:text-slate-100 dark:placeholder:text-slate-600 dark:focus:border-slate-700 dark:focus:bg-[#0b1220] midnight:border-slate-800 midnight:bg-slate-950 midnight:text-slate-100 midnight:placeholder:text-slate-600 midnight:focus:border-slate-700 midnight:focus:bg-slate-950"
+            className={`${CONTROL_CLASS} resize-none py-2 pr-10 leading-5`}
           />
-          <button
-            type="button"
-            onClick={generateCommitMessage}
-            disabled={!canGenerateCommitMessage}
-            className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-200/70 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-35 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100 midnight:text-slate-400 midnight:hover:bg-slate-800 midnight:hover:text-slate-100"
-            title={stagedFiles.length ? 'Generate commit message from staged changes' : 'Generate commit message from changes'}
-          >
-            {generatingCommitMessage ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-          </button>
+          <div className="absolute right-1.5 top-1.5">
+            <IconButton
+              size="sm"
+              icon={PenLine}
+              loading={generatingCommitMessage}
+              onClick={generateCommitMessage}
+              disabled={!canGenerateCommitMessage}
+              label={stagedFiles.length ? 'Write a message from the staged changes' : 'Write a message from the changes'}
+            />
+          </div>
         </div>
-        <div className="mt-2 flex items-center gap-1.5">
-          <div className="relative flex flex-1">
-            <button
-              type="button"
+        <div className="mt-2 flex items-center gap-0.5">
+          <div className="mr-1 flex min-w-0 flex-1">
+            <Button
+              variant="primary"
+              icon={GitCommitHorizontal}
               onClick={() => openAction(mainCommitAction, { files: [], message: commitMessage })}
               disabled={!canMainCommit}
-              className="inline-flex min-w-0 flex-1 items-center justify-center gap-2 rounded-l-md bg-gray-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white midnight:bg-indigo-600 midnight:text-white midnight:hover:bg-indigo-500"
               title={stagedFiles.length ? 'Commit staged changes' : 'Stage all changes and commit'}
+              className="min-w-0 flex-1 !rounded-r-none"
             >
-              <GitCommitHorizontal className="h-4 w-4" />
               Commit
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              ref={commitMenuRef}
+              variant="primary"
+              size="icon"
+              icon={ChevronDown}
               onClick={() => setCommitMenuOpen(open => !open)}
               disabled={commitMenuItems.every(item => item.disabled)}
               aria-expanded={commitMenuOpen}
-              className="inline-flex w-9 items-center justify-center rounded-r-md border-l border-white/20 bg-gray-900 text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-300/30 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white midnight:border-indigo-400/40 midnight:bg-indigo-600 midnight:text-white midnight:hover:bg-indigo-500"
+              aria-haspopup="menu"
+              aria-label="More commit actions"
               title="More commit actions"
-            >
-              <ChevronDown className="h-4 w-4" />
-            </button>
-            {commitMenuOpen && (
-              <div className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-md border border-gray-200 bg-white py-1 shadow-lg dark:border-slate-800 dark:bg-slate-950 midnight:border-slate-800 midnight:bg-slate-950">
-                {commitMenuItems.map(item => (
-                  <button
-                    key={`${item.action}-${item.label}`}
-                    type="button"
-                    disabled={item.disabled}
-                    onClick={() => openAction(item.action, { files: [], message: commitMessage })}
-                    className="flex w-full items-center px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-300 dark:text-slate-200 dark:hover:bg-slate-800 dark:disabled:text-slate-600 midnight:text-slate-200 midnight:hover:bg-slate-800 midnight:disabled:text-slate-600"
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            )}
+              className="!rounded-l-none border-l border-canvas/20"
+            />
+            <Menu anchorRef={commitMenuRef} open={commitMenuOpen} onClose={() => setCommitMenuOpen(false)} placement="bottom-end" width={232} label="Commit actions">
+              {commitMenuItems.map(item => (
+                <MenuItem
+                  key={`${item.action}-${item.label}`}
+                  label={item.label}
+                  disabled={item.disabled}
+                  onSelect={() => openAction(item.action, { files: [], message: commitMessage })}
+                />
+              ))}
+            </Menu>
           </div>
-          <IconButton title={syncTitle} onClick={() => openAction('sync')} disabled={!state.upstream}>
-            <GitCompare className={`h-4 w-4 ${syncNeeded ? 'text-sky-600 dark:text-sky-300' : ''}`} />
-          </IconButton>
-          <IconButton title="Pull" onClick={() => openAction('pull')}>
-            <GitPullRequestArrow className="h-4 w-4" />
-          </IconButton>
-          <IconButton title="Push" onClick={() => openAction('push')}>
-            <GitPullRequestDraft className="h-4 w-4" />
-          </IconButton>
-          <IconButton title="Stash" onClick={() => openAction('stash-save')} disabled={!files.length}>
-            <Save className="h-4 w-4" />
-          </IconButton>
+          <IconButton size="sm" icon={ArrowDownUp} label={syncTitle} onClick={() => openAction('sync')} disabled={!state.upstream} />
+          <IconButton size="sm" icon={ArrowDown} label="Pull" onClick={() => openAction('pull')} />
+          <IconButton size="sm" icon={ArrowUp} label="Push" onClick={() => openAction('push')} />
+          <IconButton size="sm" icon={Archive} label="Stash" onClick={() => openAction('stash-save')} disabled={!files.length} />
           <BranchManager currentBranch={state.branch} onSwitch={() => onChanged?.()} workingDir={workingDir} />
         </div>
       </div>
-      
-      {/* Tabs */}
-      <div className="flex shrink-0 border-b border-gray-100 px-2 dark:border-slate-800 midnight:border-slate-800">
-        <button
-          onClick={() => setActiveTab('working')}
-          className={`flex-1 border-b-2 px-2 py-2 text-[11px] font-semibold uppercase tracking-wider transition-colors ${activeTab === 'working' ? 'border-sky-500 text-sky-600 dark:text-sky-400 midnight:text-sky-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-300 midnight:text-slate-500 midnight:hover:text-slate-300'}`}
-        >
-          Working Tree
-        </button>
-        <button
-          onClick={() => setActiveTab('history')}
-          className={`flex-1 border-b-2 px-2 py-2 text-[11px] font-semibold uppercase tracking-wider transition-colors ${activeTab === 'history' ? 'border-sky-500 text-sky-600 dark:text-sky-400 midnight:text-sky-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-300 midnight:text-slate-500 midnight:hover:text-slate-300'}`}
-        >
-          History
-        </button>
-        <button
-          onClick={() => setActiveTab('stashes')}
-          className={`flex-1 border-b-2 px-2 py-2 text-[11px] font-semibold uppercase tracking-wider transition-colors ${activeTab === 'stashes' ? 'border-sky-500 text-sky-600 dark:text-sky-400 midnight:text-sky-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-300 midnight:text-slate-500 midnight:hover:text-slate-300'}`}
-        >
-          Stashes
-        </button>
+
+      <div className="shrink-0 border-b border-line px-2">
+        <Tabs
+          value={activeTab}
+          onChange={setActiveTab}
+          label="Git views"
+          items={[
+            { value: 'working', label: 'Working tree', meta: files.length ? String(files.length) : null },
+            { value: 'history', label: 'History' },
+            { value: 'stashes', label: 'Stashes', meta: stashCount ? String(stashCount) : null },
+          ]}
+        />
       </div>
 
       <div className="min-h-0 flex-1 overflow-hidden">
         {activeTab === 'working' && (
           <div className="flex h-full flex-col">
-            <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+            <div className="min-h-0 flex-1 overflow-y-auto px-1.5 py-2">
               {files.length === 0 && (
-                <div className="py-8 text-center text-sm text-gray-400 midnight:text-slate-500">Working tree clean.</div>
+                <p className="py-8 text-center text-[13px] text-fg-subtle">Working tree clean.</p>
               )}
-              
+
               {files.length > 0 && (
                 <div className="mb-4 space-y-3">
                   {stagedFiles.length > 0 && (
                     <section>
-                      <div className="mb-1 flex items-center gap-1 px-2">
-                        <button
-                          type="button"
-                          onClick={() => setStagedExpanded(v => !v)}
-                          className="flex min-w-0 flex-1 items-center gap-2 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-300 midnight:text-slate-500 midnight:hover:text-slate-300"
-                        >
-                          {stagedExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                          Staged
-                          <span className="ml-auto rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] dark:bg-slate-800 midnight:bg-slate-800">{stagedFiles.length}</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={selectAllStaged}
-                          className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-800 dark:hover:text-slate-100 midnight:hover:bg-slate-800 midnight:hover:text-slate-100"
-                          title={checkedStaged.size === stagedFiles.length ? 'Deselect all staged' : 'Select all staged'}
-                        >
-                          {checkedStaged.size === stagedFiles.length ? <CheckSquare className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400 midnight:text-sky-400" /> : <Square className="h-3.5 w-3.5" />}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openAction('unstage', { files: [] })}
-                          disabled={!stagedFiles.length}
-                          className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-35 dark:hover:bg-slate-800 dark:hover:text-slate-100 midnight:hover:bg-slate-800 midnight:hover:text-slate-100"
-                          title="Unstage all"
-                        >
-                          <Upload className="h-3.5 w-3.5 rotate-180" />
-                        </button>
-                      </div>
+                      <SectionHeader
+                        label="Staged"
+                        count={stagedFiles.length}
+                        expanded={stagedExpanded}
+                        onToggle={() => setStagedExpanded(v => !v)}
+                        allChecked={checkedStaged.size === stagedFiles.length}
+                        onCheckAll={selectAllStaged}
+                        checkAllLabel={checkedStaged.size === stagedFiles.length ? 'Deselect all staged' : 'Select all staged'}
+                        action={<IconButton size="sm" icon={Minus} label="Unstage all" onClick={() => openAction('unstage', { files: [] })} disabled={!stagedFiles.length} />}
+                      />
                       {hasStagedChecked && (
-                        <div className="mx-2 mb-1.5 flex items-center gap-2 rounded-md border border-gray-100 bg-gray-50 px-2 py-1.5 dark:border-slate-800 dark:bg-slate-900 midnight:border-slate-800 midnight:bg-slate-900">
-                          <span className="text-[10px] font-medium text-gray-500 dark:text-slate-400 midnight:text-slate-400">{checkedStaged.size} selected</span>
-                          <div className="ml-auto flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => { openAction('unstage', { files: Array.from(checkedStaged) }); setCheckedStaged(new Set()); }}
-                              className="rounded px-2 py-0.5 text-[10px] font-medium text-gray-600 transition-colors hover:bg-gray-200 dark:text-slate-300 dark:hover:bg-slate-700 midnight:text-slate-300 midnight:hover:bg-slate-700"
-                            >
-                              Unstage
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setCheckedStaged(new Set())}
-                              className="rounded px-1.5 py-0.5 text-[10px] text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:text-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-300 midnight:text-slate-500 midnight:hover:bg-slate-700 midnight:hover:text-slate-300"
-                            >
-                              Clear
-                            </button>
-                          </div>
-                        </div>
+                        <SelectionBar count={checkedStaged.size} onClear={() => setCheckedStaged(new Set())}>
+                          <Button variant="ghost" size="xs" onClick={() => { openAction('unstage', { files: Array.from(checkedStaged) }); setCheckedStaged(new Set()); }}>
+                            Unstage
+                          </Button>
+                        </SelectionBar>
                       )}
                       {stagedExpanded && (
                         <div className="space-y-px">
@@ -736,61 +679,25 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
                   )}
                   {workingFiles.length > 0 && (
                     <section>
-                      <div className="mb-1 flex items-center gap-1 px-2">
-                        <button
-                          type="button"
-                          onClick={() => setChangesExpanded(v => !v)}
-                          className="flex min-w-0 flex-1 items-center gap-2 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-300 midnight:text-slate-500 midnight:hover:text-slate-300"
-                        >
-                          {changesExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                          Changes
-                          <span className="ml-auto rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] dark:bg-slate-800 midnight:bg-slate-800">{workingFiles.length}</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={selectAllChanges}
-                          className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-800 dark:hover:text-slate-100 midnight:hover:bg-slate-800 midnight:hover:text-slate-100"
-                          title={checkedChanges.size === workingFiles.length ? 'Deselect all changes' : 'Select all changes'}
-                        >
-                          {checkedChanges.size === workingFiles.length ? <CheckSquare className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400 midnight:text-sky-400" /> : <Square className="h-3.5 w-3.5" />}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openAction('stage', { files: [] })}
-                          disabled={!workingFiles.length}
-                          className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-35 dark:hover:bg-slate-800 dark:hover:text-slate-100 midnight:hover:bg-slate-800 midnight:hover:text-slate-100"
-                          title="Stage all changes"
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
+                      <SectionHeader
+                        label="Changes"
+                        count={workingFiles.length}
+                        expanded={changesExpanded}
+                        onToggle={() => setChangesExpanded(v => !v)}
+                        allChecked={checkedChanges.size === workingFiles.length}
+                        onCheckAll={selectAllChanges}
+                        checkAllLabel={checkedChanges.size === workingFiles.length ? 'Deselect all changes' : 'Select all changes'}
+                        action={<IconButton size="sm" icon={Plus} label="Stage all changes" onClick={() => openAction('stage', { files: [] })} disabled={!workingFiles.length} />}
+                      />
                       {hasChangesChecked && (
-                        <div className="mx-2 mb-1.5 flex items-center gap-2 rounded-md border border-gray-100 bg-gray-50 px-2 py-1.5 dark:border-slate-800 dark:bg-slate-900 midnight:border-slate-800 midnight:bg-slate-900">
-                          <span className="text-[10px] font-medium text-gray-500 dark:text-slate-400 midnight:text-slate-400">{checkedChanges.size} selected</span>
-                          <div className="ml-auto flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => { openAction('stage', { files: Array.from(checkedChanges) }); setCheckedChanges(new Set()); }}
-                              className="rounded px-2 py-0.5 text-[10px] font-medium text-gray-600 transition-colors hover:bg-gray-200 dark:text-slate-300 dark:hover:bg-slate-700 midnight:text-slate-300 midnight:hover:bg-slate-700"
-                            >
-                              Stage
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => { openAction('discard', { files: Array.from(checkedChanges) }); setCheckedChanges(new Set()); }}
-                              className="rounded px-2 py-0.5 text-[10px] font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10 midnight:text-red-400 midnight:hover:bg-red-500/10"
-                            >
-                              Discard
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setCheckedChanges(new Set())}
-                              className="rounded px-1.5 py-0.5 text-[10px] text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:text-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-300 midnight:text-slate-500 midnight:hover:bg-slate-700 midnight:hover:text-slate-300"
-                            >
-                              Clear
-                            </button>
-                          </div>
-                        </div>
+                        <SelectionBar count={checkedChanges.size} onClear={() => setCheckedChanges(new Set())}>
+                          <Button variant="ghost" size="xs" onClick={() => { openAction('stage', { files: Array.from(checkedChanges) }); setCheckedChanges(new Set()); }}>
+                            Stage
+                          </Button>
+                          <Button variant="danger" size="xs" onClick={() => { openAction('discard', { files: Array.from(checkedChanges) }); setCheckedChanges(new Set()); }}>
+                            Discard
+                          </Button>
+                        </SelectionBar>
                       )}
                       {changesExpanded && (
                         <div className="space-y-px">
@@ -816,15 +723,15 @@ export default function GitPanel({ state, loading, error, onRefresh, onChanged, 
             </div>
           </div>
         )}
-        
+
         {activeTab === 'history' && (
-          <div className="h-full flex flex-col pt-1">
+          <div className="flex h-full flex-col overflow-y-auto pt-2">
             <GitGraph workingDir={workingDir} />
           </div>
         )}
-        
+
         {activeTab === 'stashes' && (
-          <div className="h-full flex flex-col pt-1">
+          <div className="flex h-full flex-col pt-1">
             <StashManager onRefresh={onRefresh} workingDir={workingDir} />
           </div>
         )}
