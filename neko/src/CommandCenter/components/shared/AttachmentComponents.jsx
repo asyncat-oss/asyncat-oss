@@ -1,7 +1,10 @@
+// Files attached to a message: a chip per file, and a larger view of an image.
 import { useState, useEffect } from "react";
-import { X } from "lucide-react";
+import { File, FileText, Image, Music, X } from "lucide-react";
 import { filesApi } from "../../api";
-import { fileIconMeta } from "../../../files/fileUtils.js";
+import Dialog from "../../../components/ui/Dialog.jsx";
+
+const KIND_ICON = { image: Image, audio: Music, pdf: FileText, text: FileText, file: File };
 
 export function attachmentKind(file = {}) {
   const mime = String(file.mime || "").toLowerCase();
@@ -41,20 +44,18 @@ export function attachmentBadge(file, capabilities = null) {
   return { label: "File", tone: "slate" };
 }
 
+// Green and amber say whether the model can use the file; the kind of file
+// itself (blue, slate) is neutral.
 export const badgeToneClass = {
-  emerald:
-    "bg-emerald-50 text-emerald-700 ring-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-900/50",
-  amber:
-    "bg-amber-50 text-amber-700 ring-amber-100 dark:bg-amber-950/30 dark:text-amber-300 dark:ring-amber-900/50",
-  blue:
-    "bg-blue-50 text-blue-700 ring-blue-100 dark:bg-blue-950/30 dark:text-blue-300 dark:ring-blue-900/50",
-  slate:
-    "bg-slate-50 text-slate-600 ring-slate-100 dark:bg-slate-900/50 dark:text-slate-300 dark:ring-slate-800",
+  emerald: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+  amber: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+  blue: "bg-hover text-fg-muted",
+  slate: "bg-hover text-fg-muted",
 };
 
 export function AttachmentChip({ file, capabilities, onRemove, onPreview }) {
-  const { Icon, color } = fileIconMeta(file.ext, "file");
   const kind = attachmentKind(file);
+  const Icon = KIND_ICON[kind] || File;
   const badge = attachmentBadge(file, capabilities);
   const [previewUrl, setPreviewUrl] = useState(null);
 
@@ -83,13 +84,14 @@ export function AttachmentChip({ file, capabilities, onRemove, onPreview }) {
   };
 
   return (
-    <span className="inline-flex max-w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-medium text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 midnight:border-slate-700 midnight:bg-slate-900">
+    <span className="inline-flex max-w-full items-center gap-2 rounded-lg border border-line bg-surface px-2 py-1.5 text-[12px] font-medium text-fg">
       {kind === "image" && previewUrl ? (
         onPreview ? (
           <button
             type="button"
             onClick={handlePreview}
-            className="h-8 w-8 shrink-0 overflow-hidden rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            aria-label={`Preview ${file.name}`}
+            className="h-8 w-8 shrink-0 overflow-hidden rounded-md outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
           >
             <img src={previewUrl} alt="" className="h-full w-full object-cover" />
           </button>
@@ -99,12 +101,12 @@ export function AttachmentChip({ file, capabilities, onRemove, onPreview }) {
       ) : kind === "audio" && previewUrl ? (
         <audio src={previewUrl} controls className="h-7 w-32 max-w-[35vw]" />
       ) : (
-        <Icon className={`h-4 w-4 shrink-0 ${color}`} />
+        <Icon className="h-4 w-4 shrink-0 text-fg-subtle" strokeWidth={1.75} />
       )}
       <span className="min-w-0">
         <span className="block max-w-[12rem] truncate">{file.name}</span>
         <span
-          className={`mt-0.5 inline-flex rounded px-1.5 py-0.5 text-[10px] ring-1 ${badgeToneClass[badge.tone]}`}
+          className={`mt-0.5 inline-flex rounded-md px-1.5 py-0.5 text-[11px] font-medium ${badgeToneClass[badge.tone] || badgeToneClass.slate}`}
         >
           {badge.label}
         </span>
@@ -113,9 +115,10 @@ export function AttachmentChip({ file, capabilities, onRemove, onPreview }) {
         <button
           type="button"
           onClick={onRemove}
-          className="ml-0.5 shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+          aria-label={`Remove ${file.name}`}
+          className="ml-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-hover hover:text-fg"
         >
-          <X className="h-3 w-3" />
+          <X className="h-3.5 w-3.5" />
         </button>
       )}
     </span>
@@ -123,37 +126,11 @@ export function AttachmentChip({ file, capabilities, onRemove, onPreview }) {
 }
 
 export function ImageLightbox({ url, name, onClose }) {
-  useEffect(() => {
-    const handleKey = (e) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handleKey);
-    return () => document.removeEventListener("keydown", handleKey);
-  }, [onClose]);
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div className="relative flex max-h-[90vh] max-w-[90vw] flex-col items-center">
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute -top-10 right-0 rounded-full p-1 text-white/80 transition-colors hover:bg-white/10 hover:text-white"
-        >
-          <X className="h-6 w-6" />
-        </button>
-        <img
-          src={url}
-          alt={name || "Preview"}
-          className="max-h-[80vh] max-w-[85vw] rounded-lg object-contain shadow-2xl"
-          onClick={(e) => e.stopPropagation()}
-        />
-        {name && (
-          <div className="mt-3 text-center text-sm text-white/70">{name}</div>
-        )}
+    <Dialog open size="xl" title={name || "Image"} onClose={onClose}>
+      <div className="flex justify-center rounded-lg bg-hover p-2">
+        <img src={url} alt={name || "Preview"} className="max-h-[65vh] max-w-full object-contain" />
       </div>
-    </div>
+    </Dialog>
   );
 }
