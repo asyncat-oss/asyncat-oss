@@ -63,8 +63,12 @@ function exportSkip() {
 export async function exportEstimate() {
   const dataRoot = runtimeDataRoot();
   const data = await folderUsage(dataRoot, { skip: exportSkip(), key: 'export' });
+  // With write-ahead logging most of a busy database sits in its -wal file,
+  // which the export takes in too; the main file alone can be 4 KB.
   let databaseBytes = 0;
-  try { databaseBytes = fs.statSync(dbPath()).size; } catch { /* none yet */ }
+  for (const suffix of ['', '-wal']) {
+    try { databaseBytes += fs.statSync(`${dbPath()}${suffix}`).size; } catch { /* none yet */ }
+  }
   const uploads = inside(uploadsPath(), dataRoot) ? { bytes: 0, files: 0 } : await folderUsage(uploadsPath());
   const models = await folderUsage(modelsPath());
   return {

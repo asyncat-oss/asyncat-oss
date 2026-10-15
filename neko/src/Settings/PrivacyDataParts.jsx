@@ -11,7 +11,7 @@ import Dialog from '../components/ui/Dialog.jsx';
 import { CONTROL_CLASS, Field, Input } from '../components/ui/Field.jsx';
 import Notice from '../components/ui/Notice.jsx';
 import { errorDetail, useToast } from '../components/toastContext.js';
-import { formatBytes } from '../Models/engineProgress.js';
+import { formatBytes } from '../components/ui/progressFormat.js';
 import privacyApi, { importApi } from '../services/privacyApi.js';
 import { updateApi } from './settingApi.js';
 

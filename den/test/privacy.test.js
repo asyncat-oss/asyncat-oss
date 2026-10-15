@@ -96,6 +96,10 @@ test('export everything: the database, files, skills and the edited instructions
   const { exportEverything, exportEstimate, dataLocations } = await import('../src/privacy/privacyService.js');
   const estimate = await exportEstimate();
   assert.ok(estimate.bytes > 0);
+  // The database counts with its write-ahead log, where most of it can be.
+  const dbFile = process.env.DB_PATH;
+  const onDisk = ['', '-wal'].reduce((sum, suffix) => sum + (fs.existsSync(`${dbFile}${suffix}`) ? fs.statSync(`${dbFile}${suffix}`).size : 0), 0);
+  assert.ok(estimate.bytes >= onDisk, `${estimate.bytes} < ${onDisk}`);
   assert.ok(estimate.leftOut.modelsBytes >= 11);
   assert.ok(dataLocations().some((item) => item.id === 'database' && item.exists));
 
