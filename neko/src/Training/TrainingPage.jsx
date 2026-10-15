@@ -46,6 +46,7 @@ const readinessShape = PropTypes.shape({
     name: PropTypes.string,
     vendor: PropTypes.string,
     vramGb: PropTypes.number,
+    driverIssue: PropTypes.bool,
   }),
   disk: PropTypes.shape({ freeGb: PropTypes.number }),
   warnings: PropTypes.arrayOf(PropTypes.string),
@@ -121,6 +122,15 @@ ProgressBar.propTypes = {
 
 // ── This computer ───────────────────────────────────────────────────────────
 
+// Where training would run, in words. A card whose driver isn't answering
+// doesn't count until it does (the warning below says so).
+function runsOnText(readiness) {
+  if (readiness.gpu?.driverIssue) return 'Runs on the processor until the graphics driver answers';
+  if (readiness.backend === 'cuda') return 'Runs on the graphics card (CUDA)';
+  if (readiness.backend === 'mlx') return 'Runs on Apple silicon (MLX)';
+  return 'Runs on the processor';
+}
+
 const Fact = ({ icon: Icon, children }) => (
   <div className="flex min-w-0 items-center gap-2 text-[13px] text-fg-muted">
     <Icon className="h-4 w-4 shrink-0 text-fg-subtle" strokeWidth={1.75} />
@@ -153,13 +163,15 @@ const ReadinessBanner = ({ readiness, onInstall, installing, onRemove, onRefresh
         </div>
       </div>
 
-      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
+      {/* Facts take the room their words need (a long graphics card name
+          isn't squeezed into a third) and wrap on a narrow window. */}
+      <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2">
         <Fact icon={Zap}>
           {gpu
             ? `${gpu.name || gpu.vendor}${gpu.vramGb ? `, ${gpu.vramGb} GB` : ''}`
             : 'No GPU found (processor only)'}
         </Fact>
-        <Fact icon={Brain}>Runs on {(readiness.backend || 'cpu').toUpperCase()}</Fact>
+        <Fact icon={Brain}>{runsOnText(readiness)}</Fact>
         <Fact icon={HardDrive}>
           {readiness.disk?.freeGb != null ? `${readiness.disk.freeGb} GB free` : 'Free space unknown'}
         </Fact>
