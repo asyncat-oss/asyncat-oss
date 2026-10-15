@@ -31,8 +31,13 @@ Field.propTypes = {
   children: PropTypes.node,
 };
 
+// A width the caller gives (className="w-32") replaces the full width:
+// both are plain width utilities, and CSS order, not class order, would pick.
+const OWN_WIDTH = /(^|\s)w-/;
+
 export const Input = forwardRef(function Input({ className = '', ...rest }, ref) {
-  return <input ref={ref} className={`h-9 ${CONTROL_CLASS} ${className}`} {...rest} />;
+  const control = OWN_WIDTH.test(className) ? CONTROL_CLASS.replace(/^w-full /, '') : CONTROL_CLASS;
+  return <input ref={ref} className={`h-9 ${control} ${className}`} {...rest} />;
 });
 
 Input.propTypes = { className: PropTypes.string };
