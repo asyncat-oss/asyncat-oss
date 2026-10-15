@@ -45,6 +45,14 @@ const MadeRedirect = () => {
   return <Navigate to={`/files/made${search}`} replace />;
 };
 
+// /skills is Tools & Skills' Skills tab, at the address the sidebar marks.
+const SkillsRedirect = () => {
+  const { search } = useLocation();
+  const params = new URLSearchParams(search);
+  params.set('tab', 'skills');
+  return <Navigate to={`/tools?${params}`} replace />;
+};
+
 // Automations (Workflows, Schedules, Activity) became one Scheduled page,
 // and scheduled tasks became Cats.
 const OLD_SCHEDULED_PATHS = ['scheduled', 'automations', 'workflows', 'schedules', 'activity', 'scheduler', 'agent/scheduler'];
@@ -201,7 +209,7 @@ const createRouter = () => createBrowserRouter([
       },
       {
         path: "skills",
-        element: <ToolsSkillsPage initialTab="skills" />,
+        element: <SkillsRedirect />,
         errorElement: <RouteErrorElement />
       },
       {

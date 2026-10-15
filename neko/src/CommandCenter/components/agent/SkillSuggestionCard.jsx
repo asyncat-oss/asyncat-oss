@@ -30,7 +30,7 @@ export default function SkillSuggestionCard({ suggestion, onSave, onDismiss }) {
       <div className="flex items-center gap-2 rounded-xl border border-line px-4 py-2.5 text-[13px] text-fg-muted" data-skill-suggestion="saved">
         <Check className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
         <span className="min-w-0 flex-1 truncate">Saved <span className="font-medium text-fg">{suggestion.name}</span> to your skills</span>
-        <button type="button" onClick={() => navigate('/skills')} className="shrink-0 text-accent hover:underline">View</button>
+        <button type="button" onClick={() => navigate('/tools?tab=skills')} className="shrink-0 text-accent hover:underline">View</button>
       </div>
     );
   }
