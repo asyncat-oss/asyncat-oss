@@ -135,7 +135,24 @@ export function runsOnOptions(kind, cloud = {}, { unsupportedReason = null } = {
   return options;
 }
 
-/** What a group's provider is called in "Still using {current}." */
+/**
+ * The draft footer's sentence: what a picked change waits for, then what
+ * stays in use, but only when something works now (`currentWorks`).
+ *   "Not in use until the key is saved."
+ *   "Not in use until ComfyUI answers. Still runs on this computer."
+ */
+export function draftText({ draft, current, currentWorks = false, cloud = {} }) {
+  const waits = draft === 'comfyui'
+    ? 'Not in use until ComfyUI answers.'
+    : cloud[draft] && !cloud[draft].hasKey ? 'Not in use until the key is saved.' : 'Not in use yet.';
+  if (!currentWorks) return waits;
+  const still = !current || current === 'local'
+    ? 'Still runs on this computer.'
+    : current === 'off' ? 'Still off.' : `Still uses ${providerLabel(current, cloud)}.`;
+  return `${waits} ${still}`;
+}
+
+/** What a group's provider is called ("On this computer", "ElevenLabs"). */
 export function providerLabel(provider, cloud = {}) {
   if (!provider || provider === 'local') return 'On this computer';
   if (provider === 'off') return 'Off';

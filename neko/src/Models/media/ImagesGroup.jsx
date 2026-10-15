@@ -23,7 +23,7 @@ import KeyRow from './KeyRow.jsx';
 import RunsOnRow from './RunsOnRow.jsx';
 import { LoadingRows, PlannedSize, StepRow, ValueWithError } from './SetupParts.jsx';
 import { FIT, gpuLine, stepErrorText } from './mediaFormat.js';
-import { providerLabel } from './providers.js';
+import { draftText, providerLabel } from './providers.js';
 import {
   COMFYUI_ADDRESS, IMAGES_TITLE, checkpointLabel, cleanComfyAddress, comfyStatusText, imageDraftChoice, imageInUse, imageRunsOnChange,
   imagesHint, imagesSwitchedText, pickedImage, serviceModel, serviceModelName,
@@ -463,7 +463,12 @@ export default function ImagesGroup({
       );
     }
     rows.push(
-      <DraftFooter key="draft" current={providerLabel(status.provider, cloud)} onCancel={() => { onDraft(null); setRunsOnError(''); }} primary={primary} />,
+      <DraftFooter
+        key="draft"
+        text={draftText({ draft: provider, current: status.provider, currentWorks: !firstRun && Boolean(status.ready), cloud })}
+        onCancel={() => { onDraft(null); setRunsOnError(''); }}
+        primary={primary}
+      />,
     );
   }
 

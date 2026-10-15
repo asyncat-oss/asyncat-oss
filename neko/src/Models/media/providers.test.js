@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { billedBy, keyEnding, keyUrl, listeningModelName, providerLabel, runsOnOptions, sharedKeyNote } from './providers.js';
+import { billedBy, draftText, keyEnding, keyUrl, listeningModelName, providerLabel, runsOnOptions, sharedKeyNote } from './providers.js';
 
 const voiceCloud = {
   openai: { title: 'OpenAI', hasKey: true, stt: {}, tts: {} },
@@ -61,4 +61,13 @@ test('keys, names and bills in plain words', () => {
   assert.equal(providerLabel('local'), 'On this computer');
   assert.equal(providerLabel('elevenlabs', voiceCloud), 'ElevenLabs');
   assert.equal(providerLabel('off'), 'Off');
+});
+
+test('a draft footer says what the change waits for, and what still runs only when something does', () => {
+  const cloud = { openai: { title: 'OpenAI', hasKey: false }, elevenlabs: { title: 'ElevenLabs', hasKey: true } };
+  assert.equal(draftText({ draft: 'openai', current: 'local', currentWorks: false, cloud }), 'Not in use until the key is saved.');
+  assert.equal(draftText({ draft: 'comfyui', current: 'local', currentWorks: false, cloud }), 'Not in use until ComfyUI answers.');
+  assert.equal(draftText({ draft: 'openai', current: 'local', currentWorks: true, cloud }), 'Not in use until the key is saved. Still runs on this computer.');
+  assert.equal(draftText({ draft: 'openai', current: 'off', currentWorks: true, cloud }), 'Not in use until the key is saved. Still off.');
+  assert.equal(draftText({ draft: 'openai', current: 'elevenlabs', currentWorks: true, cloud }), 'Not in use until the key is saved. Still uses ElevenLabs.');
 });

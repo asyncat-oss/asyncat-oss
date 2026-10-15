@@ -23,7 +23,7 @@ import RunsOnRow from './RunsOnRow.jsx';
 import { LoadingRows, PlannedSize, StepRow, ValueWithError } from './SetupParts.jsx';
 import SpeakTest from './SpeakTest.jsx';
 import { mediaApi, mediaUrl } from './mediaApi.js';
-import { listeningModelName, providerLabel } from './providers.js';
+import { draftText, listeningModelName, providerLabel } from './providers.js';
 import { usePlayer } from './usePlayer.js';
 import {
   GROUP_TITLES, draftChoice, groupHint, listeningInUse, pickedVoice, pickedWhisper, runsOnChange, switchedText, voiceInUse,
@@ -352,7 +352,12 @@ export default function VoiceGroup({
       <Button variant="primary" size="sm" onClick={() => saveDraft().catch((err) => setRunsOnError(err.message))}>Use {service.title}</Button>
     ) : null;
     rows.push(
-      <DraftFooter key="draft" current={providerLabel(saved.provider, cloud)} onCancel={() => { onDraft(null); setRunsOnError(''); }} primary={useNow} />,
+      <DraftFooter
+        key="draft"
+        text={draftText({ draft: provider, current: saved.provider, currentWorks: !firstRun && (saved.ready || saved.provider === 'off'), cloud })}
+        onCancel={() => { onDraft(null); setRunsOnError(''); }}
+        primary={useNow}
+      />,
     );
   }
 

@@ -6,13 +6,13 @@ import PropTypes from 'prop-types';
 import Button from '../../components/ui/Button.jsx';
 
 /**
- *   <DraftFooter current="On this computer" onCancel={dropDraft}
+ *   <DraftFooter text={draftText({ draft, current, currentWorks, cloud })} onCancel={dropDraft}
  *     primary={<Button variant="primary" size="sm" onClick={use}>Use ComfyUI</Button>} />
  */
-export default function DraftFooter({ current, onCancel, primary = null }) {
+export default function DraftFooter({ text, onCancel, primary = null }) {
   return (
     <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-4" data-draft-footer>
-      <p className="min-w-0 flex-1 text-[12px] leading-5 text-fg-muted">Not in use yet. Still using {current}.</p>
+      <p className="min-w-0 flex-1 text-[12px] leading-5 text-fg-muted">{text}</p>
       <div className="flex shrink-0 items-center justify-end gap-2">
         <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
         {primary}
@@ -22,7 +22,7 @@ export default function DraftFooter({ current, onCancel, primary = null }) {
 }
 
 DraftFooter.propTypes = {
-  current: PropTypes.node.isRequired,
+  text: PropTypes.node.isRequired,
   onCancel: PropTypes.func.isRequired,
   primary: PropTypes.node,
 };
