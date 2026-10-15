@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import PageHeader from '../components/ui/PageHeader.jsx';
 import { Tabs } from '../components/ui/Tabs.jsx';
 import {
-  Search, Wrench, File,
+  Search, Wrench,
   Loader2, AlertCircle, ChevronRight,
-  Bot, Save, Edit2, X, Check, BookMarked, Trash2, RefreshCw, Plus,
+  Bot, Edit2, X, Check, BookMarked, Trash2, RefreshCw, Plus,
   PanelLeft, PanelLeftClose,
 } from 'lucide-react';
 import { agentApi } from '../CommandCenter/api';
@@ -117,7 +117,7 @@ function renderInlineMarkdown(text, keyPrefix) {
   return parts.length ? parts : text;
 }
 
-function parseSoulMarkdown(content) {
+function parseMarkdownBlocks(content) {
   if (!content?.trim()) return [];
 
   const withoutFrontmatter = content.replace(/^---[\s\S]*?\n---\s*/, '');
@@ -167,60 +167,8 @@ function parseSoulMarkdown(content) {
   return blocks;
 }
 
-function SoulPreview({ content }) {
-  const blocks = useMemo(() => parseSoulMarkdown(content), [content]);
-
-  return (
-    <article className="min-h-[52vh] px-7 py-8 text-sm leading-7 text-gray-700 dark:text-gray-300 midnight:text-slate-300 sm:px-10">
-      {blocks.map((block, idx) => {
-        if (block.type === 'heading') {
-          const HeadingTag = block.depth === 1 ? 'h1' : block.depth === 2 ? 'h2' : 'h3';
-          const headingClass = block.depth === 1
-            ? 'mb-5 text-xl font-semibold text-gray-950 dark:text-white midnight:text-white'
-            : 'mb-3 mt-8 text-sm font-semibold uppercase tracking-wide text-gray-900 dark:text-gray-100 midnight:text-slate-200';
-          return (
-            <HeadingTag key={`heading-${idx}`} className={headingClass}>
-              {renderInlineMarkdown(block.text, `heading-${idx}`)}
-            </HeadingTag>
-          );
-        }
-
-        if (block.type === 'numbered') {
-          return (
-            <div key={`numbered-${idx}`} className="my-4 flex gap-3">
-              <span className="mt-1 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-gray-100 text-xs font-semibold text-gray-500 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-300">
-                {block.number}
-              </span>
-              <p className="min-w-0">{renderInlineMarkdown(block.text, `numbered-${idx}`)}</p>
-            </div>
-          );
-        }
-
-        if (block.type === 'bullet') {
-          return (
-            <div key={`bullet-${idx}`} className="my-2 flex gap-3">
-              <span className="mt-3 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-gray-400 dark:bg-gray-500 midnight:bg-slate-500" />
-              <p className="min-w-0">{renderInlineMarkdown(block.text, `bullet-${idx}`)}</p>
-            </div>
-          );
-        }
-
-        return (
-          <p key={`paragraph-${idx}`} className="mb-5 max-w-4xl">
-            {renderInlineMarkdown(block.text, `paragraph-${idx}`)}
-          </p>
-        );
-      })}
-    </article>
-  );
-}
-
-SoulPreview.propTypes = {
-  content: PropTypes.string.isRequired,
-};
-
 function MarkdownPanel({ content, emptyText = 'No description' }) {
-  const blocks = useMemo(() => parseSoulMarkdown(content || ''), [content]);
+  const blocks = useMemo(() => parseMarkdownBlocks(content || ''), [content]);
 
   if (!blocks.length) {
     return <p className="text-sm leading-6 text-gray-500 dark:text-gray-400">{emptyText}</p>;
@@ -767,11 +715,18 @@ NewSkillModal.propTypes = {
   onCreated: PropTypes.func.isRequired,
 };
 
-export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
-  // `?tab=memory` (or soul/skills/tools) opens a specific tab, e.g. from ⌘K.
+// The instructions file was the Soul tab here; it lives in Settings now.
+export default function AgentToolsSkillsPage(props) {
+  const [searchParams] = useSearchParams();
+  if (searchParams.get('tab') === 'soul') return <Navigate to="/settings/personalization#instructions" replace />;
+  return <ToolsSkillsTabs {...props} />;
+}
+
+function ToolsSkillsTabs({ initialTab = 'tools' }) {
+  // `?tab=memory` (or skills/tools) opens a specific tab, e.g. from ⌘K.
   const [searchParams] = useSearchParams();
   const requestedTab = searchParams.get('tab');
-  const startTab = ['tools', 'skills', 'soul', 'memory'].includes(requestedTab) ? requestedTab : initialTab;
+  const startTab = ['tools', 'skills', 'memory'].includes(requestedTab) ? requestedTab : initialTab;
   const [activeTab, setActiveTab] = useState(startTab);
   const [tools, setTools] = useState([]);
   const [skills, setSkills] = useState([]);
@@ -799,16 +754,6 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
   const [osFilter, setOsFilter] = useState('all');
   const [toolsSidebarOpen, setToolsSidebarOpen] = useState(true);
   const [skillsSidebarOpen, setSkillsSidebarOpen] = useState(true);
-  const [soulSidebarOpen, setSoulSidebarOpen] = useState(true);
-
-  const [soulContent, setSoulContent] = useState('');
-  const [soulEdited, setSoulEdited] = useState('');
-  const [loadingSoul, setLoadingSoul] = useState(false);
-  const [errorSoul, setErrorSoul] = useState(null);
-  const [editingSoul, setEditingSoul] = useState(false);
-  const [savingSoul, setSavingSoul] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const soulFetchedRef = useRef(false);
 
   const [memories, setMemories] = useState([]);
   const [memorySearch, setMemorySearch] = useState('');
@@ -844,12 +789,6 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
     skillsFetchedRef.current = true;
     fetchSkills();
   }, []);
-
-  useEffect(() => {
-    if (activeTab !== 'soul' || soulFetchedRef.current) return;
-    soulFetchedRef.current = true;
-    fetchSoul();
-  }, [activeTab]);
 
   const fetchMemories = useCallback(async () => {
     setLoadingMemory(true);
@@ -910,41 +849,6 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
     } finally {
       setReloadingSkills(false);
     }
-  }
-
-  async function fetchSoul() {
-    setLoadingSoul(true);
-    setErrorSoul(null);
-    try {
-      const res = await agentApi.getSoul();
-      setSoulContent(res.content || '');
-      setSoulEdited(res.content || '');
-    } catch (err) {
-      setErrorSoul(err.message || 'Failed to load soul');
-    } finally {
-      setLoadingSoul(false);
-    }
-  }
-
-  async function saveSoul() {
-    setSavingSoul(true);
-    setSaveSuccess(false);
-    try {
-      await agentApi.updateSoul(soulEdited);
-      setSoulContent(soulEdited);
-      setEditingSoul(false);
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 2000);
-    } catch (err) {
-      setErrorSoul(err.message || 'Failed to save soul');
-    } finally {
-      setSavingSoul(false);
-    }
-  }
-
-  function cancelEdit() {
-    setSoulEdited(soulContent);
-    setEditingSoul(false);
   }
 
   function requestDeleteSkill(skill) {
@@ -1051,20 +955,9 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
   const defaultSkillCount = skills.filter(s => getSkillOrigin(s) === 'default').length;
   const userSkillCount = skills.filter(s => getSkillOrigin(s) === 'user').length;
   const autoSkillCount = skills.filter(s => getSkillOrigin(s) === 'auto').length;
-  const soulStats = useMemo(() => {
-    const source = editingSoul ? soulEdited : soulContent;
-    const trimmed = source.trim();
-    return {
-      lines: source ? source.split(/\r\n|\r|\n/).length : 0,
-      words: trimmed ? trimmed.split(/\s+/).length : 0,
-      chars: source.length,
-    };
-  }, [editingSoul, soulContent, soulEdited]);
-  const soulDirty = soulEdited !== soulContent;
 
   const toolsTabActive   = activeTab === 'tools';
   const skillsTabActive  = activeTab === 'skills';
-  const soulTabActive    = activeTab === 'soul';
   const memoryTabActive  = activeTab === 'memory';
 
   return (
@@ -1088,18 +981,16 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
       />
       <PageHeader
         title="Tools & Skills"
-        description="What the agent can do: actions it can take, skills it can follow, its personality and what it remembers."
-        actions={saveSuccess ? <span className="flex items-center gap-1 text-[12px] text-emerald-600 dark:text-emerald-400"><Check className="h-3.5 w-3.5" />Soul saved</span> : null}
+        description="What the agent can do: actions it can take, skills it can follow and what it remembers."
       >
         <Tabs
           className="mt-4"
           label="Tools and skills sections"
-          value={toolsTabActive ? 'tools' : skillsTabActive ? 'skills' : soulTabActive ? 'soul' : 'memory'}
+          value={toolsTabActive ? 'tools' : skillsTabActive ? 'skills' : 'memory'}
           onChange={setActiveTab}
           items={[
             { value: 'tools', label: 'Tools', icon: Wrench, meta: tools.length ? String(tools.length) : null },
             { value: 'skills', label: 'Skills', icon: Bot, meta: skills.length ? String(skills.length) : null },
-            { value: 'soul', label: 'Soul', icon: File },
             { value: 'memory', label: 'Memory', icon: BookMarked },
           ]}
         />
@@ -1382,184 +1273,6 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
           </div>
         )}
 
-        {soulTabActive && (
-          <div className="flex h-full flex-col">
-            <div className="flex flex-col gap-3 border-b border-gray-100 px-6 py-4 dark:border-gray-800 midnight:border-slate-800 md:flex-row md:items-center md:justify-between">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  {!soulSidebarOpen && (
-                    <button
-                      onClick={() => setSoulSidebarOpen(true)}
-                      title="Show sidebar"
-                      className="rounded-md border border-gray-200 bg-white p-1.5 text-gray-500 shadow-sm transition-colors hover:text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-gray-200 midnight:border-slate-700 midnight:bg-slate-950 midnight:text-slate-400 midnight:hover:text-slate-200"
-                    >
-                      <PanelLeft className="h-4 w-4" />
-                    </button>
-                  )}
-                  <span className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100">default.md</span>
-                  <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                    editingSoul
-                      ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300 midnight:bg-amber-950/30 midnight:text-amber-400/70'
-                      : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300 midnight:bg-emerald-950/30 midnight:text-emerald-400/70'
-                  }`}>
-                    {editingSoul ? (soulDirty ? 'Editing' : 'No changes') : 'Active'}
-                  </span>
-                </div>
-                <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">
-                  Agent persona &amp; operating rules
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {saveSuccess && (
-                  <span className="hidden items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 sm:flex">
-                    <Check className="h-3.5 w-3.5" />
-                    Saved
-                  </span>
-                )}
-                {!editingSoul && !loadingSoul && !errorSoul && (
-                  <button
-                    onClick={() => setEditingSoul(true)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800 midnight:border-slate-700 midnight:bg-slate-950 midnight:text-slate-200 midnight:hover:bg-slate-800"
-                  >
-                    <Edit2 className="h-3.5 w-3.5" />
-                    Edit
-                  </button>
-                )}
-                {editingSoul && (
-                  <>
-                    <button
-                      onClick={cancelEdit}
-                      disabled={savingSoul}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 midnight:border-slate-700 midnight:bg-slate-950 midnight:text-slate-300 midnight:hover:bg-slate-800"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                      Cancel
-                    </button>
-                    <button
-                      onClick={saveSoul}
-                      disabled={savingSoul || !soulDirty}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-45 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
-                    >
-                      {savingSoul ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                      Save
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {loadingSoul && (
-              <div className="flex flex-1 items-center justify-center gap-2 text-gray-400">
-                <Loader2 className="h-5 w-5 animate-spin" />
-                <span className="text-sm">Loading soul...</span>
-              </div>
-            )}
-
-            {errorSoul && (
-              <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-                <AlertCircle className="h-6 w-6 text-red-500" />
-                <p className="text-sm font-medium text-red-600 dark:text-red-400">{errorSoul}</p>
-                <button
-                  onClick={() => { soulFetchedRef.current = false; fetchSoul(); }}
-                  className="text-xs text-gray-500 underline hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                >
-                  Retry
-                </button>
-              </div>
-            )}
-
-            {!loadingSoul && !errorSoul && (
-              <div className={`grid flex-1 gap-0 overflow-hidden ${soulSidebarOpen ? 'lg:grid-cols-[240px_minmax(0,1fr)]' : 'lg:grid-cols-1'}`}>
-                {soulSidebarOpen && (
-                <aside className="border-b border-gray-100 px-6 py-5 dark:border-gray-800 midnight:border-slate-800 lg:border-b-0 lg:border-r">
-                  <div className="space-y-5">
-                    <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 midnight:text-slate-500">What this controls</p>
-                      <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-gray-400 midnight:text-slate-400">
-                        The soul is the default instruction file for the local agent: its identity, working style, and rules before a task starts.
-                      </p>
-                    </div>
-
-                    <div className="border-t border-gray-100 pt-4 dark:border-gray-800 midnight:border-slate-800">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 midnight:text-slate-500">How to edit</p>
-                      <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-gray-400 midnight:text-slate-400">
-                        Preview renders the Markdown for reading. Edit shows the raw file so headings, lists, and front matter stay exactly as saved.
-                      </p>
-                    </div>
-
-                    <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 midnight:text-slate-500">Document</p>
-                      <div className="mt-2 space-y-2 text-xs">
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-gray-500 dark:text-gray-400 midnight:text-slate-400">Lines</span>
-                          <span className="font-mono text-gray-800 dark:text-gray-200 midnight:text-slate-200">{soulStats.lines}</span>
-                        </div>
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-gray-500 dark:text-gray-400 midnight:text-slate-400">Words</span>
-                          <span className="font-mono text-gray-800 dark:text-gray-200 midnight:text-slate-200">{soulStats.words}</span>
-                        </div>
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-gray-500 dark:text-gray-400 midnight:text-slate-400">Characters</span>
-                          <span className="font-mono text-gray-800 dark:text-gray-200 midnight:text-slate-200">{soulStats.chars}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="border-t border-gray-100 pt-4 dark:border-gray-800 midnight:border-slate-800">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 midnight:text-slate-500">State</p>
-                      <div className="mt-2 flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300 midnight:text-slate-300">
-                        <span className={`h-1.5 w-1.5 rounded-full ${soulDirty ? 'bg-amber-500' : 'bg-emerald-500'}`} />
-                        {editingSoul ? (soulDirty ? 'Unsaved changes' : 'Ready to edit') : 'Loaded from profile'}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="border-t border-gray-100 pt-4 dark:border-gray-800 midnight:border-slate-800">
-                    <button
-                      onClick={() => setSoulSidebarOpen(false)}
-                      className="flex items-center gap-1.5 text-[10px] font-medium text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 midnight:text-slate-400 midnight:hover:text-slate-200"
-                    >
-                      <PanelLeftClose className="h-3.5 w-3.5" />
-                      Close sidebar
-                    </button>
-                  </div>
-                </aside>
-                )}
-
-                <main className="relative min-h-0 overflow-y-auto p-4 sm:p-6">
-                  <div className="mx-auto max-w-5xl overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800 midnight:border-slate-800">
-                    <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/50 px-4 py-2 dark:border-gray-800 dark:bg-gray-900/50 midnight:border-slate-800 midnight:bg-slate-900/50">
-                      <span className="truncate font-mono text-xs text-gray-500 dark:text-gray-400">souls/default.md</span>
-                      <span className="text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                        {editingSoul ? 'Edit mode' : 'Preview'}
-                      </span>
-                    </div>
-
-                    {!editingSoul && soulContent && (
-                      <SoulPreview content={soulContent} />
-                    )}
-
-                    {editingSoul && (
-                      <textarea
-                        value={soulEdited}
-                        onChange={e => setSoulEdited(e.target.value)}
-                        className="h-[60vh] w-full resize-none bg-transparent p-5 font-mono text-xs leading-6 text-gray-800 outline-none focus:ring-2 focus:ring-inset focus:ring-gray-300 dark:text-gray-100 dark:focus:ring-gray-700 midnight:text-slate-100 sm:p-6"
-                        spellCheck={false}
-                      />
-                    )}
-
-                    {!editingSoul && !soulContent && (
-                      <div className="flex min-h-[52vh] items-center justify-center px-6 text-sm text-gray-400">
-                        No soul file found.
-                      </div>
-                    )}
-                  </div>
-                </main>
-              </div>
-            )}
-          </div>
-        )}
-
         {memoryTabActive && (
           <div className="flex flex-col h-full">
             {/* Memory stats banner */}
@@ -1808,5 +1521,7 @@ MemoryRow.propTypes = {
 };
 
 AgentToolsSkillsPage.propTypes = {
-  initialTab: PropTypes.oneOf(['tools', 'skills', 'soul', 'memory']),
+  initialTab: PropTypes.oneOf(['tools', 'skills', 'memory']),
 };
+
+ToolsSkillsTabs.propTypes = AgentToolsSkillsPage.propTypes;
