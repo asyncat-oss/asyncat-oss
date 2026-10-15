@@ -1,7 +1,7 @@
 ---
 name: email-drafting
 description: Write effective emails
-brain_region: hippocampus
+brain_region: limbic
 weight: 1.0
 tags: [email, communication, writing, business]
 when_to_use: |

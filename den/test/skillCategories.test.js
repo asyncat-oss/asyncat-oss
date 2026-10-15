@@ -71,6 +71,19 @@ test('every bundled skill has a category', () => {
   for (const skill of bundled) assert.notEqual(skill.category, 'Other', `${skill.name} (${skill.brain_region})`);
 });
 
+test('bundled skills sit in the category that fits them', () => {
+  skills.loadSkills();
+  const categoryOf = (name) => skills.listSkills().find((skill) => skill.name === name && skill.source === 'bundled')?.category;
+  assert.equal(categoryOf('dependency-audit'), 'Risk checks', 'a CVE audit is a risk check');
+  assert.equal(categoryOf('security-best-practices'), 'Risk checks');
+  assert.equal(categoryOf('plan'), 'Planning');
+  assert.equal(categoryOf('customer-support'), 'Tone');
+  assert.equal(categoryOf('email-drafting'), 'Tone');
+  assert.equal(categoryOf('marketing-content'), 'Tone');
+  assert.equal(categoryOf('report-writing'), 'Workflow');
+  assert.equal(categoryOf('web-research'), 'Recall');
+});
+
 test('a new skill is saved with its category as brain_region, and read back by name', async () => {
   const res = await fetch(`${base}/skills`, {
     method: 'POST',

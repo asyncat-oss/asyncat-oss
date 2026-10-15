@@ -1,7 +1,7 @@
 ---
 name: effective-documentation
 description: Docs that get read
-brain_region: hippocampus
+brain_region: cerebellum
 weight: 1.0
 tags: [docs, readme, comments]
 when_to_use: |

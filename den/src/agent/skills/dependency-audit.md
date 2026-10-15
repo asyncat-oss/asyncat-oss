@@ -1,7 +1,7 @@
 ---
 name: dependency-audit
 description: Security audit project dependencies for CVEs and vulnerabilities
-brain_region: prefrontal
+brain_region: amygdala
 weight: 1.0
 tags: [security, audit, npm, pip, cargo, cve, vulnerability, dependencies]
 when_to_use: |

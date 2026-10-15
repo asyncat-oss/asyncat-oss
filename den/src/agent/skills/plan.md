@@ -1,7 +1,7 @@
 ---
 name: plan
 description: Break complex goals into executable, verifiable steps with recovery strategies
-brain_region: cerebellum
+brain_region: prefrontal
 weight: 1.0
 tags: [planning, agentic]
 when_to_use: |

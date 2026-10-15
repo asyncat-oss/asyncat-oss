@@ -1,7 +1,7 @@
 ---
 name: marketing-content
 description: Create marketing copy, SEO content, social media posts, email campaigns, and brand messaging
-brain_region: hippocampus
+brain_region: limbic
 weight: 1.0
 tags: [marketing, seo, content, copywriting, social-media, email, branding]
 when_to_use: |

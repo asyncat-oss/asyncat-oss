@@ -1,7 +1,7 @@
 ---
 name: customer-support
 description: Handle customer support tickets, escalation, tone management, and resolution workflows
-brain_region: prefrontal
+brain_region: limbic
 weight: 1.0
 tags: [support, customer-service, tickets, escalation, communication, helpdesk]
 when_to_use: |

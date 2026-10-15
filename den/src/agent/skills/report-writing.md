@@ -1,7 +1,7 @@
 ---
 name: report-writing
 description: Write professional reports
-brain_region: hippocampus
+brain_region: cerebellum
 weight: 1.0
 tags: [writing, reports, documentation, business]
 when_to_use: |
