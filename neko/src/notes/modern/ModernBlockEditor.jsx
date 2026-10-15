@@ -8054,8 +8054,9 @@ const ModernBlockEditor = forwardRef(
         className="@container bg-canvas"
       >
         <div className="mx-auto max-w-5xl px-4 pb-24 pt-8 @2xl:px-8 @2xl:pt-16">
-          {/* Title */}
-          <div className="mb-8">
+          {/* Title: lined up with the blocks' text, which sits inside their
+              px-3 hover box (components/Block.jsx). */}
+          <div className="mb-6 px-3">
             <textarea
               ref={titleRef}
               value={title}

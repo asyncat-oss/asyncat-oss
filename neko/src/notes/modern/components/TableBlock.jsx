@@ -398,7 +398,7 @@ const TableCell = React.memo(
         data-table-col={colIndex}
         suppressContentEditableWarning
         className={`outline-none resize-none bg-transparent ${
-          isHeader ? "font-semibold text-center" : ""
+          isHeader ? "font-semibold" : ""
         } text-fg focus:bg-accent-soft`}
         style={{
           width: "100%",
