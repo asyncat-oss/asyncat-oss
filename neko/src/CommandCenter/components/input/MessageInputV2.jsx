@@ -1317,12 +1317,23 @@ export const MessageInputV2 = ({
           enabledIntegrationTools: Array.isArray(enabledIntegrationTools) ? enabledIntegrationTools : [],
         };
 
-        await onSubmit(messageToSend, []);
+        // The message leaves the box as soon as it is sent, so it doesn't sit
+        // in the composer (and repeat its bubble) for the whole reply. It
+        // comes back only if sending fails.
+        const draft = { value, fileAttachments, inlineMentions };
         setValue("");
         setFileAttachments([]);
         setInlineMentions(new Map());
         setError(null);
         if (textareaRef.current) textareaRef.current.style.height = "auto";
+        try {
+          await onSubmit(messageToSend, []);
+        } catch (submitError) {
+          setValue((current) => current || draft.value);
+          setFileAttachments((current) => (current.length ? current : draft.fileAttachments));
+          setInlineMentions((current) => (current.size ? current : draft.inlineMentions));
+          throw submitError;
+        }
       } catch (err) {
         console.error("Failed to submit message:", err);
         setError("Failed to send message. Please try again.");
