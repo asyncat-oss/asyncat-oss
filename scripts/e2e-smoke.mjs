@@ -384,7 +384,8 @@ async function main() {
     assert(stream.includes('echo: from the smoke test'), 'the connector tool did not answer');
     const limited = await api('POST', '/api/agent/profiles', { name: 'No connectors', connectors: [] });
     const refused = await runStream({ profileId: limited.profile.id });
-    assert(!refused.includes('echo: from the smoke test') && refused.includes('Unknown tool'), 'an agent without connectors still reached the tool');
+    // The tool exists, so it isn't "Unknown": the run says it isn't available here.
+    assert(!refused.includes('echo: from the smoke test') && refused.includes("isn't available in this chat"), 'an agent without connectors still reached the tool');
   });
 
   await check('an ACP agent answers a chat and shows in the composer', async () => {
@@ -582,7 +583,7 @@ async function main() {
     await waitFor(() => page.evaluate(() => location.pathname === '/home'), { timeout: 10000, what: 'a new chat' });
     await showsModel('smoke-model');
     await page.click('[data-chat-model]');
-    await clickText('[role="menuitem"]', 'smoke-model-2');
+    await clickText('[role^="menuitem"]', 'smoke-model-2');
     await showsModel('smoke-model-2');
     await ask('Which model are you, chat B?');
     await textAppears('Answer from smoke-model-2.');
@@ -629,7 +630,7 @@ async function main() {
     await clickText('aside button', 'New chat');
     await waitFor(() => page.evaluate(() => location.pathname === '/home'), { timeout: 10000, what: 'a new chat' });
     await page.click('[data-chat-model]');
-    await clickText('[role="menuitem"]', 'smoke-model-3');
+    await clickText('[role^="menuitem"]', 'smoke-model-3');
     await showsModel('smoke-model-3');
     await ask('Which model are you, chat C?');
     await textAppears('Answer from smoke-model-3.');
@@ -640,9 +641,10 @@ async function main() {
     await ask('Which model are you after that?');
     await textAppears('was removed from your models');
     await clickText('button', 'Pick another model');
-    await waitFor(() => page.evaluate(() => Boolean(document.querySelector('[role="menu"] [role="menuitem"]'))), { timeout: 10000, what: "the composer's model menu" });
+    // The model menu's items are menuitemradio: they say which one is chosen.
+    await waitFor(() => page.evaluate(() => Boolean(document.querySelector('[role="menu"] [role^="menuitem"]'))), { timeout: 10000, what: "the composer's model menu" });
     await waitFor(() => page.evaluate(() => {
-      const first = [...document.querySelectorAll('[role="menu"] [role="menuitem"]')]
+      const first = [...document.querySelectorAll('[role="menu"] [role^="menuitem"]')]
         .find((node) => /^smoke-model(?!-)/.test(node.textContent.trim()));
       first?.click();
       return Boolean(first);
