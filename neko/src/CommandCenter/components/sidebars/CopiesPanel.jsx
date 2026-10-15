@@ -2,60 +2,42 @@
 // folder copy) to try changes in, review, and bring back.
 
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, CheckSquare, ChevronRight, File, Folder, GitBranch, Loader2, Play, Plus, RefreshCw, Square, Trash2, XCircle } from 'lucide-react';
+import { ArrowLeft, Check, ChevronRight, File, Folder, GitBranch, Play, Plus, RefreshCw, Trash2, X } from 'lucide-react';
 import { filesApi, sandboxesApi } from '../../api';
+import { useConfirm } from '../../../components/confirmContext';
+import Button from '../../../components/ui/Button.jsx';
+import IconButton from '../../../components/ui/IconButton.jsx';
+import Checkbox from '../../../components/ui/Checkbox.jsx';
+import Notice from '../../../components/ui/Notice.jsx';
+import { Input } from '../../../components/ui/Field.jsx';
+import UnifiedDiffViewer from '../code/UnifiedDiffViewer';
 
-function ConfirmModal({ open, title, message, confirmLabel = 'Confirm', confirmClass, onConfirm, onCancel }) {
-  if (!open) return null;
+const STATUS_TONES = {
+  ready: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+  succeeded: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+  failed: 'bg-red-500/10 text-red-700 dark:text-red-400',
+  deleted: 'bg-red-500/10 text-red-700 dark:text-red-400',
+};
+
+function StatusPill({ value }) {
+  const label = value ? value.charAt(0).toUpperCase() + value.slice(1) : 'Unknown';
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onCancel} />
-      <div className="relative w-full max-w-sm rounded-xl border border-gray-200 bg-white p-5 shadow-xl dark:border-slate-700 dark:bg-slate-900">
-        <div className="mb-4 flex items-start gap-3">
-          <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-50 dark:bg-amber-950/40">
-            <AlertTriangle className="h-4 w-4 text-amber-500" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-gray-800 dark:text-slate-100">{title}</p>
-            <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">{message}</p>
-          </div>
-        </div>
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            className={confirmClass}
-          >
-            {confirmLabel}
-          </button>
-        </div>
-      </div>
+    <span className={`inline-flex shrink-0 items-center rounded-md px-1.5 py-px text-[11px] font-medium leading-4 ${STATUS_TONES[value] || 'bg-hover text-fg-muted'}`}>
+      {label}
+    </span>
+  );
+}
+
+function SectionTitle({ children, aside = null }) {
+  return (
+    <div className="mb-1.5 flex min-h-7 items-center justify-between gap-2">
+      <h3 className="min-w-0 truncate text-[13px] font-semibold text-fg">{children}</h3>
+      {aside}
     </div>
   );
 }
 
-function StatusPill({ value }) {
-  const ok = value === 'ready' || value === 'succeeded';
-  const bad = value === 'failed' || value === 'deleted';
-  return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-      ok
-        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
-        : bad
-          ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-300'
-          : 'bg-gray-100 text-gray-600 dark:bg-slate-800 dark:text-slate-300'
-    }`}>
-      {value || 'unknown'}
-    </span>
-  );
-}
+const PRE_CLASS = 'overflow-auto rounded-lg border border-line bg-surface p-3 font-mono text-[11px] leading-relaxed text-fg';
 
 function shortPath(value = '') {
   const parts = String(value).split('/').filter(Boolean);
@@ -82,7 +64,7 @@ export default function CopiesPanel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [modal, setModal] = useState(null);
+  const confirm = useConfirm();
 
   const selected = useMemo(
     () => sandboxes.find(item => item.id === selectedId) || sandboxes[0] || null,
@@ -233,138 +215,104 @@ export default function CopiesPanel() {
     }
   }
 
+  async function askThenRun(question, action) {
+    if (await confirm(question)) runAction(action);
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <ConfirmModal
-        open={!!modal}
-        title={modal?.title}
-        message={modal?.message}
-        confirmLabel={modal?.confirmLabel}
-        confirmClass={modal?.confirmClass}
-        onConfirm={modal?.onConfirm}
-        onCancel={() => setModal(null)}
-      />
-      <div className="shrink-0 border-b border-gray-100 p-3 dark:border-slate-800">
-        <div className="mb-2 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={createSandbox}
-            disabled={busy}
-            className="inline-flex items-center gap-1.5 rounded-md bg-gray-900 px-2.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-gray-800 disabled:opacity-60 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white"
-          >
-            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+      <div className="shrink-0 border-b border-line p-3">
+        <div className="mb-2 flex items-center gap-1">
+          <Button variant="secondary" size="xs" icon={Plus} loading={busy} onClick={createSandbox}>
             New
-          </button>
-          <button
-            type="button"
-            onClick={() => loadSandboxes().then(() => loadReview())}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-            title="Refresh"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-          </button>
-          <span className="ml-auto text-[10px] text-gray-400 dark:text-slate-500">{sandboxes.length}</span>
+          </Button>
+          <IconButton size="sm" icon={RefreshCw} label="Refresh" onClick={() => loadSandboxes().then(() => loadReview())} />
+          <span className="ml-auto text-[12px] tabular-nums text-fg-subtle">{sandboxes.length}</span>
         </div>
 
-        <div className="max-h-32 space-y-1 overflow-y-auto">
-          {sandboxes.map(item => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setSelectedId(item.id)}
-              className={`w-full rounded-md border px-2 py-1.5 text-left transition-colors ${
-                item.id === selected?.id
-                  ? 'border-indigo-200 bg-indigo-50/70 dark:border-indigo-900/60 dark:bg-indigo-950/20'
-                  : 'border-gray-100 hover:bg-gray-50 dark:border-slate-800 dark:hover:bg-slate-900'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <span className="min-w-0 flex-1 truncate text-xs font-medium text-gray-800 dark:text-slate-100">{item.name}</span>
-                <StatusPill value={item.status} />
-              </div>
-              <div className="mt-0.5 flex items-center gap-1 text-[10px] text-gray-400 dark:text-slate-500">
-                <GitBranch className="h-3 w-3" />
-                <span className="truncate">{item.branchName || item.strategy}</span>
-              </div>
-            </button>
-          ))}
+        <div className="-mx-1 max-h-32 space-y-px overflow-y-auto">
+          {sandboxes.map(item => {
+            const current = item.id === selected?.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setSelectedId(item.id)}
+                aria-current={current ? 'true' : undefined}
+                className={`w-full rounded-lg px-2.5 py-1.5 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/40 ${
+                  current ? 'bg-selected' : 'hover:bg-hover'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className={`min-w-0 flex-1 truncate text-[13px] ${current ? 'font-medium text-fg' : 'text-fg'}`}>{item.name}</span>
+                  <StatusPill value={item.status} />
+                </div>
+                <div className="mt-0.5 flex items-center gap-1 text-[11px] text-fg-subtle">
+                  <GitBranch className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{item.branchName || item.strategy}</span>
+                </div>
+              </button>
+            );
+          })}
           {!sandboxes.length && (
-            <div className="rounded-md border border-dashed border-gray-200 px-3 py-4 text-center text-xs text-gray-400 dark:border-slate-800 dark:text-slate-500">
+            <p className="mx-1 rounded-lg border border-dashed border-line-strong px-3 py-4 text-center text-[12px] text-fg-subtle">
               No copies yet
-            </div>
+            </p>
           )}
         </div>
       </div>
 
-      {error && !staleSandbox && (
-        <div className="mx-3 mt-3 rounded-md border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-950/50 dark:bg-rose-950/20 dark:text-rose-300">
-          {error}
-        </div>
-      )}
+      {error && !staleSandbox && <Notice tone="error" className="mx-3 mt-3">{error}</Notice>}
       {staleSandbox && selected && (
-        <div className="mx-3 mt-3 rounded-md border border-amber-100 bg-amber-50 px-3 py-2 dark:border-amber-950/50 dark:bg-amber-950/20">
-          <div className="flex items-start gap-2">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">This copy&apos;s folder is gone</p>
-              <p className="mt-0.5 text-xs text-amber-700/80 dark:text-amber-300/80">
-                Its folder was already removed. Remove it from the list.
-              </p>
-              <button
-                type="button"
-                onClick={() => setModal({
-                  title: 'Remove this copy from the list?',
-                  message: "Its folder is already gone; this only removes it from Asyncat's list.",
-                  confirmLabel: 'Remove',
-                  confirmClass: 'inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-rose-500',
-                  onConfirm: () => { setModal(null); runAction(id => sandboxesApi.delete(id, { force: true })); },
-                })}
-                disabled={busy}
-                className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-amber-900 px-2.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-800 disabled:opacity-60 dark:bg-amber-200 dark:text-amber-950 dark:hover:bg-amber-100"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Remove from list
-              </button>
-            </div>
-          </div>
+        <div className="mx-3 mt-3 space-y-2">
+          <Notice tone="warning">
+            <span className="font-medium">This copy&apos;s folder is gone.</span> Its folder was already removed. Remove it from the list.
+          </Notice>
+          <Button
+            variant="secondary"
+            size="xs"
+            icon={Trash2}
+            disabled={busy}
+            onClick={() => askThenRun({
+              title: 'Remove this copy from the list?',
+              message: "Its folder is already gone; this only removes it from Asyncat's list.",
+              confirmLabel: 'Remove',
+              destructive: true,
+            }, id => sandboxesApi.delete(id, { force: true }))}
+          >
+            Remove from list
+          </Button>
         </div>
       )}
       {notice && (
-        <div className="mx-3 mt-3 rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-950/50 dark:bg-emerald-950/20 dark:text-emerald-300">
+        <p className="mx-3 mt-3 flex items-center gap-1.5 text-[12px] text-emerald-700 dark:text-emerald-400" role="status">
+          <Check className="h-3.5 w-3.5 shrink-0" />
           {notice}
-        </div>
+        </p>
       )}
 
-          {selected ? (
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">
-          {!staleSandbox && <section className="mb-4">
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-xs font-semibold text-gray-700 dark:text-slate-200">Files</h3>
-              <button
-                type="button"
-                onClick={() => loadBrowser(browserPath)}
-                className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-                title="Refresh files"
-              >
-                <RefreshCw className="h-3.5 w-3.5" />
-              </button>
-            </div>
-            <div className="mb-2 flex min-w-0 items-center gap-1 overflow-hidden rounded-md bg-gray-50 px-2 py-1 text-[10px] text-gray-500 dark:bg-slate-900 dark:text-slate-400">
-              <button type="button" onClick={() => setBrowserPath('.')} className="shrink-0 hover:text-gray-800 dark:hover:text-slate-100">
+      {selected ? (
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-3">
+          {!staleSandbox && <section>
+            <SectionTitle aside={<IconButton size="sm" icon={RefreshCw} label="Refresh files" onClick={() => loadBrowser(browserPath)} />}>
+              Files
+            </SectionTitle>
+            <nav aria-label="Folder" className="mb-1 flex min-w-0 items-center gap-1 overflow-hidden text-[12px] text-fg-muted">
+              <button type="button" onClick={() => setBrowserPath('.')} className="shrink-0 rounded-md px-1 py-0.5 hover:bg-hover hover:text-fg">
                 root
               </button>
               {pathParts.map((part, index) => {
                 const nextPath = pathParts.slice(0, index + 1).join('/');
                 return (
                   <span key={nextPath} className="flex min-w-0 items-center gap-1">
-                    <ChevronRight className="h-3 w-3 shrink-0" />
-                    <button type="button" onClick={() => setBrowserPath(nextPath)} className="truncate hover:text-gray-800 dark:hover:text-slate-100">
+                    <ChevronRight className="h-3 w-3 shrink-0 text-fg-subtle" />
+                    <button type="button" onClick={() => setBrowserPath(nextPath)} className="truncate rounded-md px-1 py-0.5 hover:bg-hover hover:text-fg">
                       {part}
                     </button>
                   </span>
                 );
               })}
-            </div>
+            </nav>
             {browserPath !== '.' && !openFile && (
               <button
                 type="button"
@@ -372,35 +320,40 @@ export default function CopiesPanel() {
                   const next = pathParts.slice(0, -1).join('/');
                   setBrowserPath(next || '.');
                 }}
-                className="mb-1 w-full rounded-md px-2 py-1.5 text-left text-xs text-gray-500 hover:bg-gray-50 dark:text-slate-400 dark:hover:bg-slate-900"
+                className="-mx-1 flex min-h-8 w-[calc(100%+0.5rem)] items-center gap-2 rounded-lg px-2.5 text-left text-[13px] text-fg-subtle hover:bg-hover hover:text-fg"
+                title="Up one folder"
               >
+                <ArrowLeft className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
                 ..
               </button>
             )}
             {openFile ? (
               <div>
-                <div className="mb-2 flex items-center gap-2">
-                  <button
-                    type="button"
+                <div className="mb-1.5 flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    icon={ArrowLeft}
+                    className="-ml-1"
                     onClick={() => {
                       setOpenFile(null);
                       const parent = browserPath.split('/').slice(0, -1).join('/');
                       setBrowserPath(parent || '.');
                     }}
-                    className="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-900"
                   >
                     Back
-                  </button>
-                  <span className="min-w-0 flex-1 truncate font-mono text-xs text-gray-700 dark:text-slate-200">{openFile.path?.replace(`${sandboxRelativePath}/`, '')}</span>
+                  </Button>
+                  <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-fg-muted">{openFile.path?.replace(`${sandboxRelativePath}/`, '')}</span>
                 </div>
-                <pre className="max-h-80 overflow-auto rounded-md border border-gray-200 bg-gray-50 p-3 text-[10px] leading-relaxed text-gray-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
-                  {openFile.tooLarge ? 'File is too large to preview.' : openFile.binary ? 'Binary file preview is not available.' : openFile.content || ''}
+                <pre className={`max-h-80 ${PRE_CLASS}`}>
+                  {openFile.tooLarge ? 'This file is too large to preview.' : openFile.binary ? 'This file isn’t text, so there’s no preview.' : openFile.content || ''}
                 </pre>
               </div>
             ) : (
-              <div className="max-h-64 overflow-y-auto rounded-md border border-gray-100 dark:border-slate-800">
+              <div className="-mx-1 max-h-64 space-y-px overflow-y-auto">
                 {currentEntries.map(entry => {
                   const relPath = entry.path.replace(`${sandboxRelativePath}/`, '');
+                  const Icon = entry.type === 'dir' ? Folder : File;
                   return (
                     <button
                       key={entry.path}
@@ -409,215 +362,173 @@ export default function CopiesPanel() {
                         if (entry.type === 'dir') setBrowserPath(relPath || '.');
                         else setBrowserPath(relPath);
                       }}
-                      className="flex w-full items-center gap-2 border-b border-gray-50 px-2 py-1.5 text-left text-xs last:border-b-0 hover:bg-gray-50 dark:border-slate-800 dark:hover:bg-slate-900"
+                      className="flex min-h-8 w-full items-center gap-2 rounded-lg px-2.5 text-left text-[13px] hover:bg-hover"
                     >
-                      {entry.type === 'dir' ? <Folder className="h-3.5 w-3.5 shrink-0 text-amber-500" /> : <File className="h-3.5 w-3.5 shrink-0 text-gray-400" />}
-                      <span className="min-w-0 flex-1 truncate text-gray-700 dark:text-slate-200">{entry.name}</span>
-                      {entry.type === 'file' && <span className="text-[10px] text-gray-400">{entry.ext || 'file'}</span>}
+                      <Icon className="h-3.5 w-3.5 shrink-0 text-fg-subtle" strokeWidth={1.75} />
+                      <span className="min-w-0 flex-1 truncate text-fg">{entry.name}</span>
+                      {entry.type === 'file' && <span className="text-[11px] text-fg-subtle">{entry.ext || 'file'}</span>}
                     </button>
                   );
                 })}
                 {!currentEntries.length && (
-                  <div className="px-3 py-3 text-center text-xs text-gray-400 dark:text-slate-500">No files</div>
+                  <p className="px-2.5 py-2 text-[12px] text-fg-subtle">No files</p>
                 )}
               </div>
             )}
           </section>}
 
-          {!staleSandbox && <section className="mb-4">
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-xs font-semibold text-gray-700 dark:text-slate-200">Changes</h3>
-              <button
-                type="button"
-                onClick={toggleAllChangedPaths}
-                disabled={!files.length}
-                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-                title={selectedPaths.length === files.length ? 'Clear selected files' : 'Select all changed files'}
-              >
-                {selectedPaths.length === files.length && files.length > 0 ? <CheckSquare className="h-3 w-3" /> : <Square className="h-3 w-3" />}
-                {selectedPaths.length ? `${selectedPaths.length}/${files.length}` : `${diff?.summary?.changed || files.length} files`}
-              </button>
-            </div>
-            <div className="space-y-1">
-              {files.map(file => (
-                <button
-                  key={`${file.status}-${file.path}`}
-                  type="button"
-                  onClick={() => setSelectedFile(file.path)}
-                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors ${
-                    selectedFile === file.path
-                      ? 'bg-gray-900 text-white dark:bg-slate-100 dark:text-slate-950'
-                      : 'bg-gray-50 text-gray-700 hover:bg-gray-100 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  <span
-                    role="checkbox"
-                    aria-checked={selectedPathSet.has(file.path)}
-                    tabIndex={0}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      toggleSelectedPath(file.path);
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        toggleSelectedPath(file.path);
-                      }
-                    }}
-                    className="shrink-0 rounded p-0.5"
-                    title={selectedPathSet.has(file.path) ? 'Remove from apply set' : 'Add to apply set'}
-                  >
-                    {selectedPathSet.has(file.path) ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
-                  </span>
-                  <span className="w-7 shrink-0 font-mono text-[10px]">{file.status.trim() || 'M'}</span>
-                  <span className="min-w-0 flex-1 truncate font-mono">{file.path}</span>
-                </button>
-              ))}
+          {!staleSandbox && <section>
+            <SectionTitle
+              aside={files.length ? (
+                <label className="flex items-center gap-1.5 text-[12px] tabular-nums text-fg-subtle">
+                  <Checkbox
+                    checked={selectedPaths.length === files.length && files.length > 0}
+                    onChange={toggleAllChangedPaths}
+                    aria-label={selectedPaths.length === files.length ? 'Clear selected files' : 'Select all changed files'}
+                  />
+                  {selectedPaths.length ? `${selectedPaths.length}/${files.length}` : `${diff?.summary?.changed || files.length} files`}
+                </label>
+              ) : null}
+            >
+              Changes
+            </SectionTitle>
+            <div className="-mx-1 space-y-px">
+              {files.map(file => {
+                const open = selectedFile === file.path;
+                return (
+                  <div key={`${file.status}-${file.path}`} className={`flex items-center gap-2 rounded-lg pl-2.5 transition-colors ${open ? 'bg-selected' : 'hover:bg-hover'}`}>
+                    <Checkbox
+                      checked={selectedPathSet.has(file.path)}
+                      onChange={() => toggleSelectedPath(file.path)}
+                      aria-label={selectedPathSet.has(file.path) ? `Leave ${file.path} out` : `Include ${file.path}`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setSelectedFile(file.path)}
+                      aria-pressed={open}
+                      className="flex min-h-8 min-w-0 flex-1 items-center gap-2 rounded-r-lg pr-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                    >
+                      <span className="w-6 shrink-0 font-mono text-[11px] text-fg-subtle">{file.status.trim() || 'M'}</span>
+                      <span className={`min-w-0 flex-1 truncate font-mono text-[12px] ${open ? 'text-fg' : 'text-fg'}`}>{file.path}</span>
+                    </button>
+                  </div>
+                );
+              })}
               {!files.length && (
-                <div className="rounded-md bg-gray-50 px-3 py-3 text-center text-xs text-gray-400 dark:bg-slate-900 dark:text-slate-500">
-                  No changes
-                </div>
+                <p className="px-1 text-[12px] text-fg-subtle">No changes</p>
               )}
             </div>
           </section>}
 
           {!staleSandbox && selectedFile && (
-            <section className="mb-4">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <h3 className="min-w-0 truncate text-xs font-semibold text-gray-700 dark:text-slate-200">{shortPath(selectedFile)}</h3>
-                <button
-                  type="button"
-                  onClick={() => setSelectedFile(null)}
-                  className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-                  title="Close diff"
-                >
-                  <XCircle className="h-3.5 w-3.5" />
-                </button>
-              </div>
-              <pre className="max-h-72 overflow-auto rounded-md border border-gray-200 bg-gray-50 p-3 text-[10px] leading-relaxed text-gray-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
-                {selectedPatch || 'No text diff'}
-              </pre>
+            <section>
+              <SectionTitle aside={<IconButton size="sm" icon={X} label="Close diff" onClick={() => setSelectedFile(null)} />}>
+                <span className="font-mono text-[12px] font-medium">{shortPath(selectedFile)}</span>
+              </SectionTitle>
+              {selectedPatch
+                ? <UnifiedDiffViewer diff={selectedPatch} filePath={selectedFile} className="max-h-72 overflow-y-auto" />
+                : <p className="text-[12px] text-fg-subtle">No text diff</p>}
             </section>
           )}
 
-          {!staleSandbox && <section className="mb-4">
-            <h3 className="mb-2 text-xs font-semibold text-gray-700 dark:text-slate-200">Run</h3>
+          {!staleSandbox && <section>
+            <SectionTitle>Run</SectionTitle>
             <div className="flex gap-1.5">
-              <input
+              <Input
                 value={command}
                 onChange={(e) => setCommand(e.target.value)}
-                className="min-w-0 flex-1 rounded-md border border-gray-200 bg-white px-2 py-1.5 font-mono text-xs text-gray-700 outline-none focus:border-indigo-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                aria-label="Command to run in the copy"
+                className="!h-8 min-w-0 flex-1 font-mono !text-[12px]"
                 spellCheck={false}
               />
-              <button
-                type="button"
-                disabled={busy || !command.trim()}
-                onClick={() => runAction(id => sandboxesApi.runJob(id, { command, kind: 'test' }))}
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-60 dark:bg-slate-100 dark:text-slate-950"
-                title="Run"
-              >
-                {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
-              </button>
+              <Button variant="secondary" icon={Play} loading={busy} disabled={!command.trim()} onClick={() => runAction(id => sandboxesApi.runJob(id, { command, kind: 'test' }))}>
+                Run
+              </Button>
             </div>
           </section>}
 
-          {!staleSandbox && <section className="mb-4">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <h3 className="text-xs font-semibold text-gray-700 dark:text-slate-200">Promote</h3>
-              <span className="truncate text-[10px] text-gray-400 dark:text-slate-500">{promoteScope}</span>
-            </div>
+          {!staleSandbox && <section>
+            <SectionTitle aside={<span className="truncate text-[12px] text-fg-subtle">{promoteScope}</span>}>
+              Promote
+            </SectionTitle>
             <div className="grid grid-cols-2 gap-1.5">
-              <button
-                type="button"
+              <Button
+                variant="secondary"
                 onClick={() => runAction(id => sandboxesApi.apply(id, { filePaths: promoteFilePaths, dryRun: true }))}
                 disabled={busy || !files.length}
-                className="rounded-md border border-gray-200 px-2 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900"
               >
                 Check
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="secondary"
                 onClick={() => runAction(id => sandboxesApi.createPatch(id, { filePaths: promoteFilePaths }))}
                 disabled={busy || !files.length}
-                className="rounded-md border border-gray-200 px-2 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900"
               >
                 Patch
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="secondary"
+                icon={GitBranch}
                 onClick={() => runAction(id => sandboxesApi.commitBranch(id, { filePaths: promoteFilePaths }))}
                 disabled={busy || !files.length}
-                className="inline-flex items-center justify-center gap-1 rounded-md border border-gray-200 px-2 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900"
               >
-                <GitBranch className="h-3 w-3" />
                 Branch
-              </button>
-              <button
-                type="button"
-                onClick={() => setModal({
-                  title: 'Apply changes',
+              </Button>
+              <Button
+                variant="primary"
+                icon={Check}
+                onClick={() => askThenRun({
+                  title: 'Apply changes?',
                   message: `Apply ${promoteScope} to the source workspace? This cannot be undone.`,
                   confirmLabel: 'Apply',
-                  confirmClass: 'inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-500',
-                  onConfirm: () => { setModal(null); runAction(id => sandboxesApi.apply(id, { filePaths: promoteFilePaths })); },
-                })}
+                }, id => sandboxesApi.apply(id, { filePaths: promoteFilePaths }))}
                 disabled={busy || !files.length}
-                className="inline-flex items-center justify-center gap-1 rounded-md bg-emerald-600 px-2 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-60"
               >
-                <CheckCircle2 className="h-3 w-3" />
                 Apply
-              </button>
-              <button
-                type="button"
-                onClick={() => setModal({
+              </Button>
+              <Button
+                variant="danger"
+                icon={Trash2}
+                className="col-span-2"
+                onClick={() => askThenRun({
                   title: 'Delete this copy?',
                   message: 'The copy and all its changes are deleted for good.',
                   confirmLabel: 'Delete',
-                  confirmClass: 'inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-rose-500',
-                  onConfirm: () => { setModal(null); runAction(id => sandboxesApi.delete(id, { force: true })); },
-                })}
+                  destructive: true,
+                }, id => sandboxesApi.delete(id, { force: true }))}
                 disabled={busy}
-                className="col-span-2 inline-flex items-center justify-center gap-1 rounded-md border border-rose-200 px-2 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-60 dark:border-rose-950/60 dark:text-rose-300 dark:hover:bg-rose-950/20"
               >
-                <Trash2 className="h-3 w-3" />
                 Reject
-              </button>
+              </Button>
             </div>
           </section>}
 
           <section>
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-xs font-semibold text-gray-700 dark:text-slate-200">Jobs</h3>
-              <span className="text-[10px] text-gray-400 dark:text-slate-500">{jobs.length}</span>
-            </div>
-            <div className="space-y-2">
+            <SectionTitle aside={<span className="text-[12px] tabular-nums text-fg-subtle">{jobs.length}</span>}>Jobs</SectionTitle>
+            <div className="space-y-1.5">
               {jobs.map(job => (
-                <details key={job.id} className="rounded-md border border-gray-100 bg-white p-2 dark:border-slate-800 dark:bg-slate-950/40">
-                  <summary className="cursor-pointer list-none">
-                    <div className="flex items-center gap-2">
-                      <StatusPill value={job.status} />
-                      <span className="min-w-0 flex-1 truncate font-mono text-xs text-gray-700 dark:text-slate-200">{job.command}</span>
-                      <span className="text-[10px] text-gray-400">{job.exitCode ?? '-'}</span>
-                    </div>
+                <details key={job.id} className="group rounded-lg border border-line">
+                  <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-2.5 py-1.5 hover:bg-hover [&::-webkit-details-marker]:hidden">
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-fg-subtle transition-transform group-open:rotate-90" />
+                    <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-fg">{job.command}</span>
+                    <StatusPill value={job.status} />
+                    <span className="w-5 text-right text-[11px] tabular-nums text-fg-subtle" title="Exit code">{job.exitCode ?? '-'}</span>
                   </summary>
-                  <pre className="mt-2 max-h-48 overflow-auto rounded border border-gray-200 bg-gray-50 p-2 text-[10px] leading-relaxed text-gray-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
+                  <pre className={`m-2 mt-0 max-h-48 ${PRE_CLASS}`}>
                     {[job.stdout, job.stderr].filter(Boolean).join('\n') || 'No output'}
                   </pre>
                 </details>
               ))}
               {!jobs.length && (
-                <div className="rounded-md bg-gray-50 px-3 py-3 text-center text-xs text-gray-400 dark:bg-slate-900 dark:text-slate-500">
-                  No jobs
-                </div>
+                <p className="text-[12px] text-fg-subtle">No jobs</p>
               )}
             </div>
           </section>
         </div>
       ) : (
-        <div className="flex flex-1 items-center justify-center p-6 text-center text-sm text-gray-400 dark:text-slate-500">
+        <p className="flex flex-1 items-center justify-center p-6 text-center text-[13px] text-fg-subtle">
           Pick a copy, or make one with New
-        </div>
+        </p>
       )}
     </div>
   );
