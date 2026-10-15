@@ -594,7 +594,7 @@ export const useModelsPageController = ({ runtimeOnly = false } = {}) => {
     
     // Clean up path and extract a friendly name
     const cleanPath = p.replace(/[\\/]+$/, '');
-    const name = cleanPath.split(/[\\/]/).pop().replace(/\.(gguf|bin)$/i, '') || 'Custom Model';
+    const name = cleanPath.split(/[\\/]/).pop().replace(/\.(gguf|bin)$/i, '') || 'Custom model';
     
     try {
       setSwitchingEngine('adding_path');

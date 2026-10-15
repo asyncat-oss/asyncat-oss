@@ -92,9 +92,11 @@ const ModelCard = ({
         </div>
       </div>
 
-      <div className="flex shrink-0 items-center gap-2">
-        <label className="flex h-8 items-center gap-1.5 rounded-lg border border-line bg-canvas pl-2.5 pr-1 text-[12px] text-fg-subtle focus-within:border-accent" title="How much context to load. Larger uses more memory.">
-          Context
+      {/* On a phone the context field gives way so the buttons stay inside the card. */}
+      <div className="flex items-center gap-2 sm:shrink-0">
+        <label className="flex h-8 min-w-0 flex-1 items-center gap-1.5 rounded-lg border border-line bg-canvas pl-2.5 pr-1 text-[12px] text-fg-subtle focus-within:border-accent sm:flex-none" title="How much context to load. Larger uses more memory.">
+          <span className="sm:hidden">Ctx</span>
+          <span className="hidden sm:inline">Context</span>
           <input
             type="number"
             min="512"
@@ -104,7 +106,7 @@ const ModelCard = ({
             onChange={(e) => updateModelLoadCtxSize(m.filename, e.target.value)}
             onBlur={() => commitModelLoadCtxSize(m.filename, modelContextLimit)}
             aria-label={`Context to load for ${m.name || m.filename}`}
-            className={`w-[4.5rem] bg-transparent text-right font-medium tabular-nums outline-none ${loadCtxError ? 'text-red-600 dark:text-red-400' : 'text-fg'}`}
+            className={`w-full min-w-0 bg-transparent text-right sm:w-[4.5rem] font-medium tabular-nums outline-none ${loadCtxError ? 'text-red-600 dark:text-red-400' : 'text-fg'}`}
           />
         </label>
         {isLoaded ? (
@@ -179,7 +181,7 @@ const LocalModelsPane = ({
     setSwitchError('');
     const result = await window.electronAPI.openFilesDialog({
       title: 'Choose a local model file',
-      buttonLabel: 'Choose Model',
+      buttonLabel: 'Choose model',
       multiSelections: false,
       defaultPath: quickLoadPath.trim() || undefined,
       filters: [
@@ -193,8 +195,8 @@ const LocalModelsPane = ({
   const chooseFolder = async () => {
     setSwitchError('');
     const result = await window.electronAPI.openDirectory({
-      title: 'Choose an MLX model directory',
-      buttonLabel: 'Choose Model Folder',
+      title: 'Choose an MLX model folder',
+      buttonLabel: 'Choose folder',
       defaultPath: quickLoadPath.trim() || undefined,
     });
     if (!result?.canceled && result?.filePaths?.[0]) setQuickLoadPath(result.filePaths[0]);
@@ -256,7 +258,7 @@ const LocalModelsPane = ({
         <p className="text-[13px] font-medium text-fg">Load a model from a file or folder</p>
         <p className="mt-0.5 text-[12px] text-fg-subtle">A .gguf file, or an MLX model folder, anywhere on this computer.</p>
         <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-          <label className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg border border-line-strong bg-canvas px-3 focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20">
+          <label className="flex h-9 min-w-0 items-center gap-2 rounded-lg border border-line-strong bg-canvas px-3 focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20 sm:flex-1">
             <FolderOpen className="h-4 w-4 shrink-0 text-fg-subtle" />
             <input
               type="text"
