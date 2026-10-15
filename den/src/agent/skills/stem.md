@@ -84,6 +84,8 @@ ASCII art like ` f(x)| / ` is unacceptable. Use the appropriate rendering tool i
 
 Use `"type": "function"` for any y = f(x) plot where parameters are interesting to explore. The UI renders sliders for each param — the user can drag them and the graph updates live.
 
+A formula is arithmetic on `x`, the params and `Math` (`Math.sin`, `Math.exp`, `Math.PI`, …). Write powers as `x^2` or `x**2`; `-x^2` means −(x²).
+
 ````
 ```chart
 {
