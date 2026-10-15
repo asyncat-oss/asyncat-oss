@@ -18,6 +18,7 @@ import {
   useCallback,
   useMemo,
 } from "react";
+import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import { flushSync } from "react-dom";
 import { MessageInputV2 } from "./components/input/MessageInputV2";
@@ -3474,9 +3475,10 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
       {/* Mobile overlay — only mount on non-xl screens. CSS display:none alone is not
           enough because Electron <webview> elements stay alive (play audio, run JS) even
           when hidden. By gating on !isXLScreen we guarantee only ONE webview mounts. */}
-      {!isXLScreen && shouldRenderSidePanel && (
-        // A sheet from the right edge, not a centred dialog, so it is built here.
-        <div className="fixed inset-0 z-50 flex bg-black/45 xl:hidden">
+      {!isXLScreen && shouldRenderSidePanel && createPortal(
+        // A sheet from the right edge, not a centred dialog, so it is built
+        // here. In <body>, so it covers the app rail too.
+        <div className="fixed inset-0 z-[60] flex bg-black/45 xl:hidden">
           <button
             type="button"
             className="flex-1"
@@ -3515,7 +3517,8 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
               agentTerminalOutput={agentTerminalOutput}
             />
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
     </div>
