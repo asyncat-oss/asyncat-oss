@@ -5,20 +5,23 @@ import {
   useRef,
   useCallback,
 } from "react";
-import ReactDOM from "react-dom";
 import {
   Trash2,
   CheckCircle,
   AlertCircle,
-  Clock,
   WifiOff,
-  PencilRuler,
-  Loader,
+  Keyboard,
+  Loader2,
   FileDown,
   Download,
   CircleCheck,
   CircleX,
 } from "lucide-react";
+import Button from "../../components/ui/Button.jsx";
+import IconButton from "../../components/ui/IconButton.jsx";
+import Skeleton from "../../components/ui/Skeleton.jsx";
+import { Menu, MenuItem } from "../../components/ui/Menu.jsx";
+import { useConfirm } from "../../components/confirmContext";
 import { useNoteContext } from "../context/NoteContext";
 import { attachmentsApi, notesApi } from "../noteApi";
 import ModernBlockEditor from "./ModernBlockEditor";
@@ -50,23 +53,16 @@ const ModernNoteEditor = ({ note, onBack }) => {
   const [isApplyingRemoteChanges, setIsApplyingRemoteChanges] = useState(false);
 
   // UI state
-  const [notification, setNotification] = useState(null);
   const [showShortcutsInfo, setShowShortcutsInfo] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [showDownloadDropdown, setShowDownloadDropdown] = useState(false);
+  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const [downloadStatus, setDownloadStatus] = useState("idle"); // idle, downloading, downloaded, failed
-  const [downloadMessage, setDownloadMessage] = useState("");
-  const [isDownloadDropdownClosing, setIsDownloadDropdownClosing] =
-    useState(false);
-  const [shouldRenderDownloadDropdown, setShouldRenderDownloadDropdown] =
-    useState(false);
   const [isVisibilitySaving, setIsVisibilitySaving] = useState(false);
+  const confirm = useConfirm();
 
   // References
   const editorRef = useRef(null);
   const initialStateRef = useRef({ title: "", blocks: [] });
-  const deleteTimeoutRef = useRef(null);
-  const [deleteConfirming, setDeleteConfirming] = useState(false);
   const isInitializedRef = useRef(false);
   const deltaQueueRef = useRef([]);
   const shortcutsTriggerRef = useRef(null);
@@ -567,21 +563,18 @@ const ModernNoteEditor = ({ note, onBack }) => {
     };
   }, []); // Empty dependencies - handlers use refs and closures
 
-  // Delete note
-  const handleDeleteClick = useCallback(() => {
-    if (!deleteConfirming) {
-      setDeleteConfirming(true);
-      deleteTimeoutRef.current = setTimeout(() => {
-        setDeleteConfirming(false);
-      }, 3000);
-    } else {
-      if (deleteTimeoutRef.current) {
-        clearTimeout(deleteTimeoutRef.current);
-      }
-      deleteNote(note.id);
-      onBack();
-    }
-  }, [deleteConfirming, note, deleteNote, onBack]);
+  // Delete note, once the user confirms.
+  const handleDeleteClick = useCallback(async () => {
+    const confirmed = await confirm({
+      title: "Delete this note?",
+      message: `"${title || "Untitled Note"}" and its attachments will be gone for good.`,
+      confirmLabel: "Delete",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    deleteNote(note.id);
+    onBack();
+  }, [confirm, title, note, deleteNote, onBack]);
 
   // Helper function to ensure media URLs are fresh before exporting
   const refreshMediaUrls = useCallback(
@@ -667,18 +660,6 @@ const ModernNoteEditor = ({ note, onBack }) => {
     [note?.id]
   );
 
-  // Animated close handler for download dropdown
-  const handleCloseDownloadDropdown = useCallback(() => {
-    if (!isDownloadDropdownClosing) {
-      setIsDownloadDropdownClosing(true);
-      setTimeout(() => {
-        setIsDownloadDropdownClosing(false);
-        setShouldRenderDownloadDropdown(false);
-        setShowDownloadDropdown(false);
-      }, 200); // Animation duration
-    }
-  }, [isDownloadDropdownClosing]);
-
   // Handle export with status updates
   const handleExport = useCallback(
     async (format) => {
@@ -686,8 +667,7 @@ const ModernNoteEditor = ({ note, onBack }) => {
 
       setIsExporting(true);
       setDownloadStatus("downloading");
-      setDownloadMessage("");
-      handleCloseDownloadDropdown(); // Close dropdown with animation
+      setShowDownloadMenu(false);
 
       try {
         // First, refresh all image URLs to ensure they have valid tokens
@@ -698,7 +678,6 @@ const ModernNoteEditor = ({ note, onBack }) => {
 
         // If URLs were refreshed, update the blocks state and save
         if (hasChanges) {
-          setDownloadMessage("");
           setBlocks(updatedBlocks);
           blocksRef.current = updatedBlocks;
 
@@ -717,8 +696,6 @@ const ModernNoteEditor = ({ note, onBack }) => {
             blocks: currentBlocks,
           });
         }
-
-        setDownloadMessage("");
 
         // Export the note
         let blob;
@@ -740,23 +717,19 @@ const ModernNoteEditor = ({ note, onBack }) => {
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
 
-        setDownloadMessage("");
         setDownloadStatus("downloaded");
 
         // Reset to idle after 3 seconds
         setTimeout(() => {
           setDownloadStatus("idle");
-          setDownloadMessage("");
         }, 3000);
       } catch (error) {
         console.error(`[Export] ${format.toUpperCase()} export error:`, error);
-        setDownloadMessage("Download failed");
         setDownloadStatus("failed");
 
         // Reset to idle after 3 seconds
         setTimeout(() => {
           setDownloadStatus("idle");
-          setDownloadMessage("");
         }, 3000);
       } finally {
         setIsExporting(false);
@@ -768,7 +741,6 @@ const ModernNoteEditor = ({ note, onBack }) => {
       saveNow,
       isExporting,
       refreshMediaUrls,
-      handleCloseDownloadDropdown,
     ]
   );
 
@@ -879,37 +851,9 @@ const ModernNoteEditor = ({ note, onBack }) => {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [hasChanges, note?.id]);
 
-  // Auto-hide notifications
-  useEffect(() => {
-    if (notification) {
-      const timer = setTimeout(() => setNotification(null), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [notification]);
-
-  // Handle click outside for download dropdown
-  useEffect(() => {
-    if (!showDownloadDropdown) return;
-
-    const handleClickOutside = (event) => {
-      if (
-        downloadTriggerRef.current &&
-        !downloadTriggerRef.current.contains(event.target)
-      ) {
-        handleCloseDownloadDropdown();
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [showDownloadDropdown, handleCloseDownloadDropdown]);
-
   // Cleanup
   useEffect(() => {
     return () => {
-      if (deleteTimeoutRef.current) {
-        clearTimeout(deleteTimeoutRef.current);
-      }
       cancelAutoSave();
     };
   }, [cancelAutoSave]);
@@ -918,45 +862,44 @@ const ModernNoteEditor = ({ note, onBack }) => {
   const getStatusIndicator = useCallback(() => {
     if (!isOnline) {
       return {
-        icon: <WifiOff className="w-4 h-4" />,
+        icon: <WifiOff className="h-3.5 w-3.5" />,
         text: "Offline",
-        className:
-          "text-orange-600 dark:text-orange-400 midnight:text-orange-400",
+        className: "text-amber-700 dark:text-amber-400",
       };
     }
 
     if (saveStatus === "saving" || saveStatus === "auto-saving") {
       return {
-        icon: <Clock className="w-4 h-4 animate-spin" />,
-        text: "Saving...",
-        className: "text-blue-600 dark:text-blue-400 midnight:text-indigo-400",
+        icon: <Loader2 className="h-3.5 w-3.5 animate-spin" />,
+        text: "Saving…",
+        className: "text-fg-subtle",
       };
     }
 
     if (saveStatus === "error" || lastSaveError) {
       const queueSize = getQueueSize();
       return {
-        icon: <AlertCircle className="w-4 h-4" />,
+        icon: <AlertCircle className="h-3.5 w-3.5" />,
         text: queueSize > 0 ? "Queued for sync" : "Save failed",
         className:
           queueSize > 0
-            ? "text-yellow-600 dark:text-yellow-500 midnight:text-yellow-400"
-            : "text-red-600 dark:text-red-500 midnight:text-red-400",
+            ? "text-amber-700 dark:text-amber-400"
+            : "text-red-600 dark:text-red-400",
       };
     }
 
     if (saveStatus === "saved" || saveStatus === "auto-saved") {
       return {
-        icon: <CheckCircle className="w-4 h-4" />,
+        icon: <CheckCircle className="h-3.5 w-3.5" />,
         text: "Saved",
-        className: "text-green-600 dark:text-green-500 midnight:text-green-400",
+        className: "text-fg-subtle",
       };
     }
 
     return {
-      icon: <CheckCircle className="w-4 h-4" />,
+      icon: <CheckCircle className="h-3.5 w-3.5" />,
       text: "Up to date",
-      className: "text-gray-600 dark:text-gray-500 midnight:text-gray-400",
+      className: "text-fg-subtle",
     };
   }, [isOnline, saveStatus, lastSaveError, getQueueSize]);
 
@@ -978,68 +921,23 @@ const ModernNoteEditor = ({ note, onBack }) => {
   // Loading skeleton
   if (!note || !isContentLoaded || !isInitializedRef.current) {
     return (
-      <div className="flex h-full bg-white dark:bg-gray-900 midnight:bg-gray-950 transition-colors duration-200">
-        <div className="flex-1 flex flex-col">
-          <div className="flex items-center justify-between px-6 py-4">
-            <div className="flex items-center gap-3 animate-pulse [animation-duration:2s]">
-              <div className="w-10 h-10 bg-gray-100 dark:bg-gray-800/50 midnight:bg-gray-900/50 rounded-lg"></div>
-              <div className="w-10 h-10 bg-gray-100 dark:bg-gray-800/50 midnight:bg-gray-900/50 rounded-lg"></div>
-            </div>
-
-            <div className="flex items-center gap-4 animate-pulse [animation-duration:2s]">
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 bg-gray-100 dark:bg-gray-800/50 midnight:bg-gray-900/50 rounded"></div>
-                <div className="w-20 h-4 bg-gray-100 dark:bg-gray-800/50 midnight:bg-gray-900/50 rounded"></div>
-              </div>
-              <div className="w-16 h-8 bg-gray-100 dark:bg-gray-800/50 midnight:bg-gray-900/50 rounded-lg"></div>
-            </div>
-          </div>
-
-          <div className="flex-1">
-            <div className="max-w-4xl mx-auto px-8 py-6 animate-pulse [animation-duration:2s]">
-              <div className="mb-8">
-                <div className="w-2/3 h-12 bg-gray-100 dark:bg-gray-800/30 midnight:bg-gray-900/30 rounded-lg"></div>
-              </div>
-
-              <div className="space-y-6">
-                <div className="w-full h-6 bg-gray-100 dark:bg-gray-800/30 midnight:bg-gray-900/30 rounded"></div>
-                <div className="w-5/6 h-6 bg-gray-100 dark:bg-gray-800/30 midnight:bg-gray-900/30 rounded"></div>
-
-                <div className="flex items-start gap-2">
-                  <div className="w-2 h-2 bg-gray-200 dark:bg-gray-800/40 midnight:bg-gray-900/40 rounded-full mt-2"></div>
-                  <div className="w-3/4 h-6 bg-gray-100 dark:bg-gray-800/30 midnight:bg-gray-900/30 rounded"></div>
-                </div>
-                <div className="flex items-start gap-2">
-                  <div className="w-2 h-2 bg-gray-200 dark:bg-gray-800/40 midnight:bg-gray-900/40 rounded-full mt-2"></div>
-                  <div className="w-2/3 h-6 bg-gray-100 dark:bg-gray-800/30 midnight:bg-gray-900/30 rounded"></div>
-                </div>
-
-                <div className="w-1/2 h-8 bg-gray-100 dark:bg-gray-800/30 midnight:bg-gray-900/30 rounded mt-8"></div>
-                <div className="w-full h-6 bg-gray-100 dark:bg-gray-800/30 midnight:bg-gray-900/30 rounded"></div>
-                <div className="w-4/5 h-6 bg-gray-100 dark:bg-gray-800/30 midnight:bg-gray-900/30 rounded"></div>
-
-                <div className="flex gap-3 mt-6">
-                  <div className="w-1 h-12 bg-gray-200 dark:bg-gray-800/40 midnight:bg-gray-900/40 rounded-full"></div>
-                  <div className="flex-1 space-y-3">
-                    <div className="w-5/6 h-6 bg-gray-100 dark:bg-gray-800/30 midnight:bg-gray-900/30 rounded"></div>
-                    <div className="w-3/4 h-6 bg-gray-100 dark:bg-gray-800/30 midnight:bg-gray-900/30 rounded"></div>
-                  </div>
-                </div>
-
-                <div className="w-full h-6 bg-gray-100 dark:bg-gray-800/30 midnight:bg-gray-900/30 rounded"></div>
-                <div className="w-3/5 h-6 bg-gray-100 dark:bg-gray-800/30 midnight:bg-gray-900/30 rounded"></div>
-
-                <div className="bg-gray-50 dark:bg-gray-800/20 midnight:bg-gray-900/20 rounded-lg p-3 mt-6">
-                  <div className="space-y-2">
-                    <div className="w-1/4 h-4 bg-gray-100 dark:bg-gray-800/30 midnight:bg-gray-900/30 rounded"></div>
-                    <div className="w-2/3 h-4 bg-gray-100 dark:bg-gray-800/30 midnight:bg-gray-900/30 rounded"></div>
-                  </div>
-                </div>
-
-                <div className="w-full h-6 bg-gray-100 dark:bg-gray-800/30 midnight:bg-gray-900/30 rounded"></div>
-              </div>
-            </div>
-          </div>
+      <div className="flex h-full flex-col bg-canvas" aria-busy="true">
+        <div className="flex items-center justify-end gap-2 border-b border-line px-3 py-2">
+          <Skeleton className="h-4 w-20" />
+          <Skeleton className="h-8 w-24" />
+          <Skeleton className="h-8 w-20" />
+          <Skeleton className="h-8 w-8" />
+        </div>
+        <div className="mx-auto w-full max-w-4xl space-y-5 px-6 py-10 sm:px-8">
+          <Skeleton className="h-10 w-2/3" />
+          <Skeleton className="h-5 w-full" />
+          <Skeleton className="h-5 w-5/6" />
+          <Skeleton className="h-5 w-3/4" />
+          <Skeleton className="mt-8 h-7 w-1/2" />
+          <Skeleton className="h-5 w-full" />
+          <Skeleton className="h-5 w-4/5" />
+          <Skeleton className="h-16 w-full rounded-xl" />
+          <Skeleton className="h-5 w-3/5" />
         </div>
       </div>
     );
@@ -1048,171 +946,107 @@ const ModernNoteEditor = ({ note, onBack }) => {
   const statusIndicator = getStatusIndicator();
 
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-gray-900 midnight:bg-gray-950 transition-colors duration-200">
-      {/* Header - Full Width */}
+    <div className="flex h-full flex-col bg-canvas text-fg">
+      {/* Header */}
       <div
-        className="flex-shrink-0 z-50 flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800 midnight:border-gray-900 bg-white dark:bg-gray-900 midnight:bg-gray-950"
+        className="flex flex-shrink-0 items-center justify-end gap-1 border-b border-line bg-canvas px-3 py-2"
         style={{ userSelect: "none" }}
       >
-        <div className="flex items-center gap-3" />
-
-        <div className="flex items-center gap-4">
-
-          <div className="flex items-center gap-2">
-            {/* Status Indicator */}
-            {statusIndicator && (
-              <div
-                className={`flex items-center gap-2 text-xs font-medium ${statusIndicator.className}`}
-              >
-                {statusIndicator.icon}
-                <span className="hidden sm:inline">{statusIndicator.text}</span>
-              </div>
-            )}
-
-            {/* Download Button with Dropdown */}
-            <div className="relative">
-              <button
-                ref={downloadTriggerRef}
-                onClick={() => {
-                  if (downloadStatus === "idle" && !isExporting) {
-                    if (showDownloadDropdown) {
-                      handleCloseDownloadDropdown();
-                    } else {
-                      setShowDownloadDropdown(true);
-                      setShouldRenderDownloadDropdown(true);
-                    }
-                  }
-                }}
-                disabled={isExporting}
-                className={`px-3 py-1.5 rounded-lg flex items-center gap-2 text-sm font-medium transition-all ${
-                  downloadStatus === "downloading"
-                    ? "text-blue-600 dark:text-blue-400 midnight:text-blue-500"
-                    : downloadStatus === "downloaded"
-                    ? "text-green-600 dark:text-green-500 midnight:text-green-400"
-                    : downloadStatus === "failed"
-                    ? "text-red-600 dark:text-red-500 midnight:text-red-400"
-                    : "text-gray-600 dark:text-gray-500 midnight:text-slate-400 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-900"
-                }`}
-                title="Download Note"
-              >
-                {downloadStatus === "downloading" && (
-                  <>
-                    <Loader className="w-4 h-4 animate-spin" />
-                    <div className="flex flex-col leading-tight">
-                      <span>Downloading...</span>
-                      {downloadMessage && (
-                        <span className="text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">
-                          {downloadMessage}
-                        </span>
-                      )}
-                    </div>
-                  </>
-                )}
-                {downloadStatus === "downloaded" && (
-                  <>
-                    <CircleCheck className="w-4 h-4" />
-                    <span>Downloaded</span>
-                  </>
-                )}
-                {downloadStatus === "failed" && (
-                  <>
-                    <CircleX className="w-4 h-4" />
-                    <span>Download failed</span>
-                  </>
-                )}
-                {downloadStatus === "idle" && (
-                  <>
-                    <Download className="w-4 h-4" />
-                    <span>Download</span>
-                  </>
-                )}
-              </button>
-
-              {shouldRenderDownloadDropdown && downloadStatus === "idle" && (
-                <div
-                  className="absolute left-[-1.5rem] top-6.5 mt-2 w-42 bg-white dark:bg-gray-800 midnight:bg-gray-900 border border-gray-200 dark:border-gray-700 midnight:border-gray-800 rounded-lg shadow-lg z-50"
-                  style={{
-                    animation: isDownloadDropdownClosing
-                      ? "fadeOutUp 0.2s ease-in forwards"
-                      : "fadeInDown 0.24s ease-out",
-                  }}
-                  onMouseDown={(e) => {
-                    e.stopPropagation();
-                  }}
-                >
-                  <button
-                    onClick={() => handleExport("pdf")}
-                    className="w-full px-4 py-2.5 text-left flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 midnight:hover:bg-gray-800 rounded-t-lg text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-200 transition-colors"
-                  >
-                    <FileDown className="w-4 h-4 text-purple-600 dark:text-purple-400 midnight:text-purple-500" />
-                    <span>Export as PDF</span>
-                  </button>
-                  {/* <button
-                    onClick={() => handleExport("docx")}
-                    className="w-full px-4 py-2.5 text-left flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 midnight:hover:bg-gray-800 rounded-b-lg text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-200 transition-colors"
-                  >
-                    <FileText className="w-4 h-4 text-blue-600 dark:text-blue-400 midnight:text-blue-500" />
-                    <span>Export as DOCX</span>
-                  </button> */}
-                </div>
-              )}
-            </div>
-
-            {/* Delete Button */}
-            <button
-              onClick={handleDeleteClick}
-              className={`px-3 py-1.5 rounded-lg flex items-center gap-2 text-sm font-medium transition-all ${
-                deleteConfirming
-                  ? "bg-red-600 dark:bg-red-700 midnight:bg-red-800 text-white hover:bg-red-700 dark:hover:bg-red-800 midnight:hover:bg-red-900"
-                  : "text-red-600 dark:text-red-400 midnight:text-red-500 hover:bg-red-50 dark:hover:bg-red-950 midnight:hover:bg-red-950/50"
-              }`}
-            >
-              <Trash2 className="w-4 h-4" />
-              {deleteConfirming ? "Confirm?" : "Delete"}
-            </button>
-
-            {/* Help Button with Dropdown */}
-            <div className="relative">
-              <button
-                ref={shortcutsTriggerRef}
-                onClick={() => {
-                  if (!showShortcutsInfo) {
-                    setShowShortcutsInfo(true);
-                  }
-                  // If dropdown is open, let the dropdown's click-outside logic handle closing
-                }}
-                className={`p-2 rounded-lg transition-colors ${
-                  showShortcutsInfo
-                    ? "bg-blue-100 dark:bg-blue-900/50 midnight:bg-blue-900/30 text-blue-600 dark:text-blue-500 midnight:text-blue-400"
-                    : "hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-gray-700 text-gray-600 dark:text-gray-400 midnight:text-slate-300"
-                }`}
-                title="Toggle keyboard shortcuts"
-              >
-                <PencilRuler className="w-4.5 h-4.5" />
-              </button>
-
-              {/* Keyboard Shortcuts Dropdown */}
-              <KeyboardShortcutsDropdown
-                isVisible={showShortcutsInfo}
-                onClose={() => setShowShortcutsInfo(false)}
-                triggerRef={shortcutsTriggerRef}
-              />
-            </div>
-
+        {statusIndicator && (
+          <div
+            className={`mr-1 flex items-center gap-1.5 text-[12px] ${statusIndicator.className}`}
+            title={statusIndicator.text}
+          >
+            {statusIndicator.icon}
+            <span className="hidden sm:inline">{statusIndicator.text}</span>
           </div>
-        </div>
+        )}
+
+        {/* Download, with a menu of formats */}
+        {downloadStatus === "idle" ? (
+          <Button
+            ref={downloadTriggerRef}
+            variant="ghost"
+            icon={Download}
+            onClick={() => setShowDownloadMenu((open) => !open)}
+            disabled={isExporting}
+            aria-haspopup="menu"
+            aria-expanded={showDownloadMenu}
+            title="Download note"
+          >
+            <span className="hidden sm:inline">Download</span>
+          </Button>
+        ) : (
+          <div
+            role="status"
+            className={`flex h-8 items-center gap-1.5 px-3 text-[13px] font-medium ${
+              downloadStatus === "downloaded"
+                ? "text-emerald-700 dark:text-emerald-400"
+                : downloadStatus === "failed"
+                ? "text-red-600 dark:text-red-400"
+                : "text-fg-muted"
+            }`}
+          >
+            {downloadStatus === "downloading" && (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            )}
+            {downloadStatus === "downloaded" && (
+              <CircleCheck className="h-3.5 w-3.5" />
+            )}
+            {downloadStatus === "failed" && <CircleX className="h-3.5 w-3.5" />}
+            <span>
+              {downloadStatus === "downloading"
+                ? "Downloading…"
+                : downloadStatus === "downloaded"
+                ? "Downloaded"
+                : "Download failed"}
+            </span>
+          </div>
+        )}
+        <Menu
+          anchorRef={downloadTriggerRef}
+          open={showDownloadMenu && downloadStatus === "idle"}
+          onClose={() => setShowDownloadMenu(false)}
+          placement="bottom-end"
+          width={200}
+          label="Download"
+        >
+          <MenuItem
+            icon={FileDown}
+            label="Export as PDF"
+            onSelect={() => handleExport("pdf")}
+          />
+        </Menu>
+
+        <Button
+          variant="danger"
+          icon={Trash2}
+          onClick={handleDeleteClick}
+          aria-label="Delete note"
+          title="Delete note"
+        >
+          <span className="hidden sm:inline">Delete</span>
+        </Button>
+
+        <IconButton
+          ref={shortcutsTriggerRef}
+          icon={Keyboard}
+          label="Keyboard shortcuts"
+          side="bottom"
+          aria-expanded={showShortcutsInfo}
+          className={showShortcutsInfo ? "bg-selected text-fg" : ""}
+          onClick={() => setShowShortcutsInfo((open) => !open)}
+        />
+        <KeyboardShortcutsDropdown
+          isVisible={showShortcutsInfo}
+          onClose={() => setShowShortcutsInfo(false)}
+          triggerRef={shortcutsTriggerRef}
+        />
       </div>
 
-      {/* Content Area - Editor and Version Panel Side by Side */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Editor Content */}
-        <div
-          className="flex-1 overflow-y-auto editor-fullscreen"
-          style={{
-            transition: "margin 350ms cubic-bezier(0.4, 0.0, 0.2, 1)",
-            marginRight: "0px",
-          }}
-        >
+      {/* Content */}
+      <div className="relative flex flex-1 overflow-hidden">
+        <div className="flex-1 overflow-y-auto editor-fullscreen">
           <NoteBanner
             note={note}
             onBannerChange={(bannerData) => {
@@ -1243,147 +1077,31 @@ const ModernNoteEditor = ({ note, onBack }) => {
             isEditable={true}
           />
 
-          <div className="relative">
-            <div className="block">
-              <ModernBlockEditor
-                ref={editorRef}
-                title={title}
-                onTitleChange={handleTitleChange}
-                initialBlocks={blocks}
-                onContentChange={handleContentChange}
-                onDeltaChange={handleDeltaChange}
-                placeholder="Type '/' for commands..."
-                noteId={note?.id}
-              />
+          <ModernBlockEditor
+            ref={editorRef}
+            title={title}
+            onTitleChange={handleTitleChange}
+            initialBlocks={blocks}
+            onContentChange={handleContentChange}
+            onDeltaChange={handleDeltaChange}
+            placeholder="Type '/' for commands..."
+            noteId={note?.id}
+          />
+        </div>
+
+        {/* Back on the page: the latest version is loading, so nothing typed now is lost. */}
+        {isVisibilitySaving && (
+          <div className="absolute inset-0 z-20 flex items-start justify-center bg-canvas/70 pt-24">
+            <div
+              role="status"
+              className="flex items-center gap-2 rounded-xl border border-line bg-elevated px-4 py-2.5 text-[13px] text-fg-muted shadow-sm"
+            >
+              <Loader2 className="h-4 w-4 animate-spin text-fg-subtle" />
+              Loading the latest version…
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* Visibility-triggered Autosave Overlay - using portal to render above everything */}
-      {isVisibilitySaving &&
-        ReactDOM.createPortal(
-          <div className="fixed inset-0 z-[20000] flex items-center justify-center bg-black/40 dark:bg-black/60 midnight:bg-black/70 backdrop-blur-sm">
-            <div className="flex flex-col items-center gap-4 px-8 py-6 bg-white dark:bg-slate-800 midnight:bg-slate-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-slate-700 midnight:border-slate-800">
-              <div className="relative flex items-center justify-center">
-                {/* Background circle (light) */}
-                <div className="w-12 h-12 border-4 border-blue-200 dark:border-blue-900/40 midnight:border-blue-950/40 rounded-full"></div>
-
-                {/* Spinning circle with visible gradient effect */}
-                <div
-                  className="absolute top-0 left-0 w-12 h-12 rounded-full animate-spin"
-                  style={{
-                    animationDuration: "0.8s",
-                    border: "3px solid transparent",
-                    borderTopColor: "#3b82f6",
-                    borderRightColor: "#60a5fa",
-                    borderBottomColor: "transparent",
-                    borderLeftColor: "transparent",
-                  }}
-                ></div>
-              </div>
-              <div className="text-center">
-                <h3 className="text-xl font-semibold text-gray-900 dark:text-slate-100 midnight:text-slate-50 mb-1">
-                  Loading The Latest Note Version...
-                </h3>
-              </div>
-            </div>
-          </div>,
-          document.body
         )}
-
-      {/* Enhanced Notifications */}
-      {notification && (
-        <div
-          className={`fixed top-4 right-4 px-4 py-3 rounded-lg shadow-lg z-50 flex items-center gap-2 transition-all duration-300 ${
-            notification.type === "success"
-              ? "bg-green-100 text-green-800 dark:bg-green-900/80 dark:text-green-200 midnight:bg-green-950/90 midnight:text-green-300"
-              : notification.type === "error"
-              ? "bg-red-100 text-red-800 dark:bg-red-900/80 dark:text-red-200 midnight:bg-red-950/90 midnight:text-red-300"
-              : notification.type === "warning"
-              ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/80 dark:text-yellow-200 midnight:bg-yellow-950/90 midnight:text-yellow-300"
-              : "bg-blue-100 text-blue-800 dark:bg-blue-900/80 dark:text-blue-200 midnight:bg-blue-950/90 midnight:text-blue-300"
-          }`}
-          style={{
-            animation: "slideInRight 0.3s ease-out",
-          }}
-        >
-          {notification.type === "success" && (
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-              <path
-                fillRule="evenodd"
-                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                clipRule="evenodd"
-              />
-            </svg>
-          )}
-          {notification.type === "error" && (
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-              <path
-                fillRule="evenodd"
-                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                clipRule="evenodd"
-              />
-            </svg>
-          )}
-          {notification.type === "warning" && (
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-              <path
-                fillRule="evenodd"
-                d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                clipRule="evenodd"
-              />
-            </svg>
-          )}
-          {notification.type === "info" && (
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-              <path
-                fillRule="evenodd"
-                d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                clipRule="evenodd"
-              />
-            </svg>
-          )}
-          <span className="text-sm font-medium">{notification.message}</span>
-        </div>
-      )}
-
-      <style>{`
-        @keyframes slideInRight {
-          from {
-            transform: translateX(100%);
-            opacity: 0;
-          }
-          to {
-            transform: translateX(0);
-            opacity: 1;
-          }
-        }
-
-        @keyframes fadeInDown {
-          from {
-            opacity: 0;
-            transform: translateY(-12px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        @keyframes fadeOutUp {
-          from {
-            opacity: 1;
-            transform: translateY(0);
-          }
-          to {
-            opacity: 0;
-            transform: translateY(-12px);
-          }
-        }
-      `}</style>
-
-     
+      </div>
     </div>
   );
 };

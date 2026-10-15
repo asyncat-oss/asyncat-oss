@@ -1,119 +1,41 @@
-import React, { useEffect, useRef, useState, useCallback } from "react";
+// The note's keyboard shortcuts, in a panel under the header's keyboard button.
+
+import { Fragment } from "react";
+import PropTypes from "prop-types";
 import {
   ArrowDown,
   ArrowLeft,
   ArrowRight,
   ArrowUp,
   Command as CommandIcon,
-  Keyboard,
 } from "lucide-react";
+import Popover from "../../../components/ui/Popover.jsx";
 
 const KeyboardShortcutsDropdown = ({ isVisible, onClose, triggerRef }) => {
-  const dropdownRef = useRef(null);
-  const [isClosing, setIsClosing] = useState(false);
-  const [shouldRender, setShouldRender] = useState(false);
-
-  // Handle animated close
-  const handleClose = useCallback(() => {
-    if (!isClosing) {
-      setIsClosing(true);
-      setTimeout(() => {
-        setIsClosing(false);
-        setShouldRender(false);
-        onClose();
-      }, 200); // Animation duration
-    }
-  }, [onClose, isClosing]);
-
-  // Handle visibility changes
-  useEffect(() => {
-    if (isVisible) {
-      setShouldRender(true);
-      setIsClosing(false);
-    }
-  }, [isVisible]);
-
-  // Handle click outside to close
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      // Check if click is outside dropdown
-      const isOutsideDropdown =
-        dropdownRef.current && !dropdownRef.current.contains(event.target);
-      const isOnTrigger =
-        triggerRef?.current && triggerRef.current.contains(event.target);
-
-      if (isOutsideDropdown) {
-        if (isOnTrigger) {
-          // If clicking on trigger while dropdown is open, close it
-          handleClose();
-        } else {
-          // If clicking outside, close it
-          handleClose();
-        }
-      }
-    };
-
-    const handleEscape = (event) => {
-      if (event.key === "Escape") {
-        handleClose();
-      }
-    };
-
-    if (isVisible) {
-      document.addEventListener("mousedown", handleClickOutside);
-      document.addEventListener("keydown", handleEscape);
-    }
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [isVisible, handleClose]);
-
-  if (!shouldRender) return null;
-
   const shortcuts = [
     {
       category: "Navigation",
       shortcuts: [
-        { keys: ["↑", "↓", "←", "→"], description: "Navigate Between Blocks" },
-        { keys: ["tab"], description: "Navigate Cells in Tables" },
-        { keys: ["Escape"], description: "Close Fullscreen Image" },
+        { keys: ["↑", "↓", "←", "→"], description: "Move between blocks" },
+        { keys: ["tab"], description: "Move between table cells" },
+        { keys: ["Escape"], description: "Close a full-screen image" },
       ],
     },
-    // {
-    //   category: "Version History",
-    //   shortcuts: [
-    //     {
-    //       keys: ["Ctrl", "Alt", "Shift", "H"],
-    //       description: "Toggle Version History",
-    //       mac: ["⌘", "Option", "Shift", "H"],
-    //     },
-    //     {
-    //       keys: ["↑", "↓"],
-    //       description: "Navigate Versions",
-    //     },
-    //     {
-    //       keys: ["Esc"],
-    //       description: "Close Version Comparison View",
-    //     },
-    //   ],
-    // },
     {
-      category: "Text Input",
+      category: "Typing",
       shortcuts: [
         {
           keys: ["Enter"],
-          description: "Create New Block (Exit List if Empty)",
+          description: "New block (leaves an empty list)",
         },
         {
           keys: ["Shift", "Enter"],
-          description: "New Line",
+          description: "New line",
           mac: ["Shift", "Enter"],
         },
         {
           keys: ["Shift", "Tab"],
-          description: "Create Subpoint in List",
+          description: "Indent a list item",
           mac: ["Shift", "Tab"],
         },
       ],
@@ -121,17 +43,17 @@ const KeyboardShortcutsDropdown = ({ isVisible, onClose, triggerRef }) => {
     {
       category: "Formatting",
       shortcuts: [
-        { keys: ["Ctrl", "B"], description: "Bold Text", mac: ["⌘", "B"] },
-        { keys: ["Ctrl", "I"], description: "Italic Text", mac: ["⌘", "I"] },
-        { keys: ["Ctrl", "U"], description: "Underline Text", mac: ["⌘", "U"] },
+        { keys: ["Ctrl", "B"], description: "Bold", mac: ["⌘", "B"] },
+        { keys: ["Ctrl", "I"], description: "Italic", mac: ["⌘", "I"] },
+        { keys: ["Ctrl", "U"], description: "Underline", mac: ["⌘", "U"] },
         {
           keys: ["Ctrl", "Shift", "S"],
-          description: "Strikethrough Text",
+          description: "Strikethrough",
           mac: ["⌘", "Shift", "S"],
         },
         {
           keys: ["Ctrl", "Shift", "H"],
-          description: "Highlight Text",
+          description: "Highlight",
           mac: ["⌘", "Shift", "H"],
         },
       ],
@@ -146,36 +68,36 @@ const KeyboardShortcutsDropdown = ({ isVisible, onClose, triggerRef }) => {
     },
 
     {
-      category: "Block Actions",
+      category: "Blocks",
       shortcuts: [
         {
           keys: ["Ctrl", "D"],
-          description: "Duplicate Block",
+          description: "Duplicate block",
           mac: ["⌘", "D"],
         },
         {
           keys: ["Ctrl", "Shift", "D"],
-          description: "Delete Block",
+          description: "Delete block",
           mac: ["⌘", "Shift", "D"],
         },
         {
           keys: ["Ctrl", "Delete"],
-          description: "Clear Block Content",
+          description: "Clear block",
           mac: ["⌘", "Delete"],
         },
         {
           keys: ["Ctrl", "A", "A", "Delete"],
-          description: "Clear All Content",
+          description: "Clear the whole note",
           mac: ["⌘", "A", "A", "Delete"],
         },
         {
           keys: ["Alt", "↑"],
-          description: "Move Block Up",
+          description: "Move block up",
           mac: ["Option", "↑"],
         },
         {
           keys: ["Alt", "↓"],
-          description: "Move Block Down",
+          description: "Move block down",
           mac: ["Option", "↓"],
         },
       ],
@@ -185,36 +107,36 @@ const KeyboardShortcutsDropdown = ({ isVisible, onClose, triggerRef }) => {
       shortcuts: [
         {
           keys: ["Ctrl", "A"],
-          description: "Select Text in Block",
+          description: "Select text in block",
           mac: ["⌘", "A"],
         },
         {
           keys: ["Ctrl", "A", "A"],
-          description: "Select All Blocks",
+          description: "Select all blocks",
           mac: ["⌘", "A", "A"],
         },
         {
           keys: ["Ctrl", "Shift", "A"],
-          description: "Select Entire Table",
+          description: "Select the whole table",
           mac: ["⌘", "Shift", "A"],
         },
       ],
     },
     {
       category: "Commands",
-      shortcuts: [{ keys: ["/"], description: "Open Command Menu" }],
+      shortcuts: [{ keys: ["/"], description: "Open the block menu" }],
     },
     {
       category: "History",
       shortcuts: [
-        { keys: ["Ctrl", "Z"], description: "Undo in Block", mac: ["⌘", "Z"] },
-        { keys: ["Ctrl", "Y"], description: "Redo in Block", mac: ["⌘", "Y"] },
+        { keys: ["Ctrl", "Z"], description: "Undo", mac: ["⌘", "Z"] },
+        { keys: ["Ctrl", "Y"], description: "Redo", mac: ["⌘", "Y"] },
       ],
     },
     {
-      category: "Save & View",
+      category: "Saving",
       shortcuts: [
-        { keys: ["Ctrl", "S"], description: "Save Note", mac: ["⌘", "S"] },
+        { keys: ["Ctrl", "S"], description: "Save now", mac: ["⌘", "S"] },
       ],
     },
   ];
@@ -224,24 +146,24 @@ const KeyboardShortcutsDropdown = ({ isVisible, onClose, triggerRef }) => {
   const getKeyDisplay = (key) => {
     const normalized = String(key).trim();
     const lower = normalized.toLowerCase();
-    const iconClassName = "h-3.5 w-3.5";
+    const iconClassName = "h-3 w-3";
 
     const iconMap = {
-      command: <CommandIcon className={iconClassName} strokeWidth={3.2} />,
-      cmd: <CommandIcon className={iconClassName} strokeWidth={3.2} />,
-      "⌘": <CommandIcon className={iconClassName} strokeWidth={3.2} />,
-      arrowup: <ArrowUp className={iconClassName} strokeWidth={3.2} />,
-      arrowdown: <ArrowDown className={iconClassName} strokeWidth={3.2} />,
-      arrowleft: <ArrowLeft className={iconClassName} strokeWidth={3.2} />,
-      arrowright: <ArrowRight className={iconClassName} strokeWidth={3.2} />,
-      up: <ArrowUp className={iconClassName} strokeWidth={3.2} />,
-      down: <ArrowDown className={iconClassName} strokeWidth={3.2} />,
-      left: <ArrowLeft className={iconClassName} strokeWidth={3.2} />,
-      right: <ArrowRight className={iconClassName} strokeWidth={3.2} />,
-      "↑": <ArrowUp className={iconClassName} strokeWidth={3.2} />,
-      "↓": <ArrowDown className={iconClassName} strokeWidth={3.2} />,
-      "←": <ArrowLeft className={iconClassName} strokeWidth={3.2} />,
-      "→": <ArrowRight className={iconClassName} strokeWidth={3.2} />,
+      command: <CommandIcon className={iconClassName} strokeWidth={2.25} />,
+      cmd: <CommandIcon className={iconClassName} strokeWidth={2.25} />,
+      "⌘": <CommandIcon className={iconClassName} strokeWidth={2.25} />,
+      arrowup: <ArrowUp className={iconClassName} strokeWidth={2.25} />,
+      arrowdown: <ArrowDown className={iconClassName} strokeWidth={2.25} />,
+      arrowleft: <ArrowLeft className={iconClassName} strokeWidth={2.25} />,
+      arrowright: <ArrowRight className={iconClassName} strokeWidth={2.25} />,
+      up: <ArrowUp className={iconClassName} strokeWidth={2.25} />,
+      down: <ArrowDown className={iconClassName} strokeWidth={2.25} />,
+      left: <ArrowLeft className={iconClassName} strokeWidth={2.25} />,
+      right: <ArrowRight className={iconClassName} strokeWidth={2.25} />,
+      "↑": <ArrowUp className={iconClassName} strokeWidth={2.25} />,
+      "↓": <ArrowDown className={iconClassName} strokeWidth={2.25} />,
+      "←": <ArrowLeft className={iconClassName} strokeWidth={2.25} />,
+      "→": <ArrowRight className={iconClassName} strokeWidth={2.25} />,
     };
 
     if (iconMap[normalized]) {
@@ -282,113 +204,65 @@ const KeyboardShortcutsDropdown = ({ isVisible, onClose, triggerRef }) => {
   };
 
   return (
-    <div
-      ref={dropdownRef}
-      className="absolute top-full right-[-1.2rem] mt-0.5 z-50 w-[22rem] sm:w-[26rem] max-h-[82vh] overflow-hidden rounded-2xl border border-white/60 bg-white shadow-[0_22px_50px_-25px_rgba(15,23,42,0.55)] backdrop-blur-xl dark:border-slate-700/60 dark:bg-slate-800 midnight:border-slate-800/60 midnight:bg-slate-900"
-      style={{
-        animation: isClosing
-          ? "fadeOutUp 0.2s ease-in forwards"
-          : "fadeInDown 0.24s ease-out",
-      }}
+    <Popover
+      anchorRef={triggerRef}
+      open={Boolean(isVisible)}
+      onClose={onClose}
+      placement="bottom-end"
+      width={360}
+      label="Keyboard shortcuts"
+      className="max-h-[70vh]"
     >
-      <div className="relative">
-        {/* Header */}
-        <div className="relative flex items-start justify-between px-5 pb-4 pt-5">
-          <div className="flex items-center gap-3">
-            <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-400 bg-white/80 text-cyan-500 dark:border-cyan-400/80 dark:bg-slate-900/65 dark:text-cyan-300 midnight:border-cyan-400/80 midnight:bg-slate-900/65 midnight:text-cyan-300">
-              <Keyboard className="h-5 w-5" strokeWidth={1.75} />
-            </span>
-            <div className="space-y-1">
-              <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-300 midnight:text-slate-100">
-                Keyboard Shortcuts
-              </h3>
-            </div>
-          </div>
-        </div>
+      <h3 className="px-1 text-[13px] font-semibold text-fg">
+        Keyboard shortcuts
+      </h3>
+      <div className="space-y-4 px-1 pb-1 pt-3">
+        {shortcuts.map((category) => (
+          <section key={category.category}>
+            <h4 className="mb-1 text-[12px] text-fg-subtle">{category.category}</h4>
+            <ul>
+              {category.shortcuts.map((shortcut) => {
+                const keysToUse =
+                  isMac && shortcut.mac ? shortcut.mac : shortcut.keys;
 
-        {/* Content */}
-        <div className="relative max-h-[70vh] overflow-y-auto px-5 pb-5">
-          <div className="space-y-5 pb-2">
-            {shortcuts.map((category, categoryIndex) => (
-              <section
-                key={categoryIndex}
-                className="rounded-xl border border-slate-200/60 bg-white/80 px-4 py-4 shadow-sm dark:border-slate-700/60 dark:bg-slate-900/60 midnight:border-slate-800/60 midnight:bg-slate-900/60"
-              >
-                <header className="mb-3">
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 midnight:text-slate-300">
-                    {category.category}
-                  </h4>
-                </header>
-                <ul className="space-y-2">
-                  {category.shortcuts.map((shortcut, shortcutIndex) => {
-                    const keysToUse =
-                      isMac && shortcut.mac ? shortcut.mac : shortcut.keys;
-
-                    return (
-                      <li
-                        key={shortcutIndex}
-                        className="flex items-center justify-between rounded-lg border border-slate-300/70 bg-slate-50/70 px-3 py-2 backdrop-blur-sm dark:border-slate-600/70 dark:bg-slate-800/40 midnight:border-slate-700/70 midnight:bg-slate-900/40"
-                      >
-                        <span className="text-[13px] font-medium text-slate-600 dark:text-slate-300 midnight:text-slate-200">
-                          {shortcut.description}
-                        </span>
-                        <div className="ml-4 flex flex-shrink-0 items-center gap-1">
-                          {keysToUse.map((key, keyIndex) => {
-                            const { content, isIcon } = getKeyDisplay(key);
-
-                            return (
-                              <React.Fragment key={keyIndex}>
-                                <span
-                                  className={`inline-flex items-center justify-center gap-1 rounded-lg border border-slate-300/70 bg-white/80 px-2 py-1 font-mono text-[11px] font-semibold text-slate-600 shadow-sm dark:border-slate-600/70 dark:bg-slate-900/70 dark:text-slate-200 midnight:border-slate-700/70 midnight:bg-slate-900/70 midnight:text-slate-200 ${
-                                    isIcon ? "min-w-[2.35rem]" : ""
-                                  }`}
-                                >
-                                  {content}
-                                </span>
-                                {keyIndex < keysToUse.length - 1 && (
-                                  <span className="text-[10px] font-semibold text-slate-300 dark:text-slate-500 midnight:text-slate-400">
-                                    +
-                                  </span>
-                                )}
-                              </React.Fragment>
-                            );
-                          })}
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
-            ))}
-          </div>
-        </div>
+                return (
+                  <li
+                    key={shortcut.description}
+                    className="flex items-center justify-between gap-4 py-1"
+                  >
+                    <span className="text-[13px] text-fg-muted">
+                      {shortcut.description}
+                    </span>
+                    <span className="flex flex-shrink-0 items-center gap-1">
+                      {keysToUse.map((key, keyIndex) => {
+                        const { content } = getKeyDisplay(key);
+                        return (
+                          <Fragment key={keyIndex}>
+                            {keyIndex > 0 && (
+                              <span className="text-[11px] text-fg-subtle">+</span>
+                            )}
+                            <kbd className="inline-flex h-5 min-w-5 items-center justify-center rounded-md border border-line bg-surface px-1.5 font-sans text-[11px] text-fg-muted">
+                              {content}
+                            </kbd>
+                          </Fragment>
+                        );
+                      })}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ))}
       </div>
-
-      <style>
-        {`@keyframes fadeInDown {
-          from {
-            opacity: 0;
-            transform: translateY(-12px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        @keyframes fadeOutUp {
-          from {
-            opacity: 1;
-            transform: translateY(0);
-          }
-          to {
-            opacity: 0;
-            transform: translateY(-12px);
-          }
-        }`}
-      </style>
-    </div>
+    </Popover>
   );
+};
+
+KeyboardShortcutsDropdown.propTypes = {
+  isVisible: PropTypes.bool,
+  onClose: PropTypes.func.isRequired,
+  triggerRef: PropTypes.shape({ current: PropTypes.any }).isRequired,
 };
 
 export default KeyboardShortcutsDropdown;
