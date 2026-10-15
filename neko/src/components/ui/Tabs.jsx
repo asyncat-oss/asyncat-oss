@@ -1,12 +1,16 @@
+import { useRef } from 'react';
 import PropTypes from 'prop-types';
+import { useEdgeFade } from './edgeFade.js';
 
 /**
  * Page-level tabs drawn as an underlined row.
  *   <Tabs value={tab} onChange={setTab} items={[{ value: 'chat', label: 'Language', icon: MessageSquare, meta: '3' }]} />
  */
 export function Tabs({ value, onChange, items, className = '', label }) {
+  const rowRef = useRef(null);
+  useEdgeFade(rowRef);
   return (
-    <div role="tablist" aria-label={label} className={`-mb-px flex items-center gap-1 overflow-x-auto ${className}`}>
+    <div ref={rowRef} role="tablist" aria-label={label} className={`scroll-row -mb-px flex items-center gap-1 overflow-x-auto ${className}`}>
       {items.map(({ value: itemValue, label: itemLabel, icon: Icon, meta }) => {
         const active = itemValue === value;
         return (
@@ -64,6 +68,8 @@ const NEXT = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
  */
 export function Segmented({ value, onChange, items, className = '', label, size = 'md', role = 'tablist' }) {
   const look = SEGMENT_SIZES[size] || SEGMENT_SIZES.md;
+  const trackRef = useRef(null);
+  useEdgeFade(trackRef);
   const radio = role === 'radiogroup';
   const current = items.findIndex((item) => item.value === value);
 
@@ -80,7 +86,7 @@ export function Segmented({ value, onChange, items, className = '', label, size 
   };
 
   return (
-    <div role={radio ? 'radiogroup' : 'tablist'} aria-label={label} onKeyDown={onKeyDown} className={`inline-flex items-center bg-hover ${look.track} ${className}`}>
+    <div ref={trackRef} role={radio ? 'radiogroup' : 'tablist'} aria-label={label} onKeyDown={onKeyDown} className={`scroll-row inline-flex items-center bg-hover ${look.track} ${className}`}>
       {items.map(({ value: itemValue, label: itemLabel, icon: Icon, meta }, index) => {
         const active = itemValue === value;
         return (

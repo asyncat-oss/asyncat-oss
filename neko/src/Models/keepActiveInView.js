@@ -6,11 +6,14 @@
  * ({ left, right }). Negative scrolls left; 0 means it already shows. An item
  * wider than the track lines up with its left edge.
  */
-export function scrollToShow(track, item) {
-  if (item.left < track.left) return item.left - track.left;
-  if (item.right > track.right) return Math.min(item.right - track.right, item.left - track.left);
+export function scrollToShow(track, item, margin = 0) {
+  if (item.left - margin < track.left) return item.left - margin - track.left;
+  if (item.right + margin > track.right) return Math.min(item.right + margin - track.right, item.left - margin - track.left);
   return 0;
 }
+
+// Room left beside the chosen item, clear of the row's edge fade (edgeFade.js).
+const FADE_ROOM = 24;
 
 /**
  * Scrolls the switch inside `container` sideways until its selected item
@@ -20,6 +23,6 @@ export function keepActiveInView(container) {
   const item = container?.querySelector('[aria-selected="true"], [aria-checked="true"]');
   const track = item?.parentElement;
   if (!track || track.scrollWidth <= track.clientWidth) return;
-  const delta = scrollToShow(track.getBoundingClientRect(), item.getBoundingClientRect());
+  const delta = scrollToShow(track.getBoundingClientRect(), item.getBoundingClientRect(), FADE_ROOM);
   if (delta) track.scrollLeft += delta;
 }

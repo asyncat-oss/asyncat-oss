@@ -21,7 +21,7 @@ test('keepActiveInView moves the track, and leaves one that fits alone', () => {
 
   const narrow = makeTrack(340);
   keepActiveInView(narrow.container);
-  assert.equal(narrow.track.scrollLeft, 60);
+  assert.equal(narrow.track.scrollLeft, 84, 'with room beside it, clear of the edge fade');
 
   const wide = makeTrack(260);
   keepActiveInView(wide.container);
