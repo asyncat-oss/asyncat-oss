@@ -17,9 +17,10 @@ import UpdateScreen from '../components/UpdateScreen.jsx';
 import FolderDropProject from '../projects/FolderDropProject.jsx';
 import { useFirstRunSetup } from '../welcome/useFirstRunSetup.js';
 
-// A slim line at the top right while the internet or Asyncat's own local
-// service can't be reached.
-const ConnectionNotice = () => {
+// A slim bar above the page while the internet or Asyncat's own local
+// service can't be reached. It takes its own room at the top instead of
+// floating over a panel's header and buttons.
+const ConnectionNotice = ({ className = '' }) => {
   const network = useNetworkStatus({ pollMs: 6000 });
   const [isRestarting, setIsRestarting] = useState(false);
   const canRestart = Boolean(window.electronAPI?.restartBackend) && !network.backendOnline;
@@ -40,18 +41,22 @@ const ConnectionNotice = () => {
   };
 
   return (
-    <div className={`fixed right-3 top-3 z-[80] w-max max-w-[calc(100vw-1.5rem)] rounded-xl border border-line bg-elevated shadow-xl shadow-black/10 dark:shadow-black/40 sm:max-w-md ${canRestart ? 'py-1 pl-3 pr-1' : 'px-3 py-2'}`}>
-      <StatusLine
-        tone="warning"
-        text={title}
-        detail={detail}
-        action={canRestart ? (
-          <Button variant="ghost" size="xs" icon={RotateCw} loading={isRestarting} onClick={restart}>Restart</Button>
-        ) : null}
-      />
+    <div className={`shrink-0 ${className}`} data-connection-notice>
+      <div className={`border-b border-line bg-surface ${canRestart ? 'py-1 pl-4 pr-2' : 'px-4 py-1.5'}`}>
+        <StatusLine
+          tone="warning"
+          text={title}
+          detail={detail}
+          action={canRestart ? (
+            <Button variant="ghost" size="xs" icon={RotateCw} loading={isRestarting} onClick={restart}>Restart</Button>
+          ) : null}
+        />
+      </div>
     </div>
   );
 };
+
+ConnectionNotice.propTypes = { className: PropTypes.string };
 
 // The cat walking along a line, shown while Asyncat starts up.
 const CHAT_PAGES = new Set(['home', 'conversations', 'agents']);
@@ -343,7 +348,6 @@ const AppLayout = () => {
   // Normal dashboard when user has workspaces
   return (
     <div className="flex h-screen bg-canvas">
-      <ConnectionNotice />
       <FolderDropProject />
       {!hideSidebar && (
         <Sidebar
@@ -354,10 +358,11 @@ const AppLayout = () => {
         />
       )}
 
-      <main className="flex-1 overflow-hidden h-full">
+      <main className="flex h-full flex-1 flex-col overflow-hidden">
+        <ConnectionNotice className={navigationPaddingClass} />
         <div
           key={routeTransitionKey}
-          className={`${pageTransitionsEnabled ? 'animate-fadeIn' : ''} h-full ${navigationPaddingClass}`}
+          className={`${pageTransitionsEnabled ? 'animate-fadeIn' : ''} min-h-0 flex-1 ${navigationPaddingClass}`}
         >
           {/* Pages other than the chat are code-split; they load from the local server instantly. */}
           <Suspense fallback={<PageFallback />}>
