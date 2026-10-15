@@ -1,9 +1,13 @@
+// The side panel's Browser tab: tabs, an address bar and the page, which
+// the desktop app draws over this panel (see BrowserPanel below).
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   AppWindow,
   ArrowLeft,
   ArrowRight,
+  Bot,
   Bug,
   Camera,
   ChevronDown,
@@ -18,6 +22,7 @@ import {
   History,
   Lock,
   Maximize2,
+  MessageSquareQuote,
   Minimize2,
   MoreHorizontal,
   Pause,
@@ -26,7 +31,6 @@ import {
   RotateCcw,
   Search,
   ShieldAlert,
-  Sparkles,
   Trash2,
   Volume2,
   VolumeX,
@@ -38,6 +42,15 @@ import eventBus from '../../../utils/eventBus.js';
 import { useUiPreferences } from '../../../contexts/UiPreferencesContext.jsx';
 import { openWebLink } from '../../../utils/openWebLink.js';
 import { connectionKind, rectsIntersect, resolveAddress, samplePoints, stripTabs } from '../../utils/browserPanel.js';
+import Button from '../../../components/ui/Button.jsx';
+import IconButton from '../../../components/ui/IconButton.jsx';
+import Notice from '../../../components/ui/Notice.jsx';
+import { Menu, MenuItem, MenuSeparator } from '../../../components/ui/Menu.jsx';
+import Popover from '../../../components/ui/Popover.jsx';
+import SearchField from '../../../components/ui/SearchField.jsx';
+import Tooltip from '../../../components/ui/Tooltip.jsx';
+import { Progress } from '../../../components/ui/Progress.jsx';
+import { CONTROL_CLASS } from '../../../components/ui/Field.jsx';
 
 const MAIN_API = import.meta.env.VITE_MAIN_URL || 'http://127.0.0.1:8716';
 const BROWSER_API = `${MAIN_API}/api/browser`;
@@ -69,21 +82,10 @@ function networkErrorMessage(code) {
   }
 }
 
-function IconButton({ icon: Icon, label, onClick, disabled = false, active = false, className = '', children }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={label}
-      aria-label={label}
-      className={`flex h-7 shrink-0 items-center justify-center gap-1 rounded-md px-1.5 text-fg-muted transition-colors hover:bg-hover hover:text-fg disabled:pointer-events-none disabled:opacity-35 ${active ? 'bg-selected text-fg' : ''} ${className}`}
-    >
-      <Icon className="h-3.5 w-3.5" />
-      {children}
-    </button>
-  );
-}
+// A toolbar button that is on (Incognito, full screen, an open panel).
+const ON = '!bg-selected !text-fg';
+// Rows and small buttons inside the panel's popovers.
+const ROW_CLASS = 'outline-none focus-visible:ring-2 focus-visible:ring-accent/40';
 
 /** Live state of the browser tabs owned by the desktop app. */
 function useHostState(api, prefs) {
@@ -133,7 +135,7 @@ function usePageViewport(ref, api, { live }) {
         if (hit && hit !== el && !el.contains(hit)) return true;
       }
       // Tooltips and similar overlays don't take clicks, so look for them too.
-      const floating = document.querySelectorAll('[role="tooltip"], [role="menu"], [role="dialog"], [role="listbox"], [data-floating-overlay]');
+      const floating = document.querySelectorAll('[role="tooltip"], [role="menu"], [role="dialog"], [role="listbox"]');
       for (const node of floating) {
         if (el.contains(node)) continue;
         const box = node.getBoundingClientRect();
@@ -205,9 +207,15 @@ function HostBrowser({ api, request, workingContext }) {
   });
   const [now, setNow] = useState(() => Date.now());
   const addressRef = useRef(null);
+  const moreRef = useRef(null);
+  const historyRef = useRef(null);
+  const downloadsRef = useRef(null);
   const findRef = useRef(null);
   const pageRef = useRef(null);
   const lastHistory = useRef({ url: '', at: 0 });
+
+  const toggleMenu = useCallback((name) => setMenu((current) => (current === name ? null : name)), []);
+  const closeMenu = useCallback((name) => setMenu((current) => (current === name ? null : current)), []);
 
   const localError = activeTab ? localErrors[activeTab.id] : null;
   const showsPage = Boolean(activeTab?.url && !activeTab.popup && !activeTab.crashed && !activeTab.error && !localError);
@@ -286,11 +294,11 @@ function HostBrowser({ api, request, workingContext }) {
     else if (name === 'close-tab') closeTab(activeTab);
     else if (name === 'reopen-tab') reopenClosed();
     else if (name === 'reload' && activeTab) ui('reload', { tabId: activeTab.id });
-    else if (name === 'history') setMenu((current) => (current === 'history' ? null : 'history'));
+    else if (name === 'history') toggleMenu('history');
     else if (name === 'find') openFind();
     else if (name === 'toggle-fullscreen') { if (fullscreen) exitFullscreen(); else setFullscreen(true); }
     else if (name === 'exit-fullscreen' && fullscreen) exitFullscreen();
-  }, [activeTab, closeTab, exitFullscreen, fullscreen, openFind, reopenClosed, ui]);
+  }, [activeTab, closeTab, exitFullscreen, fullscreen, openFind, reopenClosed, toggleMenu, ui]);
 
   const recordHistory = useCallback((event) => {
     if (!historyEnabled || event.profile !== 'standard') return;
@@ -426,7 +434,7 @@ function HostBrowser({ api, request, workingContext }) {
   }, [activeTab, ui]);
 
   if (!state) {
-    return <div className="flex h-full items-center justify-center bg-surface text-xs text-fg-subtle">Starting the browser…</div>;
+    return <div className="flex h-full items-center justify-center text-[12px] text-fg-subtle">Starting the browser…</div>;
   }
 
   const handover = state.handover;
@@ -437,14 +445,20 @@ function HostBrowser({ api, request, workingContext }) {
 
   return (
     <div
-      className={`flex min-h-0 flex-col bg-surface ${fullscreen ? 'fixed inset-0 z-[100] h-dvh w-dvw' : 'h-full'}`}
+      className={`flex min-h-0 flex-col bg-canvas ${fullscreen ? 'fixed inset-0 z-[100] h-dvh w-dvw' : 'h-full'}`}
       onKeyDown={handlePanelKey}
     >
       {/* Tabs */}
-      <div className={`flex min-w-0 shrink-0 items-center gap-0.5 overflow-x-auto border-b px-1 py-1 ${incognito ? 'border-violet-200 bg-violet-50/60 dark:border-violet-900/50 dark:bg-violet-950/20 midnight:border-violet-900/50 midnight:bg-violet-950/20' : 'border-line bg-canvas'}`}>
+      <div className={`flex min-w-0 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-line px-1 py-1 ${incognito ? 'bg-hover' : 'bg-canvas'}`}>
+        {incognito && (
+          <span className="flex shrink-0 items-center gap-1 pl-1.5 pr-1 text-[11px] font-medium text-fg-muted" title="Incognito: no history, and site data is cleared when you leave Incognito.">
+            <Ghost className="h-3 w-3" />
+            Incognito
+          </span>
+        )}
         {tabs.map((tab) => {
           const active = tab.id === state.activeTabId;
-          const TabIcon = tab.popup ? AppWindow : tab.catProfile ? CatIcon : tab.agent ? Sparkles : Globe;
+          const TabIcon = tab.popup ? AppWindow : tab.catProfile ? CatIcon : tab.agent ? Bot : Globe;
           const tip = tab.popup
             ? 'Pop-up window (click to bring it forward)'
             : tab.catProfile
@@ -460,17 +474,17 @@ function HostBrowser({ api, request, workingContext }) {
               title={tip}
               onClick={() => ui('activate', { tabId: tab.id })}
               onKeyDown={(event) => { if (event.key === 'Enter') ui('activate', { tabId: tab.id }); }}
-              className={`group flex min-w-0 max-w-[160px] shrink-0 cursor-default items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${active ? 'bg-surface text-fg shadow-sm ring-1 ring-line' : 'text-fg-muted hover:bg-hover hover:text-fg'}`}
+              className={`group flex min-w-0 max-w-[160px] shrink-0 cursor-default items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/40 ${active ? 'bg-elevated text-fg shadow-sm ring-1 ring-line' : 'text-fg-muted hover:bg-hover hover:text-fg'}`}
             >
               {tab.loading
                 ? <span className="h-3 w-3 shrink-0 animate-spin rounded-full border border-line-strong border-t-accent" />
-                : <TabIcon className={`h-3 w-3 shrink-0 ${tab.agent ? 'text-accent' : 'opacity-60'} ${agentRecent(tab) ? 'animate-pulse' : ''}`} />}
+                : <TabIcon className={`h-3 w-3 shrink-0 ${agentRecent(tab) ? 'animate-pulse text-accent' : 'opacity-60'}`} />}
               <span className="min-w-0 flex-1 truncate">{tab.title || (tab.url ? tab.url : 'New tab')}</span>
               {tab.audible && !tab.muted && <Volume2 className="h-3 w-3 shrink-0 opacity-60" />}
               <button
                 type="button"
                 onClick={(event) => { event.stopPropagation(); closeTab(tab); }}
-                className="shrink-0 rounded p-0.5 text-fg-subtle opacity-0 transition-opacity hover:bg-hover hover:text-fg group-hover:opacity-100"
+                className="shrink-0 rounded p-0.5 text-fg-subtle opacity-0 outline-none transition-opacity hover:bg-hover hover:text-fg focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-accent/40 group-hover:opacity-100"
                 title="Close tab"
                 aria-label="Close tab"
               >
@@ -479,88 +493,183 @@ function HostBrowser({ api, request, workingContext }) {
             </div>
           );
         })}
-        <IconButton icon={Plus} label="New tab" onClick={() => ui('new-tab', {})} />
+        <IconButton size="sm" side="bottom" icon={Plus} label="New tab" onClick={() => ui('new-tab', {})} />
       </div>
 
       {/* Address bar */}
-      <div className="relative flex shrink-0 items-center gap-0.5 border-b border-line px-1.5 py-1">
-        <IconButton icon={ArrowLeft} label="Back" disabled={!activeTab?.canGoBack} onClick={() => ui('back', { tabId: activeTab.id })} />
-        <IconButton icon={ArrowRight} label="Forward" disabled={!activeTab?.canGoForward} onClick={() => ui('forward', { tabId: activeTab.id })} />
+      <div className="relative flex shrink-0 items-center border-b border-line px-1.5 py-1">
+        <IconButton size="sm" icon={ArrowLeft} label="Back" disabled={!activeTab?.canGoBack} onClick={() => ui('back', { tabId: activeTab.id })} />
+        <IconButton size="sm" icon={ArrowRight} label="Forward" disabled={!activeTab?.canGoForward} onClick={() => ui('forward', { tabId: activeTab.id })} />
         <IconButton
+          size="sm"
           icon={activeTab?.loading ? X : RotateCcw}
           label={activeTab?.loading ? 'Stop' : 'Reload'}
           disabled={!activeTab?.url}
           onClick={() => ui(activeTab?.loading ? 'stop' : 'reload', { tabId: activeTab.id })}
         />
         <form
-          className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-line bg-canvas px-2 focus-within:border-accent/60 focus-within:ring-1 focus-within:ring-accent/25"
+          className="mx-1 flex min-w-0 flex-1 items-center gap-1.5 rounded-lg border border-line-strong bg-canvas px-2 transition-[border-color,box-shadow] focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20"
           onSubmit={(event) => { event.preventDefault(); if (activeTab) openAddress(activeTab.id, inputValue); }}
         >
           {connection === 'secure' || connection === 'local'
             ? <Lock className="h-3 w-3 shrink-0 text-emerald-600 dark:text-emerald-400" title="Secure connection" />
             : connection === 'insecure'
-              ? <span className="flex shrink-0 items-center gap-0.5 text-amber-600 dark:text-amber-400" title="Not encrypted. Don't enter private details here."><ShieldAlert className="h-3 w-3" /><span className="text-[9px] font-semibold uppercase tracking-wide">Not secure</span></span>
+              ? <span className="flex shrink-0 items-center gap-1 text-amber-700 dark:text-amber-400" title="Not encrypted. Don't enter private details here."><ShieldAlert className="h-3 w-3" /><span className="text-[11px] font-medium">Not secure</span></span>
               : <Search className="h-3 w-3 shrink-0 text-fg-subtle" />}
           <input
             ref={addressRef}
             value={inputValue}
             onChange={(event) => activeTab && setInputs((previous) => ({ ...previous, [activeTab.id]: event.target.value }))}
             onFocus={(event) => event.target.select()}
-            className="min-w-0 flex-1 bg-transparent py-1 font-mono text-[11px] text-fg outline-none placeholder:text-fg-subtle"
+            className="min-w-0 flex-1 bg-transparent py-1 font-mono text-[12px] text-fg outline-none placeholder:text-fg-subtle"
             placeholder="Search or enter address"
             spellCheck={false}
             disabled={!activeTab || activeTab.popup}
           />
         </form>
         <IconButton
+          size="sm"
           icon={Ghost}
           label={incognito ? 'Incognito is on. Switch to Standard browsing' : 'Switch to Incognito browsing'}
-          active={incognito}
-          className={incognito ? '!bg-violet-100 !text-violet-700 dark:!bg-violet-950/50 dark:!text-violet-300' : ''}
+          aria-pressed={incognito}
+          className={incognito ? ON : ''}
           onClick={() => ui('set-mode', { mode: incognito ? 'standard' : 'incognito' })}
         />
         {activeTab?.url && !activeTab.popup && (
-          <IconButton icon={Sparkles} label="Ask Asyncat about this page" onClick={askAgent} />
+          <IconButton size="sm" icon={MessageSquareQuote} label="Ask Asyncat about this page" onClick={askAgent} />
         )}
+        <Tooltip label={state.agentPaused ? 'Let Asyncat use the browser again' : 'Stop Asyncat using the browser'} side="top" className="inline-flex">
+          <Button
+            variant="ghost"
+            size={state.agentPaused ? 'xs' : 'icon-sm'}
+            icon={state.agentPaused ? Play : Pause}
+            aria-label={state.agentPaused ? 'Let Asyncat use the browser again' : 'Stop Asyncat using the browser'}
+            className={state.agentPaused ? '!bg-amber-500/10 !text-amber-700 dark:!text-amber-400' : agentRecentlyActive ? '!bg-selected !text-accent' : ''}
+            onClick={() => ui('pause-agent', { paused: !state.agentPaused })}
+          >
+            {state.agentPaused ? 'Paused' : null}
+          </Button>
+        </Tooltip>
         <IconButton
-          icon={state.agentPaused ? Play : Pause}
-          label={state.agentPaused ? 'Let Asyncat use the browser again' : 'Stop Asyncat using the browser'}
-          active={state.agentPaused || agentRecentlyActive}
-          className={state.agentPaused ? '!bg-amber-100 !text-amber-700 dark:!bg-amber-950/40 dark:!text-amber-300' : agentRecentlyActive ? '!text-accent' : ''}
-          onClick={() => ui('pause-agent', { paused: !state.agentPaused })}
-        >
-          {state.agentPaused ? <span className="text-[10px] font-medium">Paused</span> : null}
-        </IconButton>
-        <IconButton icon={fullscreen ? Minimize2 : Maximize2} label={fullscreen ? 'Exit full screen (Esc)' : 'Full screen (F11)'} active={fullscreen} onClick={() => (fullscreen ? exitFullscreen() : setFullscreen(true))} />
-        <IconButton icon={History} label="History and recently closed (Ctrl+H)" active={menu === 'history'} onClick={() => setMenu((current) => (current === 'history' ? null : 'history'))} />
+          size="sm"
+          icon={fullscreen ? Minimize2 : Maximize2}
+          label={fullscreen ? 'Exit full screen (Esc)' : 'Full screen (F11)'}
+          aria-pressed={fullscreen}
+          className={fullscreen ? ON : ''}
+          onClick={() => (fullscreen ? exitFullscreen() : setFullscreen(true))}
+        />
+        <IconButton
+          ref={historyRef}
+          size="sm"
+          icon={History}
+          label="History and recently closed (Ctrl+H)"
+          aria-expanded={menu === 'history'}
+          className={menu === 'history' ? ON : ''}
+          onClick={() => toggleMenu('history')}
+        />
         {state.downloads.length > 0 && (
-          <div className="relative">
-            <IconButton icon={Download} label="Downloads" active={menu === 'downloads'} onClick={() => setMenu((current) => (current === 'downloads' ? null : 'downloads'))} />
+          <div className="relative flex shrink-0">
+            <IconButton
+              ref={downloadsRef}
+              size="sm"
+              icon={Download}
+              label="Downloads"
+              aria-expanded={menu === 'downloads'}
+              className={menu === 'downloads' ? ON : ''}
+              onClick={() => toggleMenu('downloads')}
+            />
             {downloadsActive && <span className="pointer-events-none absolute right-1 top-1 h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />}
           </div>
         )}
-        <IconButton icon={MoreHorizontal} label="More" active={menu === 'more'} onClick={() => setMenu((current) => (current === 'more' ? null : 'more'))} />
+        <IconButton
+          ref={moreRef}
+          size="sm"
+          icon={MoreHorizontal}
+          label="More"
+          aria-expanded={menu === 'more'}
+          className={menu === 'more' ? ON : ''}
+          onClick={() => toggleMenu('more')}
+        />
+        <Menu anchorRef={moreRef} open={menu === 'more'} onClose={() => closeMenu('more')} placement="bottom-end" width={248} label="More">
+          {[
+            { label: 'Copy address', icon: Copy, run: () => navigator.clipboard.writeText(activeTab?.url || '').catch(() => {}), show: Boolean(activeTab?.url) },
+            { label: 'Find in page', icon: Search, run: openFind, show: Boolean(activeTab?.url) },
+            { label: activeTab?.muted ? 'Unmute tab' : 'Mute tab', icon: activeTab?.muted ? Volume2 : VolumeX, run: () => ui('mute', { tabId: activeTab.id, muted: !activeTab.muted }), show: Boolean(activeTab?.url) },
+            { label: 'Save screenshot', icon: Camera, run: saveScreenshot, show: showsPage },
+            { label: 'Open in system browser', icon: ExternalLink, run: () => openWebLink(activeTab.url, 'system'), show: /^https?:/i.test(activeTab?.url || '') },
+            { label: 'Developer tools', icon: Bug, run: () => ui('devtools', { tabId: activeTab.id }), show: Boolean(prefs.browserDeveloperTools && activeTab?.url) },
+          ].filter((item) => item.show).map((item) => (
+            <MenuItem key={item.label} icon={item.icon} label={item.label} onSelect={item.run} />
+          ))}
+          {activeTab?.url ? <MenuSeparator /> : null}
+          <p className="px-2.5 pb-1.5 pt-1 text-[12px] leading-5 text-fg-subtle">Tabs Asyncat opens use your Standard profile, so a site you sign in to there stays signed in for Asyncat.</p>
+        </Menu>
 
-        {menu === 'more' && (
-          <div className="absolute right-1.5 top-full z-40 mt-1 w-56 rounded-lg border border-line bg-elevated p-1 shadow-xl" data-floating-overlay>
-            {[
-              { label: 'Copy address', icon: Copy, run: () => navigator.clipboard.writeText(activeTab?.url || '').catch(() => {}), show: Boolean(activeTab?.url) },
-              { label: 'Find in page', icon: Search, run: openFind, show: Boolean(activeTab?.url) },
-              { label: activeTab?.muted ? 'Unmute tab' : 'Mute tab', icon: activeTab?.muted ? Volume2 : VolumeX, run: () => ui('mute', { tabId: activeTab.id, muted: !activeTab.muted }), show: Boolean(activeTab?.url) },
-              { label: 'Save screenshot', icon: Camera, run: saveScreenshot, show: showsPage },
-              { label: 'Open in system browser', icon: ExternalLink, run: () => openWebLink(activeTab.url, 'system'), show: /^https?:/i.test(activeTab?.url || '') },
-              { label: 'Developer tools', icon: Bug, run: () => ui('devtools', { tabId: activeTab.id }), show: Boolean(prefs.browserDeveloperTools && activeTab?.url) },
-            ].filter((item) => item.show).map((item) => {
-              const ItemIcon = item.icon;
-              return (
-                <button key={item.label} type="button" onClick={() => { item.run(); setMenu(null); }} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-fg-muted hover:bg-hover hover:text-fg">
-                  <ItemIcon className="h-3.5 w-3.5" />{item.label}
+        <Popover anchorRef={historyRef} open={menu === 'history'} onClose={() => closeMenu('history')} placement="bottom-end" width={340} label="Browser history" className="!p-0">
+          <p className="px-3 pb-1.5 pt-2.5 text-[13px] font-semibold text-fg">Browser history</p>
+          {historyEnabled && (
+            <div className="px-2 pb-2">
+              <SearchField size="sm" value={historyQuery} onChange={setHistoryQuery} placeholder="Search history" />
+            </div>
+          )}
+          <div className="max-h-[min(24rem,60vh)] overflow-y-auto border-t border-line p-1.5">
+            {recentlyClosed.length > 0 && (
+              <section className="mb-2">
+                <div className="flex items-center justify-between py-1 pl-2 pr-1">
+                  <p className="text-[12px] text-fg-subtle">Recently closed</p>
+                  <button type="button" onClick={() => setRecentlyClosed([])} className={`rounded px-1 text-[12px] text-fg-subtle hover:text-fg ${ROW_CLASS}`}>Clear</button>
+                </div>
+                {recentlyClosed.slice(0, 5).map((item, index) => (
+                  <button key={`${item.url}-${index}`} type="button" onClick={() => { ui('new-tab', { url: item.url }); setRecentlyClosed((previous) => previous.filter((_, i) => i !== index)); setMenu(null); }} className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-hover ${ROW_CLASS}`}>
+                    <RotateCcw className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
+                    <span className="min-w-0 flex-1 truncate text-[13px] text-fg">{item.title || item.url}</span>
+                  </button>
+                ))}
+              </section>
+            )}
+            <p className="px-2 py-1 text-[12px] text-fg-subtle">Visited pages</p>
+            {!historyEnabled && <p className="px-2 py-4 text-center text-[12px] text-fg-subtle">{incognito ? 'Incognito pages are not saved to history.' : 'History is turned off in Settings → Workbench.'}</p>}
+            {historyEnabled && historyLoading && <p className="px-2 py-4 text-center text-[12px] text-fg-subtle">Loading…</p>}
+            {historyEnabled && !historyLoading && historyItems.length === 0 && <p className="px-2 py-4 text-center text-[12px] text-fg-subtle">No browsing history yet.</p>}
+            {historyItems.map((item) => (
+              <div key={item.id} className="group flex items-center gap-1 rounded-lg hover:bg-hover">
+                <button type="button" onClick={() => { ui('new-tab', { url: item.url }); setMenu(null); }} className={`min-w-0 flex-1 rounded-lg px-2 py-1.5 text-left ${ROW_CLASS}`}>
+                  <p className="truncate text-[13px] text-fg">{item.title || item.url}</p>
+                  <p className="truncate text-[11px] text-fg-subtle">{item.url}</p>
                 </button>
+                <button type="button" onClick={async () => { await fetch(`${BROWSER_API}/history/${encodeURIComponent(item.id)}`, { method: 'DELETE' }).catch(() => {}); setHistoryItems((previous) => previous.filter((entry) => entry.id !== item.id)); }} className={`mr-1 rounded p-1 text-fg-subtle opacity-0 hover:text-red-600 focus-visible:opacity-100 group-hover:opacity-100 dark:hover:text-red-400 ${ROW_CLASS}`} title="Remove" aria-label="Remove"><X className="h-3 w-3" /></button>
+              </div>
+            ))}
+          </div>
+          {historyEnabled && historyItems.length > 0 && (
+            <div className="flex justify-end border-t border-line p-1.5">
+              <Button variant="danger" size="xs" icon={Trash2} onClick={async () => { await fetch(`${BROWSER_API}/history`, { method: 'DELETE' }).catch(() => {}); setHistoryItems([]); }}>Clear history</Button>
+            </div>
+          )}
+        </Popover>
+
+        <Popover anchorRef={downloadsRef} open={menu === 'downloads' && state.downloads.length > 0} onClose={() => closeMenu('downloads')} placement="bottom-end" width={340} label="Downloads" className="!p-0">
+          <div className="flex items-center gap-1 py-1.5 pl-3 pr-1.5">
+            <span className="flex-1 text-[13px] font-semibold text-fg">Downloads</span>
+            <Button variant="ghost" size="xs" onClick={() => { ui('clear-downloads', {}); setMenu(null); }}>Clear</Button>
+          </div>
+          <div className="max-h-72 overflow-y-auto border-t border-line p-1.5">
+            {state.downloads.map((item) => {
+              const percent = item.totalBytes > 0 ? Math.min(100, Math.round((item.receivedBytes / item.totalBytes) * 100)) : 0;
+              return (
+                <div key={item.id} className="rounded-lg px-2 py-2 hover:bg-hover">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
+                    <span className="min-w-0 flex-1 truncate text-[13px] text-fg">{item.filename}</span>
+                    <span className="text-[11px] tabular-nums text-fg-subtle">{item.state === 'progressing' ? `${percent}%` : item.state.charAt(0).toUpperCase() + item.state.slice(1)}</span>
+                  </div>
+                  {item.state === 'progressing' && <Progress className="mt-1.5" value={percent} label={`Downloading ${item.filename}`} />}
+                  {item.savePath && item.state === 'completed' && <button type="button" onClick={() => window.electronAPI?.shellShowInFolder?.(item.savePath)} className={`mt-1 rounded text-[12px] font-medium text-accent hover:underline ${ROW_CLASS}`}>Show in folder</button>}
+                </div>
               );
             })}
-            <p className="px-2 pb-1 pt-1.5 text-[10px] leading-4 text-fg-subtle">Tabs Asyncat opens use your Standard profile, so a site you sign in to there stays signed in for Asyncat.</p>
           </div>
-        )}
+        </Popover>
       </div>
 
       {/* Find bar */}
@@ -577,12 +686,12 @@ function HostBrowser({ api, request, workingContext }) {
             }}
             placeholder="Find in page"
             spellCheck={false}
-            className="min-w-0 flex-1 bg-transparent text-xs text-fg outline-none placeholder:text-fg-subtle"
+            className="min-w-0 flex-1 bg-transparent text-[12px] text-fg outline-none placeholder:text-fg-subtle"
           />
-          <span className="min-w-[40px] text-right text-[10px] tabular-nums text-fg-subtle">{find.total ? `${find.active}/${find.total}` : '0/0'}</span>
-          <IconButton icon={ChevronUp} label="Previous match" onClick={() => runFind(find.query, { forward: false, findNext: true })} />
-          <IconButton icon={ChevronDown} label="Next match" onClick={() => runFind(find.query, { forward: true, findNext: true })} />
-          <IconButton icon={X} label="Close (Esc)" onClick={closeFind} />
+          <span className="min-w-[40px] text-right text-[11px] tabular-nums text-fg-subtle">{find.total ? `${find.active}/${find.total}` : '0/0'}</span>
+          <IconButton size="sm" icon={ChevronUp} label="Previous match" onClick={() => runFind(find.query, { forward: false, findNext: true })} />
+          <IconButton size="sm" icon={ChevronDown} label="Next match" onClick={() => runFind(find.query, { forward: true, findNext: true })} />
+          <IconButton size="sm" icon={X} label="Close (Esc)" onClick={closeFind} />
         </div>
       )}
 
@@ -591,116 +700,40 @@ function HostBrowser({ api, request, workingContext }) {
         <div className="flex shrink-0 items-start gap-2 border-b border-accent/30 bg-accent-soft px-3 py-2">
           <Hand className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold text-fg">Asyncat is waiting for you</p>
-            <p className="mt-0.5 text-xs leading-5 text-fg-muted">{handover.message} Then press Continue. Asyncat won&apos;t see what you type.</p>
+            <p className="text-[13px] font-medium text-fg">Asyncat is waiting for you</p>
+            <p className="mt-0.5 text-[12px] leading-5 text-fg-muted">{handover.message} Then press Continue. Asyncat won&apos;t see what you type.</p>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <button type="button" onClick={() => ui('handover-done', { id: handover.id, outcome: 'cancelled' })} className="rounded-md px-2.5 py-1 text-xs font-medium text-fg-muted hover:bg-hover hover:text-fg">Skip</button>
-            <button type="button" onClick={() => ui('handover-done', { id: handover.id, outcome: 'done' })} className="rounded-md bg-accent px-3 py-1 text-xs font-semibold text-white shadow-sm hover:opacity-90 dark:text-gray-950">Continue</button>
+          <div className="flex shrink-0 items-center gap-1">
+            <Button variant="ghost" size="xs" onClick={() => ui('handover-done', { id: handover.id, outcome: 'cancelled' })}>Skip</Button>
+            <Button variant="primary" size="xs" onClick={() => ui('handover-done', { id: handover.id, outcome: 'done' })}>Continue</Button>
           </div>
         </div>
       )}
 
       {/* An Asyncat tab while browsing in Incognito: say whose profile it uses */}
       {activeTab?.agent && incognito && !handover && (
-        <div className="flex shrink-0 items-center gap-1.5 border-b border-line bg-canvas px-3 py-1 text-[10px] text-fg-muted">
-          <Sparkles className="h-3 w-3 shrink-0 text-accent" />
+        <div className="flex shrink-0 items-center gap-1.5 border-b border-line bg-canvas px-3 py-1 text-[11px] text-fg-muted">
+          <Bot className="h-3 w-3 shrink-0 text-fg-subtle" />
           Asyncat&apos;s tab uses your Standard profile, not Incognito: sign-ins here are kept for Asyncat.
         </div>
       )}
 
       {/* Page area: the desktop app draws the page over this box */}
-      <div className="relative min-h-0 flex-1 bg-surface">
+      <div className="relative min-h-0 flex-1 bg-canvas">
         <div ref={pageRef} className="absolute inset-0" />
 
         {frozen && showsPage && (
           <img src={frozen} alt="" className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover object-left-top" />
         )}
 
-        {menu === 'history' && (
-          <div className="absolute right-2 top-2 z-40 flex max-h-[75%] w-[min(340px,calc(100%-16px))] flex-col overflow-hidden rounded-xl border border-line bg-elevated shadow-2xl" data-floating-overlay>
-            <div className="flex items-center gap-2 border-b border-line px-3 py-2">
-              <History className="h-3.5 w-3.5 text-fg-subtle" />
-              <span className="flex-1 text-xs font-semibold text-fg">Browser history</span>
-              {historyEnabled && historyItems.length > 0 && (
-                <button type="button" onClick={async () => { await fetch(`${BROWSER_API}/history`, { method: 'DELETE' }).catch(() => {}); setHistoryItems([]); }} className="rounded p-1 text-fg-subtle hover:bg-hover hover:text-red-500" title="Clear history"><Trash2 className="h-3.5 w-3.5" /></button>
-              )}
-              <button type="button" onClick={() => setMenu(null)} className="rounded p-1 text-fg-subtle hover:bg-hover hover:text-fg" title="Close"><X className="h-3.5 w-3.5" /></button>
-            </div>
-            <div className="min-h-0 overflow-y-auto p-2">
-              {historyEnabled && (
-                <div className="mb-2 flex items-center gap-1.5 rounded-md border border-line bg-canvas px-2">
-                  <Search className="h-3 w-3 shrink-0 text-fg-subtle" />
-                  <input value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} placeholder="Search history" className="min-w-0 flex-1 bg-transparent py-1.5 text-xs text-fg outline-none placeholder:text-fg-subtle" />
-                </div>
-              )}
-              {recentlyClosed.length > 0 && (
-                <section className="mb-3">
-                  <div className="mb-1 flex items-center justify-between px-1">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-fg-subtle">Recently closed</p>
-                    <button type="button" onClick={() => setRecentlyClosed([])} className="text-[10px] text-fg-subtle hover:text-fg">Clear</button>
-                  </div>
-                  {recentlyClosed.slice(0, 5).map((item, index) => (
-                    <button key={`${item.url}-${index}`} type="button" onClick={() => { ui('new-tab', { url: item.url }); setRecentlyClosed((previous) => previous.filter((_, i) => i !== index)); setMenu(null); }} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-hover">
-                      <RotateCcw className="h-3 w-3 shrink-0 text-fg-subtle" />
-                      <span className="min-w-0 flex-1 truncate text-xs text-fg-muted">{item.title || item.url}</span>
-                    </button>
-                  ))}
-                </section>
-              )}
-              <p className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wide text-fg-subtle">Visited pages</p>
-              {!historyEnabled && <p className="px-2 py-4 text-center text-xs text-fg-subtle">{incognito ? 'Incognito pages are not saved to history.' : 'History is turned off in Settings → Workbench.'}</p>}
-              {historyEnabled && historyLoading && <p className="px-2 py-4 text-center text-xs text-fg-subtle">Loading…</p>}
-              {historyEnabled && !historyLoading && historyItems.length === 0 && <p className="px-2 py-4 text-center text-xs text-fg-subtle">No browsing history yet.</p>}
-              {historyItems.map((item) => (
-                <div key={item.id} className="group flex items-center gap-1 rounded-md hover:bg-hover">
-                  <button type="button" onClick={() => { ui('new-tab', { url: item.url }); setMenu(null); }} className="min-w-0 flex-1 px-2 py-1.5 text-left">
-                    <p className="truncate text-xs text-fg-muted">{item.title || item.url}</p>
-                    <p className="truncate text-[10px] text-fg-subtle">{item.url}</p>
-                  </button>
-                  <button type="button" onClick={async () => { await fetch(`${BROWSER_API}/history/${encodeURIComponent(item.id)}`, { method: 'DELETE' }).catch(() => {}); setHistoryItems((previous) => previous.filter((entry) => entry.id !== item.id)); }} className="mr-1 rounded p-1 text-fg-subtle opacity-0 hover:text-red-500 group-hover:opacity-100" title="Remove"><X className="h-3 w-3" /></button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {menu === 'downloads' && (
-          <div className="absolute right-2 top-2 z-40 w-[min(340px,calc(100%-16px))] overflow-hidden rounded-xl border border-line bg-elevated shadow-2xl" data-floating-overlay>
-            <div className="flex items-center gap-2 border-b border-line px-3 py-2">
-              <Download className="h-3.5 w-3.5 text-fg-subtle" />
-              <span className="flex-1 text-xs font-semibold text-fg">Downloads</span>
-              <button type="button" onClick={() => { ui('clear-downloads', {}); setMenu(null); }} className="text-[10px] text-fg-subtle hover:text-fg">Clear</button>
-              <button type="button" onClick={() => setMenu(null)} className="rounded p-1 text-fg-subtle hover:bg-hover hover:text-fg" title="Close"><X className="h-3.5 w-3.5" /></button>
-            </div>
-            <div className="max-h-72 overflow-y-auto p-2">
-              {state.downloads.map((item) => {
-                const percent = item.totalBytes > 0 ? Math.min(100, Math.round((item.receivedBytes / item.totalBytes) * 100)) : 0;
-                return (
-                  <div key={item.id} className="rounded-lg px-2 py-2 hover:bg-hover">
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
-                      <span className="min-w-0 flex-1 truncate text-xs text-fg-muted">{item.filename}</span>
-                      <span className="text-[10px] text-fg-subtle">{item.state === 'progressing' ? `${percent}%` : item.state}</span>
-                    </div>
-                    {item.state === 'progressing' && <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-line"><div className="h-full bg-accent transition-all" style={{ width: `${percent}%` }} /></div>}
-                    {item.savePath && item.state === 'completed' && <button type="button" onClick={() => window.electronAPI?.shellShowInFolder?.(item.savePath)} className="mt-1 text-[10px] font-medium text-accent hover:opacity-80">Show in folder</button>}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
         {/* Start page */}
         {activeTab && !activeTab.url && !activeTab.popup && (
           <div className="flex h-full flex-col items-center justify-center gap-5 overflow-y-auto px-6 py-8">
-            <Globe className="h-8 w-8 text-fg-subtle" />
+            <Globe className="h-7 w-7 text-fg-subtle" strokeWidth={1.5} />
             {localError && (
-              <div className="w-full max-w-sm rounded-lg border border-amber-200/70 bg-amber-50/60 px-3 py-2.5 text-center dark:border-amber-900/50 dark:bg-amber-950/20">
-                <p className="text-xs font-medium text-amber-800 dark:text-amber-300">{localError.title}</p>
-                <p className="mt-1 text-[11px] leading-relaxed text-amber-700/80 dark:text-amber-400/80">{localError.message}</p>
-              </div>
+              <Notice tone="warning" className="w-full max-w-sm">
+                <span className="font-medium">{localError.title}.</span> {localError.message}
+              </Notice>
             )}
             <form className="w-full max-w-sm" onSubmit={(event) => { event.preventDefault(); if (startQuery.trim()) { openAddress(activeTab.id, startQuery); setStartQuery(''); } }}>
               <input
@@ -709,18 +742,19 @@ function HostBrowser({ api, request, workingContext }) {
                 autoFocus
                 placeholder="Search or enter a URL"
                 spellCheck={false}
-                className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-fg outline-none transition-colors placeholder:text-fg-subtle focus:border-accent/60 focus:ring-1 focus:ring-accent/25"
+                aria-label="Search or enter a URL"
+                className={`h-9 ${CONTROL_CLASS}`}
               />
             </form>
             <div className="flex w-full max-w-sm flex-wrap justify-center gap-1.5">
               {QUICK_LINKS.map((link) => (
-                <button key={link.url} type="button" onClick={() => openAddress(activeTab.id, link.url)} className="rounded-md border border-line bg-canvas px-2.5 py-1 text-[11px] font-medium text-fg-muted transition-colors hover:bg-hover hover:text-fg">
+                <button key={link.url} type="button" onClick={() => openAddress(activeTab.id, link.url)} className="rounded-md border border-line bg-canvas px-2.5 py-1 text-[12px] text-fg-muted outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/40">
                   {link.label}
                 </button>
               ))}
             </div>
-            <p className="flex items-center gap-1.5 text-center text-[11px] text-fg-subtle">
-              {incognito && <Ghost className="h-3 w-3 text-violet-500" />}
+            <p className="flex items-center gap-1.5 text-center text-[12px] text-fg-subtle">
+              {incognito && <Ghost className="h-3.5 w-3.5 shrink-0" />}
               {incognito ? 'Incognito: no history, and site data is cleared when you leave Incognito.' : 'Or ask Asyncat to browse the web for you.'}
             </p>
           </div>
@@ -728,27 +762,27 @@ function HostBrowser({ api, request, workingContext }) {
 
         {/* A page that failed or crashed */}
         {activeTab?.url && activeTab.error && !activeTab.crashed && (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-surface p-6 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 dark:bg-amber-950/30"><WifiOff className="h-6 w-6 text-amber-500" /></div>
-            <p className="text-sm font-semibold text-fg">Can&apos;t connect</p>
-            <p className="max-w-xs text-xs leading-relaxed text-fg-muted">{networkErrorMessage(activeTab.error.code)}</p>
-            <p className="max-w-xs break-all font-mono text-[10px] text-fg-subtle">{activeTab.url}</p>
-            <button type="button" onClick={() => ui('reload', { tabId: activeTab.id })} className="mt-1 rounded-lg border border-line px-4 py-2 text-xs font-medium text-fg hover:bg-hover">Try again</button>
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-canvas p-6 text-center">
+            <WifiOff className="h-7 w-7 text-fg-subtle" strokeWidth={1.5} />
+            <p className="text-[15px] font-semibold text-fg">Can&apos;t connect</p>
+            <p className="max-w-xs text-[13px] leading-5 text-fg-muted">{networkErrorMessage(activeTab.error.code)}</p>
+            <p className="max-w-xs break-all font-mono text-[11px] text-fg-subtle">{activeTab.url}</p>
+            <Button variant="secondary" className="mt-1" onClick={() => ui('reload', { tabId: activeTab.id })}>Try again</Button>
           </div>
         )}
         {activeTab?.crashed && (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-surface p-6 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50 dark:bg-red-950/30"><AlertTriangle className="h-6 w-6 text-red-500" /></div>
-            <p className="text-sm font-semibold text-fg">This page stopped working</p>
-            <p className="max-w-xs text-xs text-fg-muted">It may have run out of memory.</p>
-            <button type="button" onClick={() => ui('reload', { tabId: activeTab.id })} className="mt-1 rounded-lg border border-line px-4 py-2 text-xs font-medium text-fg hover:bg-hover">Reload</button>
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-canvas p-6 text-center">
+            <AlertTriangle className="h-7 w-7 text-fg-subtle" strokeWidth={1.5} />
+            <p className="text-[15px] font-semibold text-fg">This page stopped working</p>
+            <p className="max-w-xs text-[13px] leading-5 text-fg-muted">It may have run out of memory.</p>
+            <Button variant="secondary" className="mt-1" onClick={() => ui('reload', { tabId: activeTab.id })}>Reload</Button>
           </div>
         )}
         {activeTab?.popup && (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-            <AppWindow className="h-8 w-8 text-fg-subtle" />
-            <p className="max-w-xs text-xs leading-5 text-fg-muted">This page opened in its own window (for example to sign in or pay).</p>
-            <button type="button" onClick={() => ui('activate', { tabId: activeTab.id })} className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-fg hover:bg-hover">Show the window</button>
+            <AppWindow className="h-7 w-7 text-fg-subtle" strokeWidth={1.5} />
+            <p className="max-w-xs text-[13px] leading-5 text-fg-muted">This page opened in its own window (for example to sign in or pay).</p>
+            <Button variant="secondary" onClick={() => ui('activate', { tabId: activeTab.id })}>Show the window</Button>
           </div>
         )}
       </div>
@@ -776,15 +810,15 @@ function IframeBrowser({ request, workingContext }) {
   }, [open, request?.key, request?.url]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-surface">
+    <div className="flex h-full min-h-0 flex-col bg-canvas">
       <form className="flex shrink-0 items-center gap-1.5 border-b border-line px-2 py-1.5" onSubmit={(event) => { event.preventDefault(); open(input); }}>
         <Search className="h-3 w-3 text-fg-subtle" />
-        <input value={input} onChange={(event) => setInput(event.target.value)} placeholder="Search or enter address" spellCheck={false} className="min-w-0 flex-1 bg-transparent font-mono text-[11px] text-fg outline-none placeholder:text-fg-subtle" />
+        <input value={input} onChange={(event) => setInput(event.target.value)} placeholder="Search or enter address" aria-label="Address" spellCheck={false} className="min-w-0 flex-1 bg-transparent font-mono text-[12px] text-fg outline-none placeholder:text-fg-subtle" />
       </form>
-      {error && <p className="px-3 py-2 text-xs text-amber-700 dark:text-amber-400">{error}</p>}
+      {error && <Notice tone="warning" className="px-3 py-2">{error}</Notice>}
       {url
         ? <iframe key={url} src={url} className="h-full w-full border-0" title="Web" sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals" />
-        : <div className="flex flex-1 items-center justify-center text-xs text-fg-subtle">The full browser is available in the Asyncat desktop app.</div>}
+        : <div className="flex flex-1 items-center justify-center px-6 text-center text-[12px] text-fg-subtle">The full browser is available in the Asyncat desktop app.</div>}
     </div>
   );
 }
