@@ -258,12 +258,35 @@ html.app-frame body {
 }
 
 /* Scrollbars, everywhere: thin, in the app's greys, without the OS arrow
-   buttons (Chromium drops them when these are set). In the base layer, so a
-   class such as [scrollbar-width:none] still wins. */
+   buttons. Chromium (the desktop app) is styled through ::-webkit-scrollbar,
+   since setting scrollbar-width there keeps small arrow buttons on Linux;
+   other browsers get the standard properties. In the base layer, so a class
+   such as [scrollbar-width:none] still wins. */
 @layer base {
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: color-mix(in srgb, var(--as-fg-subtle) 45%, transparent) transparent;
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 9999px;
+    background: color-mix(in srgb, var(--as-fg-subtle) 40%, transparent) padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--as-fg-subtle) 65%, transparent) padding-box;
+  }
+  ::-webkit-scrollbar-button {
+    display: none;
+  }
+  @supports not selector(::-webkit-scrollbar) {
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: color-mix(in srgb, var(--as-fg-subtle) 45%, transparent) transparent;
+    }
   }
 }
 
