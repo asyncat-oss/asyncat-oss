@@ -1,40 +1,52 @@
-// Settings/ServerSection.jsx — local server configuration
-import { useState, useEffect, useCallback, useRef } from "react";
-import {
-  Server,
-  Loader2,
-  RotateCcw,
-  CheckCircle2,
-  AlertTriangle,
-  Database,
-} from "lucide-react";
-import { configApi, updateApi, apiUtils } from "./settingApi";
-import { SettingsSection } from "../components/ui/Rows.jsx";
-import Skeleton from "../components/ui/Skeleton.jsx";
-import Notice from "../components/ui/Notice.jsx";
-import { storageApi } from "../files/storageApi.js";
-import { formatBytes } from "../files/fileFormat.js";
+// Settings → About → Developer options: the local server's service address
+// you can change, the settings it runs with (read-only), its database, and
+// restarting it.
 
-const settingsFontBase = "font-sans";
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Database, RotateCcw, Server, SlidersHorizontal } from 'lucide-react';
+import { configApi, updateApi } from './settingApi';
+import Button from '../components/ui/Button.jsx';
+import { Input } from '../components/ui/Field.jsx';
+import Notice from '../components/ui/Notice.jsx';
+import Skeleton from '../components/ui/Skeleton.jsx';
+import { RowGroup, SettingsRow, SettingsSection } from '../components/ui/Rows.jsx';
+import { errorDetail, useToast } from '../components/toastContext.js';
+import { storageApi } from '../files/storageApi.js';
+import { formatBytes } from '../files/fileFormat.js';
 
-const inputCls =
-  "w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-gray-700 " +
-  "bg-white dark:bg-gray-800 midnight:bg-gray-800 " +
-  "text-gray-900 dark:text-gray-100 midnight:text-gray-100 text-sm " +
-  "focus:outline-none focus:ring-2 focus:ring-gray-300 dark:focus:ring-gray-600 " +
-  "transition-colors placeholder:text-gray-400 dark:placeholder:text-gray-500";
+const READ_ONLY = [
+  { key: 'PORT', label: 'Server port' },
+  { key: 'NODE_ENV', label: 'Environment' },
+  { key: 'FRONTEND_URL', label: 'App address' },
+  { key: 'DB_PATH', label: 'Database' },
+  { key: 'LLAMA_SERVER_PORT', label: 'llama.cpp port' },
+  { key: 'MLX_SERVER_PORT', label: 'MLX port' },
+  { key: 'MODELS_PATH', label: 'Models folder' },
+  { key: 'STORAGE_PATH', label: 'Storage folder' },
+  { key: 'WHISPER_SERVER_PORT', label: 'Whisper port' },
+  { key: 'WHISPER_BINARY_PATH', label: 'Whisper program' },
+  { key: 'TTS_SERVER_PORT', label: 'Piper port' },
+  { key: 'PIPER_BINARY_PATH', label: 'Piper program' },
+  { key: 'IMAGEGEN_BINARY_PATH', label: 'Image engine program' },
+  { key: 'MLX_PYTHON_PATH', label: 'MLX Python' },
+  { key: 'MLX_MODELS_PATH', label: 'More MLX models' },
+];
 
-const readOnlyCls =
-  "w-full px-3 py-2 rounded-lg border border-gray-200/60 dark:border-gray-700/40 midnight:border-gray-700/40 " +
-  "bg-gray-50 dark:bg-gray-800/50 midnight:bg-gray-800/50 " +
-  "text-gray-400 dark:text-gray-500 midnight:text-gray-500 text-sm cursor-default select-none";
+const EDITABLE = [
+  {
+    key: 'COMFYUI_BASE_URL',
+    label: 'ComfyUI address',
+    placeholder: 'http://127.0.0.1:8188',
+    hint: 'Where the image generation tester looks for ComfyUI.',
+  },
+];
 
-// The database's file and how many rows each table has (Developer options
-// only; den's GET /api/storage/database).
+// The database's file and how many rows each table has (den's GET
+// /api/storage/database).
 function DatabaseTables() {
   const [info, setInfo] = useState(null);
   useEffect(() => {
-    storageApi.database().then(setInfo).catch((err) => setInfo({ error: apiUtils.handleError(err, "Couldn't read the database") }));
+    storageApi.database().then(setInfo).catch((err) => setInfo({ error: errorDetail(err) || "Couldn't read the database" }));
   }, []);
   const tables = [...(info?.tables || [])].sort((a, b) => (b.rows ?? -1) - (a.rows ?? -1) || a.name.localeCompare(b.name));
   return (
@@ -60,7 +72,7 @@ function DatabaseTables() {
               {tables.map((table) => (
                 <tr key={table.name}>
                   <td className="px-4 py-1.5 font-mono text-fg">{table.name}</td>
-                  <td className="px-4 py-1.5 text-right tabular-nums text-fg-muted">{table.rows == null ? "?" : table.rows.toLocaleString()}</td>
+                  <td className="px-4 py-1.5 text-right tabular-nums text-fg-muted">{table.rows == null ? '?' : table.rows.toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>
@@ -72,24 +84,16 @@ function DatabaseTables() {
 }
 
 const ServerSection = () => {
+  const toast = useToast();
   const [config, setConfig] = useState({});
   const [effectiveConfig, setEffectiveConfig] = useState({});
   const [configSources, setConfigSources] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState(null);
   const [runtime, setRuntime] = useState({});
-
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(null);
   const [editValues, setEditValues] = useState({});
-
-  // Restart state
   const [restartPhase, setRestartPhase] = useState(null); // null | 'restarting' | 'waiting' | 'done' | 'timeout'
   const restartCleanupRef = useRef(null);
-
-  const flash = useCallback((msg, ms = 3000) => {
-    setMessage(msg);
-    setTimeout(() => setMessage(null), ms);
-  }, []);
 
   const loadConfig = useCallback(async () => {
     setLoading(true);
@@ -102,268 +106,108 @@ const ServerSection = () => {
         setRuntime(cfg.runtime || {});
       }
     } catch (err) {
-      flash({
-        type: "error",
-        text: apiUtils.handleError(err, "Failed to load config"),
-      });
+      toast.error("Couldn't read the server settings", { detail: errorDetail(err) });
     } finally {
       setLoading(false);
     }
-  }, [flash]);
+  }, [toast]);
 
   useEffect(() => {
     loadConfig();
     return () => restartCleanupRef.current?.();
   }, [loadConfig]);
 
-  const saveConfigValue = async (key) => {
+  const saveConfigValue = async (event, key, label) => {
+    event.preventDefault();
     const value = editValues[key]?.trim();
-    if (!value) {
-      flash({ type: "error", text: `${key} cannot be empty` });
-      return;
-    }
-
-    setSaving(true);
+    if (!value) return;
+    setSaving(key);
     try {
       const res = await configApi.updateConfig(key, value);
       if (!res.success) throw new Error(res.error);
-
-      setEditValues((prev) => ({ ...prev, [key]: "" }));
+      setEditValues((prev) => ({ ...prev, [key]: '' }));
       await loadConfig();
-      flash({ type: "success", text: res.message || `${key} updated` });
+      toast.success(`Saved the ${label}`);
     } catch (err) {
-      flash({
-        type: "error",
-        text: apiUtils.handleError(err, "Failed to save"),
-      });
+      toast.error("Couldn't save that", { detail: errorDetail(err) });
     } finally {
-      setSaving(false);
+      setSaving(null);
     }
   };
 
-  const handleRestart = () => {
+  const restart = () => {
     restartCleanupRef.current?.();
-    setRestartPhase("restarting");
+    setRestartPhase('restarting');
     restartCleanupRef.current = updateApi.restart(
-      () => setRestartPhase("waiting"),
+      () => setRestartPhase('waiting'),
       () => {
-        setRestartPhase("done");
+        setRestartPhase('done');
         setTimeout(() => window.location.reload(), 800);
       },
-      () => setRestartPhase("timeout"),
+      () => setRestartPhase('timeout'),
     );
   };
 
-  const nonEditableConfig = [
-    { key: "PORT", label: "Server Port" },
-    { key: "NODE_ENV", label: "Environment" },
-    { key: "FRONTEND_URL", label: "Frontend URL" },
-    { key: "DB_PATH", label: "Database Path" },
-    { key: "LLAMA_SERVER_PORT", label: "LLM Server Port" },
-    { key: "MLX_SERVER_PORT", label: "MLX Server Port" },
-    { key: "MODELS_PATH", label: "Models Path" },
-    { key: "STORAGE_PATH", label: "Storage Path" },
-    { key: "WHISPER_SERVER_PORT", label: "Whisper STT Port" },
-    { key: "WHISPER_BINARY_PATH", label: "Whisper Binary Path" },
-    { key: "TTS_SERVER_PORT", label: "Piper TTS Port" },
-    { key: "PIPER_BINARY_PATH", label: "Piper Binary Path" },
-    { key: "IMAGEGEN_BINARY_PATH", label: "Simple Image Engine Binary Path" },
-    { key: "MLX_PYTHON_PATH", label: "MLX Python Runtime" },
-    { key: "MLX_MODELS_PATH", label: "Additional MLX Models Path" },
-  ];
+  if (loading) return <Skeleton className="h-64 rounded-xl" />;
 
-  const editableConfig = [
-    {
-      key: "COMFYUI_BASE_URL",
-      label: "ComfyUI base URL",
-      placeholder: "http://127.0.0.1:8188",
-      help: "Controls where the image generation tester looks for ComfyUI. Default is http://127.0.0.1:8188.",
-    },
-  ];
-
-  if (loading) {
-    const skeletonRows = ["h-10", "h-8", "h-6"];
-    return (
-      <div className={`space-y-3 ${settingsFontBase}`}>
-        {skeletonRows.map((heightClass) => (
-          <div
-            key={heightClass}
-            className={`${heightClass} bg-gray-100 dark:bg-gray-800 rounded`}
-          />
-        ))}
-      </div>
-    );
-  }
+  const value = (key) => effectiveConfig[key] || config[key] || '';
+  const restarting = restartPhase === 'restarting' || restartPhase === 'waiting';
 
   return (
-    <div className={`space-y-6 ${settingsFontBase}`}>
-      {message && (
-        <div
-          className={`p-4 rounded-lg text-sm ${
-            message.type === "success"
-              ? "bg-green-100 text-green-700 dark:bg-green-800 dark:text-green-200 midnight:bg-green-900 midnight:text-green-300"
-              : "bg-red-100 text-red-700 dark:bg-red-800 dark:text-red-200 midnight:bg-red-900 midnight:text-red-300"
-          }`}
-        >
-          {message.text}
-        </div>
-      )}
+    <div className="space-y-8" data-server>
+      <SettingsSection icon={Server} title="Service addresses" hint="Optional services on this computer. A project's folder access is set in the project.">
+        <RowGroup>
+          {EDITABLE.map(({ key, label, placeholder, hint }) => (
+            <SettingsRow key={key} label={label} hint={<>{hint} Now: <span className="font-mono">{value(key) || 'not set'}</span></>}>
+              <form onSubmit={(event) => saveConfigValue(event, key, label)} className="flex items-center gap-2">
+                <Input
+                  value={editValues[key] ?? ''}
+                  onChange={(event) => setEditValues((prev) => ({ ...prev, [key]: event.target.value }))}
+                  placeholder={value(key) || placeholder}
+                  aria-label={label}
+                  className="w-full sm:w-60"
+                />
+                <Button type="submit" loading={saving === key} disabled={!editValues[key]?.trim()}>Save</Button>
+              </form>
+            </SettingsRow>
+          ))}
+        </RowGroup>
+      </SettingsSection>
 
-      {/* Service endpoints */}
-      <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800 pt-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Server size={18} className="text-gray-500 dark:text-gray-400" />
-          <h3 className="text-base font-semibold text-gray-900 dark:text-white midnight:text-gray-100">
-            Service endpoints
-          </h3>
-        </div>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-          Configure optional local services. Project folder access is managed from each Project.
-        </p>
-
-        <div className="space-y-4">
-          {editableConfig.map(({ key, label, placeholder, help }) => {
-            const currentValue = effectiveConfig[key] || config[key] || "(not set)";
-            return (
-              <div key={key}>
-                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-400 mb-1.5">
-                  {label}
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={editValues[key] ?? ""}
-                    onChange={(e) =>
-                      setEditValues((prev) => ({
-                        ...prev,
-                        [key]: e.target.value,
-                      }))
-                    }
-                    placeholder={effectiveConfig[key] || config[key] || placeholder}
-                    className={inputCls}
-                  />
-                </div>
-                <p className="mt-1.5 text-[11px] text-gray-400 dark:text-gray-500">
-                  Current: {currentValue}
-                </p>
-                <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
-                  {help}
-                </p>
-                <div className="mt-2 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => saveConfigValue(key)}
-                    disabled={saving || !editValues[key]}
-                    className="px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5
-                    bg-gray-900 hover:bg-gray-700 dark:bg-gray-100 dark:hover:bg-white
-                    midnight:bg-gray-100 midnight:hover:bg-white
-                    text-white dark:text-gray-900 midnight:text-gray-900
-                    disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                  >
-                    {saving ? (
-                      <Loader2 size={11} className="animate-spin" />
-                    ) : null}
-                    Save {label}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Server Info (read-only) */}
-      <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800 pt-6">
-        <div className="flex items-center gap-2 mb-4">
-          <RotateCcw size={18} className="text-gray-500 dark:text-gray-400" />
-          <h3 className="text-base font-semibold text-gray-900 dark:text-white midnight:text-gray-100">
-            Server Configuration
-          </h3>
-        </div>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-          Effective server settings (read-only). Engine paths and ports are
-          managed from Runtime and Models. Bootstrap configuration is loaded
-          from <code className="font-mono px-1 break-all">{runtime.envFile || '.env'}</code>.
-        </p>
-
-        <div className="space-y-3">
-          {nonEditableConfig.map(({ key, label }) => (
-            <div key={key}>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-400 mb-1">
-                {label}
-              </label>
-              <div className={readOnlyCls}>{effectiveConfig[key] || config[key] || "(not set)"}</div>
-              <p className="mt-1 text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-600">
-                Source: {configSources[key] || 'unknown'}
-              </p>
+      <SettingsSection
+        icon={SlidersHorizontal}
+        title="Server settings"
+        hint={<>What the server runs with, read-only. Start-up settings come from <span className="break-all font-mono">{runtime.envFile || '.env'}</span>; engines are set up in Models.</>}
+      >
+        <dl className="divide-y divide-line rounded-xl border border-line">
+          {READ_ONLY.map(({ key, label }) => (
+            <div key={key} className="flex flex-col gap-0.5 px-4 py-2.5 sm:flex-row sm:items-baseline sm:gap-4">
+              <dt className="shrink-0 text-[13px] text-fg-muted sm:w-44">{label}</dt>
+              <dd className="min-w-0 flex-1 break-all font-mono text-[12px] text-fg">{value(key) || <span className="font-sans text-fg-subtle">Not set</span>}</dd>
+              <dd className="shrink-0 font-mono text-[11px] text-fg-subtle" title={`From ${configSources[key] || 'unknown'}`}>{key} · {configSources[key] || 'unknown'}</dd>
             </div>
           ))}
-        </div>
-      </div>
+        </dl>
+      </SettingsSection>
 
-      <div className="border-t border-line pt-6">
-        <DatabaseTables />
-      </div>
+      <DatabaseTables />
 
-      {/* Restart */}
-      <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800 pt-6">
-        <div className="flex items-center gap-2 mb-2">
-          <RotateCcw size={18} className="text-gray-500 dark:text-gray-400" />
-          <h3 className="text-base font-semibold text-gray-900 dark:text-white midnight:text-gray-100">
-            Restart Server
-          </h3>
-        </div>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-          The desktop app stops and starts its managed backend directly. A web
-          or source deployment requests a graceful restart and requires a
-          supervisor such as systemd, pm2, Docker, or an equivalent restart policy.
-        </p>
-
-        <div className="flex items-center gap-3 flex-wrap">
-          <button
-            type="button"
-            onClick={handleRestart}
-            disabled={
-              restartPhase === "restarting" ||
-              restartPhase === "waiting" ||
-              restartPhase === "done"
-            }
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
-              bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-white
-              midnight:bg-gray-100 midnight:hover:bg-white
-              text-white dark:text-gray-900 midnight:text-gray-900
-              disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+      <SettingsSection icon={RotateCcw} title="Restart">
+        <RowGroup>
+          <SettingsRow
+            label="Restart the server"
+            hint={restartPhase === 'done'
+              ? <span className="text-emerald-700 dark:text-emerald-400">The server is back. Reloading…</span>
+              : restartPhase === 'timeout'
+                ? <span className="text-amber-700 dark:text-amber-400">The server didn&apos;t restart by itself. Reopen the desktop app, or restart it from your supervisor.</span>
+                : 'The desktop app restarts its own server. A copy run from source asks for a restart, which needs a supervisor such as systemd, pm2 or Docker.'}
           >
-            {restartPhase === "restarting" || restartPhase === "waiting" ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <RotateCcw size={14} />
-            )}
-            {restartPhase === "restarting"
-              ? "Restarting…"
-              : restartPhase === "waiting"
-                ? "Waiting for server…"
-                : restartPhase === "done"
-                  ? "Reloading…"
-                  : "Restart server"}
-          </button>
-
-          {restartPhase === "done" && (
-            <span className="inline-flex items-center gap-1.5 text-sm text-green-600 dark:text-green-400">
-              <CheckCircle2 size={14} />
-              Server is back — reloading page
-            </span>
-          )}
-
-          {restartPhase === "timeout" && (
-            <span className="inline-flex items-center gap-1.5 text-sm text-amber-600 dark:text-amber-400 flex-wrap">
-              <AlertTriangle size={14} className="shrink-0" />
-              Server did not restart automatically. Relaunch the desktop app,
-              or restart the backend from your source deployment supervisor.
-            </span>
-          )}
-        </div>
-      </div>
+            <Button icon={RotateCcw} loading={restarting} disabled={restarting || restartPhase === 'done'} onClick={restart}>
+              {restartPhase === 'restarting' ? 'Restarting…' : restartPhase === 'waiting' ? 'Waiting for the server…' : restartPhase === 'done' ? 'Reloading…' : 'Restart'}
+            </Button>
+          </SettingsRow>
+        </RowGroup>
+      </SettingsSection>
     </div>
   );
 };

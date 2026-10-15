@@ -165,7 +165,7 @@ const SettingsPage = () => {
   const renderAbout = () => (
     <div className="space-y-8">
       <UpdateSection />
-      <SettingsSection icon={Wrench} title="Developer options" data-settings-section="developer" className="scroll-mt-6">
+      <SettingsSection icon={Wrench} title="Advanced" data-settings-section="developer" className="scroll-mt-6">
         <RowGroup>
           <SettingsRow label="Storage and logs" hint="In Files, with everything else Asyncat keeps on this computer.">
             <Button onClick={() => navigate('/files/logs')}>Open Files</Button>
