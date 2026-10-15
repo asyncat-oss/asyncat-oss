@@ -5,7 +5,23 @@ import { useMemo, useState } from 'react';
 import { BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell, ScatterChart, Scatter, ZAxis, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { evalExpr } from '../../utils/chartExpression.js';
 
-const CHART_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4', '#d946ef', '#0ea5e9'];
+// Series colours, used in this fixed order: a categorical palette checked for
+// colour-blind separation, stepped for the light and the dark surfaces. The
+// first is the app's blue. They are set as CSS variables on the chart's frame
+// so the theme switches them; every other part of a chart uses the app's
+// tokens (axes, grid, tooltip, text).
+const CHART_PALETTE = [
+  '[--chart-1:#2456dc] [--chart-2:#eb6834] [--chart-3:#1baf7a] [--chart-4:#eda100]',
+  '[--chart-5:#e87ba4] [--chart-6:#008300] [--chart-7:#4a3aa7] [--chart-8:#e34948]',
+  'dark:[--chart-1:#3987e5] dark:[--chart-2:#d95926] dark:[--chart-3:#199e70] dark:[--chart-4:#c98500]',
+  'dark:[--chart-5:#d55181] dark:[--chart-6:#008300] dark:[--chart-7:#9085e9] dark:[--chart-8:#e66767]',
+].join(' ');
+const CHART_COLORS = Array.from({ length: 8 }, (_, i) => `var(--chart-${i + 1})`);
+
+const AXIS = { stroke: 'var(--as-line-strong)', tick: { fontSize: 11, fill: 'var(--as-fg-subtle)' } };
+const GRID = { strokeDasharray: '3 3', stroke: 'var(--as-line)' };
+// Legend text stays in ink; the swatch beside it carries the colour.
+const legendText = (value) => <span style={{ color: 'var(--as-fg-muted)' }}>{value}</span>;
 
 // ─── Shared math expression evaluator ────────────────────────────────────────
 
@@ -28,10 +44,10 @@ function defaultParams(paramDefs) {
 function SliderPanel({ paramDefs, paramValues, setParamValues, onReset }) {
   if (!Object.keys(paramDefs).length) return null;
   return (
-    <div className="px-4 pb-4 pt-3 bg-white dark:bg-gray-950 midnight:bg-slate-950 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 space-y-3">
+    <div className="space-y-3 border-t border-line px-4 pb-4 pt-3">
       {Object.entries(paramDefs).map(([key, p]) => (
         <div key={key} className="flex items-center gap-3">
-          <span className="text-[11px] font-mono text-gray-500 dark:text-gray-400 w-36 shrink-0 truncate" title={p.label || key}>
+          <span className="w-36 shrink-0 truncate font-mono text-[12px] text-fg-muted" title={p.label || key}>
             {p.label || key}
           </span>
           <input
@@ -41,9 +57,10 @@ function SliderPanel({ paramDefs, paramValues, setParamValues, onReset }) {
             step={p.step ?? 0.1}
             value={paramValues[key]}
             onChange={e => setParamValues(prev => ({ ...prev, [key]: Number(e.target.value) }))}
-            className="flex-1 h-1.5 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+            aria-label={p.label || key}
+            className="h-1.5 flex-1 cursor-pointer rounded-lg accent-[var(--as-accent)]"
           />
-          <span className="text-[11px] font-mono text-indigo-500 dark:text-indigo-400 w-14 text-right shrink-0 tabular-nums">
+          <span className="w-14 shrink-0 text-right font-mono text-[12px] tabular-nums text-fg">
             {fmtVal(paramValues[key])}
           </span>
         </div>
@@ -53,7 +70,7 @@ function SliderPanel({ paramDefs, paramValues, setParamValues, onReset }) {
           <button
             type="button"
             onClick={onReset}
-            className="text-[10px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 midnight:hover:text-slate-300 transition-colors"
+            className="rounded-md px-1.5 py-0.5 text-[12px] text-fg-subtle transition-colors hover:bg-hover hover:text-fg"
           >
             Reset
           </button>
@@ -63,15 +80,32 @@ function SliderPanel({ paramDefs, paramValues, setParamValues, onReset }) {
   );
 }
 
+// ─── Shared header: what the chart is, its title, then actions ──────────────
+
+function ChartHeader({ label, title, children }) {
+  return (
+    <div className="flex items-center gap-2 border-b border-line px-3.5 py-1.5">
+      <span className="shrink-0 text-[12px] font-medium text-fg-subtle">{label}</span>
+      {title ? <span className="min-w-0 truncate text-[12px] text-fg-muted">{title}</span> : null}
+      <div className="ml-auto flex shrink-0 items-center gap-1">{children}</div>
+    </div>
+  );
+}
+
 // ─── Shared tooltip style ─────────────────────────────────────────────────────
 
 const TOOLTIP_STYLE = {
-  backgroundColor: 'rgba(17, 24, 39, 0.95)',
-  border: '1px solid #374151',
+  backgroundColor: 'var(--as-elevated)',
+  border: '1px solid var(--as-line-strong)',
   borderRadius: '8px',
   fontSize: '12px',
-  color: '#f3f4f6',
+  color: 'var(--as-fg)',
 };
+// Tooltip text in ink too, not in the series colour.
+const TOOLTIP_TEXT = { itemStyle: { color: 'var(--as-fg)' }, labelStyle: { color: 'var(--as-fg-muted)' } };
+// The hover cursor in tokens too: recharts' default #ccc glares in dark themes.
+const BAR_CURSOR = { fill: 'var(--as-hover)' };
+const LINE_CURSOR = { stroke: 'var(--as-line-strong)' };
 
 // ─── Interactive Function Plot y = f(x) ──────────────────────────────────────
 
@@ -111,24 +145,24 @@ const FunctionPlotChart = ({ parsed }) => {
   const yDomain = yRange ? [yRange[0], yRange[1]] : ['auto', 'auto'];
 
   return (
-    <div className="mb-6 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 midnight:border-slate-800 shadow-sm">
-      <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-900 midnight:bg-slate-900 border-b border-gray-200 dark:border-gray-800 midnight:border-slate-800">
-        <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 tracking-wide uppercase">Function Plot</span>
-        {title && <span className="text-[11px] text-gray-400 dark:text-gray-500">— {title}</span>}
-        {hasParams && <span className="ml-auto text-[10px] text-indigo-400 dark:text-indigo-500">drag sliders to explore</span>}
-      </div>
-      <div className="px-4 pt-4 pb-2 bg-white dark:bg-gray-950 midnight:bg-slate-950">
+    <div className={`mb-6 overflow-hidden rounded-xl border border-line ${CHART_PALETTE}`}>
+      <ChartHeader label="Function plot" title={title}>
+        {hasParams && <span className="text-[12px] text-fg-subtle">Drag the sliders to explore</span>}
+      </ChartHeader>
+      <div className="px-4 pt-4 pb-2">
         <ResponsiveContainer width="100%" height={240}>
           <LineChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-gray-700" />
-            <XAxis dataKey="x" tick={{ fontSize: 11 }} stroke="#9ca3af" />
-            <YAxis tick={{ fontSize: 11 }} stroke="#9ca3af" domain={yDomain} />
+            <CartesianGrid {...GRID} />
+            <XAxis dataKey="x" {...AXIS} />
+            <YAxis {...AXIS} domain={yDomain} />
             <Tooltip
+              cursor={LINE_CURSOR}
               contentStyle={TOOLTIP_STYLE}
+              {...TOOLTIP_TEXT}
               formatter={(v, name) => [fmtVal(v), name]}
               labelFormatter={x => `x = ${fmtVal(Number(x))}`}
             />
-            {yKeys.length > 1 && <Legend wrapperStyle={{ fontSize: '11px' }} />}
+            {yKeys.length > 1 && <Legend wrapperStyle={{ fontSize: '12px' }} formatter={legendText} />}
             {yKeys.map((key, i) => (
               <Line
                 key={key}
@@ -186,24 +220,24 @@ const ParametricPlotChart = ({ parsed }) => {
   }, [seriesDefs, paramValues, tRange, tSteps]);
 
   return (
-    <div className="mb-6 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 midnight:border-slate-800 shadow-sm">
-      <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-900 midnight:bg-slate-900 border-b border-gray-200 dark:border-gray-800 midnight:border-slate-800">
-        <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 tracking-wide uppercase">Parametric Plot</span>
-        {title && <span className="text-[11px] text-gray-400 dark:text-gray-500">— {title}</span>}
-        {hasParams && <span className="ml-auto text-[10px] text-indigo-400 dark:text-indigo-500">drag sliders to explore</span>}
-      </div>
-      <div className="px-4 pt-4 pb-2 bg-white dark:bg-gray-950 midnight:bg-slate-950">
+    <div className={`mb-6 overflow-hidden rounded-xl border border-line ${CHART_PALETTE}`}>
+      <ChartHeader label="Parametric plot" title={title}>
+        {hasParams && <span className="text-[12px] text-fg-subtle">Drag the sliders to explore</span>}
+      </ChartHeader>
+      <div className="px-4 pt-4 pb-2">
         <ResponsiveContainer width="100%" height={280}>
           <ScatterChart margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-gray-700" />
-            <XAxis dataKey="x" type="number" name="x" tick={{ fontSize: 11 }} stroke="#9ca3af" />
-            <YAxis dataKey="y" type="number" name="y" tick={{ fontSize: 11 }} stroke="#9ca3af" />
+            <CartesianGrid {...GRID} />
+            <XAxis dataKey="x" type="number" name="x" {...AXIS} />
+            <YAxis dataKey="y" type="number" name="y" {...AXIS} />
             <ZAxis range={[1, 1]} />
             <Tooltip
+              cursor={LINE_CURSOR}
               contentStyle={TOOLTIP_STYLE}
+              {...TOOLTIP_TEXT}
               formatter={(v, name) => [fmtVal(v), name]}
             />
-            {seriesData.length > 1 && <Legend wrapperStyle={{ fontSize: '11px' }} />}
+            {seriesData.length > 1 && <Legend wrapperStyle={{ fontSize: '12px' }} formatter={legendText} />}
             {seriesData.map((s, i) => (
               <Scatter
                 key={s.name}
@@ -270,23 +304,15 @@ const ChartBlock = ({ content, fallback = null }) => {
       margin: { top: 5, right: 20, left: 0, bottom: 5 },
     };
 
-    const axes = (
-      <>
-        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-gray-700" />
-        <XAxis dataKey={xKey} tick={{ fontSize: 11 }} stroke="#9ca3af" />
-        <YAxis tick={{ fontSize: 11 }} stroke="#9ca3af" />
-        <Tooltip
-          contentStyle={{
-            backgroundColor: 'rgba(17, 24, 39, 0.95)',
-            border: '1px solid #374151',
-            borderRadius: '8px',
-            fontSize: '12px',
-            color: '#f3f4f6',
-          }}
-        />
-        {yKeys.length > 1 && <Legend wrapperStyle={{ fontSize: '11px' }} />}
-      </>
-    );
+    // An array, not a fragment: recharts only finds its axes, grid and
+    // tooltip among a chart's direct children.
+    const axes = [
+      <CartesianGrid key="grid" {...GRID} />,
+      <XAxis key="x" dataKey={xKey} {...AXIS} />,
+      <YAxis key="y" {...AXIS} />,
+      <Tooltip key="tooltip" cursor={type === 'line' || type === 'area' ? LINE_CURSOR : BAR_CURSOR} contentStyle={TOOLTIP_STYLE} {...TOOLTIP_TEXT} />,
+      yKeys.length > 1 ? <Legend key="legend" wrapperStyle={{ fontSize: '12px' }} formatter={legendText} /> : null,
+    ];
 
     if (type === 'line') {
       return (
@@ -320,43 +346,37 @@ const ChartBlock = ({ content, fallback = null }) => {
             nameKey={xKey}
             cx="50%" cy="50%"
             outerRadius={80}
-            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-            labelLine={{ stroke: '#9ca3af' }}
+            label={({ name, percent, x, y, textAnchor }) => (
+              <text x={x} y={y} textAnchor={textAnchor} dominantBaseline="central" fontSize={12} fill="var(--as-fg-muted)">
+                {`${name} ${(percent * 100).toFixed(0)}%`}
+              </text>
+            )}
+            labelLine={{ stroke: 'var(--as-line-strong)' }}
+            stroke="var(--as-canvas)"
+            strokeWidth={2}
           >
             {data.map((_, i) => (
               <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
             ))}
           </Pie>
           <Tooltip
-            contentStyle={{
-              backgroundColor: 'rgba(17, 24, 39, 0.95)',
-              border: '1px solid #374151',
-              borderRadius: '8px',
-              fontSize: '12px',
-              color: '#f3f4f6',
-            }}
+            contentStyle={TOOLTIP_STYLE}
+          {...TOOLTIP_TEXT}
           />
-          <Legend wrapperStyle={{ fontSize: '11px' }} />
+          <Legend wrapperStyle={{ fontSize: '12px' }} formatter={legendText} />
         </PieChart>
       );
     }
 
     if (type === 'scatter') {
-      const tooltipStyle = {
-        backgroundColor: 'rgba(17, 24, 39, 0.95)',
-        border: '1px solid #374151',
-        borderRadius: '8px',
-        fontSize: '12px',
-        color: '#f3f4f6',
-      };
       return (
         <ScatterChart margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-gray-700" />
-          <XAxis dataKey="x" type="number" name={xKey} tick={{ fontSize: 11 }} stroke="#9ca3af" label={{ value: xKey, position: 'insideBottom', offset: -2, fontSize: 11 }} />
-          <YAxis dataKey="y" type="number" tick={{ fontSize: 11 }} stroke="#9ca3af" />
+          <CartesianGrid {...GRID} />
+          <XAxis dataKey="x" type="number" name={xKey} {...AXIS} label={{ value: xKey, position: 'insideBottom', offset: -2, fontSize: 11, fill: 'var(--as-fg-subtle)' }} />
+          <YAxis dataKey="y" type="number" {...AXIS} />
           <ZAxis range={[40, 40]} />
-          <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={tooltipStyle} />
-          {yKeys.length > 1 && <Legend wrapperStyle={{ fontSize: '11px' }} />}
+          <Tooltip cursor={{ ...LINE_CURSOR, strokeDasharray: '3 3' }} contentStyle={TOOLTIP_STYLE} {...TOOLTIP_TEXT} />
+          {yKeys.length > 1 && <Legend wrapperStyle={{ fontSize: '12px' }} formatter={legendText} />}
           {yKeys.map((key, i) => (
             <Scatter
               key={key}
@@ -381,29 +401,25 @@ const ChartBlock = ({ content, fallback = null }) => {
   };
 
   return (
-    <div className="mb-6 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 midnight:border-slate-800 shadow-sm">
-      <div className="flex items-center justify-between px-4 py-2 bg-gray-100 dark:bg-gray-900 midnight:bg-slate-900 border-b border-gray-200 dark:border-gray-800 midnight:border-slate-800">
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 tracking-wide uppercase">
-            {config.type === 'pie' ? 'Pie Chart' : config.type === 'line' ? 'Line Chart' : config.type === 'area' ? 'Area Chart' : config.type === 'scatter' ? 'Scatter Plot' : 'Bar Chart'}
-          </span>
-          {config.title && (
-            <span className="text-[11px] text-gray-400 dark:text-gray-500">— {config.title}</span>
-          )}
-        </div>
+    <div className={`mb-6 overflow-hidden rounded-xl border border-line ${CHART_PALETTE}`}>
+      <ChartHeader
+        label={config.type === 'pie' ? 'Pie chart' : config.type === 'line' ? 'Line chart' : config.type === 'area' ? 'Area chart' : config.type === 'scatter' ? 'Scatter plot' : 'Bar chart'}
+        title={config.title}
+      >
         <button
+          type="button"
           onClick={() => setShowData(v => !v)}
-          className="text-[10px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+          className="flex h-7 items-center rounded-md px-2 text-[12px] font-medium text-fg-subtle outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/40"
         >
           {showData ? 'Show chart' : 'View data'}
         </button>
-      </div>
+      </ChartHeader>
       {showData ? (
-        <pre className="p-4 overflow-x-auto bg-gray-50 dark:bg-gray-950 text-[12px] font-mono text-gray-600 dark:text-gray-400">
+        <pre className="overflow-x-auto p-4 font-mono text-[12px] text-fg-muted">
           {JSON.stringify(config.data, null, 2)}
         </pre>
       ) : (
-        <div className="p-4 bg-white dark:bg-gray-950 midnight:bg-slate-950">
+        <div className="p-4">
           <ResponsiveContainer width="100%" height={280}>
             {renderChart()}
           </ResponsiveContainer>
