@@ -37,6 +37,7 @@ import { formatMultimodalCapabilityPrompt, getMultimodalCapabilities } from '../
 import { normalizeApprovalDecision } from '../../agent/approvalDecisions.js';
 import { buildChatContext, projectForChat } from '../../knowledge/chatContext.js';
 import { personalizationPromptFor } from '../../users/personalization.js';
+import { SKILL_CATEGORIES } from '../../agent/skillCategories.js';
 import { getModelCapabilities, normalizeReasoningEffort } from '../controllers/ai/modelCapabilities.js';
 import { getModelRuntimeStatus } from '../controllers/ai/modelRuntimeStatus.js';
 import { listProfiles, getProfile, getProfileByHandle, createProfile, updateProfile, deleteProfile, toolsForCapabilities, AGENT_CAPABILITIES } from '../../agent/ProfileManager.js';
@@ -946,6 +947,7 @@ router.get('/skills', withWorkspaceContext, (req, res) => {
   const skills = listSkills().map(s => ({
     name: s.name,
     description: s.description || '',
+    category: s.category,
     brain_region: s.brain_region || 'unknown',
     weight: parseFloat(s.weight || 1),
     tags: normalizeTags(s.tags),
@@ -954,7 +956,9 @@ router.get('/skills', withWorkspaceContext, (req, res) => {
     source: s.source || 'bundled',
     created_by: s.created_by || null,
   }));
-  res.json({ success: true, count: skills.length, skills });
+  // The categories in the order the Skills page shows them.
+  const categories = SKILL_CATEGORIES.map(({ name, description }) => ({ name, description }));
+  res.json({ success: true, count: skills.length, skills, categories });
 });
 
 router.get('/skills/:name', withWorkspaceContext, (req, res) => {
@@ -966,6 +970,7 @@ router.get('/skills/:name', withWorkspaceContext, (req, res) => {
     skill: {
       name: skill.name,
       description: skill.description || '',
+      category: skill.category,
       brain_region: skill.brain_region || 'unknown',
       weight: parseFloat(skill.weight || 1),
       tags: normalizeTags(skill.tags),
@@ -988,8 +993,9 @@ router.post('/skills/reload', withWorkspaceContext, (_req, res) => {
 
 router.post('/skills', withWorkspaceContext, (req, res) => {
   try {
-    const { name, description = '', brain_region = 'unknown', weight = 1, tags = [], when_to_use = '', body = '', created_by = null } = req.body;
-    const result = createSkill({ name, description, brain_region, weight, tags, when_to_use, body, created_by });
+    // `category` is the plain name (Workflow…); `brain_region` still works.
+    const { name, description = '', category, brain_region, weight = 1, tags = [], when_to_use = '', body = '', created_by = null } = req.body;
+    const result = createSkill({ name, description, category, brain_region, weight, tags, when_to_use, body, created_by });
     res.status(201).json({ success: true, ...result });
   } catch (err) {
     const status = err.message.includes('already exists') ? 409 : err.message.includes('required') ? 400 : 500;

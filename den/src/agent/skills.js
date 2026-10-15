@@ -5,6 +5,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { categoryForRegion, regionForCategory } from './skillCategories.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -51,8 +52,11 @@ function readSkillsFromDir(dir, source) {
       const filePath = path.join(dir, file);
       const content = fs.readFileSync(filePath, 'utf8');
       const stat = fs.statSync(filePath);
+      const skill = parseFrontmatter(content, file.replace(/\.md$/, ''));
       return {
-        ...parseFrontmatter(content, file.replace(/\.md$/, '')),
+        ...skill,
+        // Files keep brain_region; everything else uses the plain name.
+        category: categoryForRegion(skill.brain_region),
         source,
         path: filePath,
         updatedAt: stat.mtime.toISOString(),
@@ -104,24 +108,29 @@ function buildSkillMarkdown({ name, description = '', brain_region = 'unknown', 
   return lines.join('\n');
 }
 
-export function createSkill({ name, description, brain_region, weight, tags, when_to_use, body, created_by }) {
+/** A new user skill. `category` is a plain name (Workflow…); an old brain_region key works too. */
+export function createSkill({ name, description, category, brain_region, weight, tags, when_to_use, body, created_by }) {
   if (!name?.trim()) throw new Error('name is required');
   fs.mkdirSync(USER_SKILLS_DIR, { recursive: true });
   const filename = `${slugifyName(name)}.md`;
   const filePath = path.join(USER_SKILLS_DIR, filename);
   if (fs.existsSync(filePath)) throw new Error(`Skill "${name}" already exists`);
-  const content = buildSkillMarkdown({ name: name.trim(), description, brain_region, weight, tags, when_to_use, body, created_by });
+  const content = buildSkillMarkdown({
+    name: name.trim(), description, brain_region: regionForCategory(category ?? brain_region), weight, tags, when_to_use, body, created_by,
+  });
   fs.writeFileSync(filePath, content, 'utf8');
   reloadSkills();
   return { name: name.trim(), filename, path: filePath };
 }
 
-export function updateSkill(name, fields) {
+export function updateSkill(name, fields = {}) {
   const slug = slugifyName(name);
   const filePath = path.join(USER_SKILLS_DIR, `${slug}.md`);
   if (!fs.existsSync(filePath)) throw new Error(`User skill "${name}" not found`);
   const existing = parseFrontmatter(fs.readFileSync(filePath, 'utf8'), name);
-  const merged = { ...existing, ...fields, name: existing.name };
+  const { category, ...rest } = fields;
+  const merged = { ...existing, ...rest, name: existing.name };
+  if (category !== undefined) merged.brain_region = regionForCategory(category);
   const content = buildSkillMarkdown(merged);
   fs.writeFileSync(filePath, content, 'utf8');
   reloadSkills();
@@ -539,7 +548,7 @@ export function skillFromDraft(draft = {}) {
   return {
     name: draft.name,
     description: draft.description || '',
-    brain_region: 'hippocampus', // hippocampus = Recall — learned patterns aid future recall
+    brain_region: regionForCategory('Recall'), // learned from a chat, so it helps recall
     weight: 0.9,
     tags: draft.tags || [],
     when_to_use: draft.when_to_use || '',

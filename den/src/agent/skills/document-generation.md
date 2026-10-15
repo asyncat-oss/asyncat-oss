@@ -1,6 +1,7 @@
 ---
 name: document-generation
 description: Skill for creating structured documents, reports, and data exports using artifact tools
+brain_region: cerebellum
 tags: [document, report, markdown, csv, export, artifact, pdf]
 triggers:
   - create a report
