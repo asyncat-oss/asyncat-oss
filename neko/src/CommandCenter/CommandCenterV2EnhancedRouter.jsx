@@ -10,6 +10,7 @@ const CommandCenterV2Enhanced = () => {
   const { loadConversation, currentConversationId, handleNewConversation } = useCommandCenter();
   const loadedRouteConversationRef = useRef(null);
   const handledProjectStartRef = useRef(null);
+  const previousConversationIdRef = useRef(currentConversationId);
 
   useEffect(() => {
     if (!conversationId) {
@@ -32,6 +33,16 @@ const CommandCenterV2Enhanced = () => {
     loadedRouteConversationRef.current = conversationId;
     loadConversation(conversationId);
   }, [conversationId, currentConversationId, loadConversation]);
+
+  // A new chat gets its own address as soon as it is saved, however it was
+  // started (Home, a project page, Quick ask), so the sidebar marks it and a
+  // reload or Back finds it again.
+  useEffect(() => {
+    const previous = previousConversationIdRef.current;
+    previousConversationIdRef.current = currentConversationId;
+    if (conversationId || previous || !currentConversationId) return;
+    navigate(`/conversations/${currentConversationId}`, { replace: true });
+  }, [conversationId, currentConversationId, navigate]);
 
   useEffect(() => {
     const startProjectChat = location.state?.startProjectChat;

@@ -3,7 +3,7 @@
 // Streaming is handled directly in CommandCenterV2Enhanced via agentApi.runStream.
 
 import { createContext, useState, useContext, useReducer, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import commandCenterApi from '../api';
 import { CLIENT_ID, subscribeAppEvent } from '../../services/appEvents.js';
@@ -54,6 +54,11 @@ const initialState = {
   // project page).
   pendingSend: null,
 };
+
+// Where a new, unsaved chat is shown (the chat page without a chat id).
+function isNewChatPath(pathname) {
+  return /^\/(?:home|conversations)?\/?$/.test(String(pathname || ''));
+}
 
 function normalizeWorkingContext(context) {
   if (!context || typeof context !== 'object') return null;
@@ -178,7 +183,6 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
   const [state, dispatch] = useReducer(commandCenterReducer, initialState);
   const { currentWorkspace } = useWorkspace();
   const navigate = useNavigate();
-  const location = useLocation();
 
   const [toolsEnabled, setToolsEnabled] = useState(() => {
     const preset = newChatToolsEnabled();
@@ -386,7 +390,10 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
           if (result.title && result.title !== state.conversationTitle) {
             dispatch({ type: ActionTypes.SET_CONVERSATION_TITLE, payload: result.title });
           }
-          if (location.pathname === '/home') {
+          // The live address, not the one this callback closed over: a chat
+          // started from a project page (or Quick ask) saves from a send that
+          // began before the move to /home was rendered here.
+          if (isNewChatPath(window.location.pathname)) {
             navigate(`/conversations/${result.conversationId}`, { replace: true });
           }
           setTimeout(() => triggerConversationRefresh(), 50);
@@ -402,10 +409,11 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     } finally {
       savingConversationIdsRef.current.delete(savingKey);
     }
-  }, [state.messages, state.currentConversationId, state.conversationTitle, state.isTemporaryChat, state.workingContext, state.conversationMetadata, currentWorkspace?.id, triggerConversationRefresh, location.pathname, navigate, shouldSaveConversations, rememberMessageIds]);
+  }, [state.messages, state.currentConversationId, state.conversationTitle, state.isTemporaryChat, state.workingContext, state.conversationMetadata, currentWorkspace?.id, triggerConversationRefresh, navigate, shouldSaveConversations, rememberMessageIds]);
 
   // Helper for V2Enhanced to set conversation id and title after a new save
   const setCurrentConversationId = useCallback((id) => {
+    currentConversationIdRef.current = id;
     dispatch({ type: ActionTypes.SET_CURRENT_CONVERSATION_ID, payload: id });
   }, []);
 
@@ -456,6 +464,10 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     loadConversationRequestRef.current += 1;
     discardTemporaryRun();
     dispatch({ type: ActionTypes.RESET_STATE, payload: { keepMode: true } });
+    // At once, not after the next render: a message sent from a project page
+    // goes out in the same commit, and must not be taken for the chat that
+    // was open before.
+    currentConversationIdRef.current = null;
     applyNewChatMode();
     const nextWorkingContext = normalizeWorkingContext(options.workingContext || null);
     if (nextWorkingContext) {
@@ -525,6 +537,7 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
           ? [loadedWorkingContext.projectId]
           : (conversation.project_ids || []),
       });
+      currentConversationIdRef.current = conversationId;
       dispatch({ type: ActionTypes.SET_CURRENT_CONVERSATION_ID, payload: conversationId });
       dispatch({ type: ActionTypes.SET_CONVERSATION_TITLE, payload: conversation.title });
       dispatch({ type: ActionTypes.SET_CONVERSATION_METADATA, payload: loadedMetadata });
@@ -554,6 +567,7 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
       if (requestId !== loadConversationRequestRef.current) return;
       console.error('Load conversation error:', error);
       dispatch({ type: ActionTypes.RESET_STATE, payload: { keepMode: true } });
+      currentConversationIdRef.current = null;
       dispatch({ type: ActionTypes.SET_ERROR, payload: 'Failed to load conversation' });
     } finally {
       if (requestId === loadConversationRequestRef.current) {
@@ -664,6 +678,10 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     loadConversationRequestRef.current += 1;
     discardTemporaryRun();
     dispatch({ type: ActionTypes.RESET_STATE, payload: { keepMode: true } });
+    // At once, not after the next render: a message sent from a project page
+    // goes out in the same commit, and must not be taken for the chat that
+    // was open before.
+    currentConversationIdRef.current = null;
     applyNewChatMode();
   }, [applyNewChatMode, discardTemporaryRun]);
 
