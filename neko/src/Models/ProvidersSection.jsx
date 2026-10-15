@@ -35,14 +35,14 @@ function ProfileRow({ profile, catalog, isActive, busy, highlighted, onUse, onCh
     <div
       id={`provider-card-${profile.id}`}
       className={`group flex items-center gap-3.5 rounded-xl border px-4 py-3 transition-[border-color,box-shadow,background-color] ${
-        isActive ? 'border-accent/35 bg-accent-soft' : 'border-line bg-surface hover:border-line-strong'
+        isActive ? 'border-line-strong bg-surface' : 'border-line bg-surface hover:border-line-strong'
       } ${highlighted ? 'ring-2 ring-accent/40' : ''}`}
     >
       <ProviderLogo providerId={profile.provider_id} name={profile.name} size="md" />
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
           <span className="truncate text-[14px] font-medium text-fg">{profile.name}</span>
-          {isActive ? <Badge color="blue">Default</Badge> : null}
+          {isActive ? <Badge>Default</Badge> : null}
         </div>
         <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12px] text-fg-muted">
           <span className="truncate font-mono text-[11.5px]">{modelDisplayName(profile)}</span>
