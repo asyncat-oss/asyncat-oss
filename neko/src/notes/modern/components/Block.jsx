@@ -1695,7 +1695,14 @@ const Block = forwardRef(
             }
           }}
         >
-          <div className="relative flex w-full items-start gap-2 pr-28">
+          {/* Room on the right for the hover buttons, so they never cover the
+              block. A narrow editor (the chat's side panel, a phone) shows
+              only "more" and the drag handle, so it keeps less room. */}
+          <div
+            className={`relative flex w-full items-start gap-2 ${
+              readOnly ? "" : "pr-12 @2xl:pr-28"
+            }`}
+          >
             <div className="flex-1 min-w-0 w-full">{renderBlockContent()}</div>
 
             {/* Block actions - hidden in read-only mode */}

@@ -1,14 +1,25 @@
+// The buttons beside a block while it is hovered: its type (opens "Change
+// to"), more actions (copy, duplicate, delete) and the drag handle. In a
+// narrow editor the type button hides and "Change to" is in "more" instead.
+
 import { useState, useRef, useEffect } from "react";
-import { createPortal } from "react-dom";
+import PropTypes from "prop-types";
 import {
   MoreHorizontal,
   ChevronDown,
   Copy,
   Trash2,
   CopyPlus,
-  Move,
+  GripVertical,
+  ArrowLeftRight,
 } from "lucide-react";
+import { Menu, MenuItem, MenuSeparator } from "../../../components/ui/Menu.jsx";
 import BlockTypeSelector from "./BlockTypeSelector";
+
+// No display class here: each button adds its own (the type button is
+// hidden below the editor's @2xl width).
+const HANDLE =
+  "h-6 select-none items-center rounded-md text-fg-subtle outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/40";
 
 const BlockType = {
   TEXT: "text",
@@ -55,132 +66,29 @@ const BlockActions = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [showTypeSelector, setShowTypeSelector] = useState(false);
-  const [selectorPosition, setSelectorPosition] = useState(null);
-  const [moreActionsPosition, setMoreActionsPosition] = useState(null);
   const menuRef = useRef(null);
   const buttonRef = useRef(null);
   const moreActionsButtonRef = useRef(null);
-  const moreActionsMenuRef = useRef(null);
+  // "Change to" hangs from the type button, or from "more" when the type
+  // button is hidden (a narrow editor) and it was chosen from that menu.
+  const [typeMenuFromMore, setTypeMenuFromMore] = useState(false);
+  const [typeButtonHidden, setTypeButtonHidden] = useState(false);
+  const menuOpen = isOpen || showTypeSelector;
 
-  // Function to calculate and update selector position
-  const updateSelectorPosition = () => {
-    if (buttonRef.current) {
-      const buttonRect = buttonRef.current.getBoundingClientRect();
-      setSelectorPosition({
-        top: buttonRect.bottom + 2,
-        left: buttonRect.left,
-      });
-    }
-  };
-
-  // Function to calculate and update more actions position
-  const updateMoreActionsPosition = () => {
-    if (moreActionsButtonRef.current) {
-      const buttonRect = moreActionsButtonRef.current.getBoundingClientRect();
-      setMoreActionsPosition({
-        top: buttonRect.bottom + 2,
-        left: buttonRect.left,
-      });
-    }
-  };
-
+  // While a menu is open, the buttons stay visible (they show on hover) and
+  // sit above the blocks around them.
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      // Only handle mousedown events
-      if (event.type !== "mousedown") return;
-
-      // Check if click is inside this specific menu or the portal selector
-      const isInsideThisMenu =
-        menuRef.current && menuRef.current.contains(event.target);
-      const isInsidePortalSelector = event.target.closest(
-        "[data-block-type-selector]"
-      );
-      const isInsideMoreActionsMenu =
-        moreActionsMenuRef.current && moreActionsMenuRef.current.contains(event.target);
-
-      if (!isInsideThisMenu && !isInsidePortalSelector && !isInsideMoreActionsMenu) {
-        setIsOpen(false);
-        setShowTypeSelector(false);
-      }
+    const parentDiv = menuRef.current?.parentElement;
+    if (!parentDiv || !menuOpen) return undefined;
+    parentDiv.style.opacity = "1";
+    parentDiv.style.visibility = "visible";
+    parentDiv.style.zIndex = "9999";
+    return () => {
+      parentDiv.style.opacity = "";
+      parentDiv.style.visibility = "";
+      parentDiv.style.zIndex = "";
     };
-
-    if (showTypeSelector || isOpen) {
-      document.addEventListener("mousedown", handleClickOutside, true);
-      return () => {
-        document.removeEventListener("mousedown", handleClickOutside, true);
-      };
-    }
-  }, [showTypeSelector, isOpen]);
-
-  // Update selector position on scroll or resize
-  useEffect(() => {
-    if (showTypeSelector) {
-      const handleScroll = () => updateSelectorPosition();
-      const handleResize = () => updateSelectorPosition();
-
-      window.addEventListener("scroll", handleScroll, true);
-      window.addEventListener("resize", handleResize);
-
-      return () => {
-        window.removeEventListener("scroll", handleScroll, true);
-        window.removeEventListener("resize", handleResize);
-      };
-    }
-  }, [showTypeSelector]);
-
-  // Update more actions position on scroll or resize
-  useEffect(() => {
-    if (isOpen) {
-      const handleScroll = () => updateMoreActionsPosition();
-      const handleResize = () => updateMoreActionsPosition();
-
-      window.addEventListener("scroll", handleScroll, true);
-      window.addEventListener("resize", handleResize);
-
-      return () => {
-        window.removeEventListener("scroll", handleScroll, true);
-        window.removeEventListener("resize", handleResize);
-      };
-    }
-  }, [isOpen]);
-
-  // Force parent visibility when selector is open
-  useEffect(() => {
-    const parentDiv = menuRef.current?.parentElement;
-    if (parentDiv && showTypeSelector) {
-      // Force the parent BlockActions wrapper to stay visible
-      parentDiv.style.opacity = "1";
-      parentDiv.style.visibility = "visible";
-
-      return () => {
-        // Reset when selector closes
-        if (parentDiv) {
-          parentDiv.style.opacity = "";
-          parentDiv.style.visibility = "";
-        }
-      };
-    }
-  }, [showTypeSelector]);
-
-  // Force parent visibility when more actions menu is open
-  useEffect(() => {
-    const parentDiv = menuRef.current?.parentElement;
-    if (parentDiv && isOpen) {
-      // Force the parent BlockActions wrapper to stay visible and increase z-index
-      parentDiv.style.opacity = "1";
-      parentDiv.style.visibility = "visible";
-      parentDiv.style.zIndex = "9999";
-
-      return () => {
-        // Reset when menu closes
-        if (parentDiv) {
-          parentDiv.style.opacity = "";
-          parentDiv.style.visibility = "";
-          parentDiv.style.zIndex = "";
-        }
-      };
-    }
-  }, [isOpen]);
+  }, [menuOpen]);
 
   const getDisplayName = (type) => {
     switch (type) {
@@ -212,59 +120,47 @@ const BlockActions = ({
         return "Video";
       case BlockType.AUDIO:
         return "Audio";
-      // case BlockType.FILE:
-      //   return "File"; // NEW: Display name for file blocks
+      case BlockType.FILE:
+        return "File";
       case BlockType.CALLOUT:
         return "Callout";
-      // case BlockType.TOGGLE:
-      //   return "Toggle";
-      // case BlockType.EMBED:
-      //   return "Embed";
-      // case BlockType.MATH:
-      //   return "Math";
+      case BlockType.TOGGLE:
+        return "Toggle";
+      case BlockType.EMBED:
+        return "Embed";
+      case BlockType.MATH:
+        return "Math";
       case BlockType.LINK_PREVIEW:
         return "Link";
       // Charts
       case BlockType.LINE_CHART:
-        return "Line Chart";
+        return "Line chart";
       case BlockType.BAR_CHART:
-        return "Bar Chart";
+        return "Bar chart";
       case BlockType.PIE_CHART:
-        return "Pie Chart";
+        return "Pie chart";
       case BlockType.AREA_CHART:
-        return "Area Chart";
+        return "Area chart";
       case BlockType.SCATTER_CHART:
         return "Scatter";
       case BlockType.DONUT_CHART:
         return "Donut";
-      // Layout
       // Advanced
-      // case BlockType.PROGRESS_BAR:
-      //   return "Progress";
-      // case BlockType.BREADCRUMB:
-      //   return "Breadcrumb";
-      // case BlockType.BUTTON:
-      //   return "Button";
+      case BlockType.PROGRESS_BAR:
+        return "Progress";
+      case BlockType.BREADCRUMB:
+        return "Breadcrumb";
+      case BlockType.BUTTON:
+        return "Button";
       default:
         return "Text";
     }
   };
 
   const handleCopyBlock = async () => {
-    setIsOpen(false);
     if (onCopy) {
       await onCopy(blockId);
     }
-  };
-
-  const handleDuplicateBlock = () => {
-    setIsOpen(false);
-    onAction("duplicate", blockId);
-  };
-
-  const handleDeleteBlock = () => {
-    setIsOpen(false);
-    onAction("delete", blockId);
   };
 
   const handleTypeChange = (newType) => {
@@ -276,149 +172,121 @@ const BlockActions = ({
 
   return (
     <div
-      className={`relative flex items-center gap-1 ${
-        showTypeSelector ? "opacity-100" : ""
-      }`}
+      className="relative flex items-center gap-0.5"
       ref={menuRef}
       data-block-selection-disabled="true"
-      style={
-        showTypeSelector
-          ? { visibility: "visible", opacity: "1 !important" }
-          : {}
-      }
     >
-      {/* Block type selector button */}
+      {/* Block type */}
       <button
         ref={buttonRef}
-        className={`p-1 rounded flex items-center gap-1 select-none ${
-          showTypeSelector
-            ? "bg-gray-100 dark:bg-gray-700 midnight:bg-gray-700 text-gray-600 dark:text-gray-200 midnight:text-gray-200"
-            : "hover:bg-gray-100 dark:hover:bg-gray-700 midnight:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 midnight:hover:text-gray-200"
+        type="button"
+        className={`${HANDLE} hidden gap-0.5 px-1.5 text-[11px] font-medium @2xl:flex ${
+          showTypeSelector ? "bg-selected text-fg" : ""
         }`}
         onClick={(e) => {
-          if (showTypeSelector) {
-            setShowTypeSelector(false);
-            return;
-          }
           e.preventDefault();
           e.stopPropagation();
-
-          // Calculate initial position and show selector
-          updateSelectorPosition();
-          setShowTypeSelector(true);
           setIsOpen(false);
+          setTypeMenuFromMore(false);
+          setShowTypeSelector((open) => !open);
         }}
+        aria-haspopup="menu"
+        aria-expanded={showTypeSelector}
         title="Change block type"
       >
-        <span className="text-xs font-medium select-none">
-          {getDisplayName(blockType)}
-        </span>
-        <ChevronDown className="w-3 h-3 select-none" />
+        {getDisplayName(blockType)}
+        <ChevronDown className="h-3 w-3" />
       </button>
 
-      {/* More actions button */}
+      {/* More actions */}
       <button
         ref={moreActionsButtonRef}
-        className={`p-1 rounded select-none ${
-          isOpen
-            ? "bg-gray-100 dark:bg-gray-700 midnight:bg-gray-700 text-gray-600 dark:text-gray-200 midnight:text-gray-200"
-            : "hover:bg-gray-100 dark:hover:bg-gray-700 midnight:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 midnight:hover:text-gray-200"
-        }`}
+        type="button"
+        className={`${HANDLE} flex w-6 justify-center ${isOpen ? "bg-selected text-fg" : ""}`}
         onClick={(e) => {
-          if (isOpen) {
-            setIsOpen(false);
-            return;
-          }
           e.preventDefault();
           e.stopPropagation();
-
-          // Calculate initial position and show menu
-          updateMoreActionsPosition();
-          setIsOpen(true);
           setShowTypeSelector(false);
+          setTypeButtonHidden(!buttonRef.current?.getClientRects().length);
+          setIsOpen((open) => !open);
         }}
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
         title="More actions"
+        aria-label="More actions"
       >
-        <MoreHorizontal className="w-4 h-4" />
+        <MoreHorizontal className="h-4 w-4" />
       </button>
 
-      {/* Drag handle */}
+      {/* Drag handle (the editor finds it by its title) */}
       <div
-        className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 midnight:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 midnight:hover:text-gray-200 cursor-grab active:cursor-grabbing select-none"
+        className={`${HANDLE} flex w-6 cursor-grab justify-center active:cursor-grabbing`}
         title="Drag to reorder"
         {...(dragListeners || {})}
         {...(dragAttributes || {})}
       >
-        <Move className="w-4 h-4" />
+        <GripVertical className="h-4 w-4" />
       </div>
 
-      {/* Block Type Selector */}
-      {showTypeSelector && selectorPosition && (
-        <BlockTypeSelector
-          currentType={blockType}
-          position={selectorPosition}
-          buttonRef={buttonRef}
-          onSelect={handleTypeChange}
-          onClose={() => setShowTypeSelector(false)}
-        />
-      )}
+      <BlockTypeSelector
+        anchorRef={typeMenuFromMore ? moreActionsButtonRef : buttonRef}
+        open={showTypeSelector}
+        onClose={() => setShowTypeSelector(false)}
+        currentType={blockType}
+        onSelect={handleTypeChange}
+      />
 
-      {/* Actions Menu - using portal for proper z-index */}
-      {isOpen && moreActionsPosition && createPortal(
-        <div
-          ref={moreActionsMenuRef}
-          className="fixed z-[9999] bg-white dark:bg-gray-800 midnight:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 midnight:border-gray-600 py-1 w-44 select-none"
-          style={{
-            top: moreActionsPosition.top,
-            left: moreActionsPosition.left,
-            animation: "fadeIn 0.1s ease-out",
-          }}
-          data-more-actions-dropdown="true"
-          data-block-selection-modal
-          data-block-selection-disabled="true"
-          onMouseLeave={(e) => {
-            const relatedTarget = e.relatedTarget;
-
-            // Don't close if hovering over this block's more actions button
-            if (moreActionsButtonRef?.current && moreActionsButtonRef.current.contains(relatedTarget)) {
-              return;
-            }
-
-            // Don't close if hovering over this block's actions container
-            if (menuRef?.current && menuRef.current.contains(relatedTarget)) {
-              return;
-            }
-
-            setIsOpen(false);
-          }}
-        >
-          <button
-            className="w-full px-3 py-1.5 text-left text-sm text-gray-900 dark:text-gray-300 midnight:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 midnight:hover:bg-gray-600 flex items-center gap-2"
-            onClick={handleCopyBlock}
-          >
-            <Copy className="w-4 h-4" />
-            Copy Block
-          </button>
-          <button
-            className="w-full px-3 py-1.5 text-left text-sm text-gray-900 dark:text-gray-300 midnight:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 midnight:hover:bg-gray-600 flex items-center gap-2"
-            onClick={handleDuplicateBlock}
-          >
-            <CopyPlus className="w-4 h-4" />
-            Duplicate Block
-          </button>
-          <hr className="my-1 border-gray-200 dark:border-gray-700 midnight:border-gray-600" />
-          <button
-            className="w-full px-3 py-1.5 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 midnight:hover:bg-gray-600 flex items-center gap-2 text-red-600 dark:text-red-400 midnight:text-red-300"
-            onClick={handleDeleteBlock}
-          >
-            <Trash2 className="w-4 h-4" />
-            Delete Block
-          </button>
-        </div>,
-        document.body
-      )}
+      <Menu
+        anchorRef={moreActionsButtonRef}
+        open={isOpen}
+        onClose={() => setIsOpen(false)}
+        placement="bottom-end"
+        width={184}
+        label="Block actions"
+      >
+        <div data-more-actions-dropdown="true" data-block-selection-modal data-block-selection-disabled="true">
+          {typeButtonHidden && (
+            <>
+              <MenuItem
+                icon={ArrowLeftRight}
+                label="Change to…"
+                onSelect={() => {
+                  // Back on "more", so a keyboard user lands in the new menu.
+                  moreActionsButtonRef.current?.focus({ preventScroll: true });
+                  setTypeMenuFromMore(true);
+                  setShowTypeSelector(true);
+                }}
+              />
+              <MenuSeparator />
+            </>
+          )}
+          <MenuItem icon={Copy} label="Copy block" onSelect={handleCopyBlock} />
+          <MenuItem
+            icon={CopyPlus}
+            label="Duplicate block"
+            onSelect={() => onAction("duplicate", blockId)}
+          />
+          <MenuSeparator />
+          <MenuItem
+            icon={Trash2}
+            label="Delete block"
+            danger
+            onSelect={() => onAction("delete", blockId)}
+          />
+        </div>
+      </Menu>
     </div>
   );
+};
+
+BlockActions.propTypes = {
+  onAction: PropTypes.func.isRequired,
+  blockId: PropTypes.string.isRequired,
+  onCopy: PropTypes.func,
+  blockType: PropTypes.string,
+  onTypeChange: PropTypes.func,
+  dragListeners: PropTypes.object,
+  dragAttributes: PropTypes.object,
 };
 
 export default BlockActions;

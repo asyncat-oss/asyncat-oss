@@ -1,5 +1,7 @@
-import { useState, useRef, useEffect, useMemo } from "react";
-import { createPortal } from "react-dom";
+// "Change to": the block types a block can turn into, in the app's Menu,
+// opened from the type button beside a block.
+
+import PropTypes from "prop-types";
 import {
   Hash,
   Type,
@@ -21,6 +23,7 @@ import {
   StampIcon,
   CircleDot,
 } from "lucide-react";
+import { Menu, MenuItem, MenuLabel } from "../../../components/ui/Menu.jsx";
 
 const BlockType = {
   TEXT: "text",
@@ -55,7 +58,7 @@ const BlockType = {
   BREADCRUMB: "breadcrumb",
   BUTTON: "button",
 };
-const slashCommands = [
+const TYPE_CHOICES = [
   {
     icon: Type,
     label: "Text",
@@ -82,13 +85,13 @@ const slashCommands = [
   },
   {
     icon: ListOrdered,
-    label: "Numbered List",
+    label: "Numbered list",
     description: "Create a numbered list",
     type: BlockType.NUMBERED_LIST,
   },
   {
     icon: List,
-    label: "Bullet List",
+    label: "Bullet list",
     description: "Create a bulleted list",
     type: BlockType.BULLET_LIST,
   },
@@ -152,44 +155,44 @@ const slashCommands = [
   // { icon: Calculator, label: 'Math', description: 'Add mathematical equations', type: BlockType.MATH },
   {
     icon: FileText,
-    label: "Link Preview",
+    label: "Link preview",
     description: "Add a rich link preview",
     type: BlockType.LINK_PREVIEW,
   },
   // Charts
   {
     icon: TrendingUp,
-    label: "Line Chart",
+    label: "Line chart",
     description: "Display data as a line chart",
     type: BlockType.LINE_CHART,
   },
   {
     icon: BarChart3,
-    label: "Bar Chart",
+    label: "Bar chart",
     description: "Display data as a bar chart",
     type: BlockType.BAR_CHART,
   },
   {
     icon: PieChart,
-    label: "Pie Chart",
+    label: "Pie chart",
     description: "Display data as a pie chart",
     type: BlockType.PIE_CHART,
   },
   {
     icon: Activity,
-    label: "Area Chart",
+    label: "Area chart",
     description: "Display data as an area chart",
     type: BlockType.AREA_CHART,
   },
   {
     icon: StampIcon,
-    label: "Scatter Chart",
+    label: "Scatter chart",
     description: "Display data as a scatter plot",
     type: BlockType.SCATTER_CHART,
   },
   {
     icon: CircleDot,
-    label: "Donut Chart",
+    label: "Donut chart",
     description: "Display data as a donut chart",
     type: BlockType.DONUT_CHART,
   },
@@ -200,143 +203,38 @@ const slashCommands = [
   // { icon: MousePointer, label: 'Button', description: 'Interactive button element', type: BlockType.BUTTON },
 ];
 
-const BlockTypeSelector = ({
-  onSelect,
-  onClose,
-  searchTerm,
-  position,
-  buttonRef,
-}) => {
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const menuRef = useRef(null);
-  const itemRefs = useRef([]);
-
-  // Filtering logic (optional, for future extensibility)
-  const filteredCommands = useMemo(() => {
-    if (!searchTerm) return slashCommands;
-    return slashCommands.filter(
-      (command) =>
-        command.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        command.description.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [searchTerm]);
-
-  // Keyboard navigation (copied from SlashCommandMenu)
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (filteredCommands.length === 0) return;
-      let nextIndex = selectedIndex;
-      switch (e.key) {
-        case "ArrowDown":
-          e.preventDefault();
-          e.stopPropagation();
-          nextIndex = Math.min(selectedIndex + 1, filteredCommands.length - 1);
-          setSelectedIndex(nextIndex);
-          break;
-        case "ArrowUp":
-          e.preventDefault();
-          e.stopPropagation();
-          nextIndex = Math.max(selectedIndex - 1, 0);
-          setSelectedIndex(nextIndex);
-          break;
-        case "Enter":
-          e.preventDefault();
-          e.stopPropagation();
-          onSelect(filteredCommands[selectedIndex].type);
-          break;
-        case "Escape":
-          e.preventDefault();
-          e.stopPropagation();
-          onClose();
-          break;
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown, true);
-    return () => document.removeEventListener("keydown", handleKeyDown, true);
-  }, [selectedIndex, filteredCommands, onSelect, onClose]);
-
-  // Scroll selected item into view
-  useEffect(() => {
-    if (itemRefs.current[selectedIndex]) {
-      itemRefs.current[selectedIndex].scrollIntoView({
-        block: "nearest",
-        behavior: "smooth",
-      });
-    }
-  }, [selectedIndex, filteredCommands]);
-
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [searchTerm]);
-
-  if (filteredCommands.length === 0) return null;
-
-  const dropdown = (
-    <div
-      ref={menuRef}
-      data-block-type-selector="true"
-      data-block-selection-modal
-      data-block-selection-disabled="true"
-      className="fixed z-[9999] bg-white dark:bg-gray-800 midnight:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 midnight:border-gray-800 select-none"
-      style={{
-        top: position?.top || 0,
-        left: position?.left || 0,
-        animation: "fadeIn 0.1s ease-out",
-        width: "240px",
-        maxHeight: "320px",
-        overflowY: "auto",
-        overflowX: "hidden",
-        padding: 0,
-        pointerEvents: "auto",
-      }}
-      onWheel={(e) => e.stopPropagation()}
-      onMouseLeave={(e) => {
-        // Check if mouse moved to the toggle button
-        const relatedTarget = e.relatedTarget;
-        if (buttonRef?.current && buttonRef.current.contains(relatedTarget)) {
-          return; // Don't close if hovering over the toggle button
-        }
-        onClose();
-      }}
-    >
-      <div className="p-2 select-none">
-        <div className="text-xs font-medium text-gray-500 dark:text-gray-400 midnight:text-gray-400 uppercase tracking-wide mb-1 select-none">
-          Change to
-        </div>
-        <div className="space-y-[1px]">
-          {filteredCommands.map((command, index) => {
-            const Icon = command.icon;
-            const isSelected = index === selectedIndex;
-            return (
-              <button
-                key={command.type}
-                ref={(el) => (itemRefs.current[index] = el)}
-                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left transition-colors select-none ${
-                  isSelected
-                    ? "bg-blue-50 dark:bg-blue-900/20 midnight:bg-blue-950/60 text-blue-700 dark:text-blue-300 midnight:text-blue-300"
-                    : "hover:bg-gray-50 dark:hover:bg-gray-700 midnight:hover:bg-gray-800 text-gray-700 dark:text-gray-400 midnight:text-gray-300"
-                }`}
-                style={{ minHeight: "32px" }}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onSelect(command.type);
-                }}
-                onMouseEnter={() => setSelectedIndex(index)}
-              >
-                <Icon className="w-4 h-4 flex-shrink-0 select-none" />
-                <div className="flex-1 min-w-0 font-medium text-xs select-none">
-                  {command.label}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+const BlockTypeSelector = ({ anchorRef, open, onClose, currentType, onSelect }) => (
+  <Menu
+    anchorRef={anchorRef}
+    open={open}
+    onClose={onClose}
+    placement="bottom-end"
+    width={220}
+    label="Change to"
+    className="max-h-80"
+  >
+    {/* Presses in here keep the editor's block selection: Change to applies to all of it. */}
+    <div data-block-type-selector="true" data-block-selection-modal data-block-selection-disabled="true">
+      <MenuLabel>Change to</MenuLabel>
+      {TYPE_CHOICES.map((choice) => (
+        <MenuItem
+          key={choice.type}
+          icon={choice.icon}
+          label={choice.label}
+          checked={choice.type === currentType}
+          onSelect={() => onSelect(choice.type)}
+        />
+      ))}
     </div>
-  );
+  </Menu>
+);
 
-  return createPortal(dropdown, document.body);
+BlockTypeSelector.propTypes = {
+  anchorRef: PropTypes.shape({ current: PropTypes.any }).isRequired,
+  open: PropTypes.bool,
+  onClose: PropTypes.func.isRequired,
+  currentType: PropTypes.string,
+  onSelect: PropTypes.func.isRequired,
 };
 
 export default BlockTypeSelector;
