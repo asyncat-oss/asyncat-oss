@@ -1,6 +1,10 @@
+// A code block: plain-text code with a language, light syntax colouring
+// (kept in its own hues), optional line numbers and a copy button.
+
 import { useState, useRef, useEffect } from "react";
-import { Copy, Check, ChevronDown } from "lucide-react";
+import { Copy, Check } from "lucide-react";
 import PropTypes from "prop-types";
+import Select from "../../../components/ui/Select.jsx";
 
 // Syntax highlighting patterns for different languages
 const syntaxPatterns = {
@@ -20,11 +24,11 @@ const syntaxPatterns = {
     },
     {
       pattern: /\/\/.*$/gm,
-      className: "text-gray-500 dark:text-gray-400 italic",
+      className: "text-fg-subtle italic",
     },
     {
       pattern: /\/\*[\s\S]*?\*\//g,
-      className: "text-gray-500 dark:text-gray-400 italic",
+      className: "text-fg-subtle italic",
     },
     {
       pattern: /\b\d+(\.\d+)?\b/g,
@@ -51,11 +55,11 @@ const syntaxPatterns = {
     },
     {
       pattern: /\/\/.*$/gm,
-      className: "text-gray-500 dark:text-gray-400 italic",
+      className: "text-fg-subtle italic",
     },
     {
       pattern: /\/\*[\s\S]*?\*\//g,
-      className: "text-gray-500 dark:text-gray-400 italic",
+      className: "text-fg-subtle italic",
     },
     {
       pattern: /\b\d+(\.\d+)?\b/g,
@@ -72,7 +76,7 @@ const syntaxPatterns = {
       pattern: /"([^"\\]|\\.)*"|'([^'\\]|\\.)*'|"""[\s\S]*?"""|'''[\s\S]*?'''/g,
       className: "text-green-600 dark:text-green-400",
     },
-    { pattern: /#.*$/gm, className: "text-gray-500 dark:text-gray-400 italic" },
+    { pattern: /#.*$/gm, className: "text-fg-subtle italic" },
     {
       pattern: /\b\d+(\.\d+)?\b/g,
       className: "text-purple-600 dark:text-purple-400",
@@ -103,11 +107,11 @@ const syntaxPatterns = {
     },
     {
       pattern: /\/\/.*$/gm,
-      className: "text-gray-500 dark:text-gray-400 italic",
+      className: "text-fg-subtle italic",
     },
     {
       pattern: /\/\*[\s\S]*?\*\//g,
-      className: "text-gray-500 dark:text-gray-400 italic",
+      className: "text-fg-subtle italic",
     },
     {
       pattern: /\b\d+(\.\d+)?[fFdDlL]?\b/g,
@@ -130,7 +134,7 @@ const syntaxPatterns = {
     },
     {
       pattern: /<!--[\s\S]*?-->/g,
-      className: "text-gray-500 dark:text-gray-400 italic",
+      className: "text-fg-subtle italic",
     },
   ],
   css: [
@@ -148,7 +152,7 @@ const syntaxPatterns = {
     },
     {
       pattern: /\/\*[\s\S]*?\*\//g,
-      className: "text-gray-500 dark:text-gray-400 italic",
+      className: "text-fg-subtle italic",
     },
     {
       pattern: /#[0-9a-fA-F]{3,6}\b/g,
@@ -180,11 +184,11 @@ const syntaxPatterns = {
     },
     {
       pattern: /\/\/.*$/gm,
-      className: "text-gray-500 dark:text-gray-400 italic",
+      className: "text-fg-subtle italic",
     },
     {
       pattern: /\/\*[\s\S]*?\*\//g,
-      className: "text-gray-500 dark:text-gray-400 italic",
+      className: "text-fg-subtle italic",
     },
     {
       pattern: /\b\d+(\.\d+)?[fFdDlL]?\b/g,
@@ -213,11 +217,11 @@ const syntaxPatterns = {
     },
     {
       pattern: /\/\/.*$/gm,
-      className: "text-gray-500 dark:text-gray-400 italic",
+      className: "text-fg-subtle italic",
     },
     {
       pattern: /\/\*[\s\S]*?\*\//g,
-      className: "text-gray-500 dark:text-gray-400 italic",
+      className: "text-fg-subtle italic",
     },
     {
       pattern: /\b\d+(\.\d+)?[fFdDlL]?\b/g,
@@ -246,11 +250,11 @@ const syntaxPatterns = {
     },
     {
       pattern: /\/\/.*$/gm,
-      className: "text-gray-500 dark:text-gray-400 italic",
+      className: "text-fg-subtle italic",
     },
     {
       pattern: /\/\*[\s\S]*?\*\//g,
-      className: "text-gray-500 dark:text-gray-400 italic",
+      className: "text-fg-subtle italic",
     },
     {
       pattern: /\b\d+(\.\d+)?[fFdDmM]?\b/g,
@@ -277,13 +281,13 @@ const syntaxPatterns = {
     },
     {
       pattern: /\/\/.*$/gm,
-      className: "text-gray-500 dark:text-gray-400 italic",
+      className: "text-fg-subtle italic",
     },
     {
       pattern: /\/\*[\s\S]*?\*\//g,
-      className: "text-gray-500 dark:text-gray-400 italic",
+      className: "text-fg-subtle italic",
     },
-    { pattern: /#.*$/gm, className: "text-gray-500 dark:text-gray-400 italic" },
+    { pattern: /#.*$/gm, className: "text-fg-subtle italic" },
     {
       pattern: /\b\d+(\.\d+)?\b/g,
       className: "text-purple-600 dark:text-purple-400",
@@ -308,7 +312,7 @@ const syntaxPatterns = {
       pattern: /"([^"\\]|\\.)*"|'([^'\\]|\\.)*'/g,
       className: "text-green-600 dark:text-green-400",
     },
-    { pattern: /#.*$/gm, className: "text-gray-500 dark:text-gray-400 italic" },
+    { pattern: /#.*$/gm, className: "text-fg-subtle italic" },
     {
       pattern: /\b\d+(\.\d+)?\b/g,
       className: "text-purple-600 dark:text-purple-400",
@@ -339,11 +343,11 @@ const syntaxPatterns = {
     },
     {
       pattern: /\/\/.*$/gm,
-      className: "text-gray-500 dark:text-gray-400 italic",
+      className: "text-fg-subtle italic",
     },
     {
       pattern: /\/\*[\s\S]*?\*\//g,
-      className: "text-gray-500 dark:text-gray-400 italic",
+      className: "text-fg-subtle italic",
     },
     {
       pattern: /\b\d+(\.\d+)?\b/g,
@@ -371,11 +375,11 @@ const syntaxPatterns = {
     },
     {
       pattern: /\/\/.*$/gm,
-      className: "text-gray-500 dark:text-gray-400 italic",
+      className: "text-fg-subtle italic",
     },
     {
       pattern: /\/\*[\s\S]*?\*\//g,
-      className: "text-gray-500 dark:text-gray-400 italic",
+      className: "text-fg-subtle italic",
     },
     {
       pattern: /\b\d+(\.\d+)?[fF]?\b/g,
@@ -404,11 +408,11 @@ const syntaxPatterns = {
     },
     {
       pattern: /--.*$/gm,
-      className: "text-gray-500 dark:text-gray-400 italic",
+      className: "text-fg-subtle italic",
     },
     {
       pattern: /\/\*[\s\S]*?\*\//g,
-      className: "text-gray-500 dark:text-gray-400 italic",
+      className: "text-fg-subtle italic",
     },
     {
       pattern: /\b\d+(\.\d+)?\b/g,
@@ -452,7 +456,7 @@ const syntaxPatterns = {
     },
     {
       pattern: /<!--[\s\S]*?-->/g,
-      className: "text-gray-500 dark:text-gray-400 italic",
+      className: "text-fg-subtle italic",
     },
     { pattern: /&[a-zA-Z0-9]+;/g, className: "text-red-600 dark:text-red-400" },
   ],
@@ -473,7 +477,7 @@ const syntaxPatterns = {
       pattern: /\b(true|false|null|yes|no|on|off)\b/gi,
       className: "text-orange-600 dark:text-orange-400",
     },
-    { pattern: /#.*$/gm, className: "text-gray-500 dark:text-gray-400 italic" },
+    { pattern: /#.*$/gm, className: "text-fg-subtle italic" },
     {
       pattern: /\b\d+(\.\d+)?\b/g,
       className: "text-purple-600 dark:text-purple-400",
@@ -490,15 +494,15 @@ const syntaxPatterns = {
     },
     {
       pattern: /\*\*([^*]+)\*\*|__([^_]+)__/g,
-      className: "text-gray-900 dark:text-gray-100 font-bold",
+      className: "text-fg font-bold",
     },
     {
       pattern: /\*([^*]+)\*|_([^_]+)_/g,
-      className: "text-gray-900 dark:text-gray-100 italic",
+      className: "text-fg italic",
     },
     {
       pattern: /`([^`]+)`/g,
-      className: "text-red-600 dark:text-red-400 bg-gray-100 dark:bg-gray-800",
+      className: "text-red-600 dark:text-red-400 bg-hover",
     },
     {
       pattern: /\[([^\]]+)\]\(([^)]+)\)/g,
@@ -527,7 +531,7 @@ const syntaxPatterns = {
       pattern: /"([^"\\]|\\.)*"|'([^'\\]|\\.)*'/g,
       className: "text-green-600 dark:text-green-400",
     },
-    { pattern: /#.*$/gm, className: "text-gray-500 dark:text-gray-400 italic" },
+    { pattern: /#.*$/gm, className: "text-fg-subtle italic" },
     { pattern: /\b\d+\b/g, className: "text-purple-600 dark:text-purple-400" },
     {
       pattern:
@@ -549,7 +553,7 @@ const syntaxPatterns = {
       pattern: /"([^"\\]|\\.)*"|'([^'\\]|\\.)*'/g,
       className: "text-green-600 dark:text-green-400",
     },
-    { pattern: /#.*$/gm, className: "text-gray-500 dark:text-gray-400 italic" },
+    { pattern: /#.*$/gm, className: "text-fg-subtle italic" },
     {
       pattern: /\b\d+(\.\d+)?\b/g,
       className: "text-purple-600 dark:text-purple-400",
@@ -766,6 +770,32 @@ const handleKeyDown = (e, contentRef, updateHighlighting) => {
   }
 };
 
+const LANGUAGES = [
+  "javascript",
+  "typescript",
+  "python",
+  "java",
+  "cpp",
+  "c",
+  "csharp",
+  "php",
+  "ruby",
+  "go",
+  "rust",
+  "sql",
+  "html",
+  "css",
+  "json",
+  "xml",
+  "yaml",
+  "markdown",
+  "bash",
+  "powershell",
+  "text",
+];
+
+const LANGUAGE_OPTIONS = LANGUAGES.map((lang) => ({ value: lang, label: lang }));
+
 const CodeBlock = ({ block, onChange, contentRef, commonProps }) => {
   const [language, setLanguage] = useState(
     block.properties?.language || "javascript"
@@ -774,41 +804,15 @@ const CodeBlock = ({ block, onChange, contentRef, commonProps }) => {
     block.properties?.showLineNumbers || false
   );
   const [copied, setCopied] = useState(false);
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [autoDetected, setAutoDetected] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const preRef = useRef(null);
-  const dropdownRef = useRef(null);
   const highlightRef = useRef(null);
   const typingTimeoutRef = useRef(null);
 
-  const languages = [
-    "javascript",
-    "typescript",
-    "python",
-    "java",
-    "cpp",
-    "c",
-    "csharp",
-    "php",
-    "ruby",
-    "go",
-    "rust",
-    "sql",
-    "html",
-    "css",
-    "json",
-    "xml",
-    "yaml",
-    "markdown",
-    "bash",
-    "powershell",
-    "text",
-  ];
 
   const handleLanguageChange = (newLanguage) => {
     setLanguage(newLanguage);
-    setIsDropdownOpen(false);
     setAutoDetected(true); // Prevent auto-detection from overriding manual selection
     onChange(block.id, {
       properties: {
@@ -854,18 +858,6 @@ const CodeBlock = ({ block, onChange, contentRef, commonProps }) => {
   };
 
 
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIsDropdownOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
 
   const toggleLineNumbers = () => {
     const newValue = !showLineNumbers;
@@ -891,80 +883,53 @@ const CodeBlock = ({ block, onChange, contentRef, commonProps }) => {
 
   return (
     <div
-      className="code-block-wrapper border border-gray-200 dark:border-gray-700 midnight:border-gray-600 rounded-lg"
+      className="code-block-wrapper rounded-xl border border-line"
       style={{ overflow: "visible" }}
     >
       {/* Code block header */}
-      <div className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-800 midnight:bg-gray-900 border-b border-gray-200 dark:border-gray-700 midnight:border-gray-600">
-        <div className="flex items-center gap-2">
-          <div className="relative" ref={dropdownRef}>
-            <button
-              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-              className="flex items-center justify-between gap-1 text-xs bg-transparent border-none text-gray-600 dark:text-gray-400 midnight:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 midnight:hover:text-gray-200 focus:outline-none cursor-pointer px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 midnight:hover:bg-gray-700 transition-colors w-28"
-            >
-              <span className="flex items-center gap-1">
-                {language}
-                {autoDetected && (
-                  <span className="text-xs text-green-500">•</span>
-                )}
-              </span>
-              <ChevronDown
-                className={`w-3 h-3 transition-transform duration-200 ${
-                  isDropdownOpen ? "rotate-180" : ""
-                }`}
-              />
-            </button>
-
-            {isDropdownOpen && (
-              <div
-                className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 midnight:bg-gray-900 border border-gray-200 dark:border-gray-600 midnight:border-gray-600 rounded-md shadow-lg w-28 max-h-60 overflow-y-auto"
-                style={{ zIndex: 99999 }}
-              >
-                {languages.map((lang) => (
-                  <button
-                    key={lang}
-                    onClick={() => handleLanguageChange(lang)}
-                    className={`w-full text-left px-3 py-2 text-xs hover:bg-gray-100 dark:hover:bg-gray-700 midnight:hover:bg-gray-700 transition-colors ${
-                      language === lang
-                        ? "bg-blue-50 dark:bg-blue-900/20 midnight:bg-blue-900/20 text-blue-600 dark:text-blue-400 midnight:text-blue-400"
-                        : "text-gray-700 dark:text-gray-300 midnight:text-gray-300"
-                    }`}
-                  >
-                    {lang}
-                  </button>
-                ))}
-              </div>
-            )}
+      <div className="flex items-center justify-between gap-2 rounded-t-xl border-b border-line bg-hover px-2 py-1">
+        <div className="flex min-w-0 items-center gap-1">
+          <div className="ml-2.5 w-36">
+            <Select
+              variant="inline"
+              size="sm"
+              value={language}
+              onChange={handleLanguageChange}
+              options={LANGUAGE_OPTIONS}
+              aria-label="Language"
+              searchPlaceholder="Find a language"
+              className="font-mono text-[12px] text-fg-muted"
+            />
           </div>
-
           <button
+            type="button"
             onClick={toggleLineNumbers}
-            className="text-xs text-gray-500 midnight:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 midnight:hover:text-gray-300 px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 midnight:hover:bg-gray-700"
+            className="h-7 rounded-md px-2 text-[12px] text-fg-muted outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/40"
           >
-            {showLineNumbers ? "Hide" : "Show"} lines
+            {showLineNumbers ? "Hide" : "Show"} line numbers
           </button>
         </div>
-
         <button
+          type="button"
           onClick={copyCode}
-          className="flex items-center gap-1 text-xs text-gray-500 midnight:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 midnight:hover:text-gray-300 px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 midnight:hover:bg-gray-700"
+          className="flex h-7 items-center gap-1 rounded-md px-2 text-[12px] text-fg-muted outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/40"
         >
           {copied ? (
-            <Check className="w-3 h-3" />
+            <Check className="h-3.5 w-3.5" />
           ) : (
-            <Copy className="w-3 h-3" />
+            <Copy className="h-3.5 w-3.5" />
           )}
-          {copied ? "Copied!" : "Copy"}
+          {copied ? "Copied" : "Copy"}
         </button>
       </div>
 
       {/* Code content */}
-      <div className="relative overflow-hidden">
+      <div className="relative overflow-hidden rounded-b-xl">
         <pre
           ref={preRef}
           className={`${
             showLineNumbers ? "pl-12" : "pl-4"
-          } pr-4 py-3 bg-gray-50 dark:bg-gray-900 midnight:bg-gray-950 text-sm font-mono overflow-x-auto relative`}
+          } pr-4 py-3 bg-surface text-sm font-mono overflow-x-auto relative`}
         >
           {/* Syntax highlighted background */}
           <code
@@ -985,7 +950,7 @@ const CodeBlock = ({ block, onChange, contentRef, commonProps }) => {
           <code
             ref={contentRef}
             contentEditable
-            className="relative bg-transparent outline-none text-gray-900 dark:text-gray-100 midnight:text-gray-100 caret-gray-900 dark:caret-gray-100 midnight:caret-gray-100 selection:bg-blue-200 dark:selection:bg-blue-800"
+            className="relative bg-transparent text-fg caret-fg outline-none selection:bg-accent-soft"
             style={{
               minHeight: "1.5rem",
               lineHeight: "1.5",
@@ -1024,7 +989,7 @@ const CodeBlock = ({ block, onChange, contentRef, commonProps }) => {
 
         {/* Line numbers */}
         {showLineNumbers && (
-          <div className="absolute left-0 top-0 bottom-0 w-10 bg-gray-100 dark:bg-gray-800 midnight:bg-gray-900 border-r border-gray-200 dark:border-gray-700 midnight:border-gray-600 text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-400 text-right py-3 pr-2 font-mono select-none">
+          <div className="absolute bottom-0 left-0 top-0 w-10 select-none border-r border-line bg-hover py-3 pr-2 text-right font-mono text-xs text-fg-subtle">
             {(block.content || "").split("\n").map((_, index) => (
               <div key={index} className="leading-6">
                 {index + 1}
