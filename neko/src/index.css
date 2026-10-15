@@ -352,116 +352,6 @@ body.browser-fullscreen-active [data-app-sidebar] {
 /* Add midnight variant */
 @custom-variant midnight (&:where(.midnight, .midnight *));
 
-/* Search highlight animation */
-.search-highlight {
-  animation: pulse-highlight 2s;
-  z-index: 10;
-  position: relative;
-}
-
-@keyframes pulse-highlight {
-  0% {
-    box-shadow: 0 0 0 0 rgba(147, 51, 234, 0.7);
-  }
-  70% {
-    box-shadow: 0 0 0 10px rgba(147, 51, 234, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(147, 51, 234, 0);
-  }
-}
-
-/* Dark mode versions */
-.dark .search-highlight {
-  animation: pulse-highlight-dark 2s;
-}
-
-@keyframes pulse-highlight-dark {
-  0% {
-    box-shadow: 0 0 0 0 rgba(192, 132, 252, 0.7);
-  }
-  70% {
-    box-shadow: 0 0 0 10px rgba(192, 132, 252, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(192, 132, 252, 0);
-  }
-}
-
-/* Midnight mode versions */
-.midnight .search-highlight {
-  animation: pulse-highlight-midnight 2s;
-}
-
-@keyframes pulse-highlight-midnight {
-  0% {
-    box-shadow: 0 0 0 0 rgba(216, 180, 254, 0.7);
-  }
-  70% {
-    box-shadow: 0 0 0 10px rgba(216, 180, 254, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(216, 180, 254, 0);
-  }
-}
-
-/* Shimmer animation for skeleton loading */
-@keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
-}
-
-.animate-shimmer {
-  background: linear-gradient(
-    90deg,
-    rgba(233, 213, 255, 0.1) 25%,
-    rgba(147, 51, 234, 0.15) 37%,
-    rgba(233, 213, 255, 0.1) 63%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-}
-
-.dark .animate-shimmer {
-  background: linear-gradient(
-    90deg,
-    rgba(233, 213, 255, 0.05) 25%,
-    rgba(192, 132, 252, 0.15) 37%,
-    rgba(233, 213, 255, 0.05) 63%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-}
-
-.midnight .animate-shimmer {
-  background: linear-gradient(
-    90deg,
-    rgba(233, 213, 255, 0.03) 25%,
-    rgba(216, 180, 254, 0.12) 37%,
-    rgba(233, 213, 255, 0.03) 63%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-}
-
-/* Shimmer animation for progress bars */
-@keyframes shimmer {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(100%);
-  }
-}
-
-.animate-shimmer {
-  animation: shimmer 2s infinite;
-}
-
 /* Subtle scale animations for button hovers */
 .animate-scale {
   transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -505,23 +395,6 @@ body.browser-fullscreen-active [data-app-sidebar] {
 .stagger-children > *:nth-child(6) { animation-delay: 0.5s; }
 .stagger-children > *:nth-child(7) { animation-delay: 0.6s; }
 .stagger-children > *:nth-child(8) { animation-delay: 0.7s; }
-
-/* Add a subtle animation for success feedback */
-@keyframes success-pulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(147, 51, 234, 0.7);
-  }
-  70% {
-    box-shadow: 0 0 0 8px rgba(147, 51, 234, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(147, 51, 234, 0);
-  }
-}
-
-.animate-success-pulse {
-  animation: success-pulse 2s 1;
-}
 
 /* Soft animations for mode changes */
 .mode-transition {
@@ -579,42 +452,6 @@ body.browser-fullscreen-active [data-app-sidebar] {
   100% {
     transform: translateX(210%);
   }
-}
-
-/* Add a focused state animation for form elements */
-@keyframes focus-border-pulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(147, 51, 234, 0.4);
-  }
-  50% {
-    box-shadow: 0 0 0 3px rgba(147, 51, 234, 0.2);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(147, 51, 234, 0);
-  }
-}
-
-.focus-pulse:focus {
-  animation: focus-border-pulse 2s infinite;
-}
-
-/* Cat cursor animation for special elements */
-.cat-cursor {
-  position: relative;
-}
-
-.cat-cursor::after {
-  content: "🐱";
-  position: absolute;
-  opacity: 0;
-  right: -15px;
-  font-size: 14px;
-  transition: all 0.3s ease;
-}
-
-.cat-cursor:hover::after {
-  opacity: 1;
-  transform: translateX(5px);
 }
 
 /* Add these to your CSS file */
