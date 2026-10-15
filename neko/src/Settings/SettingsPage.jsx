@@ -74,6 +74,7 @@ const SettingsPage = () => {
   const [devOptions, setDevOptions] = useState(readDevOptions);
   const [query, setQuery] = useState('');
   const mainRef = useRef(null);
+  const mobileNavRef = useRef(null);
 
   const tabs = SETTINGS_TABS;
   const activeTab = where.tab || 'general';
@@ -139,6 +140,11 @@ const SettingsPage = () => {
     find();
     return stop;
   }, [activeTab, section, location.key]);
+
+  // On a phone the pages are a row that scrolls sideways: keep this one in view.
+  useEffect(() => {
+    mobileNavRef.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [activeTab]);
 
   const renderGeneral = () => (
     <div className="space-y-8">
@@ -301,7 +307,7 @@ const SettingsPage = () => {
               <SettingsSearchResults results={results} icons={ICONS} onPick={openResult} />
             </div>
           ) : (
-            <nav className="-mx-4 flex gap-1 overflow-x-auto px-4 pb-3" aria-label="Settings pages">
+            <nav ref={mobileNavRef} className="-mx-4 flex gap-1 overflow-x-auto px-4 pb-3" aria-label="Settings pages">
               {tabs.map((item) => <div key={item.id}>{renderNavButton(item, true)}</div>)}
             </nav>
           )}
