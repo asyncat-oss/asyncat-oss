@@ -18,13 +18,13 @@ import {
   useCallback,
   useMemo,
 } from "react";
-import { createPortal } from "react-dom";
-import { useLocation, useNavigate } from "react-router-dom";
 import { flushSync } from "react-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { MessageInputV2 } from "./components/input/MessageInputV2";
 import AgentRunFeed, { CurrentPlanPanel, buildEventSegments } from './components/agent/AgentRunFeed';
 import { extractLocalhostUrl } from './utils/localhostUrl.js';
 import CommandCenterSidePanel from './components/sidebars/CommandCenterSidePanel';
+import SidePanelSheet from './components/SidePanelSheet.jsx';
 import ChatFloatingNav from './components/nav/ChatFloatingNav';
 import ConversationLoadingSkeleton from './components/loading/ConversationLoadingSkeleton';
 import { useAudioStatus } from "./hooks/useAudioStatus";
@@ -862,6 +862,12 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [toggleSidePanelTab]);
+
+  // Closing the side panel is remembered, as opening it is, on any width.
+  const closeSidePanel = useCallback(() => {
+    setShowActivitySidebar(false);
+    try { localStorage.setItem('asyncat_show_command_side_panel', 'false'); } catch { /* localStorage may be unavailable */ }
+  }, []);
 
   const openRuntimePanel = useCallback(() => {
     setSidePanelTab('runtime');
@@ -3416,10 +3422,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
           <div className="flex-1 min-w-0">
             <CommandCenterSidePanel
               activeTab={sidePanelTab}
-              onClose={() => {
-                setShowActivitySidebar(false);
-                try { localStorage.setItem('asyncat_show_command_side_panel', 'false'); } catch { /* noop */ }
-              }}
+              onClose={closeSidePanel}
               onBack={handleArtifactPanelBack}
               stepsItems={agentActivityItems}
               stepsLoading={agentLoadingSession}
@@ -3475,50 +3478,39 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
       {/* Mobile overlay — only mount on non-xl screens. CSS display:none alone is not
           enough because Electron <webview> elements stay alive (play audio, run JS) even
           when hidden. By gating on !isXLScreen we guarantee only ONE webview mounts. */}
-      {!isXLScreen && shouldRenderSidePanel && createPortal(
-        // A sheet from the right edge, not a centred dialog, so it is built
-        // here. In <body>, so it covers the app rail too.
-        <div className="fixed inset-0 z-[60] flex bg-black/45 xl:hidden">
-          <button
-            type="button"
-            className="flex-1"
-            onClick={() => setShowActivitySidebar(false)}
-            aria-label="Close side panel"
+      {!isXLScreen && shouldRenderSidePanel && (
+        <SidePanelSheet label="Side panel" onClose={closeSidePanel}>
+          <CommandCenterSidePanel
+            activeTab={sidePanelTab}
+            onClose={closeSidePanel}
+            onBack={handleArtifactPanelBack}
+            stepsItems={agentActivityItems}
+            stepsLoading={agentLoadingSession}
+            isRunning={agentRunning}
+            sourceCatalog={sourceCatalog}
+            gitState={gitState}
+            gitLoading={gitLoading}
+            gitError={gitError}
+            onGitRefresh={refreshGitState}
+            onGitChanged={handleGitChanged}
+            onAttachGitFile={handleAttachGitFile}
+            workingDir={workingContext?.workingDir || null}
+            workingContext={workingContext}
+            highlights={conversationHighlights}
+            onOpenSavedMessage={handleOpenSavedMessage}
+            previewUrl={effectivePreviewUrl}
+            previewNavigationKey={previewNavigationKey}
+            previewTabId={manualPreviewRequest?.tabId || null}
+            artifacts={conversationArtifacts}
+            onSelectArtifact={handleViewArtifactInPanel}
+            selectedArtifact={selectedArtifact}
+            chatNavItems={chatNavItems}
+            runtimeStatus={runtimeStatus}
+            runtimeStatusLoading={runtimeStatusLoading}
+            onRuntimeStatusRefresh={loadRuntimeStatus}
+            agentTerminalOutput={agentTerminalOutput}
           />
-          <div className="h-full w-[min(24rem,92vw)] border-l border-line bg-canvas shadow-xl shadow-black/10 dark:shadow-black/40">
-            <CommandCenterSidePanel
-              activeTab={sidePanelTab}
-              onClose={() => setShowActivitySidebar(false)}
-              onBack={handleArtifactPanelBack}
-              stepsItems={agentActivityItems}
-              stepsLoading={agentLoadingSession}
-              isRunning={agentRunning}
-              sourceCatalog={sourceCatalog}
-              gitState={gitState}
-              gitLoading={gitLoading}
-              gitError={gitError}
-              onGitRefresh={refreshGitState}
-              onGitChanged={handleGitChanged}
-              onAttachGitFile={handleAttachGitFile}
-              workingDir={workingContext?.workingDir || null}
-              workingContext={workingContext}
-              highlights={conversationHighlights}
-              onOpenSavedMessage={handleOpenSavedMessage}
-              previewUrl={effectivePreviewUrl}
-              previewNavigationKey={previewNavigationKey}
-              previewTabId={manualPreviewRequest?.tabId || null}
-              artifacts={conversationArtifacts}
-              onSelectArtifact={handleViewArtifactInPanel}
-              selectedArtifact={selectedArtifact}
-              chatNavItems={chatNavItems}
-              runtimeStatus={runtimeStatus}
-              runtimeStatusLoading={runtimeStatusLoading}
-              onRuntimeStatusRefresh={loadRuntimeStatus}
-              agentTerminalOutput={agentTerminalOutput}
-            />
-          </div>
-        </div>,
-        document.body,
+        </SidePanelSheet>
       )}
 
     </div>
