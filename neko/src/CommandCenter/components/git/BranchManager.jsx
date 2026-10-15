@@ -1,6 +1,14 @@
+// The branch button in the Git panel: a list of branches to switch to, and
+// a field to create one.
+
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { GitBranch, Loader2, Plus, Check, AlertCircle } from 'lucide-react';
+import { GitBranch, Loader2, Plus, Check } from 'lucide-react';
 import { gitApi } from '../../api';
+import Popover from '../../../components/ui/Popover.jsx';
+import IconButton from '../../../components/ui/IconButton.jsx';
+import Button from '../../../components/ui/Button.jsx';
+import Notice from '../../../components/ui/Notice.jsx';
+import { Input } from '../../../components/ui/Field.jsx';
 
 export default function BranchManager({ currentBranch, onSwitch, workingDir = null }) {
   const [open, setOpen] = useState(false);
@@ -10,7 +18,7 @@ export default function BranchManager({ currentBranch, onSwitch, workingDir = nu
   const [creating, setCreating] = useState(false);
   const [newBranchName, setNewBranchName] = useState('');
   const [busyBranch, setBusyBranch] = useState(null);
-  const dropdownRef = useRef(null);
+  const anchorRef = useRef(null);
   const inputRef = useRef(null);
 
   const fetchBranches = useCallback(async () => {
@@ -34,19 +42,11 @@ export default function BranchManager({ currentBranch, onSwitch, workingDir = nu
     if (open) fetchBranches();
   }, [open, fetchBranches]);
 
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setOpen(false);
-        setCreating(false);
-        setNewBranchName('');
-      }
-    }
-    if (open) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [open]);
+  const close = useCallback(() => {
+    setOpen(false);
+    setCreating(false);
+    setNewBranchName('');
+  }, []);
 
   useEffect(() => {
     if (creating && inputRef.current) {
@@ -96,89 +96,68 @@ export default function BranchManager({ currentBranch, onSwitch, workingDir = nu
   };
 
   return (
-    <div className="relative" ref={dropdownRef}>
-      <button
-        type="button"
-        onClick={() => setOpen(v => !v)}
-        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100 midnight:text-slate-400 midnight:hover:bg-slate-800 midnight:hover:text-slate-100"
-        title="Manage branches"
-      >
-        <GitBranch className="h-4 w-4" />
-      </button>
-
-      {open && (
-        <div className="absolute right-0 top-full z-30 mt-1 w-64 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-950 midnight:border-slate-800 midnight:bg-slate-950">
-          <div className="border-b border-gray-100 px-3 py-2 dark:border-slate-800 midnight:border-slate-800">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-gray-700 dark:text-gray-200 midnight:text-slate-200">Branches</span>
-              <button
-                type="button"
-                onClick={() => setCreating(v => !v)}
-                className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-800 dark:hover:text-slate-200 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
-                title="Create branch"
-              >
-                <Plus className="h-3 w-3" />
-              </button>
-            </div>
-          </div>
-
-          {creating && (
-            <div className="border-b border-gray-100 px-3 py-2 dark:border-slate-800 midnight:border-slate-800">
-              <div className="flex items-center gap-1.5">
-                <input
-                  ref={inputRef}
-                  value={newBranchName}
-                  onChange={e => setNewBranchName(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') handleCreate(); }}
-                  placeholder="new-branch-name"
-                  className="min-w-0 flex-1 rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 outline-none focus:border-gray-400 dark:border-slate-700 dark:bg-slate-900 dark:text-gray-100 midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-100"
-                />
-                <button
-                  type="button"
-                  onClick={handleCreate}
-                  disabled={!newBranchName.trim() || busyBranch === '__create__'}
-                  className="rounded p-1 text-emerald-600 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-400 dark:hover:bg-emerald-500/10 midnight:text-emerald-400 midnight:hover:bg-emerald-500/10"
-                >
-                  {busyBranch === '__create__' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {error && (
-            <div className="mx-2 mt-2 flex items-center gap-1.5 rounded-md bg-red-50 px-2 py-1.5 text-[10px] text-red-600 dark:bg-red-950/30 dark:text-red-300 midnight:bg-red-950/30 midnight:text-red-300">
-              <AlertCircle className="h-3 w-3 shrink-0" />
-              <span className="truncate">{error}</span>
-            </div>
-          )}
-
-          <div className="max-h-56 overflow-y-auto py-1">
-            {loading && branches.length === 0 && (
-              <div className="flex items-center justify-center py-4 text-xs text-gray-400 midnight:text-slate-500">
-                <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> Loading...
-              </div>
-            )}
-            {branches.map(branch => (
-              <button
-                key={branch.name}
-                type="button"
-                onClick={() => handleSwitch(branch.name)}
-                disabled={busyBranch === branch.name}
-                className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors ${
-                  branch.current
-                    ? 'bg-sky-50 font-medium text-sky-700 dark:bg-sky-500/10 dark:text-sky-300 midnight:bg-sky-500/10 midnight:text-sky-300'
-                    : 'text-gray-700 hover:bg-gray-50 dark:text-slate-200 dark:hover:bg-slate-800 midnight:text-slate-200 midnight:hover:bg-slate-800'
-                }`}
-              >
-                <GitBranch className={`h-3 w-3 shrink-0 ${branch.current ? 'text-sky-500 midnight:text-sky-400' : 'text-gray-400 dark:text-slate-500 midnight:text-slate-500'}`} />
-                <span className="min-w-0 flex-1 truncate">{branch.name}</span>
-                {busyBranch === branch.name && <Loader2 className="h-3 w-3 animate-spin text-gray-400" />}
-                {branch.current && <span className="shrink-0 text-[9px] font-medium uppercase tracking-wide text-sky-600 dark:text-sky-400 midnight:text-sky-400">Current</span>}
-              </button>
-            ))}
-          </div>
+    <>
+      <IconButton
+        ref={anchorRef}
+        size="sm"
+        icon={GitBranch}
+        label="Manage branches"
+        onClick={() => (open ? close() : setOpen(true))}
+        aria-expanded={open}
+      />
+      <Popover anchorRef={anchorRef} open={open} onClose={close} label="Branches" placement="bottom-end" width={256} className="!p-1.5">
+        <div className="flex items-center justify-between gap-2 py-0.5 pl-2">
+          <span className="text-[13px] font-semibold text-fg">Branches</span>
+          <IconButton size="sm" icon={Plus} label="Create branch" onClick={() => setCreating(v => !v)} />
         </div>
-      )}
-    </div>
+
+        {creating && (
+          <form
+            className="flex items-center gap-1.5 px-1 pb-1.5 pt-1"
+            onSubmit={(event) => { event.preventDefault(); handleCreate(); }}
+          >
+            <Input
+              ref={inputRef}
+              value={newBranchName}
+              onChange={e => setNewBranchName(e.target.value)}
+              placeholder="new-branch-name"
+              aria-label="New branch name"
+              spellCheck={false}
+              className="!h-8 min-w-0 flex-1 font-mono !text-[12px]"
+            />
+            <Button type="submit" variant="primary" size="sm" loading={busyBranch === '__create__'} disabled={!newBranchName.trim()}>
+              Create
+            </Button>
+          </form>
+        )}
+
+        {error && <Notice tone="error" className="mx-1 mb-1.5 !text-[12px]">{error}</Notice>}
+
+        <div className="max-h-56 overflow-y-auto border-t border-line pt-1">
+          {loading && branches.length === 0 && (
+            <div className="flex items-center justify-center gap-1.5 py-4 text-[12px] text-fg-subtle">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…
+            </div>
+          )}
+          {branches.map(branch => (
+            <button
+              key={branch.name}
+              type="button"
+              onClick={() => handleSwitch(branch.name)}
+              disabled={busyBranch === branch.name}
+              aria-current={branch.current ? 'true' : undefined}
+              className={`flex min-h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-[13px] outline-none transition-colors hover:bg-hover focus-visible:bg-hover ${
+                branch.current ? 'font-medium text-fg' : 'text-fg-muted hover:text-fg'
+              }`}
+            >
+              <GitBranch className="h-3.5 w-3.5 shrink-0 text-fg-subtle" strokeWidth={1.75} />
+              <span className="min-w-0 flex-1 truncate">{branch.name}</span>
+              {busyBranch === branch.name && <Loader2 className="h-3.5 w-3.5 animate-spin text-fg-subtle" />}
+              {branch.current && <Check className="h-3.5 w-3.5 shrink-0 text-fg" aria-label="Current branch" />}
+            </button>
+          ))}
+        </div>
+      </Popover>
+    </>
   );
 }
