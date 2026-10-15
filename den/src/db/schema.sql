@@ -358,7 +358,7 @@ CREATE TABLE IF NOT EXISTS agent_profiles (
   handle               TEXT,
   name                 TEXT NOT NULL,
   description          TEXT NOT NULL DEFAULT '',
-  icon                 TEXT NOT NULL DEFAULT '🤖',
+  icon                 TEXT NOT NULL DEFAULT '',
   color                TEXT NOT NULL DEFAULT 'indigo',
   soul_name            TEXT NOT NULL DEFAULT 'default',
   soul_override        TEXT,

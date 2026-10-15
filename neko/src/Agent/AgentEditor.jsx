@@ -15,10 +15,12 @@ import { aiProviderApi } from '../Settings/settingApi.js';
 import { useCommandCenter } from '../CommandCenter/context/CommandCenterContextEnhanced';
 import eventBus from '../utils/eventBus.js';
 import AgentAvatar from './AgentAvatar.jsx';
+import { chosenAgentIcon } from './agentIcon.js';
 import ConnectorPicker from '../Connectors/ConnectorPicker.jsx';
 
-// '' is no emoji: the agent shows a plain bot glyph.
-const EMOJIS = ['', '🤖', '🧠', '🔍', '✍️', '🧑‍🏫', '🧑‍💻', '🎨', '📊', '🧪', '🩺', '⚖️', '🍳', '🌍', '🎧', '📚', '🐱'];
+// '' is no emoji: the agent shows a plain bot glyph (as it does for the robot
+// older agents were given by default).
+const EMOJIS = ['', '🧠', '🔍', '✍️', '🧑‍🏫', '🧑‍💻', '🎨', '📊', '🧪', '🩺', '⚖️', '🍳', '🌍', '🎧', '📚', '🐱'];
 const CAPABILITY_HINTS = {
   web: 'Search the web and read or use web pages.',
   files: 'Read, write and run code in a project folder.',
@@ -293,10 +295,10 @@ export default function AgentEditor({ agentId = null, template = null, onClose }
                       key={emoji || 'none'}
                       type="button"
                       onClick={() => update({ icon: emoji })}
-                      aria-pressed={(agent.icon || '') === emoji}
+                      aria-pressed={(chosenAgentIcon(agent.icon) || '') === emoji}
                       aria-label={emoji ? undefined : 'No emoji'}
                       title={emoji ? undefined : 'No emoji'}
-                      className={`flex h-8 w-8 items-center justify-center rounded-lg text-base transition-colors ${(agent.icon || '') === emoji ? 'bg-selected ring-1 ring-line-strong' : 'hover:bg-hover'}`}
+                      className={`flex h-8 w-8 items-center justify-center rounded-lg text-base transition-colors ${(chosenAgentIcon(agent.icon) || '') === emoji ? 'bg-selected ring-1 ring-line-strong' : 'hover:bg-hover'}`}
                     >
                       {emoji || <Bot className="h-4 w-4 text-fg-subtle" strokeWidth={1.75} />}
                     </button>

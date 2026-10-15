@@ -46,6 +46,13 @@ test('agents keep instructions, starters, capabilities and an avatar; junk is cl
   assert.deepEqual(updated.starter_prompts, ['One']);
 });
 
+test('an agent made without an emoji has none, not the robot', () => {
+  const plain = profiles.createProfile({ userId: user.id, name: 'Plain helper' });
+  assert.equal(plain.icon, '');
+  assert.equal(profiles.createProfile({ userId: user.id, name: 'Null icon', icon: null }).icon, '');
+  assert.equal(profiles.createProfile({ userId: user.id, name: 'Lab helper', icon: '🧪' }).icon, '🧪');
+});
+
 test('capabilities turn into an allow-list of tools', () => {
   const tools = [
     { name: 'web_search', category: 'search' },

@@ -26,6 +26,7 @@ import { MODEL_ACTION_EVENT } from '../renderers/interactiveEvents.js';
 import AskUserForm from './AskUserForm.jsx';
 import SkillSuggestionCard from './SkillSuggestionCard.jsx';
 import { delegateIcon } from './delegateIcon.js';
+import { chosenAgentIcon } from '../../../Agent/agentIcon.js';
 import useSkillSuggestions from '../../hooks/useSkillSuggestions.js';
 import { placeSkillSuggestions } from '../../utils/skillSuggestions.js';
 import { currentToolName } from '../../utils/toolNames.js';
@@ -414,7 +415,7 @@ function UserGoalEvent({ data, onEditMessage, onToggleMessageFlag, isRunning, hi
               <div className="mt-2 flex flex-wrap justify-end gap-1">
                 {data.agentMentions.map(agent => (
                   <span key={agent.id || agent.handle} className="inline-flex items-center gap-1 rounded-md bg-surface px-1.5 py-0.5 text-[11px] font-medium text-fg-muted">
-                    {agent.icon ? <span>{agent.icon}</span> : null}
+                    {chosenAgentIcon(agent.icon) ? <span>{chosenAgentIcon(agent.icon)}</span> : null}
                     #{agent.handle}
                   </span>
                 ))}

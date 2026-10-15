@@ -13,7 +13,7 @@ db.exec(`
     handle              TEXT,
     name                TEXT NOT NULL,
     description         TEXT NOT NULL DEFAULT '',
-    icon                TEXT NOT NULL DEFAULT '🤖',
+    icon                TEXT NOT NULL DEFAULT '',
     color               TEXT NOT NULL DEFAULT 'indigo',
     soul_name           TEXT NOT NULL DEFAULT 'default',
     soul_override       TEXT,
@@ -199,7 +199,7 @@ export function getProfileByHandle(handle, userId) {
 }
 
 export function createProfile({
-  userId, name, handle = null, description = '', icon = '🤖', color = 'indigo', soulName = 'default',
+  userId, name, handle = null, description = '', icon = '', color = 'indigo', soulName = 'default',
   soulOverride = null, workingDir = null, maxRounds = 25, autoApprove = false, alwaysAllowedTools = [],
   isDefault = false, instructions = '', avatarImage = null, starterPrompts = [], modelProfileId = null,
   capabilities = null, connectors = null,
@@ -219,7 +219,7 @@ export function createProfile({
     )
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    id, userId, resolvedHandle, name, description, icon, color,
+    id, userId, resolvedHandle, name, description, String(icon || ''), color,
     soulName, soulOverride || null, workingDir || null,
     maxRounds, autoApprove ? 1 : 0,
     JSON.stringify(alwaysAllowedTools),

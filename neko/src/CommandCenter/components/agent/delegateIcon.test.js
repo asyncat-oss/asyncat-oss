@@ -12,6 +12,10 @@ test('a one-off helper role shows its initial, not the placeholder robot', () =>
   assert.equal(delegateIcon({ data: { profileId: 'default', profileIcon: '🤖' }, name: 'writer' }), 'W');
 });
 
+test('a saved agent with the old default robot shows its initial', () => {
+  assert.equal(delegateIcon({ profile: { id: 'p-3', icon: '🤖' }, name: 'helper' }), 'H');
+});
+
 test('an agent without an emoji shows its initial', () => {
   assert.equal(delegateIcon({ profile: { id: 'p-2' }, name: ' tester' }), 'T');
   assert.equal(delegateIcon({ name: '' }), 'A');

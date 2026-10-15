@@ -1,5 +1,6 @@
 import PropTypes from 'prop-types';
 import { Bot } from 'lucide-react';
+import { chosenAgentIcon } from './agentIcon.js';
 
 const SIZES = {
   xs: 'h-4 w-4 text-[11px] rounded',
@@ -17,7 +18,7 @@ export default function AgentAvatar({ agent, size = 'sm', className = '' }) {
   }
   return (
     <span className={`${box} ${size === 'xs' ? '' : 'border border-line bg-surface'}`} aria-hidden="true">
-      {agent?.icon || <Bot className={`${ICON_SIZES[size] || ICON_SIZES.sm} text-fg-subtle`} strokeWidth={1.75} />}
+      {chosenAgentIcon(agent?.icon) || <Bot className={`${ICON_SIZES[size] || ICON_SIZES.sm} text-fg-subtle`} strokeWidth={1.75} />}
     </span>
   );
 }

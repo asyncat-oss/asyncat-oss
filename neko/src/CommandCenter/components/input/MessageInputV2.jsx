@@ -30,6 +30,7 @@ import Notice from "../../../components/ui/Notice.jsx";
 import AsyncatMark from "../../../components/ui/AsyncatMark.jsx";
 import { CONTROL_CLASS } from "../../../components/ui/Field.jsx";
 import { chosenProjectEmoji } from "../../utils/projectEmoji.js";
+import { chosenAgentIcon } from "../../../Agent/agentIcon.js";
 
 function getAgentTrigger(value, cursor) {
   const beforeCursor = value.slice(0, cursor);
@@ -1718,7 +1719,7 @@ export const MessageInputV2 = ({
                             }`}
                           >
                             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-surface text-sm ring-1 ring-inset ring-line">
-                              {profile.icon || <span className="text-[11px] font-medium text-fg-muted">{String(profile.name || "#").charAt(0).toUpperCase()}</span>}
+                              {chosenAgentIcon(profile.icon) || <span className="text-[11px] font-medium text-fg-muted">{String(profile.name || "#").charAt(0).toUpperCase()}</span>}
                             </span>
                             <span className="min-w-0 flex-1">
                               <span className="block truncate text-[13px] font-medium text-fg">
