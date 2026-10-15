@@ -40,7 +40,7 @@ function QuickAsk({ api }) {
         <SettingsRow label="Open it" hint={quickAskHint(entry, platform, wayland)}>
           <div className="flex items-center gap-3">
             <Keys keys={keys} />
-            <Button size="sm" onClick={() => navigate('/settings/shortcuts')}>Change shortcut</Button>
+            <Button size="sm" onClick={() => navigate('/settings/shortcuts#system-wide')}>Change shortcut</Button>
           </div>
         </SettingsRow>
       </RowGroup>
