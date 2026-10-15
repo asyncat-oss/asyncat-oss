@@ -15,6 +15,7 @@ import RadioGroup from '../components/ui/RadioGroup.jsx';
 import { AVATARS, FREEDOM, FREEDOM_ORDER } from './catFormat.js';
 import { TEXTAREA } from './catFormState.js';
 import TriggerEditor from './TriggerEditor.jsx';
+import { chosenProjectEmoji } from '../CommandCenter/utils/projectEmoji.js';
 import ConnectorPicker from '../Connectors/ConnectorPicker.jsx';
 
 /** A small square picture from an image file, as a data: URL. */
@@ -214,7 +215,10 @@ export function BrainSection({ form, set, options }) {
           onChange={(projectId) => set({ projectId, ...(projectId ? {} : { folderMode: form.folderMode === 'project' ? 'own' : form.folderMode }) })}
           options={[
             { value: '', label: 'No project' },
-            ...options.projects.map((project) => ({ value: project.id, label: `${project.emoji ? `${project.emoji} ` : ''}${project.name}`, text: project.name })),
+            ...options.projects.map((project) => {
+              const emoji = chosenProjectEmoji(project.emoji);
+              return { value: project.id, label: `${emoji ? `${emoji} ` : ''}${project.name}`, text: project.name };
+            }),
           ]}
         />
       </Field>

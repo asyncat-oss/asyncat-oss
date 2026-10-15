@@ -129,7 +129,7 @@ async function getProjects(req, res) {
  * POST /api/projects
  */
 async function createProject(req, res) {
-	const { name, description, due_date, team_id, emoji = "📁", folder_path, folder_name } = req.body;
+	const { name, description, due_date, team_id, emoji = "", folder_path, folder_name } = req.body;
 
 	try {
 		const { user, db } = req;

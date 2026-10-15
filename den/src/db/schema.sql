@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS projects (
   -- References workspaces instead of the old teams table.
   team_id         TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   is_archived     INTEGER NOT NULL DEFAULT 0,
-  emoji           TEXT NOT NULL DEFAULT '📁',
+  emoji           TEXT NOT NULL DEFAULT '',
   instructions    TEXT NOT NULL DEFAULT '',
   created_at      TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at      TEXT NOT NULL DEFAULT (datetime('now'))

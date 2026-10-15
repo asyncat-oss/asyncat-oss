@@ -13,12 +13,13 @@ function isValidSingleEmoji(input) {
   return emojiRegex.test(char) || extendedEmojiRegex.test(char);
 }
 
+// A project's emoji: one the user picked, or '' for none (the app then shows a
+// plain folder glyph). Older projects were given 📁 when none was picked; the
+// app treats that one as none too.
 function sanitizeEmoji(emoji) {
-  const DEFAULT_EMOJI = '📁';
-  if (!emoji) return DEFAULT_EMOJI;
+  if (!emoji) return '';
   const cleaned = emoji.toString().trim().replace(/[<>"'&]/g, '');
-  if (isValidSingleEmoji(cleaned)) return cleaned;
-  return DEFAULT_EMOJI;
+  return isValidSingleEmoji(cleaned) ? cleaned : '';
 }
 
 export {

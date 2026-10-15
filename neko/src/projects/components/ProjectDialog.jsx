@@ -8,9 +8,11 @@ import { useConfirm } from '../../components/confirmContext';
 import { useToast, errorDetail } from '../../components/toastContext';
 import { projectApi } from '../projectApi.js';
 import eventBus from '../../utils/eventBus.js';
+import { chosenProjectEmoji } from '../../CommandCenter/utils/projectEmoji.js';
 
-// '' is no emoji: the project shows a plain folder glyph.
-const EMOJIS = ['', '📁', '💼', '🚀', '🧪', '📚', '✍️', '🎨', '🏡', '🌱', '🍳', '🧳', '💡', '📈', '🛠️', '🎮', '🎵', '🧠', '❤️', '🐱', '⭐'];
+// '' is no emoji: the project shows a plain folder glyph (as it does for the
+// folder emoji older projects were given by default).
+const EMOJIS = ['', '💼', '🚀', '🧪', '📚', '✍️', '🎨', '🏡', '🌱', '🍳', '🧳', '💡', '📈', '🛠️', '🎮', '🎵', '🧠', '❤️', '🐱', '⭐'];
 const MAX_INSTRUCTIONS = 20000;
 const MAX_FILES = 20;
 
@@ -69,7 +71,7 @@ export default function ProjectDialog({ open, project = null, initialFolder = ''
   useEffect(() => {
     if (!open) return;
     setName(project?.name || (initialFolder ? folderName(initialFolder) : ''));
-    setEmoji(project?.emoji || '');
+    setEmoji(chosenProjectEmoji(project?.emoji) || '');
     setDescription(project?.description || '');
     setFolder(editing ? '' : initialFolder || '');
     setInstructions('');

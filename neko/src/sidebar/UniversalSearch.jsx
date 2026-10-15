@@ -38,6 +38,7 @@ import { useWorkspace } from '../contexts/WorkspaceContext';
 import { chatApi, agentApi } from '../CommandCenter/api';
 import { searchApi } from '../CommandCenter/api/searchApi.js';
 import SearchSnippet from '../components/SearchSnippet.jsx';
+import { chosenProjectEmoji } from '../CommandCenter/utils/projectEmoji.js';
 import { chatLink, isPinned, markTitle } from './chatSearch.js';
 import { latestSearch } from '../utils/latestSearch.js';
 import { keepTabInside } from './focusLoop.js';
@@ -99,8 +100,8 @@ const SearchResultItem = memo(
         onMouseMove={() => { if (!isSelected) onHover(index); }}
       >
         <span className="flex h-5 w-4 shrink-0 items-center justify-center">
-          {item._type === 'project' && item.emoji ? (
-            <span className="text-[13px] leading-none">{item.emoji}</span>
+          {item._type === 'project' && chosenProjectEmoji(item.emoji) ? (
+            <span className="text-[13px] leading-none">{chosenProjectEmoji(item.emoji)}</span>
           ) : (
             <Icon className="h-4 w-4" strokeWidth={1.75} />
           )}

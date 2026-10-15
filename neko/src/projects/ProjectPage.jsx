@@ -12,6 +12,7 @@ import ProjectDialog from './components/ProjectDialog';
 import ProjectFolders from './components/ProjectFolders';
 import { projectApi } from './projectApi.js';
 import eventBus from '../utils/eventBus.js';
+import { chosenProjectEmoji } from '../CommandCenter/utils/projectEmoji.js';
 
 function timeAgo(value) {
   const then = new Date(value).getTime();
@@ -201,7 +202,7 @@ export default function ProjectPage() {
           </button>
           <div className="flex items-start gap-3">
             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-line bg-surface text-2xl" aria-hidden="true">
-              {project.emoji || <Folder className="h-5 w-5 text-fg-subtle" strokeWidth={1.75} />}
+              {chosenProjectEmoji(project.emoji) || <Folder className="h-5 w-5 text-fg-subtle" strokeWidth={1.75} />}
             </span>
             <div className="min-w-0 flex-1">
               <h1 className="truncate text-[22px] font-semibold tracking-[-0.02em] text-fg">{project.name}</h1>

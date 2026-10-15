@@ -7,6 +7,7 @@ import { Input } from '../components/ui/Field';
 import ProjectDialog from './components/ProjectDialog';
 import { projectApi } from './projectApi.js';
 import eventBus from '../utils/eventBus.js';
+import { chosenProjectEmoji } from '../CommandCenter/utils/projectEmoji.js';
 
 /** All projects, newest activity first, with a way to make a new one. */
 export default function ProjectsHome() {
@@ -83,7 +84,7 @@ export default function ProjectsHome() {
               >
                 <span className="flex items-center gap-2.5">
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center text-xl" aria-hidden="true">
-                    {project.emoji || <Folder className="h-[18px] w-[18px] text-fg-subtle" strokeWidth={1.75} />}
+                    {chosenProjectEmoji(project.emoji) || <Folder className="h-[18px] w-[18px] text-fg-subtle" strokeWidth={1.75} />}
                   </span>
                   <span className="truncate text-[15px] font-medium text-fg">{project.name}</span>
                 </span>

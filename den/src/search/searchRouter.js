@@ -70,7 +70,7 @@ router.get('/', (req, res) => {
         id: r.id,
         title: r.name,
         description: r.description || '',
-        emoji: r.emoji || '📁',
+        emoji: r.emoji || '',
         updatedAt: r.updated_at,
       }));
     }
