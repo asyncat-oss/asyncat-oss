@@ -202,6 +202,8 @@ export default function SkillsTab({ catalog }) {
         toolbar={toolbar}
         list={list}
         inspector={<SkillInspector skill={selected} onDelete={() => deleteSkill(selected)} deleting={deleting} />}
+        opened={Boolean(selectedName && selected)}
+        onBack={() => select(null)}
       />
     </>
   );

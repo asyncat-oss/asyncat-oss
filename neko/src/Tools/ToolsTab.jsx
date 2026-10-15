@@ -157,7 +157,16 @@ export default function ToolsTab({ catalog }) {
     ));
   }
 
-  return <ListWithInspector label="Tools" toolbar={toolbar} list={list} inspector={<ToolInspector tool={selected} />} />;
+  return (
+    <ListWithInspector
+      label="Tools"
+      toolbar={toolbar}
+      list={list}
+      inspector={<ToolInspector tool={selected} />}
+      opened={Boolean(selectedName && selected)}
+      onBack={() => select(null)}
+    />
+  );
 }
 
 ToolsTab.propTypes = {

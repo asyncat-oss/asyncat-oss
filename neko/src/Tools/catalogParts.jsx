@@ -4,19 +4,31 @@
 
 import { Fragment, useEffect, useMemo, useRef } from 'react';
 import PropTypes from 'prop-types';
+import { ArrowLeft } from 'lucide-react';
+import Button from '../components/ui/Button.jsx';
 import Skeleton from '../components/ui/Skeleton.jsx';
 import { inlineTokens, parseMarkdownBlocks, plainText } from './markdownBlocks.js';
 
-/** Toolbar and list on the left, the open item on the right (under it on small screens). */
-export function ListWithInspector({ toolbar, list, inspector, label }) {
+/**
+ * Toolbar and list on the left, the open item on the right. Below xl the
+ * list takes the whole height, and an item someone opened (`opened`) takes
+ * its place, with a way back (`onBack`): a strip under the list left the
+ * list one row tall in a smaller window.
+ */
+export function ListWithInspector({ toolbar, list, inspector, label, opened = false, onBack = null }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col xl:flex-row">
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col" aria-label={label}>
+      <section className={`${opened ? 'hidden xl:flex' : 'flex'} min-h-0 min-w-0 flex-1 flex-col`} aria-label={label}>
         <div className="shrink-0 space-y-2 px-4 pb-3 pt-4 sm:px-6 lg:px-8">{toolbar}</div>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 sm:px-6 lg:px-8">{list}</div>
       </section>
-      <aside className="h-[42%] min-h-[220px] shrink-0 overflow-y-auto border-t border-line xl:h-auto xl:w-[400px] xl:border-l xl:border-t-0" data-inspector>
-        {inspector}
+      <aside className={`${opened ? 'flex' : 'hidden xl:flex'} min-h-0 flex-1 flex-col xl:w-[400px] xl:flex-none xl:border-l xl:border-line`} data-inspector>
+        {onBack ? (
+          <div className="shrink-0 border-b border-line px-2 py-1.5 sm:px-4 xl:hidden">
+            <Button variant="ghost" size="sm" icon={ArrowLeft} onClick={onBack}>{label ? `All ${label.toLowerCase()}` : 'Back'}</Button>
+          </div>
+        ) : null}
+        <div className="min-h-0 flex-1 overflow-y-auto">{inspector}</div>
       </aside>
     </div>
   );
@@ -27,6 +39,8 @@ ListWithInspector.propTypes = {
   list: PropTypes.node,
   inspector: PropTypes.node,
   label: PropTypes.string,
+  opened: PropTypes.bool,
+  onBack: PropTypes.func,
 };
 
 /** A group heading with its count, then its rows in one bordered box. */
