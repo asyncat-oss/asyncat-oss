@@ -7,6 +7,7 @@ import PropTypes from 'prop-types';
 import { Check, X } from 'lucide-react';
 import { agentApi } from '../CommandCenter/api';
 import Button from '../components/ui/Button.jsx';
+import { CONTROL_CLASS } from '../components/ui/Field.jsx';
 import Select from '../components/ui/Select.jsx';
 import { errorDetail, useToast } from '../components/toastContext.js';
 import { MEMORY_KIND_OPTIONS } from './memoryKinds.js';
@@ -65,7 +66,7 @@ export function AddMemoryForm({ owners, defaultScope, onAdded, onCancel }) {
     }
   };
   return (
-    <form onSubmit={save} className="space-y-2 border-b border-line px-6 py-3" data-add-memory>
+    <form onSubmit={save} className="mb-3 space-y-2 rounded-xl border border-line p-3" data-add-memory>
       <textarea
         autoFocus
         rows={2}
@@ -73,11 +74,11 @@ export function AddMemoryForm({ owners, defaultScope, onAdded, onCancel }) {
         onChange={(event) => setContent(event.target.value)}
         placeholder="Something the agents should remember, e.g. “I water the balcony at 7 in the morning.”"
         aria-label="Memory"
-        className="w-full rounded-lg border border-line-strong bg-canvas px-3 py-2 text-sm text-fg outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+        className={`${CONTROL_CLASS} resize-y py-2 leading-6`}
       />
       <div className="flex flex-wrap items-center gap-2">
         <Select size="sm" fullWidth={false} value={kind} onChange={setKind} options={MEMORY_KIND_OPTIONS} aria-label="Kind" />
-        <span className="text-xs text-fg-muted">for</span>
+        <span className="text-[12px] text-fg-muted">for</span>
         <MemoryOwnerSelect value={scope} onChange={setScope} owners={owners} includeAll={false} label="Who it is for" />
         <span className="ml-auto flex gap-1.5">
           <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
@@ -113,7 +114,7 @@ export function MemoryEditor({ mem, onSaved, onCancel }) {
         value={content}
         onChange={(event) => setContent(event.target.value)}
         aria-label="Memory text"
-        className="w-full rounded-md border border-line-strong bg-canvas px-3 py-2 text-sm text-fg outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+        className={`${CONTROL_CLASS} resize-y py-2 leading-6`}
       />
       <div className="flex items-center gap-2">
         <Select size="sm" fullWidth={false} value={kind} onChange={setKind} options={MEMORY_KIND_OPTIONS} aria-label="Kind" />
