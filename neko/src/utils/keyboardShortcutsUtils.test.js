@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_KEYBOARD_SHORTCUTS, assignShortcut, findConflict, keysFromEvent, mergeSavedShortcuts, shortcutRefusal } from './keyboardShortcutsUtils.js';
+import { DEFAULT_KEYBOARD_SHORTCUTS, assignShortcut, findConflict, keyName, keysFromEvent, mergeSavedShortcuts, shortcutRefusal } from './keyboardShortcutsUtils.js';
 
 test('shortcut labels use the names the sidebar uses', () => {
   const labels = Object.fromEntries(Object.entries(DEFAULT_KEYBOARD_SHORTCUTS).map(([id, item]) => [id, item.label]));
@@ -68,4 +68,9 @@ test('copy, paste and the other editing keys, Shift and Alt are refused while re
 test('a saved shortcut on an editing key goes back to its default', () => {
   const merged = mergeSavedShortcuts({ dock3: { key: 'c', ctrl: true, meta: true } });
   assert.equal(merged.dock3.key, DEFAULT_KEYBOARD_SHORTCUTS.dock3.key);
+});
+
+test('Space reads as Space on a key cap', () => {
+  assert.equal(keyName(' '), 'Space');
+  assert.equal(keyName('k'), 'K');
 });

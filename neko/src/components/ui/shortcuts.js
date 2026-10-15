@@ -9,7 +9,7 @@ export function isMacPlatform() {
 /** "⌘K" on macOS, "Ctrl+K" elsewhere; '' when there is no shortcut. */
 export function formatShortcut(shortcut) {
   if (!shortcut?.key) return '';
-  const key = shortcut.key.length === 1 ? shortcut.key.toUpperCase() : shortcut.key;
+  const key = shortcut.key === ' ' ? 'Space' : shortcut.key.length === 1 ? shortcut.key.toUpperCase() : shortcut.key;
   if (!shortcut.ctrl) return key;
   return isMacPlatform() ? `⌘${key}` : `Ctrl+${key}`;
 }

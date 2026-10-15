@@ -12,6 +12,7 @@ import {
   DEFAULT_KEYBOARD_SHORTCUTS,
   assignShortcut,
   findConflict,
+  keyName,
   keysFromEvent,
   loadKeyboardShortcuts,
   saveKeyboardShortcuts,
@@ -21,7 +22,7 @@ import Keys from './Keys.jsx';
 
 function shortcutKeys(shortcut, isMac) {
   if (!shortcut?.key) return [];
-  const key = shortcut.key.length === 1 ? shortcut.key.toUpperCase() : shortcut.key;
+  const key = keyName(shortcut.key);
   return shortcut.ctrl ? [isMac ? '⌘' : 'Ctrl', key] : [key];
 }
 

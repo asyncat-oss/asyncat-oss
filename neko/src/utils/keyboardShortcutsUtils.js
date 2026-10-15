@@ -129,4 +129,10 @@ export function shortcutRefusal(event, { mac = false } = {}) {
   return null;
 }
 
+/** How a shortcut's key reads on a key cap: "K", "Space", "ArrowUp". */
+export function keyName(key) {
+  if (key === ' ') return 'Space';
+  return String(key || '').length === 1 ? String(key).toUpperCase() : String(key || '');
+}
+
 export const DEFAULT_KEYBOARD_SHORTCUTS = DEFAULT_SHORTCUTS;
