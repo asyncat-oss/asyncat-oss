@@ -7,8 +7,8 @@
 // one), searching inside chats, pinning a chat, a model per chat, Models →
 // Voice and Images (and a Models search that finds a voice file), Files, the
 // first-run setup (which a fresh install offers and an install with a model
-// doesn't), your preferences in Settings → Personalization, and the main
-// pages.
+// doesn't), your preferences in Settings → Personalization, making and
+// deleting a skill and adding a memory in Tools & Skills, and the main pages.
 //
 // Needs a Chromium-based browser (Chrome, Chromium, Edge or Brave), found the
 // same way PDF export finds one; PUPPETEER_EXECUTABLE_PATH picks another.
@@ -737,6 +737,32 @@ async function main() {
     await box.type('export');
     await page.keyboard.press('Enter');
     await waitFor(async () => (await page.evaluate(() => `${location.pathname}${location.hash}`)) === '/settings/privacy#data' && await dataInView(), { timeout: 10000, what: 'searching "export" to scroll to Your data' });
+    await noCrash();
+  });
+
+  await check('Tools & Skills: a new skill opens and can be deleted, a memory can be added, and the old Soul tab leads to Personalization', async () => {
+    await page.goto(`${app}/skills`, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('[data-skill-inspector]', { timeout: 20000 });
+    await clickText('section[aria-label="Skills"] button', 'New');
+    await page.waitForSelector('[data-new-skill] #skill-name', { timeout: 10000 });
+    await page.type('#skill-name', 'Smoke skill');
+    await page.type('#skill-body', '1. Say hello.');
+    await clickText('[role="dialog"] button', 'Create skill');
+    await waitFor(() => page.evaluate(() => document.querySelector('[data-skill-inspector]')?.dataset.skillInspector === 'Smoke skill'), { timeout: 10000, what: 'the new skill to open' });
+    await page.click('[data-skill-inspector] button[aria-label="Delete this skill"]');
+    await page.waitForSelector('[role="alertdialog"] [data-confirm-action]', { timeout: 10000 });
+    await page.click('[role="alertdialog"] [data-confirm-action]');
+    await waitFor(async () => !(await api('GET', '/api/agent/skills')).skills.some((skill) => skill.name === 'Smoke skill'), { timeout: 10000, what: 'the skill to be deleted' });
+
+    await page.goto(`${app}/tools?tab=memory`, { waitUntil: 'domcontentloaded' });
+    await clickText('section[aria-label="Memory"] button', 'Add');
+    await page.waitForSelector('[data-add-memory] textarea', { timeout: 10000 });
+    await page.type('[data-add-memory] textarea', 'Smoke memory: keeps answers short.');
+    await clickText('[data-add-memory] button', 'Remember');
+    await waitFor(() => page.evaluate(() => [...document.querySelectorAll('[data-memory]')].some((row) => row.innerText.includes('Smoke memory'))), { timeout: 10000, what: 'the memory in the list' });
+
+    await page.goto(`${app}/tools?tab=soul`, { waitUntil: 'domcontentloaded' });
+    await waitFor(() => page.evaluate(() => location.pathname === '/settings/personalization'), { timeout: 10000, what: 'the Soul tab to lead to Settings → Personalization' });
     await noCrash();
   });
 
