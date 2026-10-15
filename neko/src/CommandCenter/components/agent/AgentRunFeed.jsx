@@ -25,6 +25,7 @@ import Dialog from '../../../components/ui/Dialog.jsx';
 import { MODEL_ACTION_EVENT } from '../renderers/interactiveEvents.js';
 import AskUserForm from './AskUserForm.jsx';
 import SkillSuggestionCard from './SkillSuggestionCard.jsx';
+import { delegateIcon } from './delegateIcon.js';
 import useSkillSuggestions from '../../hooks/useSkillSuggestions.js';
 import { placeSkillSuggestions } from '../../utils/skillSuggestions.js';
 import { currentToolName } from '../../utils/toolNames.js';
@@ -2611,8 +2612,7 @@ function AgentDelegateEvent({ data, result, pending = false, events = [] }) {
   const profile = result?.profile || data?.profile || {};
   const handle = profile.handle || data?.profileHandle;
   const name = profile.name || data?.profileName || handle || 'agent';
-  // The agent's own emoji when it has one, else its initial.
-  const icon = profile.icon || data?.profileIcon || name.charAt(0).toUpperCase();
+  const icon = delegateIcon({ profile, data, name });
   const answer = result?.answer || data?.answer || '';
   const isError = result?.success === false || data?.success === false;
   const sessionId = result?.sessionId || data?.sessionId;
