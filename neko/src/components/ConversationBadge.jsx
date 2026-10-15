@@ -1,7 +1,6 @@
 import PropTypes from 'prop-types';
-import { Cat as CatIcon } from 'lucide-react';
+import { Cat as CatIcon, MessageSquare } from 'lucide-react';
 import { ProviderGlyph } from '../Models/modelLogos.jsx';
-import AsyncatMark from './ui/AsyncatMark.jsx';
 import AgentAvatar from '../Agent/AgentAvatar.jsx';
 import { conversationAgentId, conversationEngine, engineDisplayName } from '../Agent/externalAgentFormat.js';
 
@@ -23,8 +22,10 @@ export default function ConversationBadge({ conversation, agentsById = null, cla
   const agent = agentId && agentsById ? agentsById.get(String(agentId)) : null;
   const engineName = engineDisplayName(engine);
   const label = agent ? `${engineName} · ${agent.name || 'Agent'}` : engineName;
+  // An ordinary chat gets a plain chat icon; marks are for Claude Code,
+  // Codex and other outside agents.
   const engineMark = engine === 'asyncat'
-    ? <AsyncatMark variant="glyph" className="h-3.5 w-3.5 text-fg-subtle" />
+    ? <MessageSquare className="h-3.5 w-3.5 text-fg-subtle" strokeWidth={1.75} />
     : <EngineGlyph engine={engine} />;
   // Same width on every row: with an agent, its picture takes the spot and
   // the engine's mark sits small in its corner.
@@ -43,7 +44,7 @@ export default function ConversationBadge({ conversation, agentsById = null, cla
 }
 
 function EngineGlyph({ engine }) {
-  const glyph = <ProviderGlyph providerId={engine} className="h-3.5 w-3.5" />;
+  const glyph = <ProviderGlyph providerId={engine} className="h-3.5 w-3.5 text-fg-muted" />;
   if (glyph && (engine === 'claude-code' || engine === 'codex')) return glyph;
   // Agents without a known mark: their initial on a small tile.
   const initial = engineDisplayName(engine).charAt(0).toUpperCase();
