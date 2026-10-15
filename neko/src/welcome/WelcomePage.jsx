@@ -2,7 +2,7 @@
 // Welcome and your name, how Asyncat thinks (a model online or on this
 // computer), bringing chats from ChatGPT or Claude, how careful Asyncat is,
 // and done. Skip and Back always work; finishing or skipping marks it done
-// (den/src/setup), and Settings → Profile can open it again.
+// (den/src/setup), and Settings → General can open it again.
 
 import { useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
@@ -137,7 +137,7 @@ export default function WelcomePage() {
         <div className="mt-6">
           {step.id === 'welcome' ? (
             <form onSubmit={(event) => { event.preventDefault(); next(); }}>
-              <Field label="What should Asyncat call you?" htmlFor="welcome-name" hint="Optional. You can change it in Settings → Profile.">
+              <Field label="What should Asyncat call you?" htmlFor="welcome-name" hint="Optional. You can change it in Settings → General.">
                 <Input
                   id="welcome-name"
                   value={name}

@@ -1,4 +1,4 @@
-// Settings → Profile: open the first-run setup again.
+// Settings → General: open the first-run setup again.
 
 import { useNavigate } from 'react-router-dom';
 import Button from '../components/ui/Button.jsx';

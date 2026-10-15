@@ -1,5 +1,5 @@
 // electron/shortcuts.js — Registers the system-wide shortcuts from the user's
-// settings (Settings → Appearance) and reports which ones took effect.
+// settings (Settings → Shortcuts) and reports which ones took effect.
 // Validation and defaults live in shortcut-config.js.
 
 import { globalShortcut } from 'electron';

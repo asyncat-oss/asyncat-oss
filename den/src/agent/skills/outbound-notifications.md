@@ -13,7 +13,7 @@ when_to_use: |
 ## Workflow
 
 1. Call `notification_status` to see which channels are configured.
-2. If no channels are configured, tell the user to configure Outbound Notifications in Settings > Integrations.
+2. If no channels are configured, tell the user to set up a channel in Settings → Connections.
 3. Use `notify_channel` only when the user explicitly wants an external ping or the task instruction asked for it.
 4. Keep notification text short: title, status, why it matters, and the next action if any.
 5. Use `severity`:

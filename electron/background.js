@@ -1,7 +1,7 @@
 // electron/background.js — Running in the background for Cats.
 //
 // Decides whether closing the window quits Asyncat or leaves it in the tray
-// (Settings → Background), shows the one-time "still running" notice, and
+// (Settings → General), shows the one-time "still running" notice, and
 // starts Asyncat at login, hidden in the tray, when asked to. The rules are in
 // background-config.js; the backend reports how many Cats are on.
 

@@ -45,5 +45,5 @@ notification. A Cat with just a timer is what used to be a scheduled task.
 - If the computer was off or asleep, a timed run missed by less than 12 hours
   runs once when Asyncat is back; older ones are skipped.
 - Asyncat keeps running in the tray after its window is closed while a Cat is
-  on (Settings → Background), so Cats keep working.
+  on (Settings → General), so Cats keep working.
 - Don't use system cron or sleep loops for this; that is what Cats are for.

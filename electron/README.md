@@ -5,12 +5,12 @@ This directory contains the Electron main-process code that wraps the asyncat de
 | File | Role |
 |---|---|
 | `main.js` | App entry point. Boot sequence, IPC handlers (including the terminal PTY), webview security, the static frontend server, quit handler |
-| `shortcuts.js` | Registers the system-wide shortcuts from `userData/shortcuts.json` and reports which ones took effect (Settings → Appearance) |
+| `shortcuts.js` | Registers the system-wide shortcuts from `userData/shortcuts.json` and reports which ones took effect (Settings → Shortcuts) |
 | `shortcut-config.js`, `shortcut-config.test.js` | Defaults and validation for those shortcuts, and their tests |
 | `backend.js` | Spawns `den/src/index.js` with the bundled Node.js (packaged) or the system Node.js (dev), using `den/` or the user-data folder as its working directory. Polls `/health`, auto-restarts after crashes, writes `logs/backend-process.log`. With `--external-backend` (used by `npm run electron:dev`) it waits for the watch-mode dev backend instead |
 | `window.js` | Creates the `BrowserWindow` and the loading screen shown while the backend starts |
 | `tray.js`, `tray-menu.js` (with tests) | System tray icon. Left-click opens Quick ask; the menu has Show, Cats, Restart Backend and Quit, plus Quick ask on Linux (where the menu is always attached, since most desktops don't pass clicks on) |
-| `background.js` | Whether closing the window quits or leaves Asyncat in the tray for Cats (`userData/background.json`, Settings → Background), the one-time "still running" notice, and starting at login hidden in the tray (`--hidden`; on Linux `~/.config/autostart/asyncat.desktop`) |
+| `background.js` | Whether closing the window quits or leaves Asyncat in the tray for Cats (`userData/background.json`, Settings → General), the one-time "still running" notice, and starting at login hidden in the tray (`--hidden`; on Linux `~/.config/autostart/asyncat.desktop`) |
 | `background-config.js`, `background-config.test.js` | The rules and file formats behind `background.js`, and their tests |
 | `hostBridge.js` | Long-polls the backend for notifications and requests only the desktop app can serve (see `den/src/lib/hostBridge.js`); the backend also reports how many Cats are on |
 | `browserHost.js` | The built-in browser: tabs as views in the main window, the user's tabs and the hidden ones agents drive, Cats' own profiles, approval for sensitive steps (passwords, card numbers, buy or delete buttons), and the address rules for agent tabs (sites blocked in Settings → Privacy & safety, a Cat's own list) |
@@ -38,7 +38,7 @@ This directory contains the Electron main-process code that wraps the asyncat de
 
 Wayland doesn't let an app place its own windows, so the desktop decides
 where Quick ask goes. Global shortcuts may not reach the app either: bind the
-command that **Settings → Appearance** shows (it ends in `--quick-ask`) in
+command that **Settings → Shortcuts** shows (it ends in `--quick-ask`) in
 the desktop's keyboard settings instead.
 
 On Hyprland the window floats (it has a fixed size), but Hyprland keeps a

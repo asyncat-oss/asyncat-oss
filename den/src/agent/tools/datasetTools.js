@@ -136,7 +136,7 @@ export const hfDatasetInfoTool = {
           error: `Could not fetch info for "${repoId}". It may be private, gated, or not yet processed by the HF dataset server.`,
           hint: Boolean(getHuggingFaceToken(context.userId))
             ? 'Try accepting the dataset license on huggingface.co.'
-            : 'Set your HF token in Settings → Integrations → Hugging Face for private/gated datasets.',
+            : 'Set your HF token in Settings → Connections → Hugging Face for private/gated datasets.',
         };
       }
 
@@ -247,7 +247,7 @@ export const previewHfDatasetTool = {
         const hint = res.status === 404
           ? ' Dataset may not be processed by HF yet. Try hf_dataset_info to check available splits.'
           : res.status === 401 || res.status === 403
-            ? ' This dataset may be gated. Set your HF token in Settings → Integrations.'
+            ? ' This dataset may be gated. Set your HF token in Settings → Connections.'
             : '';
         return { success: false, error: `Datasets server ${res.status}${hint}` };
       }

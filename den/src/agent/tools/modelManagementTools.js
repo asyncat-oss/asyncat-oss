@@ -93,7 +93,7 @@ export const searchHuggingFaceTool = {
       const res = await fetch(url, { headers });
       if (!res.ok) {
         const hint = res.status === 401 || res.status === 403
-          ? ' Check that your HF token is saved in Settings → Integrations → Hugging Face and that your account has accepted the model license.'
+          ? ' Check that your HF token is saved in Settings → Connections → Hugging Face and that your account has accepted the model license.'
           : '';
         return { success: false, error: `HuggingFace API error ${res.status}: ${res.statusText}.${hint}` };
       }
@@ -145,7 +145,7 @@ export const getHuggingFaceModelFilesTool = {
       const res = await fetch(apiUrl, { headers });
       if (!res.ok) {
         const hint = res.status === 401 || res.status === 403
-          ? ' This model may be gated — ensure your HF token is saved in Settings → Integrations → Hugging Face and you have accepted the model license on huggingface.co.'
+          ? ' This model may be gated — ensure your HF token is saved in Settings → Connections → Hugging Face and you have accepted the model license on huggingface.co.'
           : '';
         return { success: false, error: `HuggingFace API error ${res.status}: ${res.statusText}.${hint}` };
       }
@@ -225,7 +225,7 @@ export const downloadModelTool = {
       };
     } catch (err) {
       const hint = err.message?.includes('HTTP 401') || err.message?.includes('HTTP 403')
-        ? ' This model may be gated. Ensure your HF token is saved in Settings → Integrations → Hugging Face and you have accepted the license on huggingface.co.'
+        ? ' This model may be gated. Ensure your HF token is saved in Settings → Connections → Hugging Face and you have accepted the license on huggingface.co.'
         : '';
       return { success: false, error: `${err.message}${hint}` };
     }

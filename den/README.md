@@ -61,8 +61,8 @@ read from the environment until the same setting is saved in the app:
 When no provider is configured in **Models**, `AI_BASE_URL`, `AI_API_KEY`, and
 `AI_MODEL` act as a fallback OpenAI-compatible endpoint.
 
-For local GGUF models, open **Settings → Runtime** and install the recommended
-managed llama.cpp build. The Runtime page inspects the machine, recommends a
+For local GGUF models, open **Models → Local models** and install the
+recommended managed llama.cpp build. It inspects the machine, recommends a
 CPU/GPU profile, switches among installed `llama-server` or
 `llama-cpp-python` engines, and installs supported runtimes without restarting
 `den`.

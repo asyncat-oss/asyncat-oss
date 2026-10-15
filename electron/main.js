@@ -79,7 +79,7 @@ if (IS_WIN) {
 }
 
 // Closing the main window either quits or leaves Asyncat in the tray
-// (Settings → Background); see onMainWindowClosed. Handling this event stops
+// (Settings → General); see onMainWindowClosed. Handling this event stops
 // Electron from quitting on its own when the last window closes.
 app.on('window-all-closed', () => {});
 
@@ -735,7 +735,7 @@ app.whenReady().then(async () => {
   });
 
   // System-wide shortcuts (defaults Cmd/Ctrl+Shift+Space and Cmd/Ctrl+Shift+A).
-  // Users can rebind or turn them off in Settings → Appearance; see shortcuts.js.
+  // Users can rebind or turn them off in Settings → Shortcuts; see shortcuts.js.
   initShortcuts({
     quickAsk: () => toggleQuick(),
     toggleWindow: () => {
