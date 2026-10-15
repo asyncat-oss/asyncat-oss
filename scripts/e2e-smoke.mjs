@@ -7,7 +7,8 @@
 // one), searching inside chats, pinning a chat, a model per chat, Models →
 // Voice and Images (and a Models search that finds a voice file), Files, the
 // first-run setup (which a fresh install offers and an install with a model
-// doesn't), and the main pages.
+// doesn't), your preferences in Settings → Personalization, and the main
+// pages.
 //
 // Needs a Chromium-based browser (Chrome, Chromium, Edge or Brave), found the
 // same way PDF export finds one; PUPPETEER_EXECUTABLE_PATH picks another.
@@ -415,6 +416,36 @@ async function main() {
     await noCrash();
   });
 
+  await check('Settings → Personalization saves your preferences, and Quick ask sends them to the model', async () => {
+    await page.goto(`${app}/settings/personalization`, { waitUntil: 'domcontentloaded' });
+    const about = await page.waitForSelector('#pref-about', { timeout: 15000 });
+    await about.type('I grow tomatoes on a balcony.');
+    await page.focus('#pref-answer');
+    await page.keyboard.type('Answer in one short paragraph.');
+    await page.keyboard.down('Control');
+    await page.keyboard.press('Enter');
+    await page.keyboard.up('Control');
+    await waitFor(async () => (await api('GET', '/api/users/me/personalization')).data?.answerStyle === 'Answer in one short paragraph.', { timeout: 10000, what: 'the preferences to be saved' });
+    const before = requests.length;
+    const res = await fetch(`${den}/api/ai/chat/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: app },
+      body: JSON.stringify({ message: 'Which pot size?' }),
+    });
+    await res.text();
+    const sent = requests.slice(before).find((r) => JSON.stringify(r.messages || []).includes('Which pot size?'));
+    assert(sent && JSON.stringify(sent.messages).includes('I grow tomatoes on a balcony.'), 'the model never saw the preferences');
+    await api('PUT', '/api/users/me/personalization', { about: '', answerStyle: '' });
+    // The instructions file (the old Soul tab) opens in its dialog.
+    await page.goto(`${app}/settings/soul`, { waitUntil: 'domcontentloaded' });
+    await textAppears('Instructions file');
+    const edit = await page.waitForSelector('[data-settings-section="instructions"] button');
+    await edit.click();
+    await waitFor(() => page.evaluate(() => document.querySelector('[role="dialog"] textarea')?.value.includes('# Asyncat Agent Soul')), { timeout: 10000, what: 'the instructions file in its dialog' });
+    await page.keyboard.press('Escape');
+    await noCrash();
+  });
+
   await check('Models → Training shows the guided steps and finds a rated answer', async () => {
     const saved = await api('POST', '/api/ai/chats/save', {
       messages: [
@@ -709,7 +740,7 @@ async function main() {
     await noCrash();
   });
 
-  for (const [label, route] of [['Models', '/models'], ['Settings → General', '/settings/general'], ['Settings → Appearance', '/settings/appearance'], ['Settings → Shortcuts', '/settings/shortcuts'], ['Settings → Connections', '/settings/connections'], ['Settings → Notifications', '/settings/notifications'], ['Settings → Workbench', '/settings/workbench'], ['Settings → Desktop', '/settings/desktop'], ['Settings → About', '/settings/about'], ['Tools & Skills', '/tools'], ['Files → System', '/files/system']]) {
+  for (const [label, route] of [['Models', '/models'], ['Settings → General', '/settings/general'], ['Settings → Appearance', '/settings/appearance'], ['Settings → Personalization', '/settings/personalization'], ['Settings → Shortcuts', '/settings/shortcuts'], ['Settings → Connections', '/settings/connections'], ['Settings → Notifications', '/settings/notifications'], ['Settings → Workbench', '/settings/workbench'], ['Settings → Desktop', '/settings/desktop'], ['Settings → About', '/settings/about'], ['Tools & Skills', '/tools'], ['Files → System', '/files/system']]) {
     await check(`${label} opens`, async () => {
       await page.goto(`${app}${route}`, { waitUntil: 'domcontentloaded' });
       // Pages keep live connections open (/api/events), so the network never
