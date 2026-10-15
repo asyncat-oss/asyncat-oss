@@ -5,8 +5,7 @@ import PageHeader from '../components/ui/PageHeader.jsx';
 import { Tabs } from '../components/ui/Tabs.jsx';
 import {
   Search, Wrench, File,
-  Brain, Loader2, AlertCircle, ChevronRight,
-  BookOpen, Cpu, ShieldAlert,
+  Loader2, AlertCircle, ChevronRight,
   Bot, Save, Edit2, X, Check, BookMarked, Trash2, RefreshCw, Plus,
   PanelLeft, PanelLeftClose,
 } from 'lucide-react';
@@ -18,6 +17,7 @@ import Select from '../components/ui/Select.jsx';
 import { backdropCloses, useLayer } from '../components/ui/floating.js';
 import { useMemoryOwners } from './useMemoryOwners.js';
 import { getSkillOrigin } from './skillOrigin.js';
+import { DEFAULT_CATEGORY, categoryOptions, groupByCategory, skillCategory, skillMatches } from './skillCategories.js';
 
 const PERM_META = {
   safe:      { label: 'Safe',      dot: 'bg-emerald-500 midnight:bg-emerald-600/80', badge: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300 midnight:bg-emerald-950/30 midnight:text-emerald-400/75' },
@@ -52,18 +52,6 @@ const TOOL_OS_INFO = {
   app_list:           { platforms: ALL_OS, deps: { mac: '/Applications (built-in)', linux: '.desktop files (built-in)', win: 'Get-StartApps (built-in)' } },
 };
 
-const BRAIN_REGION_META = {
-  prefrontal:    { label: 'Planning',      icon: Brain,       color: 'text-violet-500 midnight:text-violet-400/85', desc: 'Goal shaping and step-by-step reasoning' },
-  cerebellum:    { label: 'Workflow',      icon: BookOpen,    color: 'text-blue-500 midnight:text-blue-400/85',   desc: 'Procedures, craft patterns, and repeatable execution' },
-  hippocampus:   { label: 'Recall',        icon: Cpu,         color: 'text-cyan-500 midnight:text-cyan-400/85',   desc: 'Context retrieval and learned project knowledge' },
-  amygdala:      { label: 'Risk Checks',   icon: ShieldAlert, color: 'text-red-500 midnight:text-red-400/85',    desc: 'Safety, permissions, and high-impact cautions' },
-  basal_ganglia: { label: 'Habits',        icon: Brain,       color: 'text-amber-500 midnight:text-amber-400/85',  desc: 'Default behaviors and operating preferences' },
-  limbic:        { label: 'Tone',          icon: BookOpen,    color: 'text-pink-500 midnight:text-pink-400/85',   desc: 'Style, empathy, and user-facing expression' },
-  unknown:       { label: 'Other',         icon: Wrench,      color: 'text-gray-400',   desc: 'Uncategorized skills' },
-};
-
-const REGION_ORDER = ['prefrontal', 'cerebellum', 'hippocampus', 'amygdala', 'basal_ganglia', 'limbic', 'unknown'];
-
 const SKILL_ORIGIN_FILTERS = [
   { id: 'all', label: 'All' },
   { id: 'default', label: 'Default' },
@@ -88,11 +76,6 @@ function formatSkillAge(isoString) {
   if (months < 12) return `${months} month${months > 1 ? 's' : ''} ago`;
   const years = Math.floor(days / 365);
   return `${years} year${years > 1 ? 's' : ''} ago`;
-}
-
-function getRegionMeta(region) {
-  const key = (region || 'unknown').toLowerCase().replace(/[\s-]+/g, '_');
-  return BRAIN_REGION_META[key] || BRAIN_REGION_META.unknown;
 }
 
 function formatLabel(value) {
@@ -345,7 +328,6 @@ ToolCard.propTypes = {
 };
 
 function SkillCard({ skill, isFirst, selected, onSelect }) {
-  const meta = getRegionMeta(skill.brain_region);
   const origin = getSkillOrigin(skill);
   const originMeta = SKILL_ORIGIN_META[origin] || SKILL_ORIGIN_META.default;
 
@@ -365,7 +347,7 @@ function SkillCard({ skill, isFirst, selected, onSelect }) {
             <div className="flex flex-wrap items-center gap-2">
               <span className="truncate text-sm font-medium text-gray-900 dark:text-gray-100 midnight:text-slate-100">{skill.name}</span>
               <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${originMeta.className}`}>{originMeta.label}</span>
-              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 midnight:bg-slate-800 dark:text-gray-400 midnight:text-slate-400">{meta.label}</span>
+              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 midnight:bg-slate-800 dark:text-gray-400 midnight:text-slate-400">{skillCategory(skill)}</span>
             </div>
             <p className="mt-1 line-clamp-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{skill.description || 'No description'}</p>
             {skill.tags?.length > 0 && (
@@ -387,7 +369,7 @@ function SkillCard({ skill, isFirst, selected, onSelect }) {
 
 SkillCard.propTypes = {
   skill: PropTypes.shape({
-    brain_region: PropTypes.string,
+    category: PropTypes.string,
     name: PropTypes.string.isRequired,
     source: PropTypes.string,
     created_by: PropTypes.string,
@@ -434,18 +416,17 @@ ToolSection.propTypes = {
   onSelectTool: PropTypes.func.isRequired,
 };
 
-function SkillSection({ region, regionSkills, selectedSkillName, onSelectSkill }) {
-  const meta = getRegionMeta(region);
-  const sortedSkills = useMemo(() => [...regionSkills].sort((a, b) => a.name.localeCompare(b.name)), [regionSkills]);
+function SkillSection({ group, selectedSkillName, onSelectSkill }) {
+  const sortedSkills = useMemo(() => [...group.skills].sort((a, b) => a.name.localeCompare(b.name)), [group.skills]);
 
   return (
     <section className="mb-6">
       <div className="flex items-center justify-between gap-3 px-2 py-2">
         <div className="min-w-0">
-          <h2 className="truncate text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-300">{meta.label}</h2>
-          <p className="mt-0.5 truncate text-[11px] text-gray-400 dark:text-gray-500">{meta.desc}</p>
+          <h2 className="truncate text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-300">{group.name}</h2>
+          {group.description ? <p className="mt-0.5 truncate text-[11px] text-gray-400 dark:text-gray-500">{group.description}</p> : null}
         </div>
-        <span className="rounded bg-gray-100/50 px-2 py-0.5 font-mono text-[10px] text-gray-500 dark:bg-gray-800/50 midnight:bg-slate-800/50">{regionSkills.length}</span>
+        <span className="rounded bg-gray-100/50 px-2 py-0.5 font-mono text-[10px] text-gray-500 dark:bg-gray-800/50 midnight:bg-slate-800/50">{group.skills.length}</span>
       </div>
       <div>
         {sortedSkills.map((skill, idx) => (
@@ -457,17 +438,20 @@ function SkillSection({ region, regionSkills, selectedSkillName, onSelectSkill }
 }
 
 SkillSection.propTypes = {
-  region: PropTypes.string.isRequired,
-  regionSkills: PropTypes.arrayOf(PropTypes.shape({
-    brain_region: PropTypes.string,
+  group: PropTypes.shape({
     name: PropTypes.string.isRequired,
-    source: PropTypes.string,
-    created_by: PropTypes.string,
     description: PropTypes.string,
-    tags: PropTypes.arrayOf(PropTypes.string),
-    when_to_use: PropTypes.string,
-    body: PropTypes.string,
-  })).isRequired,
+    skills: PropTypes.arrayOf(PropTypes.shape({
+      category: PropTypes.string,
+      name: PropTypes.string.isRequired,
+      source: PropTypes.string,
+      created_by: PropTypes.string,
+      description: PropTypes.string,
+      tags: PropTypes.arrayOf(PropTypes.string),
+      when_to_use: PropTypes.string,
+      body: PropTypes.string,
+    })).isRequired,
+  }).isRequired,
   selectedSkillName: PropTypes.string,
   onSelectSkill: PropTypes.func.isRequired,
 };
@@ -579,7 +563,6 @@ function SkillInspector({ skill, onRequestDelete, isDeleting }) {
     );
   }
 
-  const meta = getRegionMeta(skill.brain_region);
   const origin = getSkillOrigin(skill);
   const originMeta = SKILL_ORIGIN_META[origin] || SKILL_ORIGIN_META.default;
   const isDeletable = origin === 'user' || origin === 'auto';
@@ -604,7 +587,7 @@ function SkillInspector({ skill, onRequestDelete, isDeleting }) {
           )}
         </div>
         <div className="mt-2 flex flex-wrap gap-2">
-          <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 midnight:bg-slate-800 dark:text-gray-400 midnight:text-slate-400">{meta.label}</span>
+          <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 midnight:bg-slate-800 dark:text-gray-400 midnight:text-slate-400">{skillCategory(skill)}</span>
           {skill.tags?.map(tag => (
             <span key={tag} className="rounded border border-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500 dark:border-gray-800 midnight:border-slate-800 dark:text-gray-500 midnight:text-slate-500">{tag}</span>
           ))}
@@ -641,7 +624,7 @@ function SkillInspector({ skill, onRequestDelete, isDeleting }) {
 
 SkillInspector.propTypes = {
   skill: PropTypes.shape({
-    brain_region: PropTypes.string,
+    category: PropTypes.string,
     name: PropTypes.string.isRequired,
     source: PropTypes.string,
     created_by: PropTypes.string,
@@ -655,32 +638,22 @@ SkillInspector.propTypes = {
   isDeleting: PropTypes.bool,
 };
 
-const BRAIN_REGION_OPTIONS = [
-  { value: 'prefrontal',    label: 'Planning' },
-  { value: 'cerebellum',   label: 'Workflow' },
-  { value: 'hippocampus',  label: 'Recall' },
-  { value: 'amygdala',     label: 'Risk Checks' },
-  { value: 'basal_ganglia',label: 'Habits' },
-  { value: 'limbic',       label: 'Tone' },
-  { value: 'unknown',      label: 'Other' },
-];
-
 const MEMORY_KIND_FILTER = [{ value: 'all', label: 'All kinds' }, ...MEMORY_KIND_OPTIONS];
 
 const EMPTY_SKILL_FORM = {
   name: '',
   description: '',
-  brain_region: 'cerebellum',
+  category: DEFAULT_CATEGORY,
   tags: '',
   when_to_use: '',
   body: '',
 };
 
-function NewSkillModal({ open, onClose, onCreated }) {
+function NewSkillModal({ open, categories, onClose, onCreated }) {
   const [form, setForm] = useState(EMPTY_SKILL_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
-  // A layer, so a click on the backdrop with the brain region list open
+  // A layer, so a click on the backdrop with the category list open
   // closes only the list, as it did with the native <select>.
   const panelRef = useRef(null);
   const layerRef = useLayer(open, panelRef);
@@ -739,8 +712,8 @@ function NewSkillModal({ open, onClose, onCreated }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label htmlFor="skill-brain-region" className={labelClass}>Brain region</label>
-              <Select id="skill-brain-region" value={form.brain_region} onChange={(value) => set('brain_region', value)} options={BRAIN_REGION_OPTIONS} />
+              <label htmlFor="skill-category" className={labelClass}>Category</label>
+              <Select id="skill-category" value={form.category} onChange={(value) => set('category', value)} options={categoryOptions(categories)} />
             </div>
             <div>
               <label className={labelClass}>Tags (comma-separated)</label>
@@ -789,6 +762,7 @@ function NewSkillModal({ open, onClose, onCreated }) {
 
 NewSkillModal.propTypes = {
   open: PropTypes.bool.isRequired,
+  categories: PropTypes.arrayOf(PropTypes.shape({ name: PropTypes.string, description: PropTypes.string })),
   onClose: PropTypes.func.isRequired,
   onCreated: PropTypes.func.isRequired,
 };
@@ -801,6 +775,8 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
   const [activeTab, setActiveTab] = useState(startTab);
   const [tools, setTools] = useState([]);
   const [skills, setSkills] = useState([]);
+  // Planning, Workflow, … in den's order (den/src/agent/skillCategories.js).
+  const [skillCategories, setSkillCategories] = useState([]);
   const [loadingTools, setLoadingTools] = useState(true);
   const [loadingSkills, setLoadingSkills] = useState(true);
   const [errorTools, setErrorTools] = useState(null);
@@ -913,6 +889,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
     try {
       const res = await agentApi.getSkills();
       setSkills(res.skills || []);
+      setSkillCategories(res.categories || []);
     } catch (err) {
       setErrorSkills(err.message || 'Failed to load skills');
     } finally {
@@ -1040,14 +1017,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
     const byOrigin = skillOriginFilter === 'all'
       ? skills
       : skills.filter(skill => getSkillOrigin(skill) === skillOriginFilter);
-    if (!skillSearch.trim()) return byOrigin;
-    const q = skillSearch.toLowerCase();
-    return byOrigin.filter(s =>
-      s.name.toLowerCase().includes(q) ||
-      (s.description || '').toLowerCase().includes(q) ||
-      (s.brain_region || '').toLowerCase().includes(q) ||
-      (s.tags || []).some(t => t.toLowerCase().includes(q))
-    );
+    return byOrigin.filter(skill => skillMatches(skill, skillSearch));
   }, [skills, skillSearch, skillOriginFilter]);
 
   const toolsByCategory = useMemo(() => {
@@ -1060,15 +1030,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
     return groups;
   }, [filteredTools]);
 
-  const skillsByRegion = useMemo(() => {
-    const groups = {};
-    for (const s of filteredSkills) {
-      const r = (s.brain_region || 'unknown').toLowerCase().replace(/[\s-]+/g, '_');
-      if (!groups[r]) groups[r] = [];
-      groups[r].push(s);
-    }
-    return groups;
-  }, [filteredSkills]);
+  const skillGroups = useMemo(() => groupByCategory(filteredSkills, skillCategories), [filteredSkills, skillCategories]);
 
   const selectedTool = useMemo(
     () => filteredTools.find(tool => tool.name === selectedToolName) || filteredTools[0] || null,
@@ -1085,7 +1047,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
   const modCount    = tools.filter(t => t.permission === 'moderate').length;
   const dangerCount = tools.filter(t => t.permission === 'dangerous').length;
   const toolCategoryCount = Object.keys(toolsByCategory).length;
-  const skillRegionCount = Object.values(skillsByRegion).filter(group => group.length > 0).length;
+  const skillGroupCount = skillGroups.length;
   const defaultSkillCount = skills.filter(s => getSkillOrigin(s) === 'default').length;
   const userSkillCount = skills.filter(s => getSkillOrigin(s) === 'user').length;
   const autoSkillCount = skills.filter(s => getSkillOrigin(s) === 'auto').length;
@@ -1109,6 +1071,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
     <div className="flex flex-col h-full bg-canvas">
       <NewSkillModal
         open={newSkillOpen}
+        categories={skillCategories}
         onClose={() => setNewSkillOpen(false)}
         onCreated={() => { fetchSkills(); setNewSkillOpen(false); }}
       />
@@ -1286,7 +1249,7 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 midnight:text-slate-500">Catalog</p>
                   <div className="mt-3 space-y-2 text-xs">
                     <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400 midnight:text-slate-400">Visible skills</span><span className="font-mono text-gray-800 dark:text-gray-200 midnight:text-slate-200">{filteredSkills.length}</span></div>
-                    <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400 midnight:text-slate-400">Groups</span><span className="font-mono text-gray-800 dark:text-gray-200 midnight:text-slate-200">{skillRegionCount}</span></div>
+                    <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400 midnight:text-slate-400">Groups</span><span className="font-mono text-gray-800 dark:text-gray-200 midnight:text-slate-200">{skillGroupCount}</span></div>
                     <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400 midnight:text-slate-400">Default</span><span className="font-mono text-gray-800 dark:text-gray-200 midnight:text-slate-200">{defaultSkillCount}</span></div>
                     <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400 midnight:text-slate-400">User-created</span><span className="font-mono text-gray-800 dark:text-gray-200 midnight:text-slate-200">{userSkillCount}</span></div>
                     <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400 midnight:text-slate-400">Auto-created</span><span className="font-mono text-gray-800 dark:text-gray-200 midnight:text-slate-200">{autoSkillCount}</span></div>
@@ -1395,19 +1358,17 @@ export default function AgentToolsSkillsPage({ initialTab = 'tools' }) {
                     <button onClick={fetchSkills} className="text-xs text-gray-500 underline hover:text-gray-700">Try again</button>
                     </div>
                   )}
-                  {!loadingSkills && !errorSkills && Object.keys(skillsByRegion).length === 0 && (
+                  {!loadingSkills && !errorSkills && skillGroups.length === 0 && (
                     <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-gray-200 bg-white py-20 text-gray-400 dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
                     <Search className="h-6 w-6" />
                     <p className="text-sm">{skillSearch || skillOriginFilter !== 'all' ? 'No skills match your filters' : 'No skills available'}</p>
                     </div>
                   )}
-                  {!loadingSkills && !errorSkills && Object.keys(skillsByRegion).length > 0 && (
+                  {!loadingSkills && !errorSkills && skillGroups.length > 0 && (
                     <div className="space-y-4 pb-4">
-                      {REGION_ORDER.map(region => {
-                        const regionSkills = skillsByRegion[region];
-                        if (!regionSkills?.length) return null;
-                        return <SkillSection key={region} region={region} regionSkills={regionSkills} selectedSkillName={activeSkillName} onSelectSkill={skill => setSelectedSkillName(skill.name)} />;
-                      })}
+                      {skillGroups.map(group => (
+                        <SkillSection key={group.name} group={group} selectedSkillName={activeSkillName} onSelectSkill={skill => setSelectedSkillName(skill.name)} />
+                      ))}
                     </div>
                   )}
                   </div>
