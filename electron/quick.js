@@ -64,9 +64,10 @@ function createWindow(origin) {
     show: false,
     // The page draws a rounded card, so the window itself is see-through.
     // Windows has no transparent corners worth having: an opaque window it
-    // rounds and shadows itself, coloured like the card (quick:background).
+    // rounds and shadows itself, coloured like the card (quick:background;
+    // until the page says, the dark card is --as-elevated in neko/src/index.css).
     ...(IS_WIN
-      ? { transparent: false, backgroundColor: nativeTheme.shouldUseDarkColors ? '#1f2937' : '#ffffff' }
+      ? { transparent: false, backgroundColor: nativeTheme.shouldUseDarkColors ? '#282828' : '#ffffff' }
       : { transparent: true, backgroundColor: '#00000000', hasShadow: IS_MAC }),
     ...(IS_MAC && { type: 'panel' }),
     webPreferences: {

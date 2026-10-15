@@ -86,8 +86,8 @@ const ANSI = {
 
 // Used only if the tokens can't be read.
 const PAGE_FALLBACK = {
-  midnight: { background: '#030712', foreground: '#f1f5f9', cursor: '#94a3b8' },
-  dark: { background: '#111827', foreground: '#f3f4f6', cursor: '#9ca3af' },
+  midnight: { background: '#070707', foreground: '#f4f4f4', cursor: '#a0a0a0' },
+  dark: { background: '#181818', foreground: '#f4f4f4', cursor: '#adadad' },
   light: { background: '#ffffff', foreground: '#111827', cursor: '#4b5563' },
 };
 

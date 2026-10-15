@@ -59,7 +59,9 @@ export function createWindow() {
       spellcheck:         true,
     },
 
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#111827' : '#ffffff',
+    // The app's canvas colour (--as-canvas in neko/src/index.css), so a dark
+    // launch doesn't flash another grey before the page paints.
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#181818' : '#ffffff',
   });
 
   // NOTE: We do NOT auto-load the app here. The boot sequence in main.js
@@ -197,10 +199,10 @@ export function showLoadingScreen() {
         }
         @media (prefers-color-scheme: dark) {
           :root {
-            --background: #111827;
-            --foreground: #f3f4f6;
-            --muted: #6b7280;
-            --track: #374151;
+            --background: #181818;
+            --foreground: #f4f4f4;
+            --muted: #adadad;
+            --track: rgb(255 255 255 / 0.12);
             --cat: #0c0c0e;
             --cat-line: #ece9e2;
             --cat-whisker: #8e8b85;
