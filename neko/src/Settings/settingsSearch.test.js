@@ -15,7 +15,7 @@ test('settings search finds where a setting lives now', () => {
   assert.equal(opens('rss'), '/settings/integrations');
   assert.equal(opens('sandbox'), '/settings/privacy');
   assert.equal(opens('dark'), '/settings/appearance');
-  assert.equal(opens('avatar'), '/settings/general#profile');
+  assert.equal(opens('avatar'), '/settings/general', 'Profile is at the top of General');
   assert.equal(opens('plan mode'), '/settings/general#new-chats', 'the mode new chats start in moved to General');
   assert.equal(opens('start at login'), '/settings/general#window', 'Background moved to General');
   assert.equal(opens('tray'), '/settings/general#window');
@@ -66,7 +66,7 @@ test('every section a link can scroll to is marked on its page', () => {
 
 test('old Settings addresses still lead somewhere sensible', () => {
   const ids = new Set(tabs.map((tab) => tab.id));
-  assert.deepEqual(resolveTab('profile'), { tab: 'general', view: null, section: 'profile' });
+  assert.deepEqual(resolveTab('profile'), { tab: 'general', view: null, section: null }, 'Ctrl+, opens General at its top');
   assert.deepEqual(resolveTab('background'), { tab: 'general', view: null, section: 'window' });
   assert.deepEqual(resolveTab('connectors'), { tab: 'connections', view: 'connectors', section: null });
   assert.deepEqual(resolveTab('integrations'), { tab: 'connections', view: 'services', section: null });

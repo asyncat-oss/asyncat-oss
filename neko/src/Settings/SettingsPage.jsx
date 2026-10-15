@@ -100,7 +100,8 @@ const SettingsPage = () => {
   }, [navigate, where.redirect, where.view]);
 
   // A new page starts at its top; a link to a section (#window) scrolls to
-  // it once it has drawn (some sections wait for the server first).
+  // it. Sections above it may still be loading and grow, so for a moment it
+  // keeps the section in place, until the person scrolls themselves.
   useEffect(() => {
     const main = mainRef.current;
     if (!main) return undefined;
@@ -110,20 +111,38 @@ const SettingsPage = () => {
     }
     let tries = 0;
     let timer = null;
+    let observer = null;
+    const stop = () => {
+      clearTimeout(timer);
+      observer?.disconnect();
+      for (const type of ['wheel', 'touchstart', 'keydown']) main.removeEventListener(type, stop);
+    };
+    // Only this page scrolls: scrollIntoView would also shift the app's frame
+    // when the section is too near the bottom to reach the top.
+    const reveal = (target) => {
+      const margin = parseFloat(getComputedStyle(target).scrollMarginTop) || 0;
+      main.scrollTop += target.getBoundingClientRect().top - main.getBoundingClientRect().top - margin;
+    };
     const find = () => {
       const target = main.querySelector(`[data-settings-section="${CSS.escape(section)}"]`);
-      if (target) target.scrollIntoView({ block: 'start' });
-      else if (tries++ < 20) timer = setTimeout(find, 100);
+      if (!target) {
+        if (tries++ < 20) timer = setTimeout(find, 100);
+        return;
+      }
+      reveal(target);
+      if (typeof ResizeObserver === 'undefined' || !main.firstElementChild) return;
+      observer = new ResizeObserver(() => reveal(target));
+      observer.observe(main.firstElementChild);
+      for (const type of ['wheel', 'touchstart', 'keydown']) main.addEventListener(type, stop, { passive: true });
+      timer = setTimeout(stop, 1500);
     };
     find();
-    return () => clearTimeout(timer);
+    return stop;
   }, [activeTab, section, location.key]);
 
   const renderGeneral = () => (
     <div className="space-y-8">
-      <div data-settings-section="profile" className="scroll-mt-6">
-        <GeneralSection />
-      </div>
+      <GeneralSection />
       <div data-settings-section="new-chats" className="scroll-mt-6">
         <NewChatsSection />
       </div>

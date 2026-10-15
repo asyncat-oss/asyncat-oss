@@ -4,7 +4,7 @@
 // `route` lives outside Settings now (engines in Models, logs in Files).
 
 export const SETTINGS_INDEX = [
-  { tab: 'general', section: 'profile', label: 'Profile', terms: ['profile', 'name', 'display name', 'avatar', 'picture', 'photo'] },
+  { tab: 'general', label: 'Profile', terms: ['profile', 'name', 'display name', 'avatar', 'picture', 'photo'] },
   { tab: 'general', section: 'new-chats', label: 'New chats', terms: ['new chats', 'default mode', 'plan mode', 'action mode', 'plan or action', 'start in'] },
   { tab: 'general', section: 'window', label: 'Closing the window', terms: ['background', 'tray', 'close window', 'closing the window', 'quit', 'keep running', 'start at login', 'log in', 'autostart'] },
   { tab: 'general', section: 'setup', label: 'First-run setup', terms: ['setup', 'run setup again', 'first-run setup', 'welcome', 'onboarding'] },

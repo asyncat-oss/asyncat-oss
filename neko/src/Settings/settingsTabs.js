@@ -4,7 +4,7 @@
 // search result can scroll to (data-settings-section on the page).
 
 export const SETTINGS_TABS = [
-  { id: 'general', group: 'App', label: 'General', description: 'Your name and picture, how new chats start, and what closing the window does.', sections: ['profile', 'new-chats', 'window', 'setup'] },
+  { id: 'general', group: 'App', label: 'General', description: 'Your name and picture, how new chats start, and what closing the window does.', sections: ['new-chats', 'window', 'setup'] },
   { id: 'appearance', group: 'App', label: 'Appearance', description: 'Theme, motion and what the sidebar shows.' },
   { id: 'shortcuts', group: 'App', label: 'Shortcuts', description: 'Keys for getting around Asyncat, and the ones that work from any app.' },
   { id: 'notifications', group: 'App', label: 'Notifications', description: 'What shows a notification, for chats and Cats, and quiet hours.' },
@@ -22,8 +22,9 @@ export const DEFAULT_TAB = 'general';
  * each one opens now, or a `redirect` out of Settings.
  */
 export const TAB_ALIASES = {
-  profile: { tab: 'general', section: 'profile' },
-  account: { tab: 'general', section: 'profile' },
+  // Ctrl+, and the sidebar's Settings item still open /settings/profile.
+  profile: { tab: 'general' },
+  account: { tab: 'general' },
   background: { tab: 'general', section: 'window' },
   security: { tab: 'privacy' },
   safety: { tab: 'privacy' },
