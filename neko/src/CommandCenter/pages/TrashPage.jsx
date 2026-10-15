@@ -193,7 +193,7 @@ const TrashPage = () => {
 
         {hasSelection && (
           <div className="mb-4 flex shrink-0 items-center justify-between gap-3 rounded-lg border border-line bg-surface px-3 py-2">
-            <div className="text-xs font-medium text-fg">{selectedCount} selected</div>
+            <div className="whitespace-nowrap text-xs font-medium text-fg">{selectedCount} selected</div>
             <div className="flex items-center gap-1">
               <Button variant="ghost" size="xs" icon={RotateCcw} loading={bulkWorking} onClick={restoreSelected}>
                 Restore
