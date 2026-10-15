@@ -11,6 +11,7 @@ import Button from '../components/ui/Button.jsx';
 import { Field, Input } from '../components/ui/Field.jsx';
 import Select from '../components/ui/Select.jsx';
 import Combobox from '../components/ui/Combobox.jsx';
+import RadioGroup from '../components/ui/RadioGroup.jsx';
 import { AVATARS, FREEDOM, FREEDOM_ORDER } from './catFormat.js';
 import { TEXTAREA } from './catFormState.js';
 import TriggerEditor from './TriggerEditor.jsx';
@@ -247,27 +248,20 @@ export function SpaceSection({ form, set, cat = null }) {
   return (
     <div className="space-y-4">
       <Field label="Where it works" hint="Its file tools can't reach outside this folder.">
-        <div role="radiogroup" aria-label="Where it works" className="divide-y divide-line rounded-xl border border-line">
-          {choices.map((choice) => (
-            <label key={choice.value} className={`flex items-start gap-3 px-3.5 py-2.5 ${choice.disabled ? 'opacity-50' : 'cursor-pointer hover:bg-hover'}`}>
-              <input
-                type="radio"
-                name="cat-folder"
-                checked={form.folderMode === choice.value}
-                disabled={choice.disabled}
-                onChange={() => (choice.value === 'custom' && !form.folder ? browse() : set({ folderMode: choice.value }))}
-                className="mt-0.5 h-4 w-4 accent-[var(--as-accent)]"
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block text-[13px] font-medium text-fg">{choice.label}</span>
-                <span className="block truncate text-[12px] text-fg-muted" title={choice.hint}>{choice.hint}</span>
-              </span>
-              {choice.value === 'custom' && window.electronAPI?.openDirectory ? (
-                <Button size="xs" variant="ghost" icon={FolderOpen} onClick={(event) => { event.preventDefault(); browse(); }}>Choose…</Button>
-              ) : null}
-            </label>
-          ))}
-        </div>
+        <RadioGroup
+          label="Where it works"
+          value={form.folderMode}
+          onChange={(value) => (value === 'custom' && !form.folder ? browse() : set({ folderMode: value }))}
+          options={choices.map((choice) => ({
+            value: choice.value,
+            label: choice.label,
+            disabled: choice.disabled,
+            description: <span className="block truncate" title={choice.hint}>{choice.hint}</span>,
+            extra: choice.value === 'custom' && window.electronAPI?.openDirectory
+              ? <Button size="xs" variant="ghost" icon={FolderOpen} onClick={browse}>Choose…</Button>
+              : null,
+          }))}
+        />
         {form.folderMode === 'custom' && !window.electronAPI?.openDirectory ? (
           <Input className="mt-2" value={form.folder} onChange={(event) => set({ folder: event.target.value })} placeholder="/home/you/cat-work" aria-label="Folder path" />
         ) : null}
@@ -300,24 +294,12 @@ export function FreedomSection({ form, set, options }) {
   const setLimit = (key, value) => set({ limits: { ...form.limits, [key]: value } });
   return (
     <div className="space-y-5">
-      <div role="radiogroup" aria-label="Freedom" className="grid gap-2 sm:grid-cols-3">
-        {FREEDOM_ORDER.map((level) => {
-          const selected = form.freedom === level;
-          return (
-            <button
-              key={level}
-              type="button"
-              role="radio"
-              aria-checked={selected}
-              onClick={() => set({ freedom: level })}
-              className={`flex flex-col items-start justify-start rounded-xl border px-3.5 py-3 text-left transition-colors ${selected ? 'border-accent bg-accent-soft/60 ring-1 ring-accent' : 'border-line hover:bg-hover'}`}
-            >
-              <span className="block text-[13px] font-medium text-fg">{FREEDOM[level].label}</span>
-              <span className="mt-1 block text-[12px] leading-5 text-fg-muted">{FREEDOM[level].description}</span>
-            </button>
-          );
-        })}
-      </div>
+      <RadioGroup
+        label="Freedom"
+        value={form.freedom}
+        onChange={(level) => set({ freedom: level })}
+        options={FREEDOM_ORDER.map((level) => ({ value: level, label: FREEDOM[level].label, description: FREEDOM[level].description }))}
+      />
 
       <Field label="When it asks, wait for your answer for" htmlFor="cat-wait" hint="After that it carries on without that step.">
         <Select
