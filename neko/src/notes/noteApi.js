@@ -181,10 +181,6 @@ export const attachmentsApi = {
     return attachmentApi.validateAudioFile(file);
   },
 
-  getFileIcon: (filename, mimeType = "") => {
-    return attachmentApi.getFileIcon(filename, mimeType);
-  },
-
   formatFileSize: (bytes) => {
     return attachmentApi.formatFileSize(bytes);
   },
