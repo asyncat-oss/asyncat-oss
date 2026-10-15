@@ -1,12 +1,14 @@
 // Settings → Privacy & safety → the command sandbox: whether it is on and
 // working (or on but unable to start, and why), the network commands get,
-// and the folders they can't read, with a way to allow one back.
+// and the folders they can't read, with a way to allow one back. Rows for
+// the RowGroup PrivacySection puts them in.
 
 import { useCallback, useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
 import { RefreshCw } from 'lucide-react';
 import Button from '../components/ui/Button.jsx';
-import { Segmented } from '../components/ui/Tabs.jsx';
+import Notice from '../components/ui/Notice.jsx';
+import RadioGroup from '../components/ui/RadioGroup.jsx';
 import { useConfirm } from '../components/confirmContext.js';
 import { errorDetail, useToast } from '../components/toastContext.js';
 import Switch from '../components/ui/Switch.jsx';
@@ -133,17 +135,18 @@ export default function SandboxSettings() {
       {status?.enabled ? (
         <>
           {pending ? <p className="px-4 py-2.5 text-[12px] leading-5 text-fg-subtle" data-sandbox-pending>{pending}</p> : null}
-          <SettingsRow
-            label="Network"
-            hint={(
-              <>
-                <span className="block">{networkHint(mode)}</span>
-                {status.network?.note ? <span className="mt-1 block text-amber-700 dark:text-amber-400">{status.network.note}</span> : null}
-              </>
-            )}
-          >
-            <Segmented value={mode} onChange={(value) => save({ network: value }, 'network')} items={NETWORK_CHOICES} label="Network for the agent's commands" role="radiogroup" />
-          </SettingsRow>
+          <div className="px-4 py-3" data-sandbox-network>
+            <p className="text-[13px] font-medium text-fg">Network for commands</p>
+            <RadioGroup
+              className="mt-2"
+              value={mode}
+              onChange={(value) => save({ network: value }, 'network')}
+              label="Network for the agent's commands"
+              options={NETWORK_CHOICES.map((choice) => ({ ...choice, description: networkHint(choice.value) }))}
+              disabled={busy === 'network'}
+            />
+            {status.network?.note ? <Notice tone="warning" className="mt-2">{status.network.note}</Notice> : null}
+          </div>
           {mode === 'registries' ? (
             <div className="px-4 py-3" data-sandbox-registries>
               <p className="text-[13px] font-medium text-fg">Other registries</p>

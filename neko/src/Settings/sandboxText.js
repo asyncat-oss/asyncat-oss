@@ -34,7 +34,7 @@ export function sandboxStatusLine(status) {
     const reason = String(status.reason || "It can't start on this computer.").trim();
     return { tone: 'warn', text: `On, but it can't start: ${reason} Asking before every command.` };
   }
-  return { tone: 'ok', text: "On. Commands can change files only in the project, temporary folders and package caches, and can't read the folders below." };
+  return { tone: 'ok', text: "On. Commands can change only the project, temporary folders and package caches, and can't read the folders below." };
 }
 
 /**

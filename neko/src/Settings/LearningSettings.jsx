@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BookMarked } from 'lucide-react';
+import Notice from '../components/ui/Notice.jsx';
 import Switch from '../components/ui/Switch.jsx';
 import { RowGroup, SettingsRow, SettingsSection } from '../components/ui/Rows.jsx';
 import { errorDetail, useToast } from '../components/toastContext.js';
@@ -40,7 +41,7 @@ export default function LearningSettings() {
       label: 'Remember things from chats',
       hint: (
         <>
-          Lasting facts, preferences and corrections from your chats are saved as memories. When this is off, a memory is saved only when you ask.{' '}
+          Lasting facts and preferences become memories; when this is off, only what you ask it to remember.{' '}
           <button type="button" onClick={() => navigate('/tools?tab=memory')} className="text-accent hover:underline">See memories</button>
         </>
       ),
@@ -48,14 +49,14 @@ export default function LearningSettings() {
     {
       key: 'suggestSkills',
       label: 'Suggest skills from my chats',
-      hint: 'After a chat where the agent worked through a task, it offers to save the steps as a skill. Nothing is saved unless you choose Save. Each offer takes one more request to your model.',
+      hint: 'After the agent works through a task, it offers to save the steps as a skill. Each offer is one more request to your model.',
     },
   ];
 
   return (
     <SettingsSection icon={BookMarked} title="Learning from chats" hint="Temporary chats never teach Asyncat anything." data-learning>
       {error ? (
-        <p role="alert" className="rounded-lg bg-red-500/10 px-3 py-2 text-[13px] text-red-700 dark:text-red-400">{error}</p>
+        <Notice tone="error">{error}</Notice>
       ) : (
         <RowGroup>
           {rows.map((row) => (

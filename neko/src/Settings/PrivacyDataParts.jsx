@@ -5,9 +5,11 @@
 import { useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
 import { AlertTriangle, Check, Download, Trash2, Upload } from 'lucide-react';
-import Button from '../components/ui/Button.jsx';
+import Button, { buttonClass } from '../components/ui/Button.jsx';
+import Checkbox from '../components/ui/Checkbox.jsx';
 import Dialog from '../components/ui/Dialog.jsx';
-import { Field, Input } from '../components/ui/Field.jsx';
+import { CONTROL_CLASS, Field, Input } from '../components/ui/Field.jsx';
+import Notice from '../components/ui/Notice.jsx';
 import { errorDetail, useToast } from '../components/toastContext.js';
 import { formatBytes } from '../Models/engineProgress.js';
 import privacyApi, { importApi } from '../services/privacyApi.js';
@@ -90,14 +92,14 @@ export function ImportChats({ title = 'Bring your chats from ChatGPT or Claude',
             Ask either for a copy of your data (ChatGPT: Settings → Data controls → Export; Claude: Settings → Privacy → Export data), then pick the .zip it emails you. Chats keep their titles and dates; ones brought over before are skipped.
           </p>
         </div>
-        <label className={`inline-flex shrink-0 cursor-pointer items-center gap-1.5 self-start rounded-lg border border-line-strong px-3 py-1.5 text-[13px] font-medium text-fg hover:bg-hover ${reading ? 'pointer-events-none opacity-60' : ''}`}>
-          <Upload className="h-3.5 w-3.5" />
+        <label className={`${buttonClass('secondary', 'sm')} cursor-pointer self-start focus-within:ring-2 focus-within:ring-accent/40 ${reading ? 'pointer-events-none opacity-60' : ''}`}>
+          <Upload className="h-3.5 w-3.5" strokeWidth={2} />
           {reading ? 'Reading…' : 'Pick the export'}
           <input type="file" accept=".zip,.json,application/zip,application/json" className="sr-only" onChange={pick} aria-label="Export file" />
         </label>
       </div>
       {info ? (
-        <div className="mt-3 rounded-lg bg-hover/50 px-3 py-2.5 text-[12px] leading-5 text-fg-muted" data-import-preview>
+        <div className="mt-3 rounded-lg bg-hover px-3 py-2.5 text-[12px] leading-5 text-fg-muted" data-import-preview>
           <p className="text-[13px] font-medium text-fg">
             From {SOURCE_NAMES[info.format] || info.format}: {info.newChats} new chat{info.newChats === 1 ? '' : 's'}, {info.messages.toLocaleString()} messages
             {info.from ? `, ${monthYear(info.from)} to ${monthYear(info.to)}` : ''}
@@ -105,10 +107,12 @@ export function ImportChats({ title = 'Bring your chats from ChatGPT or Claude',
           {info.chats !== info.newChats ? <p>{info.chats - info.newChats} were brought over before and are skipped.</p> : null}
           {info.sample?.length ? <p className="mt-1 truncate">{info.sample.join(' · ')}</p> : null}
           {info.memories ? (
-            <label className="mt-2 flex items-center gap-2 text-fg">
-              <input type="checkbox" className="h-4 w-4 accent-[var(--as-accent)]" checked={withMemories} onChange={(event) => setWithMemories(event.target.checked)} />
-              Also add its {info.memories} memor{info.memories === 1 ? 'y' : 'ies'} about you
-            </label>
+            <Checkbox
+              className="mt-2"
+              checked={withMemories}
+              onChange={setWithMemories}
+              label={`Also add its ${info.memories} memor${info.memories === 1 ? 'y' : 'ies'} about you`}
+            />
           ) : null}
           <div className="mt-2 flex gap-2">
             <Button size="sm" variant={actionVariant} loading={importing} disabled={!info.newChats && !(info.memories && withMemories)} onClick={run}>Bring them over</Button>
@@ -126,7 +130,7 @@ export function ImportChats({ title = 'Bring your chats from ChatGPT or Claude',
         {pasteOpen ? (
           <div className="space-y-2">
             <p className="text-[12px] leading-5 text-fg-muted">Memories aren&apos;t always in an export. Copy ChatGPT&apos;s from Settings → Personalization → Memory → Manage, and paste them here, one per line.</p>
-            <textarea rows={4} value={pasted} onChange={(event) => setPasted(event.target.value)} aria-label="Memories to add" className="w-full rounded-lg border border-line-strong bg-canvas px-3 py-2 text-[13px] text-fg outline-none focus:border-accent focus:ring-2 focus:ring-accent/20" />
+            <textarea rows={4} value={pasted} onChange={(event) => setPasted(event.target.value)} aria-label="Memories to add" className={`${CONTROL_CLASS} py-2`} />
             <div className="flex gap-2">
               <Button size="sm" variant={actionVariant} loading={savingMemories} disabled={!pasted.trim()} onClick={saveMemories}>Add memories</Button>
               <Button size="sm" variant="ghost" onClick={() => setPasteOpen(false)}>Cancel</Button>
@@ -296,18 +300,18 @@ export function DeleteEverything({ pending, onChanged }) {
           )}
         >
           <div className="space-y-4">
-            <label className="flex items-start gap-2.5 text-[13px] text-fg">
-              <input type="checkbox" className="mt-0.5 h-4 w-4 accent-[var(--as-accent)]" checked={includeModels} onChange={(event) => setIncludeModels(event.target.checked)} disabled={busy} />
-              <span>
-                Also delete downloaded models and engines
-                <span className="block text-[12px] text-fg-muted">Otherwise they stay, so you don&apos;t have to download them again.</span>
-              </span>
-            </label>
+            <Checkbox
+              checked={includeModels}
+              onChange={setIncludeModels}
+              disabled={busy}
+              label="Also delete downloaded models and engines"
+              description="Otherwise they stay, so you don't have to download them again."
+            />
             <Field label={`Type “${PHRASE}” to confirm`} htmlFor="delete-everything-phrase">
               <Input id="delete-everything-phrase" autoFocus autoComplete="off" spellCheck={false} value={phrase} onChange={(event) => setPhrase(event.target.value)} disabled={busy} />
             </Field>
             <p className="text-[12px] leading-5 text-fg-muted">Asyncat&apos;s server restarts to do it, then this window starts fresh.</p>
-            {error ? <p role="alert" className="rounded-lg bg-red-500/10 px-3 py-2 text-[13px] text-red-700 dark:text-red-400">{error}</p> : null}
+            {error ? <Notice tone="error">{error}</Notice> : null}
           </div>
         </Dialog>
       ) : null}
