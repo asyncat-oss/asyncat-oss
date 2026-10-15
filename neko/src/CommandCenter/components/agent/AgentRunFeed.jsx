@@ -21,6 +21,7 @@ import { extractLocalhostUrl } from '../../utils/localhostUrl.js';
 import { connectorToolLabel } from '../../../Connectors/connectorFormat.js';
 import Tooltip from '../../../components/ui/Tooltip.jsx';
 import Button from '../../../components/ui/Button.jsx';
+import Dialog from '../../../components/ui/Dialog.jsx';
 import { MODEL_ACTION_EVENT } from '../renderers/interactiveEvents.js';
 import AskUserForm from './AskUserForm.jsx';
 import SkillSuggestionCard from './SkillSuggestionCard.jsx';
@@ -40,7 +41,7 @@ function renderGoalWithMentions(goal = "", fileAttachments = []) {
       parts.push(<span key={`t${lastIndex}`}>{goal.slice(lastIndex, match.index)}</span>);
     }
     parts.push(
-      <span key={`m${match.index}`} className="rounded px-0.5 font-medium text-blue-500 bg-blue-50/80 dark:text-blue-400 dark:bg-blue-900/20 midnight:text-blue-400 midnight:bg-blue-900/20">
+      <span key={`m${match.index}`} className="rounded bg-accent-soft px-0.5 font-medium text-accent">
         {match[0]}
       </span>
     );
@@ -244,14 +245,15 @@ function getToolIntent(data) {
 function getToolStatus(result, data) {
   if (data?.resolved) {
     const decision = data?.decision;
-    if (decision === 'deny') return { label: 'Denied', tone: 'text-red-500', icon: XCircle };
+    if (decision === 'deny') return { label: 'Denied', tone: 'text-red-600 dark:text-red-400', icon: XCircle };
     if (decision === 'allow' || decision === 'allow_session' || decision === 'allow_always') {
-      return { label: 'Approved', tone: 'text-green-600 dark:text-green-400', icon: CheckCircle2 };
+      return { label: 'Approved', tone: 'text-fg-subtle', icon: CheckCircle2 };
     }
   }
-  if (result === undefined) return { label: 'Running', tone: 'text-amber-500', icon: Loader2 };
-  if (result?.error || result?.success === false) return { label: 'Failed', tone: 'text-red-500', icon: XCircle };
-  return { label: 'Done', tone: 'text-green-600 dark:text-green-400', icon: CheckCircle2 };
+  // Calm by default: only a failure gets a colour.
+  if (result === undefined) return { label: 'Running', tone: 'text-fg-subtle', icon: Loader2 };
+  if (result?.error || result?.success === false) return { label: 'Failed', tone: 'text-red-600 dark:text-red-400', icon: XCircle };
+  return { label: 'Done', tone: 'text-fg-subtle', icon: CheckCircle2 };
 }
 
 // Messages share one reading column and one text style, streaming or not.
@@ -273,8 +275,9 @@ function MessageAction({ label, onClick, disabled = false, active = false, child
         onClick={onClick}
         disabled={disabled}
         aria-label={label}
+        aria-pressed={active || undefined}
         className={`flex h-7 w-7 items-center justify-center rounded-lg outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-35 ${
-          active ? 'text-amber-500' : 'text-fg-subtle hover:text-fg'
+          active ? 'bg-selected text-fg' : 'text-fg-subtle hover:text-fg'
         }`}
       >
         {children}
@@ -362,12 +365,12 @@ function UserGoalEvent({ data, onEditMessage, onToggleMessageFlag, isRunning, hi
             {(data?.parentBranchId || data?.bookmarked) && (
               <div className="mb-1 flex justify-end gap-1.5 items-center">
                 {data?.parentBranchId && (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-white/70 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-900/50 dark:text-gray-400 midnight:bg-slate-950/50 midnight:text-slate-400">
+                  <span className="inline-flex items-center gap-1 rounded-md bg-surface px-1.5 py-0.5 text-[11px] font-medium text-fg-muted">
                     <GitBranch className="h-3 w-3" />
                     Branch
                   </span>
                 )}
-                {data?.bookmarked && <BookMarked className="h-3.5 w-3.5 text-amber-500" />}
+                {data?.bookmarked && <BookMarked className="h-3.5 w-3.5 text-fg-subtle" aria-label="Bookmarked" />}
               </div>
             )}
             {isEditing ? (
@@ -382,29 +385,23 @@ function UserGoalEvent({ data, onEditMessage, onToggleMessageFlag, isRunning, hi
                       setDraft(goal);
                     }
                   }}
-                  className="min-h-[96px] w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm leading-relaxed text-gray-900 outline-none focus:border-gray-300 focus:ring-2 focus:ring-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:focus:border-gray-600 dark:focus:ring-gray-800 midnight:border-slate-700 midnight:bg-slate-950 midnight:text-slate-100 midnight:focus:border-slate-600 midnight:focus:ring-slate-800"
+                  className="min-h-[96px] w-full resize-y rounded-lg border border-line-strong bg-canvas px-3 py-2 text-[14px] leading-6 text-fg outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
                   autoFocus
                 />
                 <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
+                  <Button
+                    variant="ghost"
+                    size="xs"
                     onClick={() => {
                       setIsEditing(false);
                       setDraft(goal);
                     }}
-                    className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:text-slate-400 midnight:hover:bg-slate-800 midnight:hover:text-slate-100"
                   >
-                    <XCircle className="h-3.5 w-3.5" />
                     Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={submitEdit}
-                    className="inline-flex items-center gap-1.5 rounded-md bg-gray-900 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white midnight:bg-indigo-600 midnight:text-white midnight:hover:bg-indigo-500"
-                  >
-                    <GitBranch className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button variant="primary" size="xs" icon={GitBranch} onClick={submitEdit}>
                     Branch
-                  </button>
+                  </Button>
                 </div>
               </div>
             ) : (
@@ -415,8 +412,8 @@ function UserGoalEvent({ data, onEditMessage, onToggleMessageFlag, isRunning, hi
             {Array.isArray(data?.agentMentions) && data.agentMentions.length > 0 && (
               <div className="mt-2 flex flex-wrap justify-end gap-1">
                 {data.agentMentions.map(agent => (
-                  <span key={agent.id || agent.handle} className="inline-flex items-center gap-1 rounded-md bg-white/70 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-900/50 dark:text-gray-400 midnight:bg-slate-950/50 midnight:text-slate-400">
-                    <span>{agent.icon || '🤖'}</span>
+                  <span key={agent.id || agent.handle} className="inline-flex items-center gap-1 rounded-md bg-surface px-1.5 py-0.5 text-[11px] font-medium text-fg-muted">
+                    {agent.icon ? <span>{agent.icon}</span> : null}
                     #{agent.handle}
                   </span>
                 ))}
@@ -474,12 +471,12 @@ function ThinkingEvent({ data }) {
     <FeedFrame className="mb-2">
       <button
         onClick={() => setExpanded(v => !v)}
-        className="flex items-center gap-1.5 rounded-md py-1 text-left transition-colors hover:text-gray-500 focus:outline-none focus-visible:ring-1 focus-visible:ring-gray-300 dark:hover:text-gray-400 dark:focus-visible:ring-gray-700 midnight:hover:text-slate-400"
+        className="flex items-center gap-1.5 rounded-md py-1 text-left text-fg-muted transition-colors hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
       >
         {expanded
           ? <ChevronDown className="w-3 h-3 text-fg-subtle flex-shrink-0" />
           : <ChevronRight className="w-3 h-3 text-fg-subtle flex-shrink-0" />}
-        <span className="text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400 select-none">
+        <span className="text-[12px] select-none">
           Reasoning{expanded && words > 0 ? ` · ${words} words` : ''}
         </span>
       </button>
@@ -523,14 +520,14 @@ function ToolEvent({ data, result, onRetryTool, framed = true, progress = '' }) 
             className={`flex w-full items-center gap-2 text-left ${isError ? 'cursor-pointer' : 'cursor-default'}`}
           >
             <Icon className="h-3 w-3 flex-shrink-0 text-fg-subtle" />
-            <span className="text-[13px] font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300">{label}</span>
+            <span className="text-[13px] font-medium text-fg-muted">{label}</span>
             {status.label !== 'Done' && (
-              <span className={`ml-auto flex-shrink-0 text-[10px] font-medium ${status.tone}`}>{status.label}</span>
+              <span className={`ml-auto flex-shrink-0 text-[11px] font-medium ${status.tone}`}>{status.label}</span>
             )}
             {isError && (
               expanded
-                ? <ChevronDown className="h-3 w-3 flex-shrink-0 text-gray-400 midnight:text-slate-500" />
-                : <ChevronRight className="h-3 w-3 flex-shrink-0 text-gray-400 midnight:text-slate-500 opacity-0 transition-opacity group-hover:opacity-100" />
+                ? <ChevronDown className="h-3 w-3 flex-shrink-0 text-fg-subtle" />
+                : <ChevronRight className="h-3 w-3 flex-shrink-0 text-fg-subtle opacity-0 transition-opacity group-hover:opacity-100" />
             )}
           </button>
 
@@ -542,10 +539,10 @@ function ToolEvent({ data, result, onRetryTool, framed = true, progress = '' }) 
               <button
                 type="button"
                 onClick={() => window.electronAPI.shellShowInFolder(intent.value)}
-                className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300 midnight:hover:bg-slate-800 midnight:hover:text-slate-300"
-                title="Reveal in Finder"
+                className="flex-shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-fg-subtle hover:bg-hover hover:text-fg"
+                title="Show in folder"
               >
-                <FolderOpen className="h-2.5 w-2.5" />
+                <FolderOpen className="h-3 w-3" />
                 Show
               </button>
             )}
@@ -554,7 +551,7 @@ function ToolEvent({ data, result, onRetryTool, framed = true, progress = '' }) 
           {/* Streaming progress output (shown while running) */}
           {isPending && progress && (
             <div className="ml-5 mt-1">
-              <pre className="max-h-32 overflow-y-auto whitespace-pre-wrap rounded bg-gray-900 p-2 font-mono text-[10px] leading-relaxed text-green-400/80 scrollbar-thin">
+              <pre className="max-h-32 overflow-y-auto whitespace-pre-wrap rounded-md bg-hover p-2 font-mono text-[11px] leading-relaxed text-fg-muted scrollbar-thin">
                 {progress.slice(-2000)}
                 <span className="animate-pulse">▊</span>
               </pre>
@@ -562,21 +559,22 @@ function ToolEvent({ data, result, onRetryTool, framed = true, progress = '' }) 
           )}
 
           {expanded && isError && (
-            <div className="ml-5 mt-1 border-l border-gray-100 pl-2 dark:border-gray-800 midnight:border-slate-800">
+            <div className="ml-5 mt-1 border-l border-line pl-2">
               {result && (
-                <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded bg-gray-50 p-2 font-mono text-[10px] leading-relaxed text-gray-500 dark:bg-gray-900/60 dark:text-gray-500 midnight:bg-slate-900/60 midnight:text-slate-500">
+                <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded-md bg-hover p-2 font-mono text-[11px] leading-relaxed text-fg-muted">
                   {typeof result === 'string' ? result : (result.output || result.content || result.error || JSON.stringify(result, null, 2))}
                 </pre>
               )}
               {onRetryTool && (
-                <button
-                  type="button"
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  icon={RotateCcw}
+                  className="mt-1.5"
                   onClick={() => onRetryTool({ tool: data?.tool, args: data?.args, result, repairPrompt: result?.repairPrompt })}
-                  className="mt-1.5 inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 midnight:border-slate-700 midnight:text-slate-300 midnight:hover:bg-slate-800"
                 >
-                  <RotateCcw className="h-3 w-3" />
                   Retry from here
-                </button>
+                </Button>
               )}
             </div>
           )}
@@ -601,9 +599,9 @@ function ArtifactResultCard({ result, prominent = false, onViewInPanel }) {
     return (
       <FeedFrame className="mb-4">
         <div className="mb-1.5 flex items-center gap-2 px-0.5">
-          <FilePlus className="h-3.5 w-3.5 text-fuchsia-500 flex-shrink-0" />
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 flex-shrink-0">Artifact created</span>
-          <span className="min-w-0 truncate text-[11px] text-gray-400 dark:text-gray-600 flex-1">
+          <FilePlus className="h-3.5 w-3.5 text-fg-subtle flex-shrink-0" />
+          <span className="text-[12px] font-medium text-fg-muted flex-shrink-0">Artifact created</span>
+          <span className="min-w-0 truncate text-[12px] text-fg-subtle flex-1">
             {artifact.path || artifact.filename}
           </span>
         </div>
@@ -734,10 +732,11 @@ function InlineAudioPlayer({ src, loadSrc, downloadName, downloadUrl, showInfo, 
         disabled={isLoading}
         className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-50 ${
           isPlaying
-            ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400'
-            : 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'
+            ? 'bg-selected text-fg'
+            : 'bg-hover text-fg-muted hover:bg-selected hover:text-fg'
         }`}
         title={isPlaying ? 'Pause' : isLoading ? 'Loading…' : 'Play'}
+        aria-label={isPlaying ? 'Pause' : 'Play'}
       >
         {isLoading ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -751,8 +750,9 @@ function InlineAudioPlayer({ src, loadSrc, downloadName, downloadUrl, showInfo, 
       {/* Skip back */}
       <button
         onClick={() => skip(-5)}
-        className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+        className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-fg-subtle hover:bg-hover hover:text-fg"
         title="Skip back 5s"
+        aria-label="Skip back 5s"
       >
         <SkipBack className="h-3 w-3" />
       </button>
@@ -760,8 +760,9 @@ function InlineAudioPlayer({ src, loadSrc, downloadName, downloadUrl, showInfo, 
       {/* Skip forward */}
       <button
         onClick={() => skip(5)}
-        className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+        className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-fg-subtle hover:bg-hover hover:text-fg"
         title="Skip forward 5s"
+        aria-label="Skip forward 5s"
       >
         <SkipForward className="h-3 w-3" />
       </button>
@@ -769,8 +770,9 @@ function InlineAudioPlayer({ src, loadSrc, downloadName, downloadUrl, showInfo, 
       {/* Stop */}
       <button
         onClick={handleStop}
-        className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+        className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-fg-subtle hover:bg-hover hover:text-fg"
         title="Stop"
+        aria-label="Stop"
       >
         <Square className="h-3 w-3 fill-current" />
       </button>
@@ -779,18 +781,18 @@ function InlineAudioPlayer({ src, loadSrc, downloadName, downloadUrl, showInfo, 
       <div className="min-w-0 flex-1 mx-1">
         <div
           onClick={handleSeek}
-          className="group relative h-1.5 w-full cursor-pointer rounded-full bg-gray-100 dark:bg-gray-800"
+          className="group relative h-1.5 w-full cursor-pointer rounded-full bg-hover"
         >
           <div
-            className="h-full rounded-full bg-emerald-500"
+            className="h-full rounded-full bg-accent"
             style={{ width: `${progressPct}%` }}
           />
           <div
-            className="absolute top-1/2 h-2.5 w-2.5 rounded-full bg-emerald-500 opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
+            className="absolute top-1/2 h-2.5 w-2.5 rounded-full bg-accent opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
             style={{ left: `${progressPct}%`, transform: 'translate(-50%, -50%)' }}
           />
         </div>
-        <div className="mt-1 flex justify-between text-[10px] text-gray-400 dark:text-gray-500 tabular-nums">
+        <div className="mt-1 flex justify-between text-[11px] text-fg-subtle tabular-nums">
           <span>{formatTime(currentTime)}</span>
           <span>{formatTime(duration)}</span>
         </div>
@@ -801,8 +803,9 @@ function InlineAudioPlayer({ src, loadSrc, downloadName, downloadUrl, showInfo, 
         <a
           href={downloadUrl || src}
           download={downloadName || 'audio.wav'}
-          className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+          className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-fg-subtle hover:bg-hover hover:text-fg"
           title="Download"
+          aria-label="Download"
         >
           <Download className="h-3.5 w-3.5" />
         </a>
@@ -841,9 +844,9 @@ function AudioResultCard({ result }) {
 
   return (
     <div className="mt-1.5 mb-2 ml-7">
-      <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-gray-700 dark:bg-gray-900/50 midnight:border-slate-700 midnight:bg-slate-900/50">
+      <div className="rounded-lg border border-line bg-surface px-3 py-2.5">
         {fetchError ? (
-          <p className="text-xs text-red-500 midnight:text-red-400">Failed to load audio: {fetchError}</p>
+          <p className="text-[12px] text-red-600 dark:text-red-400">Couldn&apos;t load the audio: {fetchError}</p>
         ) : (
           <InlineAudioPlayer
             src={blobUrl}
@@ -851,10 +854,10 @@ function AudioResultCard({ result }) {
           />
         )}
         <div className="mt-1.5 flex items-center gap-1.5">
-          <p className="truncate text-[11px] font-medium text-gray-600 dark:text-gray-300 midnight:text-slate-300">
+          <p className="truncate text-[12px] font-medium text-fg-muted">
             {result.path?.split('/').pop() || 'Generated speech'}
           </p>
-          <span className="text-[10px] text-fg-subtle">
+          <span className="text-[11px] text-fg-subtle">
             · {result.audio_size || `${(result.audio_bytes / 1024).toFixed(1)} KB`} · {result.voice || 'Piper'} · {result.format || 'WAV'}
           </span>
         </div>
@@ -892,13 +895,13 @@ function ImageResultCard({ result }) {
 
   return (
     <div className="mt-1.5 mb-3 ml-7 max-w-xl">
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900/50 midnight:border-slate-700 midnight:bg-slate-900/50">
-        <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-3 py-2 dark:border-gray-800 midnight:border-slate-800">
+      <div className="overflow-hidden rounded-xl border border-line bg-surface">
+        <div className="flex items-center justify-between gap-3 border-b border-line px-3 py-2">
           <div className="min-w-0">
-            <div className="truncate text-xs font-semibold text-gray-700 dark:text-gray-200 midnight:text-slate-200">
+            <div className="truncate text-[13px] font-medium text-fg">
               {media.prompt || result.prompt || 'Generated image'}
             </div>
-            <div className="mt-0.5 flex flex-wrap gap-1.5 text-[10px] text-fg-subtle">
+            <div className="mt-0.5 flex flex-wrap gap-1.5 text-[11px] text-fg-subtle">
               <span>{result.runtime || media.runtime || 'image'}</span>
               {(result.width || media.width) && (result.height || media.height) && <span>{result.width || media.width}x{result.height || media.height}</span>}
               {(result.seed || media.seed) !== undefined && <span>seed {result.seed || media.seed}</span>}
@@ -908,32 +911,33 @@ function ImageResultCard({ result }) {
             <a
               href={blobUrl}
               download={(imagePath || 'generated-image.png').split('/').pop()}
-              className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200 midnight:hover:bg-slate-800 midnight:hover:text-slate-200"
+              className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-fg-subtle transition-colors hover:bg-hover hover:text-fg"
               title="Download image"
+              aria-label="Download image"
             >
               <Download className="h-4 w-4" />
             </a>
           )}
         </div>
         {fetchError ? (
-          <div className="px-3 py-3 text-xs text-red-500 midnight:text-red-400">Failed to load image: {fetchError}</div>
+          <div className="px-3 py-3 text-[12px] text-red-600 dark:text-red-400">Couldn&apos;t load the image: {fetchError}</div>
         ) : blobUrl ? (
           <button
             type="button"
             onClick={() => window.open(blobUrl, '_blank', 'noopener,noreferrer')}
-            className="block w-full bg-gray-50 p-2 dark:bg-gray-950/60 midnight:bg-slate-950/60"
+            className="block w-full bg-hover p-2"
             title="Open image"
           >
             <img src={blobUrl} alt={media.prompt || 'Generated image'} className="max-h-96 w-full rounded-lg object-contain" />
           </button>
         ) : (
-          <div className="flex h-40 items-center justify-center text-xs text-gray-400 midnight:text-slate-500">
+          <div className="flex h-40 items-center justify-center text-[12px] text-fg-subtle">
             <Spinner className="mr-2 h-3.5 w-3.5 animate-spin" />
-            Loading image...
+            Loading image…
           </div>
         )}
         {imagePath && (
-          <div className="border-t border-gray-100 px-3 py-2 text-[10px] font-medium text-gray-400 dark:border-gray-800 dark:text-gray-500 midnight:border-slate-800 midnight:text-slate-500">
+          <div className="border-t border-line px-3 py-2 font-mono text-[11px] text-fg-subtle">
             <span className="block truncate">{imagePath}</span>
           </div>
         )}
@@ -954,7 +958,7 @@ function ScreenshotResultCard({ result }) {
       <div className="overflow-hidden rounded-lg border border-line bg-surface">
         <div className="flex items-center justify-between gap-3 border-b border-line px-3 py-2">
           <div className="min-w-0">
-            <div className="truncate text-xs font-medium text-fg">Screenshot</div>
+            <div className="truncate text-[13px] font-medium text-fg">Screenshot</div>
             {url && <div className="mt-0.5 truncate text-[11px] text-fg-subtle">{url}</div>}
           </div>
           <a
@@ -1019,29 +1023,29 @@ function CompactPermissionEvent({ data, onDecision }) {
           ? 'Expired, denied'
           : 'Resolved';
   const decisionTone = isAllowed
-    ? 'text-emerald-600 dark:text-emerald-400'
+    ? 'text-fg-subtle'
     : negative
       ? 'text-red-600 dark:text-red-400'
-      : 'text-gray-500 dark:text-gray-400';
+      : 'text-fg-muted';
   if (showDecision || historical) {
     return (
       <div className="group rounded-md px-2 py-1.5 transition-colors hover:bg-hover">
         <div className="flex items-start gap-2.5">
-          <span className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center ${negative ? 'text-red-500' : isAllowed ? 'text-emerald-500' : 'text-gray-400'}`}>
+          <span className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center ${negative ? 'text-red-600 dark:text-red-400' : 'text-fg-subtle'}`}>
             {negative ? <XCircle className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <Icon className="h-3 w-3 text-gray-400 dark:text-gray-500" />
-              <span className="text-[13px] font-medium text-gray-700 dark:text-gray-300">{label}</span>
-              <span className={`ml-auto text-[10px] font-medium ${decisionTone}`}>{decisionLabel}</span>
+              <Icon className="h-3 w-3 text-fg-subtle" />
+              <span className="text-[13px] font-medium text-fg-muted">{label}</span>
+              <span className={`ml-auto text-[11px] font-medium ${decisionTone}`}>{decisionLabel}</span>
             </div>
-            <p className="mt-0.5 truncate pl-5 text-[11px] text-gray-400 dark:text-gray-500">{intent.value}</p>
+            <p className="mt-0.5 truncate pl-5 text-[11px] text-fg-subtle">{intent.value}</p>
             {(data?.diff || data?.workingDir) && (
               <button
                 type="button"
                 onClick={() => setShowDetails(v => !v)}
-                className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-300"
+                className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-fg-subtle transition-colors hover:text-fg"
               >
                 {showDetails ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                 {data?.diff ? 'View changes' : 'Details'}
@@ -1049,9 +1053,9 @@ function CompactPermissionEvent({ data, onDecision }) {
             )}
             {showDetails && (
               <div className="mt-2 space-y-1.5">
-                {data?.workingDir && <p className="truncate text-[11px] text-gray-400 dark:text-gray-500">Working directory: {data.workingDir}</p>}
+                {data?.workingDir && <p className="truncate text-[11px] text-fg-subtle">Working directory: {data.workingDir}</p>}
                 {data?.diff && (
-                  <pre className="max-h-40 overflow-y-auto whitespace-pre rounded-lg border border-gray-200 bg-gray-950 p-3 font-mono text-[11px] leading-relaxed text-gray-300 dark:border-gray-700">
+                  <pre className="max-h-40 overflow-y-auto whitespace-pre rounded-lg border border-line bg-hover p-3 font-mono text-[11px] leading-relaxed text-fg-muted">
                     {data.diff}
                   </pre>
                 )}
@@ -1064,37 +1068,35 @@ function CompactPermissionEvent({ data, onDecision }) {
   }
 
   return (
-      <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-white dark:bg-gray-900 midnight:bg-slate-900 shadow-sm">
+    <div className="overflow-hidden rounded-xl border border-line bg-surface">
       <div className="flex items-start gap-3 px-4 py-3.5">
-          <div className={`mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border ${dangerous ? 'border-rose-200 bg-rose-50 text-rose-600 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-400 midnight:border-rose-800 midnight:bg-rose-950/30 midnight:text-rose-400' : 'border-amber-200 bg-amber-50 text-amber-600 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400 midnight:border-amber-800 midnight:bg-amber-950/30 midnight:text-amber-400'}`}>
-          <ShieldAlert className="h-3.5 w-3.5" />
-        </div>
+        <ShieldAlert className={`mt-0.5 h-4 w-4 flex-shrink-0 ${dangerous ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400'}`} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-medium text-gray-700 dark:text-gray-200 midnight:text-slate-200">Permission needed</span>
-            <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400 midnight:bg-slate-800 midnight:text-slate-400">
+            <span className="text-[13px] font-medium text-fg">Permission needed</span>
+            <span className="inline-flex items-center gap-1 rounded-md bg-hover px-1.5 py-0.5 text-[11px] font-medium text-fg-muted">
               <Icon className="h-3 w-3" />
               {label}
             </span>
             {!resolved && remainingMs !== null && (
-              <span className={`ml-auto text-[10px] font-medium tabular-nums ${expired ? 'text-red-600 dark:text-red-400 midnight:text-red-400' : 'text-gray-500 dark:text-gray-400 midnight:text-slate-400'}`}>
+              <span className={`ml-auto text-[11px] tabular-nums ${expired ? 'text-red-600 dark:text-red-400' : 'text-fg-subtle'}`}>
                 {expired ? 'Expired' : `Auto-deny in ${formatCountdown(remainingMs)}`}
               </span>
             )}
           </div>
-          <p className="mt-1 text-sm text-gray-800 dark:text-gray-100 midnight:text-slate-100">
+          <p className="mt-1 text-[14px] text-fg">
             The agent wants to <span className="font-medium">{intent.label.toLowerCase()}</span>.
           </p>
-          <div className="mt-2 rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-gray-50 dark:bg-gray-950 midnight:bg-slate-950 px-3 py-2">
-            <code className="block max-h-24 overflow-y-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-gray-700 dark:text-gray-300 midnight:text-slate-300">
+          <div className="mt-2 rounded-lg border border-line bg-hover px-3 py-2">
+            <code className="block max-h-24 overflow-y-auto whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-fg">
               {intent.value}
             </code>
           </div>
           {data?.sandboxNote && (
-            <p className="mt-1.5 text-xs leading-5 text-amber-700 dark:text-amber-400" data-sandbox-note>{data.sandboxNote}</p>
+            <p className="mt-1.5 text-[12px] leading-5 text-amber-700 dark:text-amber-400" data-sandbox-note>{data.sandboxNote}</p>
           )}
           {data?.error && (
-            <p role="alert" className="mt-1.5 text-xs text-red-600 dark:text-red-400 midnight:text-red-400">
+            <p role="alert" className="mt-1.5 text-[12px] text-red-600 dark:text-red-400">
               Couldn&apos;t send your choice ({data.error}). Try again.
             </p>
           )}
@@ -1102,7 +1104,7 @@ function CompactPermissionEvent({ data, onDecision }) {
             <button
               type="button"
               onClick={() => setShowDetails(v => !v)}
-              className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 midnight:text-slate-400 midnight:hover:text-slate-200 transition-colors"
+              className="mt-1.5 inline-flex items-center gap-1 text-[12px] font-medium text-fg-muted hover:text-fg transition-colors"
             >
               {showDetails ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
               {data?.diff ? 'View changes' : 'Technical details'}
@@ -1112,7 +1114,7 @@ function CompactPermissionEvent({ data, onDecision }) {
             <div className="mt-2 space-y-1.5">
               {data?.workingDir && <p className="truncate text-[11px] text-fg-subtle">Working directory: {data.workingDir}</p>}
               {data?.diff && (
-                <pre className="max-h-40 overflow-y-auto whitespace-pre rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-gray-950 p-3 font-mono text-[11px] leading-relaxed text-gray-300">
+                <pre className="max-h-40 overflow-y-auto whitespace-pre rounded-lg border border-line bg-hover p-3 font-mono text-[11px] leading-relaxed text-fg-muted">
                   {data.diff}
                 </pre>
               )}
@@ -1121,37 +1123,33 @@ function CompactPermissionEvent({ data, onDecision }) {
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line px-4 py-2.5">
-            <button
-              onClick={() => onDecision?.(data?.requestId, 'deny')}
-              disabled={data?.resolving || expired}
-              className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-            >
-              Deny
-            </button>
-            <button
-              onClick={() => onDecision?.(data?.requestId, 'allow')}
-              disabled={data?.resolving || expired}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white transition-colors disabled:opacity-50 shadow-sm ${dangerous ? 'bg-rose-600 hover:bg-rose-700' : 'bg-gray-900 hover:bg-gray-800 dark:bg-gray-700 dark:hover:bg-gray-600'}`}
-            >
-              {data?.resolving && <Loader2 className="h-3 w-3 animate-spin" />}
-              Approve once
-            </button>
-            {!data?.unsandboxed && <button
-              onClick={() => onDecision?.(data?.requestId, 'allow_session')}
-              disabled={data?.resolving || expired}
-              className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
-            >
-              Trust this run
-            </button>}
-            {!data?.unsandboxed && <button
-              onClick={() => onDecision?.(data?.requestId, 'allow_always')}
-              disabled={data?.resolving || expired}
-              title={`Always allow ${data?.tool} without asking`}
-              className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-950/20"
-            >
-              <ShieldOff className="h-3 w-3" />
-              Always allow
-            </button>}
+        <Button variant="secondary" onClick={() => onDecision?.(data?.requestId, 'deny')} disabled={data?.resolving || expired}>
+          Deny
+        </Button>
+        <Button
+          variant={dangerous ? 'destructive' : 'primary'}
+          onClick={() => onDecision?.(data?.requestId, 'allow')}
+          disabled={expired}
+          loading={Boolean(data?.resolving)}
+        >
+          Approve once
+        </Button>
+        {!data?.unsandboxed && (
+          <Button variant="secondary" onClick={() => onDecision?.(data?.requestId, 'allow_session')} disabled={data?.resolving || expired}>
+            Trust this run
+          </Button>
+        )}
+        {!data?.unsandboxed && (
+          <Button
+            variant="danger"
+            icon={ShieldOff}
+            onClick={() => onDecision?.(data?.requestId, 'allow_always')}
+            disabled={data?.resolving || expired}
+            title={`Always allow ${data?.tool} without asking`}
+          >
+            Always allow
+          </Button>
+        )}
       </div>
     </div>
   );
@@ -1168,7 +1166,7 @@ function ToolsSection({ events, onPermissionDecision, onRetryTool }) {
 
   return (
     <FeedFrame className="mb-1">
-      <div className="ml-1 space-y-0.5 border-l border-gray-100 pl-2 dark:border-gray-800 midnight:border-slate-800">
+      <div className="ml-1 space-y-0.5 border-l border-line pl-2">
         {visibleEvents.map((ev, i) => {
               if (ev.type === 'permission_request') {
                 return <CompactPermissionEvent key={i} data={ev.data} onDecision={onPermissionDecision} />;
@@ -1209,17 +1207,15 @@ function AskUserEvent({ data, onAnswer }) {
 
   return (
     <FeedFrame className="mb-4">
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-900">
+      <div className="overflow-hidden rounded-xl border border-line bg-surface">
         <div className="px-4 py-3.5 flex items-start gap-3">
-          <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center text-gray-500 dark:text-gray-400">
-            <MessageCircle className="w-3.5 h-3.5" />
-          </div>
+          <MessageCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-fg-subtle" />
           <div className="flex-1 min-w-0">
-            <span className="text-xs font-medium text-gray-700 dark:text-gray-200">Agent question</span>
-            <p className="text-sm text-gray-800 dark:text-gray-100 mt-1 leading-relaxed">{data?.question}</p>
+            <span className="text-[13px] font-medium text-fg">Agent question</span>
+            <p className="text-[14px] text-fg mt-1 leading-relaxed">{data?.question}</p>
 
             {answered ? (
-              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 italic">You replied: &quot;{chosenAnswer}&quot;</p>
+              <p className="mt-2 text-[13px] text-fg-muted">You replied: &quot;{chosenAnswer}&quot;</p>
             ) : (
               <>
                 {data?.choices?.length > 0 && (
@@ -1228,7 +1224,7 @@ function AskUserEvent({ data, onAnswer }) {
                       <button
                         key={i}
                         onClick={() => submit(choice)}
-                        className="px-2.5 py-1 text-xs rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                        className="px-2.5 py-1 text-[13px] rounded-lg border border-line text-fg hover:border-line-strong hover:bg-hover transition-colors"
                       >
                         {choice}
                       </button>
@@ -1246,22 +1242,23 @@ function AskUserEvent({ data, onAnswer }) {
                     onChange={e => setInputValue(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') submit(); }}
                     placeholder={data?.default ? `Default: ${data.default}` : 'Type your answer…'}
-                    className="flex-1 text-xs bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-1.5 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
+                    className="h-8 min-w-0 flex-1 rounded-lg border border-line-strong bg-canvas px-2.5 text-[13px] text-fg outline-none placeholder:text-fg-subtle focus:border-accent focus:ring-2 focus:ring-accent/20"
                     autoFocus
                   />
-                  <button
+                  <Button
+                    variant="primary"
+                    size="icon"
+                    icon={Send}
+                    aria-label="Send"
                     onClick={() => submit()}
                     disabled={!inputValue.trim() && !data?.default}
-                    className="px-2.5 py-1.5 text-xs rounded-lg bg-gray-900 hover:bg-gray-800 disabled:bg-gray-300 text-white flex items-center gap-1 transition-colors dark:bg-gray-700 dark:hover:bg-gray-600"
-                  >
-                    <Send className="w-3 h-3" />
-                  </button>
+                  />
                 </div>
                 )}
                 {data?.default && (
                   <button
                     onClick={() => submit(data.default)}
-                    className="mt-1 text-[10px] text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                    className="mt-1.5 text-[12px] text-fg-muted hover:text-fg transition-colors"
                   >
                     Use default: &quot;{data.default}&quot;
                   </button>
@@ -1275,6 +1272,8 @@ function AskUserEvent({ data, onAnswer }) {
   );
 }
 
+// A source the answer used. No favicon: fetching one would tell a third party
+// about every link, as in the answer's own links.
 function SourceChip({ source }) {
   const [open, setOpen] = useState(false);
   const { workbenchPreferences } = useUiPreferences();
@@ -1287,49 +1286,36 @@ function SourceChip({ source }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-white dark:bg-gray-900 midnight:bg-slate-900 px-2.5 py-1.5 text-xs text-gray-600 dark:text-gray-300 midnight:text-slate-300 hover:border-blue-300 dark:hover:border-blue-700 midnight:hover:border-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/20 midnight:hover:bg-blue-950/20 transition-colors max-w-[16rem]"
+        className="inline-flex max-w-[16rem] items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[12px] text-fg-muted transition-colors hover:border-line-strong hover:bg-hover hover:text-fg"
         title={source.title || source.url}
       >
-        <img
-          src={`https://icons.duckduckgo.com/ip3/${domain}.ico`}
-          alt=""
-          className="w-3.5 h-3.5 rounded flex-shrink-0 object-contain"
-          onError={(e) => { e.target.style.display = 'none'; }}
-        />
+        <Globe className="h-3.5 w-3.5 flex-shrink-0 text-fg-subtle" />
         <span className="truncate">{source.title || domain}</span>
-        <ExternalLink className="w-3 h-3 flex-shrink-0 opacity-50" />
       </button>
-      {open && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setOpen(false)} />
-          <div className="relative w-full max-w-sm bg-white dark:bg-gray-900 midnight:bg-slate-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700 overflow-hidden">
-            <div className="flex items-center justify-between px-5 pt-5 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
-                  <Link2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                </div>
-                <span className="font-semibold text-fg text-sm">Web source</span>
-              </div>
-              <button onClick={() => setOpen(false)} className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-slate-800 transition-colors text-lg leading-none">×</button>
-            </div>
-            <div className="mx-5 mb-4 px-3 py-2.5 bg-gray-50 dark:bg-gray-800 midnight:bg-slate-800 rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700">
-              <div className="flex items-center gap-2 min-w-0">
-                <img src={`https://icons.duckduckgo.com/ip3/${domain}.ico`} alt="" className="w-4 h-4 rounded flex-shrink-0 object-contain" onError={(e) => { e.target.style.display = 'none'; }} />
-                <span className="text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400 truncate font-mono select-all">{source.url}</span>
-              </div>
-              {source.title && <p className="mt-1 text-sm font-medium text-fg truncate">{source.title}</p>}
-              {source.snippet && <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400 line-clamp-3">{source.snippet}</p>}
-            </div>
-            <div className="flex gap-2 px-5 pb-5">
-              <button onClick={() => setOpen(false)} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-slate-300 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 hover:bg-gray-200 dark:hover:bg-gray-700 midnight:hover:bg-slate-700 transition-colors">Close</button>
-              <button onClick={() => {
+      <Dialog
+        open={open}
+        size="sm"
+        title={source.title || domain}
+        onClose={() => setOpen(false)}
+        footer={(
+          <>
+            <Button variant="ghost" onClick={() => setOpen(false)}>Close</Button>
+            <Button
+              variant="primary"
+              icon={ExternalLink}
+              onClick={() => {
                 openWebLink(source.url, workbenchPreferences.browserOpenLinks);
                 setOpen(false);
-              }} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 transition-colors flex items-center justify-center gap-1.5">{workbenchPreferences.browserOpenLinks === 'system' ? 'Open in browser' : 'Open in Asyncat'}</button>
-            </div>
-          </div>
-        </div>
-      )}
+              }}
+            >
+              {workbenchPreferences.browserOpenLinks === 'system' ? 'Open in browser' : 'Open in Asyncat'}
+            </Button>
+          </>
+        )}
+      >
+        <p className="select-all break-all font-mono text-[12px] leading-5 text-fg-muted">{source.url}</p>
+        {source.snippet && <p className="mt-2 text-[13px] leading-5 text-fg-muted">{source.snippet}</p>}
+      </Dialog>
     </>
   );
 }
@@ -1341,10 +1327,10 @@ function SourcesPanel({ searchEvent }) {
   if (sources.length === 0 && images.length === 0) return null;
 
   return (
-    <div className="mt-4 space-y-3 border-t border-gray-100 pt-3 dark:border-gray-800 midnight:border-slate-800">
+    <div className="mt-4 space-y-3 border-t border-line pt-3">
       {images.length > 0 && (
         <div className="space-y-1.5">
-          <div className="flex items-center gap-1.5 text-[11px] font-medium text-fg-subtle">
+          <div className="flex items-center gap-1.5 text-[12px] text-fg-subtle">
             <Image className="w-3 h-3" />
             <span>Images for this answer ({images.length})</span>
           </div>
@@ -1357,18 +1343,17 @@ function SourcesPanel({ searchEvent }) {
                   const url = img.url || img.image;
                   openWebLink(url, workbenchPreferences.browserOpenLinks);
                 }}
-                className="group relative h-24 w-24 flex-shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-gray-100 transition hover:border-blue-300 hover:shadow-md dark:border-gray-700 dark:bg-gray-800 dark:hover:border-blue-700 midnight:border-slate-700 midnight:bg-slate-800 midnight:hover:border-blue-700"
+                className="group relative h-24 w-24 flex-shrink-0 overflow-hidden rounded-lg border border-line bg-hover transition-colors hover:border-line-strong"
                 title={img.title}
               >
                 <img
                   src={img.thumbnail || img.image}
                   alt={img.title}
-                  className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                  className="w-full h-full object-cover"
                   loading="lazy"
                   onError={(e) => { e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="40" height="40" fill="%23999"%3E%3Crect width="40" height="40" fill="%23eee"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" font-size="10"%3EIMG%3C/text%3E%3C/svg%3E'; }}
                 />
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
-                <ExternalLink className="absolute right-1.5 top-1.5 h-3.5 w-3.5 rounded bg-white/90 p-0.5 text-gray-700 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 dark:bg-gray-900/90 dark:text-gray-200 midnight:bg-slate-900/90 midnight:text-slate-200" />
+                <ExternalLink className="absolute right-1.5 top-1.5 h-3.5 w-3.5 rounded bg-surface p-0.5 text-fg opacity-0 shadow-sm transition-opacity group-hover:opacity-100" />
               </button>
             ))}
           </div>
@@ -1376,7 +1361,7 @@ function SourcesPanel({ searchEvent }) {
       )}
       {sources.length > 0 && (
         <div className="space-y-1.5">
-          <div className="flex items-center gap-1.5 text-[11px] font-medium text-fg-subtle">
+          <div className="flex items-center gap-1.5 text-[12px] text-fg-subtle">
             <Link2 className="w-3 h-3" />
             <span>Sources for this answer ({sources.length})</span>
           </div>
@@ -1473,7 +1458,7 @@ function AnswerEvent({
             highlighted ? 'bg-selected ring-8 ring-selected' : ''
           }`}>
             {!isStoppedRun && data?.bookmarked && (
-              <BookMarked className="mb-2 h-3.5 w-3.5 text-amber-500" />
+              <BookMarked className="mb-2 h-3.5 w-3.5 text-fg-subtle" aria-label="Bookmarked" />
             )}
 
             {/* Answer body — collapsed behind a disclosure when the run was stopped */}
@@ -1482,13 +1467,13 @@ function AnswerEvent({
                 <button
                   type="button"
                   onClick={() => setNotesExpanded(v => !v)}
-                  className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 midnight:text-slate-500 midnight:hover:text-slate-300 transition-colors"
+                  className="flex items-center gap-1.5 text-[12px] text-fg-subtle hover:text-fg transition-colors"
                 >
                   {notesExpanded
                     ? <ChevronDown className="w-3 h-3" />
                     : <ChevronRight className="w-3 h-3" />}
                   Agent notes
-                  {data?.bookmarked && <BookMarked className="ml-0.5 h-3 w-3 text-amber-500" />}
+                  {data?.bookmarked && <BookMarked className="ml-0.5 h-3 w-3" aria-label="Bookmarked" />}
                 </button>
                 {notesExpanded && (
                   <div className="mt-2 pl-4 border-l-2 border-line">
@@ -1507,7 +1492,7 @@ function AnswerEvent({
                   loadSrc={() => audioApi.tts.speak(displayAnswer)}
                   showInfo={true}
                   infoContent={
-                    <span className="ml-1 text-[10px] text-fg-subtle">Read aloud</span>
+                    <span className="ml-1 text-[11px] text-fg-subtle">Read aloud</span>
                   }
                 />
               </div>
@@ -1515,7 +1500,7 @@ function AnswerEvent({
 
             <SourcesPanel searchEvent={data?.searchEvent} />
             {!isStoppedRun && data?.round > 1 && (
-              <p className="text-[10px] text-gray-300 dark:text-gray-700 midnight:text-slate-700 mt-2">{data.round} rounds</p>
+              <p className="text-[11px] text-fg-subtle mt-2">{data.round} rounds</p>
             )}
           </div>
           <div className={`mt-2 flex flex-wrap items-center gap-0.5 transition-opacity group-hover:opacity-100 focus-within:opacity-100 ${isLatest && !isRunning ? 'animate-[fadeIn_240ms_ease-out] opacity-100' : 'opacity-0'}`}>
@@ -1600,12 +1585,10 @@ function sendModelAction(event, action) {
 function ErrorEvent({ data, onRetryGoal, onRunWithAction }) {
   return (
     <FeedFrame className="mb-3">
-      <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-white dark:bg-gray-900 midnight:bg-slate-900 shadow-sm px-4 py-3 flex items-start gap-3">
-        <div className="flex-shrink-0 w-6 h-6 rounded-full border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 flex items-center justify-center mt-0.5">
-          <XCircle className="w-3 h-3 text-red-500" />
-        </div>
+      <div className="rounded-xl border border-line bg-surface px-4 py-3 flex items-start gap-3">
+        <XCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-600 dark:text-red-400" />
         <div className="min-w-0 flex-1">
-          <p className="text-xs text-gray-700 dark:text-gray-200 leading-relaxed">{data?.message || 'Agent encountered an error.'}</p>
+          <p className="text-[13px] leading-5 text-fg">{data?.message || 'Something went wrong in this run.'}</p>
           {data?.code === 'model_unavailable' && (
             <div className="mt-2 flex flex-wrap gap-1.5">
               <Button variant="secondary" size="xs" icon={ArrowLeftRight} onClick={(event) => sendModelAction(event, 'pick')}>
@@ -1618,22 +1601,12 @@ function ErrorEvent({ data, onRetryGoal, onRunWithAction }) {
           )}
           {data?.goal && (
             <div className="mt-2 flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                onClick={() => onRetryGoal?.(data.goal)}
-                className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-              >
-                <RotateCcw className="h-3 w-3" />
+              <Button variant="secondary" size="xs" icon={RotateCcw} onClick={() => onRetryGoal?.(data.goal)}>
                 Retry
-              </button>
-              <button
-                type="button"
-                onClick={() => onRunWithAction?.(data.goal)}
-                className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-              >
-                <Zap className="h-3 w-3" />
+              </Button>
+              <Button variant="ghost" size="xs" icon={Zap} onClick={() => onRunWithAction?.(data.goal)}>
                 Action mode
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -1645,17 +1618,12 @@ function ErrorEvent({ data, onRetryGoal, onRunWithAction }) {
 function StatusEvent({ data, onRunWithAction }) {
   return (
     <FeedFrame className="mb-3">
-      <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
-        <span>{data?.message || 'Agent stopped.'}</span>
+      <div className="flex flex-wrap items-center gap-2 text-[12px] text-fg-subtle">
+        <span>{data?.message || 'The agent stopped.'}</span>
         {(data?.canRetryWithAction || data?.canRetryWithTools) && data?.goal && (
-          <button
-            type="button"
-            onClick={() => onRunWithAction?.(data.goal)}
-            className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-          >
-            <Zap className="w-3 h-3" />
+          <Button variant="secondary" size="xs" icon={Zap} onClick={() => onRunWithAction?.(data.goal)}>
             Run in Action
-          </button>
+          </Button>
         )}
       </div>
     </FeedFrame>
@@ -1665,34 +1633,40 @@ function StatusEvent({ data, onRunWithAction }) {
 const STOP_REASON_CONFIG = {
   max_rounds: {
     icon: TimerOff,
-    color: 'amber',
+    tone: 'warning',
     label: 'Step limit reached',
-    detail: (d) => `Used ${d.rounds ?? '?'} of ${d.maxRounds ?? '?'} steps. Reply to continue the task from where it left off.`,
+    detail: (d) => `Used ${d.rounds ?? '?'} of ${d.maxRounds ?? '?'} steps. Reply to carry on from here.`,
   },
   tool_failure: {
     icon: XCircle,
-    color: 'red',
-    label: 'Stopped — repeated tool failures',
-    detail: () => 'The agent hit too many consecutive tool errors. Check the tools above and try again.',
+    tone: 'error',
+    label: 'Stopped after repeated tool errors',
+    detail: () => 'Too many tool calls failed in a row. Check the steps above and try again.',
   },
   loop_detected: {
     icon: RefreshCw,
-    color: 'amber',
-    label: 'Stopped — loop detected',
-    detail: () => 'The agent detected a repeating cycle and stopped to avoid runaway. Rephrase or add constraints to continue.',
+    tone: 'warning',
+    label: 'Stopped: the agent was repeating itself',
+    detail: () => 'It kept making the same calls. Rephrase or add detail to carry on.',
   },
   reflection_abort: {
     icon: AlertTriangle,
-    color: 'amber',
-    label: 'Stopped — agent determined it was stuck',
-    detail: () => 'Self-reflection concluded progress was blocked. Add more context or try a different approach.',
+    tone: 'warning',
+    label: 'Stopped: the agent was stuck',
+    detail: () => 'It decided it couldn\'t make progress. Add detail or try another way.',
   },
   cancelled: {
     icon: XCircle,
-    color: 'gray',
-    label: 'Cancelled',
-    detail: () => 'Run was stopped by the user.',
+    tone: 'neutral',
+    label: 'Stopped',
+    detail: () => 'You stopped this run.',
   },
+};
+
+const STOP_ICON_TONE = {
+  warning: 'text-amber-600 dark:text-amber-400',
+  error: 'text-red-600 dark:text-red-400',
+  neutral: 'text-fg-subtle',
 };
 
 function StopReasonBanner({ data, toolResults = [] }) {
@@ -1705,88 +1679,52 @@ function StopReasonBanner({ data, toolResults = [] }) {
   const failed = toolResults.filter(ev => ev.result?.success === false).length;
   const hasStats = toolResults.length > 0;
 
-  const colorMap = {
-    amber: {
-      wrap: 'border-amber-200/70 bg-amber-50/60 dark:border-amber-800/40 dark:bg-amber-950/15',
-      header: 'text-amber-700 dark:text-amber-400',
-      icon: 'text-amber-500 dark:text-amber-400',
-      pill: 'bg-amber-100/80 dark:bg-amber-900/30',
-    },
-    red: {
-      wrap: 'border-red-200/70 bg-red-50/60 dark:border-red-800/40 dark:bg-red-950/15',
-      header: 'text-red-700 dark:text-red-400',
-      icon: 'text-red-500 dark:text-red-400',
-      pill: 'bg-red-100/80 dark:bg-red-900/30',
-    },
-    gray: {
-      wrap: 'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/40',
-      header: 'text-gray-600 dark:text-gray-400',
-      icon: 'text-gray-400 dark:text-gray-500',
-      pill: 'bg-gray-100 dark:bg-gray-800',
-    },
-  };
-  const c = colorMap[cfg.color];
-
   return (
     <FeedFrame className="mb-4">
-      <div className={`rounded-xl border ${c.wrap} overflow-hidden`}>
-        {/* Header row */}
-        <div className={`flex items-center gap-2.5 px-3.5 py-2.5 ${c.header}`}>
-          <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${c.icon}`} />
+      <div className="overflow-hidden rounded-xl border border-line bg-surface">
+        <div className="flex items-start gap-3 px-4 py-3">
+          <Icon className={`mt-0.5 h-4 w-4 flex-shrink-0 ${STOP_ICON_TONE[cfg.tone]}`} />
           <div className="min-w-0 flex-1">
-            <p className="text-[12px] font-semibold leading-tight">{cfg.label}</p>
-            <p className="mt-0.5 text-[11px] opacity-75 leading-relaxed">{cfg.detail(data)}</p>
+            <p className="text-[13px] font-medium text-fg">{cfg.label}</p>
+            <p className="mt-0.5 text-[12px] leading-5 text-fg-muted">{cfg.detail(data)}</p>
           </div>
           {hasStats && (
-            <div className="flex items-center gap-1.5 shrink-0">
-              {succeeded > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100/80 dark:bg-emerald-950/40 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
-                  <CheckCircle2 className="w-2.5 h-2.5" />
-                  {succeeded}
-                </span>
-              )}
-              {failed > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-red-100/80 dark:bg-red-950/40 px-2 py-0.5 text-[10px] font-medium text-red-700 dark:text-red-400">
-                  <XCircle className="w-2.5 h-2.5" />
-                  {failed}
-                </span>
-              )}
-            </div>
+            <span className="shrink-0 text-[12px] tabular-nums text-fg-subtle">
+              {succeeded} done{failed > 0 ? <span className="text-red-600 dark:text-red-400"> · {failed} failed</span> : null}
+            </span>
           )}
         </div>
 
-        {/* Tool result grid — show if there's any tool history */}
         {hasStats && (
           <>
-            <div className={`border-t ${cfg.color === 'gray' ? 'border-gray-200 dark:border-gray-700' : cfg.color === 'red' ? 'border-red-200/50 dark:border-red-800/30' : 'border-amber-200/50 dark:border-amber-800/30'}`}>
-              <button
-                type="button"
-                onClick={() => setExpanded(v => !v)}
-                className={`flex w-full items-center gap-1.5 px-3.5 py-1.5 text-left text-[10px] font-medium opacity-60 hover:opacity-90 transition-opacity ${c.header}`}
-              >
-                {expanded
-                  ? <ChevronDown className="w-3 h-3" />
-                  : <ChevronRight className="w-3 h-3" />}
-                {expanded ? 'Hide' : 'Show'} {toolResults.length} operation{toolResults.length !== 1 ? 's' : ''}
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setExpanded(v => !v)}
+              aria-expanded={expanded}
+              className="flex w-full items-center gap-1.5 border-t border-line px-4 py-2 text-left text-[12px] text-fg-muted transition-colors hover:bg-hover hover:text-fg"
+            >
+              {expanded
+                ? <ChevronDown className="w-3 h-3" />
+                : <ChevronRight className="w-3 h-3" />}
+              {expanded ? 'Hide' : 'Show'} {toolResults.length} step{toolResults.length !== 1 ? 's' : ''}
+            </button>
 
             {expanded && (
-              <div className={`border-t ${cfg.color === 'gray' ? 'border-gray-100 dark:border-gray-800' : cfg.color === 'red' ? 'border-red-100/40 dark:border-red-900/20' : 'border-amber-100/40 dark:border-amber-900/20'} px-3.5 py-2 space-y-0.5 max-h-48 overflow-y-auto`}>
+              <div className="max-h-48 space-y-0.5 overflow-y-auto border-t border-line px-4 py-2">
                 {toolResults.map((ev, i) => {
                   const ok = ev.result?.success !== false;
                   const name = ev.data?.tool || '?';
                   return (
                     <div key={i} className="flex items-center gap-2 py-0.5">
                       {ok
-                        ? <CheckCircle2 className="w-3 h-3 shrink-0 text-emerald-500 dark:text-emerald-400" />
-                        : <XCircle className="w-3 h-3 shrink-0 text-red-500 dark:text-red-400" />
+                        ? <CheckCircle2 className="w-3 h-3 shrink-0 text-fg-subtle" />
+                        : <XCircle className="w-3 h-3 shrink-0 text-red-600 dark:text-red-400" />
                       }
-                      <span className={`text-[11px] font-mono truncate ${ok ? 'text-gray-600 dark:text-gray-300' : 'text-red-600 dark:text-red-400 font-medium'}`}>
+                      <span className={`truncate font-mono text-[12px] ${ok ? 'text-fg-muted' : 'text-red-600 dark:text-red-400'}`}>
                         {name}
                       </span>
                       {!ok && ev.result?.error && (
-                        <span className="truncate text-[10px] text-red-500/70 dark:text-red-500/60 ml-auto max-w-[40%]">
+                        <span className="ml-auto max-w-[40%] truncate text-[11px] text-fg-subtle">
                           {ev.result.error}
                         </span>
                       )}
@@ -1818,31 +1756,44 @@ function RunDivider({ event, data }) {
     return (
       <FeedFrame className="my-6">
         <div className="flex items-center gap-3">
-          <div className="h-px flex-1 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800" />
+          <div className="h-px flex-1 bg-line" />
           <div
-            className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium text-fg-subtle"
+            className="inline-flex items-center gap-1.5 px-2 text-[12px] text-fg-subtle"
             title={detail || 'Older context was summarized for the model'}
           >
             <RotateCcw className="h-3 w-3" />
-            <span>Context automatically compacted</span>
+            <span>Older messages summarized</span>
           </div>
-          <div className="h-px flex-1 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800" />
+          <div className="h-px flex-1 bg-line" />
         </div>
       </FeedFrame>
     );
   }
 
   return (
-    <div className="my-6">
+    <FeedFrame className="my-6">
       <div className="flex items-center gap-3 mb-2">
-        <div className="flex-1 h-px bg-gray-100 dark:bg-gray-800" />
-        <span className="text-[10px] text-gray-300 dark:text-gray-700 font-medium tracking-widest uppercase">New goal</span>
-        <div className="flex-1 h-px bg-gray-100 dark:bg-gray-800" />
+        <div className="flex-1 h-px bg-line" />
+        <span className="text-[12px] text-fg-subtle">New goal</span>
+        <div className="flex-1 h-px bg-line" />
       </div>
       {data?.goal && (
-        <p className="text-xs text-gray-500 dark:text-gray-400 text-center font-medium">{data.goal}</p>
+        <p className="text-[13px] text-fg-muted text-center">{data.goal}</p>
       )}
-    </div>
+    </FeedFrame>
+  );
+}
+
+// A quiet one-line note in the feed: a grey icon and muted text. Memory,
+// corrections, compaction and previews all look alike.
+function FeedNotice({ icon: Icon, title, children }) {
+  return (
+    <FeedFrame className="mb-2">
+      <div className="flex min-w-0 items-center gap-2 px-2 py-1 text-[12px] text-fg-muted" title={title}>
+        <Icon className="h-3.5 w-3.5 flex-shrink-0 text-fg-subtle" />
+        <span className="min-w-0 truncate">{children}</span>
+      </div>
+    </FeedFrame>
   );
 }
 
@@ -1850,32 +1801,34 @@ function SkillsLoadedEvent({ data }) {
   const [expanded, setExpanded] = useState(false);
   const skills = data?.skills || [];
   if (skills.length === 0) return null;
-  const methodLabel = data?.method === 'llm' ? 'model-selected' : null;
+  const methodLabel = data?.method === 'llm' ? 'picked by the model' : null;
 
   return (
     <FeedFrame className="mb-2">
       <button
+        type="button"
         onClick={() => setExpanded(v => !v)}
-        className="flex items-center gap-1.5 py-1 rounded-md hover:text-gray-500 dark:hover:text-gray-400 transition-colors text-left"
+        aria-expanded={expanded}
+        className="flex items-center gap-1.5 rounded-md py-1 text-left text-fg-muted transition-colors hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
       >
         {expanded
-          ? <ChevronDown className="w-3 h-3 text-gray-400 dark:text-gray-500 flex-shrink-0" />
-          : <ChevronRight className="w-3 h-3 text-gray-400 dark:text-gray-500 flex-shrink-0" />}
-        <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 tracking-wide select-none">
+          ? <ChevronDown className="w-3 h-3 text-fg-subtle flex-shrink-0" />
+          : <ChevronRight className="w-3 h-3 text-fg-subtle flex-shrink-0" />}
+        <span className="text-[12px] select-none">
           Skills loaded · {skills.map(s => s.name).join(', ')}
           {methodLabel ? ` · ${methodLabel}` : ''}
         </span>
       </button>
       {expanded && (
-        <div className="mt-1 pl-5 space-y-1">
+        <div className="mt-1 space-y-1 border-l-2 border-line pl-3">
           {data?.reason && (
-            <p className="text-[10px] text-gray-400 dark:text-gray-600">{data.reason}</p>
+            <p className="text-[12px] text-fg-subtle">{data.reason}</p>
           )}
           {skills.map(s => (
-            <div key={s.name} className="flex items-start gap-1.5">
-              <span className="text-[10px] font-medium text-indigo-500 dark:text-indigo-400">{s.name}</span>
+            <div key={s.name} className="flex items-start gap-1.5 text-[12px]">
+              <span className="font-medium text-fg">{s.name}</span>
               {s.description && (
-                <span className="text-[10px] text-gray-400 dark:text-gray-600">— {s.description}</span>
+                <span className="text-fg-muted">{s.description}</span>
               )}
             </div>
           ))}
@@ -1892,29 +1845,15 @@ function CompactionEvent({ data }) {
   const after = data?.tokensAfter ? (data.tokensAfter / 1000).toFixed(1) : '?';
 
   return (
-    <FeedFrame className="mb-2">
-      <div className="flex items-center gap-2 py-1 px-2 rounded-md bg-amber-50/50 dark:bg-amber-900/10 border border-amber-200/30 dark:border-amber-800/20">
-        <RotateCcw className="w-3 h-3 text-amber-500 dark:text-amber-400 flex-shrink-0" />
-        <span className="text-[11px] text-amber-600 dark:text-amber-400">
-          Context compacted: {dropped} messages summarized ({before}k → {after}k tokens)
-        </span>
-      </div>
-    </FeedFrame>
+    <FeedNotice icon={RotateCcw}>
+      Summarized {dropped} older messages ({before}k → {after}k tokens)
+    </FeedNotice>
   );
 }
 
 // Correction learned notification
 function CorrectionLearnedEvent() {
-  return (
-    <FeedFrame className="mb-2">
-      <div className="flex items-center gap-2 py-1 px-2 rounded-md bg-violet-50/50 dark:bg-violet-900/10 border border-violet-200/30 dark:border-violet-800/20">
-        <Brain className="w-3 h-3 text-violet-500 dark:text-violet-400 flex-shrink-0" />
-        <span className="text-[11px] text-violet-600 dark:text-violet-400">
-          Correction stored — will remember for future tasks
-        </span>
-      </div>
-    </FeedFrame>
-  );
+  return <FeedNotice icon={Brain}>Noted your correction for next time</FeedNotice>;
 }
 
 // Memory saved/updated notification
@@ -1922,14 +1861,9 @@ function MemorySavedEvent({ data }) {
   const label = data?.action === 'updated' ? 'Memory updated' : 'Memory saved';
   const detail = [data?.key, data?.kind ? `(${data.kind})` : null].filter(Boolean).join(' ');
   return (
-    <FeedFrame className="mb-2">
-      <div className="flex items-center gap-2 py-1 px-2 rounded-md bg-sky-50/50 dark:bg-sky-900/10 border border-sky-200/30 dark:border-sky-800/20">
-        <BookMarked className="w-3 h-3 text-sky-500 dark:text-sky-400 flex-shrink-0" />
-        <span className="text-[11px] text-sky-600 dark:text-sky-400 truncate">
-          {label}{detail ? `: ${detail}` : ''}
-        </span>
-      </div>
-    </FeedFrame>
+    <FeedNotice icon={BookMarked}>
+      {label}{detail ? `: ${detail}` : ''}
+    </FeedNotice>
   );
 }
 
@@ -2041,33 +1975,26 @@ export function CurrentPlanPanel({ data, isRunning, sessionId, className = '' })
   if (editing) {
     return (
       <div className={className}>
-        <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-900 px-4 py-3 shadow-sm">
+        <div className="rounded-xl border border-line bg-surface px-4 py-3 shadow-sm">
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs font-medium text-gray-700 dark:text-gray-200">Edit Plan</span>
-            <span className="text-[10px] text-gray-400">One step per line</span>
+            <span className="text-[13px] font-medium text-fg">Edit plan</span>
+            <span className="text-[12px] text-fg-subtle">One step per line</span>
           </div>
           <textarea
-            className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-800 dark:text-gray-100 p-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-400"
+            aria-label="Plan steps, one per line"
+            className="w-full resize-none rounded-lg border border-line-strong bg-canvas p-2 text-[13px] leading-6 text-fg outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
             rows={Math.max(3, editLines.split('\n').length + 1)}
             value={editLines}
             onChange={e => setEditLines(e.target.value)}
             autoFocus
           />
           <div className="flex items-center gap-2 mt-2">
-            <button
-              onClick={savePlan}
-              disabled={saving}
-              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-            >
-              {saving ? <Spinner className="w-3 h-3 animate-spin" /> : null}
+            <Button variant="primary" onClick={savePlan} loading={saving}>
               Save
-            </button>
-            <button
-              onClick={() => setEditing(false)}
-              className="rounded-lg px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400"
-            >
+            </Button>
+            <Button variant="ghost" onClick={() => setEditing(false)}>
               Cancel
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -2077,16 +2004,14 @@ export function CurrentPlanPanel({ data, isRunning, sessionId, className = '' })
   if (isDone && !isRunning) {
     return (
       <div className={className}>
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-white dark:bg-gray-900 midnight:bg-slate-900 px-4 py-2.5 text-xs shadow-sm">
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface px-4 py-2.5 text-[13px] shadow-sm">
           <div className="flex min-w-0 items-center gap-2">
-            <svg className="h-3.5 w-3.5 shrink-0 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-            <span className="font-medium text-gray-700 dark:text-gray-200">
+            <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" strokeWidth={2.5} />
+            <span className="font-medium text-fg">
               Plan done
             </span>
           </div>
-          <span className="shrink-0 tabular-nums text-gray-400 dark:text-gray-500">
+          <span className="shrink-0 text-[12px] tabular-nums text-fg-subtle">
             {completed}/{total}
           </span>
         </div>
@@ -2096,23 +2021,23 @@ export function CurrentPlanPanel({ data, isRunning, sessionId, className = '' })
 
   return (
     <div className={className}>
-      <div className="rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-slate-700 bg-white dark:bg-gray-900 midnight:bg-slate-900 px-4 py-3 shadow-sm">
+      <div className="rounded-xl border border-line bg-surface px-4 py-3 shadow-sm">
         <div className="flex items-center gap-2 mb-2.5">
-          <span className="text-xs font-medium text-gray-700 dark:text-gray-200">
+          <span className="text-[13px] font-medium text-fg">
             Plan
           </span>
-          <span className="text-[10px] tabular-nums text-gray-400 dark:text-gray-500">
+          <span className="text-[12px] tabular-nums text-fg-subtle">
             {completed}/{total}
           </span>
           {completed === total && total > 0 && (
-            <span className="text-[10px] font-medium text-emerald-500">Done</span>
+            <span className="text-[12px] font-medium text-emerald-600 dark:text-emerald-400">Done</span>
           )}
           {isStaleActivePlan && (
-            <span className="text-[10px] font-medium text-amber-500">Stopped</span>
+            <span className="text-[12px] font-medium text-amber-600 dark:text-amber-400">Stopped</span>
           )}
           {hasDeps && blockedCount > 0 && (
             <span
-              className="inline-flex items-center gap-1 text-[10px] font-medium text-fg-subtle"
+              className="inline-flex items-center gap-1 text-[12px] text-fg-subtle"
               title={`${readyCount} ready to start · ${blockedCount} waiting on dependencies`}
             >
               <GitBranch className="h-3 w-3" />
@@ -2120,15 +2045,17 @@ export function CurrentPlanPanel({ data, isRunning, sessionId, className = '' })
             </span>
           )}
           {total > 0 && (
-            <span className="ml-auto text-[10px] tabular-nums font-medium text-gray-400 dark:text-gray-500">
+            <span className="ml-auto text-[12px] tabular-nums text-fg-subtle">
               {pct}%
             </span>
           )}
           {sessionId && (
             <button
+              type="button"
               onClick={openEditor}
               title="Edit plan"
-              className="ml-1 rounded p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+              aria-label="Edit plan"
+              className="ml-1 flex h-6 w-6 items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-hover hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
             >
               <Pencil className="w-3 h-3" />
             </button>
@@ -2136,9 +2063,9 @@ export function CurrentPlanPanel({ data, isRunning, sessionId, className = '' })
         </div>
         {/* Progress bar */}
         {total > 0 && (
-          <div className="mb-3 h-1 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800">
+          <div className="mb-3 h-1 w-full overflow-hidden rounded-full bg-hover">
             <div
-              className={`h-full rounded-full transition-all duration-700 ease-out ${completed === total ? 'bg-emerald-500' : 'bg-gray-800 dark:bg-gray-200'}`}
+              className={`h-full rounded-full transition-all duration-700 ease-out ${completed === total ? 'bg-emerald-500' : 'bg-fg'}`}
               style={{ width: `${pct}%` }}
             />
           </div>
@@ -2161,20 +2088,20 @@ export function CurrentPlanPanel({ data, isRunning, sessionId, className = '' })
             <li
               key={item.id || i}
               onClick={onItemClick}
-              className={`flex items-start gap-2.5 rounded-md -mx-1 px-1 py-0.5 text-[12px] leading-snug transition-colors ${
+              className={`flex items-start gap-2.5 rounded-md -mx-1 px-1 py-0.5 text-[13px] leading-snug transition-colors ${
                 blocked ? 'cursor-pointer' : ''
               } ${
-                isHighlighted ? 'bg-amber-50 dark:bg-amber-950/20 midnight:bg-amber-950/20 ring-1 ring-amber-200 dark:ring-amber-900/40 midnight:ring-amber-900/40' : ''
+                isHighlighted ? 'bg-selected' : ''
               }`}
             >
               <span className={`mt-0.5 shrink-0 ${
                 item.status === 'completed'
-                  ? 'text-emerald-500 dark:text-emerald-400'
+                  ? 'text-fg-subtle'
                   : item.status === 'in_progress'
-                    ? (isRunning ? 'text-gray-700 dark:text-gray-200' : 'text-amber-500 dark:text-amber-400')
+                    ? (isRunning ? 'text-fg' : 'text-amber-600 dark:text-amber-400')
                     : isReady
-                      ? 'text-emerald-400 dark:text-emerald-500 midnight:text-emerald-500'
-                      : 'text-gray-300 dark:text-gray-600 midnight:text-gray-600'
+                      ? 'text-fg-muted'
+                      : 'text-fg-subtle'
               }`}>
                 {item.status === 'completed' ? (
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
@@ -2193,18 +2120,18 @@ export function CurrentPlanPanel({ data, isRunning, sessionId, className = '' })
               <span className="min-w-0 flex-1">
                 <span className={`block ${
                   item.status === 'completed'
-                    ? 'text-gray-400 dark:text-gray-500 midnight:text-gray-500'
+                    ? 'text-fg-subtle'
                     : item.status === 'in_progress'
-                      ? 'font-medium text-gray-800 dark:text-gray-100 midnight:text-slate-100'
+                      ? 'font-medium text-fg'
                       : blocked
                         ? 'text-fg-subtle'
-                        : 'text-gray-600 dark:text-gray-400 midnight:text-slate-400'
+                        : 'text-fg-muted'
                 }`}>
                   {item.status === 'in_progress' && item.activeForm ? item.activeForm : item.content}
                 </span>
                 {waits.length > 0 && (
-                  <span className="mt-0.5 flex items-center gap-1 text-[10px] text-fg-subtle" title={`Waiting on: ${waits.join(', ')} — click to highlight`}>
-                    <GitBranch className="h-2.5 w-2.5 shrink-0" />
+                  <span className="mt-0.5 flex items-center gap-1 text-[11px] text-fg-subtle" title={`Waiting on: ${waits.join(', ')} — click to highlight`}>
+                    <GitBranch className="h-3 w-3 shrink-0" />
                     <span className="truncate">Waiting on: {waits.join(', ')}</span>
                   </span>
                 )}
@@ -2264,12 +2191,12 @@ function MediaThumb({ item }) {
   }, [item.result?.path, item.type, media.path, media.rootId, media.url]);
 
   if (item.type === 'image') {
-    return src ? <img src={src} alt="" className="h-14 w-14 rounded-lg object-cover" /> : <Image className="h-5 w-5 text-gray-400" />;
+    return src ? <img src={src} alt="" className="h-14 w-14 rounded-lg object-cover" /> : <Image className="h-5 w-5 text-fg-subtle" />;
   }
   if (item.type === 'audio') {
-    return <Volume2 className="h-5 w-5 text-emerald-500" />;
+    return <Volume2 className="h-5 w-5 text-fg-subtle" />;
   }
-  return <FilePlus className="h-5 w-5 text-fuchsia-500" />;
+  return <FilePlus className="h-5 w-5 text-fg-subtle" />;
 }
 
 function GeneratedMediaLibrary({ events }) {
@@ -2282,13 +2209,14 @@ function GeneratedMediaLibrary({ events }) {
       <button
         type="button"
         onClick={() => setExpanded(v => !v)}
-        className="flex w-full items-center justify-between gap-3 rounded-lg px-1 py-1.5 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-900/60"
+        aria-expanded={expanded}
+        className="flex w-full items-center justify-between gap-3 rounded-lg px-1 py-1.5 text-left transition-colors hover:bg-hover"
       >
         <span className="flex min-w-0 items-center gap-2">
-          {expanded ? <ChevronDown className="h-3.5 w-3.5 text-gray-400" /> : <ChevronRight className="h-3.5 w-3.5 text-gray-400" />}
-          <Image className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />
-          <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">Generated media</span>
-          <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">{items.length}</span>
+          {expanded ? <ChevronDown className="h-3.5 w-3.5 text-fg-subtle" /> : <ChevronRight className="h-3.5 w-3.5 text-fg-subtle" />}
+          <Image className="h-3.5 w-3.5 text-fg-subtle" />
+          <span className="text-[13px] font-medium text-fg-muted">Generated media</span>
+          <span className="rounded-md bg-hover px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-fg-muted">{items.length}</span>
         </span>
       </button>
       {expanded && (
@@ -2306,13 +2234,13 @@ function GeneratedMediaLibrary({ events }) {
                 ? `${item.result?.audio_size || 'Audio'} · ${item.result?.voice || 'TTS'}`
                 : artifact?.type || 'artifact';
             return (
-              <div key={item.id} className="flex min-w-0 items-center gap-3 rounded-lg border border-gray-200 bg-white p-2 dark:border-gray-800 dark:bg-gray-900/60">
-                <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gray-50 dark:bg-gray-950">
+              <div key={item.id} className="flex min-w-0 items-center gap-3 rounded-lg border border-line bg-surface p-2">
+                <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-hover">
                   <MediaThumb item={item} />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-xs font-semibold text-gray-700 dark:text-gray-200">{label}</span>
-                  <span className="mt-0.5 block truncate text-[10px] text-gray-400 dark:text-gray-500">{detail}</span>
+                  <span className="block truncate text-[13px] font-medium text-fg">{label}</span>
+                  <span className="mt-0.5 block truncate text-[11px] text-fg-subtle">{detail}</span>
                 </span>
               </div>
             );
@@ -2429,7 +2357,7 @@ function RunSummaryCard({ events, runStartedAt, sessionId, session, onViewArtifa
   const summaryParts = [];
   if (hasArtifacts) summaryParts.push(`${runArtifacts.length} artifact${runArtifacts.length !== 1 ? 's' : ''}`);
   if (hasFiles) summaryParts.push(`${files.length} file${files.length !== 1 ? 's' : ''}`);
-  if (hasMemoryActivity) summaryParts.push(`${memoriesSaved} mem`);
+  if (hasMemoryActivity) summaryParts.push(`${memoriesSaved} ${memoriesSaved === 1 ? 'memory' : 'memories'}`);
   if (elapsedMs > 0) summaryParts.push(formatElapsed(elapsedMs));
   const summaryLine = summaryParts.join(' · ');
 
@@ -2439,16 +2367,16 @@ function RunSummaryCard({ events, runStartedAt, sessionId, session, onViewArtifa
       <button
         type="button"
         onClick={() => setExpanded(v => !v)}
-        className="group flex w-full items-center gap-1.5 rounded-md py-1 text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-gray-300 dark:focus-visible:ring-gray-700"
+        aria-expanded={expanded}
+        className="group flex w-full items-center gap-1.5 rounded-md py-1 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
       >
         {expanded
-          ? <ChevronDown className="h-3 w-3 flex-shrink-0 text-gray-400 dark:text-gray-500 transition-colors" />
-          : <ChevronRight className="h-3 w-3 flex-shrink-0 text-gray-400 dark:text-gray-500 transition-colors" />}
-        <CheckCircle2 className="h-3 w-3 flex-shrink-0 text-emerald-500 dark:text-emerald-400" />
-        <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 group-hover:text-gray-500 dark:group-hover:text-gray-400 transition-colors truncate">
+          ? <ChevronDown className="h-3 w-3 flex-shrink-0 text-fg-subtle transition-colors" />
+          : <ChevronRight className="h-3 w-3 flex-shrink-0 text-fg-subtle transition-colors" />}
+        <span className="text-[12px] text-fg-muted group-hover:text-fg transition-colors truncate">
           Changes{summaryLine ? ` · ${summaryLine}` : ''}
         </span>
-        <div className="h-px flex-1 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 ml-1" />
+        <div className="h-px flex-1 bg-line ml-1" />
       </button>
 
       {/* Expanded detail — no card border, just indented sections */}
@@ -2457,9 +2385,9 @@ function RunSummaryCard({ events, runStartedAt, sessionId, session, onViewArtifa
           {/* Dev server hint */}
           {previewUrl && (
             <div className="flex items-center gap-2 py-1.5">
-              <Globe className="h-3 w-3 text-emerald-500 dark:text-emerald-400 flex-shrink-0" />
-              <span className="text-[11px] text-emerald-700 dark:text-emerald-300">
-                Dev server at <code className="font-mono text-[10px]">{previewUrl}</code> — click <strong>Preview</strong> in the toolbar.
+              <Globe className="h-3.5 w-3.5 text-fg-subtle flex-shrink-0" />
+              <span className="text-[12px] text-fg-muted">
+                Dev server at <code className="font-mono text-fg">{previewUrl}</code>. Open it with <span className="font-medium text-fg">Preview</span> in the toolbar.
               </span>
             </div>
           )}
@@ -2467,7 +2395,7 @@ function RunSummaryCard({ events, runStartedAt, sessionId, session, onViewArtifa
           {/* Artifacts */}
           {hasArtifacts && (
             <div className="py-1.5 space-y-1">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-1.5">Artifacts</p>
+              <p className="text-[12px] text-fg-subtle mb-1.5">Artifacts</p>
               {runArtifacts.map((ev, i) => (
                 <ArtifactResultCard key={`run_art_${i}`} result={ev.result} onViewInPanel={onViewArtifactInPanel} />
               ))}
@@ -2477,10 +2405,10 @@ function RunSummaryCard({ events, runStartedAt, sessionId, session, onViewArtifa
           {/* Files + commands */}
           {(hasFiles || hasCommands) && (
             <div className="py-1.5">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-1">
+              <p className="text-[12px] text-fg-subtle mb-1.5">
                 {[hasFiles && `${files.length} file${files.length !== 1 ? 's' : ''}`, hasCommands && `${commands.length} command${commands.length !== 1 ? 's' : ''}`].filter(Boolean).join(' · ')}
               </p>
-              <div className="rounded-lg border border-gray-100 dark:border-gray-800 overflow-hidden divide-y divide-gray-100 dark:divide-gray-800">
+              <div className="rounded-lg border border-line overflow-hidden divide-y divide-line">
                 {files.map((change, i) => (
                   <FileChangeRow key={`${change.path}-${i}`} change={change} state={stateData?.fileStates?.[change.path] || { state: 'unknown' }} />
                 ))}
@@ -2494,11 +2422,11 @@ function RunSummaryCard({ events, runStartedAt, sessionId, session, onViewArtifa
           {/* Tools used */}
           {topTools.length > 0 && (
             <div className="py-1.5">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-1.5">Tools used</p>
+              <p className="text-[12px] text-fg-subtle mb-1.5">Tools used</p>
               <div className="flex flex-wrap gap-1.5">
                 {topTools.map(({ name, count }) => (
-                  <span key={name} className="inline-flex items-center gap-1 rounded-md bg-gray-100 dark:bg-gray-800 px-2 py-0.5 text-[10px] text-gray-500 dark:text-gray-400">
-                    {count > 1 && <span className="font-semibold">{count}×</span>}
+                  <span key={name} className="inline-flex items-center gap-1 rounded-md bg-hover px-2 py-0.5 text-[11px] text-fg-muted">
+                    {count > 1 && <span className="font-medium tabular-nums">{count}×</span>}
                     {name.replace(/_/g, ' ')}
                   </span>
                 ))}
@@ -2509,19 +2437,19 @@ function RunSummaryCard({ events, runStartedAt, sessionId, session, onViewArtifa
           {/* Footer controls */}
           <div className="flex items-center justify-between gap-3 pt-1 pb-0.5">
             <div className="flex items-center gap-3">
-              {rounds > 0 && <span className="text-[11px] text-gray-400 dark:text-gray-500 tabular-nums">{rounds} round{rounds !== 1 ? 's' : ''}</span>}
+              {rounds > 0 && <span className="text-[12px] text-fg-subtle tabular-nums">{rounds} round{rounds !== 1 ? 's' : ''}</span>}
             </div>
             <div className="flex items-center gap-2">
               {sessionId && (
                 <button type="button" onClick={refreshState} disabled={stateLoading}
-                  className="inline-flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-50 transition-colors">
+                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[12px] text-fg-subtle hover:bg-hover hover:text-fg disabled:opacity-50 transition-colors">
                   <RefreshCw className={`w-3 h-3 ${stateLoading ? 'animate-spin' : ''}`} />Refresh
                 </button>
               )}
               {hasFiles && checkpoint && (
                 <button type="button" onClick={() => setShowRevertConfirm(true)} disabled={!revert?.available || reverting}
                   title={revert?.available ? 'Revert this run' : (revert?.reason || 'Revert unavailable')}
-                  className="inline-flex items-center gap-1 text-[10px] text-red-500 dark:text-red-400 hover:text-red-700 disabled:opacity-50 transition-colors">
+                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[12px] text-red-600 hover:bg-red-500/10 disabled:opacity-50 disabled:hover:bg-transparent dark:text-red-400 transition-colors">
                   {reverting ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
                   {revert?.available ? 'Revert run' : 'Revert unavailable'}
                 </button>
@@ -2530,7 +2458,7 @@ function RunSummaryCard({ events, runStartedAt, sessionId, session, onViewArtifa
           </div>
 
           {revertMessage && (
-            <div className={`py-1.5 text-[11px] flex items-center gap-2 ${revertMessage.type === 'success' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
+            <div className={`py-1.5 text-[12px] flex items-center gap-2 ${revertMessage.type === 'success' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
               {revertMessage.type === 'success' ? <CheckCircle2 className="w-3 h-3 flex-shrink-0" /> : <AlertCircle className="w-3 h-3 flex-shrink-0" />}
               {revertMessage.text}
             </div>
@@ -2636,12 +2564,9 @@ function renderWorkContent(workEvents, { onPermissionDecision, onRetryTool, onAs
         break;
       case 'preview_url':
         rendered.push(
-          <FeedFrame key={i} className="mb-1.5">
-            <div className="flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px] text-indigo-600 dark:text-indigo-400 midnight:text-indigo-300 bg-indigo-50/60 dark:bg-indigo-950/20 midnight:bg-indigo-950/20">
-              <Globe className="h-3.5 w-3.5 flex-shrink-0" />
-              <span>Preview panel opened at <strong>{ev.data?.url}</strong></span>
-            </div>
-          </FeedFrame>
+          <FeedNotice key={i} icon={Globe} title={ev.data?.url}>
+            Preview opened at <span className="font-mono text-fg">{ev.data?.url}</span>
+          </FeedNotice>
         );
         break;
       case 'stop_reason':
@@ -2686,7 +2611,8 @@ function AgentDelegateEvent({ data, result, pending = false, events = [] }) {
   const profile = result?.profile || data?.profile || {};
   const handle = profile.handle || data?.profileHandle;
   const name = profile.name || data?.profileName || handle || 'agent';
-  const icon = profile.icon || data?.profileIcon || '🤖';
+  // The agent's own emoji when it has one, else its initial.
+  const icon = profile.icon || data?.profileIcon || name.charAt(0).toUpperCase();
   const answer = result?.answer || data?.answer || '';
   const isError = result?.success === false || data?.success === false;
   const sessionId = result?.sessionId || data?.sessionId;
@@ -2701,108 +2627,83 @@ function AgentDelegateEvent({ data, result, pending = false, events = [] }) {
     }
   }, [answer]);
   const shouldCollapseAnswer = answer.length > 520 || answerBlocks.length > 4;
-  const statusLabel = pending ? 'Running' : isError ? 'Needs attention' : 'Complete';
-  const statusClass = pending
-    ? 'border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-800 dark:bg-gray-900/60 dark:text-gray-400 midnight:border-slate-800 midnight:bg-slate-900/60 midnight:text-slate-400'
-    : isError
-      ? 'border-red-200 bg-red-50 text-red-600 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-300 midnight:border-red-900/60 midnight:bg-red-950/20 midnight:text-red-300'
-      : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300 midnight:border-emerald-900/50 midnight:bg-emerald-950/20 midnight:text-emerald-300';
-  const AccentIcon = pending ? Loader2 : isError ? AlertTriangle : CheckCircle2;
+  const statusLabel = pending ? 'Running' : isError ? 'Needs attention' : 'Done';
+  const statusClass = isError ? 'text-red-600 dark:text-red-400' : 'text-fg-subtle';
+  const StatusIcon = pending ? Loader2 : isError ? AlertTriangle : CheckCircle2;
+  const collapsed = shouldCollapseAnswer && !answerExpanded;
 
   return (
     <FeedFrame className="mb-3">
-      <div className={`group relative overflow-hidden rounded-xl border text-xs transition-colors ${
-        isError
-          ? 'border-red-200 bg-red-50/30 dark:border-red-900/50 dark:bg-red-950/10 midnight:border-red-900/50 midnight:bg-red-950/10'
-          : 'border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950/25 midnight:border-slate-800 midnight:bg-slate-950/25'
-      }`}>
-        <div className={`absolute inset-y-0 left-0 w-0.5 ${isError ? 'bg-red-300 dark:bg-red-800' : 'bg-gray-200 dark:bg-gray-800 midnight:bg-slate-800'}`} />
-
-        <div className="relative px-3.5 py-3 sm:px-4">
+      <div className="overflow-hidden rounded-xl border border-line bg-surface text-[13px]">
+        <div className="px-3.5 py-3 sm:px-4">
           <div className="flex items-start gap-3">
-            <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${
-              isError
-                ? 'border-red-200 bg-red-50 text-red-500 dark:border-red-900/70 dark:bg-red-950/30 midnight:border-red-900/70 midnight:bg-red-950/30'
-                : 'border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-800 dark:bg-gray-900/70 dark:text-gray-400 midnight:border-slate-800 midnight:bg-slate-900/70 midnight:text-slate-400'
-            }`}>
-              {pending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <span className="text-base leading-none">{icon}</span>
-              )}
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-line text-[13px] font-medium text-fg-muted">
+              {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <span className="leading-none">{icon}</span>}
             </div>
 
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                    <span className="font-semibold leading-tight text-gray-800 dark:text-gray-100 midnight:text-slate-100">
-                      {pending ? 'Delegating to' : isError ? 'Delegation failed for' : 'Delegated to'} {name}
-                    </span>
-                    {handle && (
-                      <code className="rounded-md bg-gray-100/70 px-1.5 py-0.5 text-[10px] font-medium text-gray-400 dark:bg-gray-900/70 dark:text-gray-500 midnight:bg-slate-900/70 midnight:text-slate-500">
-                        #{handle}
-                      </code>
-                    )}
-                  </div>
+                <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <span className="font-medium leading-tight text-fg">
+                    {pending ? 'Delegating to' : isError ? 'Delegation failed for' : 'Delegated to'} {name}
+                  </span>
+                  {handle && (
+                    <code className="rounded-md bg-hover px-1.5 py-0.5 text-[11px] text-fg-subtle">
+                      #{handle}
+                    </code>
+                  )}
                 </div>
                 {data?.readOnly && (
                   <span
-                    className="inline-flex shrink-0 items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] font-medium text-gray-500 dark:border-gray-800 dark:bg-gray-900/60 dark:text-gray-400 midnight:border-slate-800 midnight:bg-slate-900/60 midnight:text-slate-400"
-                    title="Read-only sub-agent — inspects and searches only, makes no changes"
+                    className="inline-flex shrink-0 items-center gap-1 rounded-md bg-hover px-1.5 py-0.5 text-[11px] font-medium text-fg-muted"
+                    title="Read-only: it looks and searches, and changes nothing"
                   >
                     <Eye className="h-3 w-3" /> Read-only
                   </span>
                 )}
                 {data?.scopedToolCount > 0 && (
                   <span
-                    className="inline-flex shrink-0 items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] font-medium text-gray-500 dark:border-gray-800 dark:bg-gray-900/60 dark:text-gray-400 midnight:border-slate-800 midnight:bg-slate-900/60 midnight:text-slate-400"
-                    title="Restricted to a focused toolset"
+                    className="inline-flex shrink-0 items-center gap-1 rounded-md bg-hover px-1.5 py-0.5 text-[11px] font-medium text-fg-muted"
+                    title="Limited to a few tools"
                   >
                     <Wrench className="h-3 w-3" /> {data.scopedToolCount} tools
                   </span>
                 )}
-                <span className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusClass}`}>
-                  <AccentIcon className={`h-3 w-3 ${pending ? 'animate-spin' : ''}`} />
+                <span className={`inline-flex shrink-0 items-center gap-1 text-[12px] font-medium ${statusClass}`}>
+                  <StatusIcon className={`h-3.5 w-3.5 ${pending ? 'animate-spin' : ''}`} />
                   {statusLabel}
                 </span>
               </div>
 
               {data?.task && (
-                <div className="mt-2.5 flex items-start gap-2 rounded-xl border border-gray-200/70 bg-gray-50/70 px-2.5 py-2 text-gray-500 dark:border-gray-800/70 dark:bg-gray-900/35 dark:text-gray-400 midnight:border-slate-800/70 midnight:bg-slate-900/35 midnight:text-slate-400">
+                <div className="mt-2 flex items-start gap-2 rounded-lg bg-hover px-2.5 py-2 text-fg-muted">
                   <Brain className="mt-0.5 h-3.5 w-3.5 shrink-0 text-fg-subtle" />
-                  <p className="line-clamp-2 text-[11px] leading-relaxed">{data.task}</p>
+                  <p className="line-clamp-2 text-[12px] leading-5">{data.task}</p>
                 </div>
               )}
 
               {answerBlocks.length > 0 && (
-                <div className="mt-3 overflow-hidden rounded-xl border border-gray-200/70 bg-white/70 dark:border-gray-800/70 dark:bg-gray-950/35 midnight:border-slate-800/70 midnight:bg-slate-950/35">
-                  <div className="flex items-center gap-2 border-b border-gray-100/80 px-3 py-2 dark:border-gray-800/70 midnight:border-slate-800/70">
-                    <div className="flex h-5 w-5 items-center justify-center rounded-md bg-gray-50 text-gray-400 dark:bg-gray-900/70 dark:text-gray-500 midnight:bg-slate-900/70 midnight:text-slate-500">
-                      <MessageCircle className="h-3 w-3" />
-                    </div>
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-fg-subtle">
-                      Sub-agent handoff
-                    </span>
+                <div className="mt-3 overflow-hidden rounded-lg border border-line">
+                  <div className="flex items-center gap-1.5 border-b border-line px-3 py-2 text-[12px] text-fg-subtle">
+                    <MessageCircle className="h-3.5 w-3.5" />
+                    <span>Answer from {name}</span>
                   </div>
-                  <div className="relative">
-                    <div className={`px-3 py-2.5 text-[12px] leading-relaxed text-gray-600 dark:text-gray-300 midnight:text-slate-300 [&_.mb-3]:mb-2 [&_.mb-5]:mb-2.5 [&_.mb-6]:mb-2.5 [&_h1]:text-base [&_h1]:mb-2 [&_h1]:mt-2 [&_h2]:text-sm [&_h2]:mb-2 [&_h2]:mt-2 [&_h3]:text-sm [&_h3]:mb-1.5 [&_h3]:mt-2 [&_li]:text-[12px] [&_p]:text-[12px] [&_p]:leading-relaxed ${shouldCollapseAnswer && !answerExpanded ? 'max-h-56 overflow-hidden' : ''}`}>
-                      {answerBlocks.map((block, i) => (
-                        <BlockRenderer key={i} block={block} />
-                      ))}
-                    </div>
-                    {shouldCollapseAnswer && !answerExpanded && (
-                      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-white via-white/90 to-transparent dark:from-gray-950 dark:via-gray-950/90 midnight:from-slate-950 midnight:via-slate-950/90" />
-                    )}
+                  <div
+                    className={`px-3 py-2.5 text-[13px] leading-relaxed text-fg-muted [&_.mb-3]:mb-2 [&_.mb-5]:mb-2.5 [&_.mb-6]:mb-2.5 [&_h1]:text-base [&_h1]:mb-2 [&_h1]:mt-2 [&_h2]:text-sm [&_h2]:mb-2 [&_h2]:mt-2 [&_h3]:text-sm [&_h3]:mb-1.5 [&_h3]:mt-2 [&_li]:text-[13px] [&_p]:text-[13px] [&_p]:leading-relaxed ${collapsed ? 'max-h-56 overflow-hidden [mask-image:linear-gradient(to_bottom,black_65%,transparent)]' : ''}`}
+                  >
+                    {answerBlocks.map((block, i) => (
+                      <BlockRenderer key={i} block={block} />
+                    ))}
                   </div>
                   {shouldCollapseAnswer && (
                     <button
                       type="button"
                       onClick={() => setAnswerExpanded(v => !v)}
-                      className="flex w-full items-center justify-center gap-1.5 border-t border-gray-100/80 px-3 py-1.5 text-[10px] font-semibold text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-800 dark:border-gray-800/70 dark:text-gray-400 dark:hover:bg-gray-900/60 dark:hover:text-gray-200 midnight:border-slate-800/70 midnight:text-slate-400 midnight:hover:bg-slate-900/60"
+                      aria-expanded={answerExpanded}
+                      className="flex w-full items-center justify-center gap-1.5 border-t border-line px-3 py-1.5 text-[12px] text-fg-muted transition-colors hover:bg-hover hover:text-fg"
                     >
                       {answerExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                      {answerExpanded ? 'Show less' : 'Read full handoff'}
+                      {answerExpanded ? 'Show less' : 'Show all'}
                     </button>
                   )}
                 </div>
@@ -2810,25 +2711,26 @@ function AgentDelegateEvent({ data, result, pending = false, events = [] }) {
 
               <div className="mt-2.5 flex flex-wrap items-center gap-2">
                 {sessionId && (
-                  <span className="inline-flex max-w-full items-center gap-1 rounded-md bg-gray-50 px-1.5 py-0.5 text-[10px] font-medium text-gray-300 dark:bg-gray-900/60 dark:text-gray-700 midnight:bg-slate-900/60 midnight:text-slate-700">
+                  <span className="inline-flex max-w-full items-center gap-1 text-[11px] text-fg-subtle" title={sessionId}>
                     <Link2 className="h-3 w-3 shrink-0" />
-                    <span className="truncate">Session {sessionId}</span>
+                    <span className="truncate font-mono">{sessionId.slice(0, 8)}</span>
                   </span>
                 )}
                 {events.length > 0 && (
                   <button
                     type="button"
                     onClick={() => setExpanded(v => !v)}
-                    className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-900/60 dark:hover:text-gray-200 midnight:text-slate-400 midnight:hover:bg-slate-900/60"
+                    aria-expanded={expanded}
+                    className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[12px] text-fg-muted transition-colors hover:bg-hover hover:text-fg"
                   >
                     {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                    {expanded ? 'Hide sub-agent steps' : `Show sub-agent steps (${events.length})`}
+                    {expanded ? 'Hide its steps' : `Show its steps (${events.length})`}
                   </button>
                 )}
               </div>
 
               {events.length > 0 && expanded && (
-                <div className="mt-2.5 rounded-xl border border-gray-200/70 bg-gray-50/50 p-2 dark:border-gray-800/70 dark:bg-gray-900/30 midnight:border-slate-800/70 midnight:bg-slate-900/30 [&_.max-w-4xl]:mx-0 [&_.max-w-4xl]:max-w-none">
+                <div className="mt-2.5 rounded-lg border border-line p-2 [&_.max-w-3xl]:mx-0 [&_.max-w-3xl]:max-w-none">
                   {renderWorkContent(events, {})}
                 </div>
               )}
@@ -2869,21 +2771,21 @@ function AgentWorkDrawer({ workEvents, isRunning, startedAt, completedAt, onPerm
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
-        className="group flex w-full items-center gap-1.5 rounded-md py-0.5 text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-gray-300 dark:focus-visible:ring-gray-700"
+        className="group flex w-full items-center gap-1.5 rounded-md py-0.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
         aria-expanded={open}
       >
         {open
-          ? <ChevronDown className="h-3 w-3 flex-shrink-0 text-gray-400 dark:text-gray-500 transition-colors" />
-          : <ChevronRight className="h-3 w-3 flex-shrink-0 text-gray-400 dark:text-gray-500 transition-colors" />}
+          ? <ChevronDown className="h-3 w-3 flex-shrink-0 text-fg-subtle transition-colors" />
+          : <ChevronRight className="h-3 w-3 flex-shrink-0 text-fg-subtle transition-colors" />}
         {isRunning ? (
-          <span className="flex-shrink-0 flex items-center gap-1.5 text-xs tabular-nums text-gray-500 dark:text-gray-400">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-gray-400 dark:bg-gray-500" />
+          <span className="flex-shrink-0 flex items-center gap-1.5 text-[12px] tabular-nums text-fg-muted">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-fg-subtle" />
             Working for {formatElapsed(elapsed)}
           </span>
         ) : elapsed > 0 || summary ? (
-          <span className="min-w-0 flex-1 truncate text-xs tabular-nums text-gray-500 transition-colors group-hover:text-gray-700 dark:text-gray-400 dark:group-hover:text-gray-300">
+          <span className="min-w-0 flex-1 truncate text-[12px] tabular-nums text-fg-muted transition-colors group-hover:text-fg">
             {elapsed > 0 ? `Worked for ${formatElapsed(elapsed)}` : summary}
-            {elapsed > 0 && summary ? <span className="text-gray-300 dark:text-gray-600"> · {summary}</span> : null}
+            {elapsed > 0 && summary ? <span className="text-fg-subtle"> · {summary}</span> : null}
           </span>
         ) : null}
       </button>
