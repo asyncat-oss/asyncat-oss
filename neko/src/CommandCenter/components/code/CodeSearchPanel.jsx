@@ -4,9 +4,11 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Search, Loader2, FileCode, Hash, Box, AlertCircle } from 'lucide-react';
+import { Loader2, FileCode } from 'lucide-react';
 import { codeApi } from '../../api';
 import Select from '../../../components/ui/Select.jsx';
+import SearchField from '../../../components/ui/SearchField.jsx';
+import Notice from '../../../components/ui/Notice.jsx';
 
 const KIND_OPTIONS = [
   { value: 'any', label: 'Any kind' },
@@ -33,25 +35,25 @@ function ResultRow({ result, onLocate }) {
     <button
       type="button"
       onClick={() => onLocate?.(result)}
-      className="group w-full text-left rounded-md px-2.5 py-1.5 hover:bg-gray-50 dark:hover:bg-slate-800/60 midnight:hover:bg-slate-800/60 transition-colors"
+      className="group w-full rounded-lg px-2.5 py-1.5 text-left outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-accent/40"
     >
-      <div className="flex items-center gap-1.5 min-w-0">
-        <FileCode className="h-3 w-3 shrink-0 text-gray-300 dark:text-slate-600 midnight:text-slate-600" />
-        <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-indigo-600 dark:text-indigo-400 midnight:text-indigo-400">
+      <div className="flex min-w-0 items-center gap-1.5">
+        <FileCode className="h-3.5 w-3.5 shrink-0 text-fg-subtle" strokeWidth={1.75} />
+        <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-fg">
           {result.file}
         </span>
-        <span className="shrink-0 font-mono text-[10px] text-gray-400 dark:text-slate-600 midnight:text-slate-600 tabular-nums">
+        <span className="shrink-0 font-mono text-[11px] tabular-nums text-fg-subtle">
           :{result.line}
         </span>
       </div>
       {result.text && (
-        <p className="mt-0.5 pl-4 font-mono text-[10px] text-gray-500 dark:text-slate-500 midnight:text-slate-500 truncate">
+        <p className="mt-0.5 truncate pl-5 font-mono text-[11px] text-fg-muted">
           {result.text}
         </p>
       )}
       {result.name && result.kind && (
-        <p className="mt-0.5 pl-4 text-[10px] text-gray-400 dark:text-slate-600 midnight:text-slate-600">
-          <span className="rounded-sm bg-gray-100 dark:bg-slate-800 midnight:bg-slate-800 px-1 py-0.5 font-mono">{result.kind}</span>
+        <p className="mt-0.5 pl-5 text-[11px] text-fg-subtle">
+          <span className="rounded-md bg-hover px-1 py-px font-mono">{result.kind}</span>
           {' '}{result.name}
         </p>
       )}
@@ -95,29 +97,17 @@ export default function CodeSearchPanel({ onLocateResult, workingDir = null, dis
     return () => clearTimeout(searchTimer.current);
   }, [disabled, doSearch, kind, lang, query, workingDir]);
 
-  const onQueryChange = (e) => {
-    setQuery(e.target.value);
-  };
-
-
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white dark:bg-slate-950 midnight:bg-slate-950">
+    <div className="flex h-full min-h-0 flex-col">
       {/* Search bar */}
-      <div className="shrink-0 border-b border-gray-100 dark:border-slate-800 midnight:border-slate-800 p-2 space-y-1.5">
-        <div className="relative">
-          {loading
-            ? <Loader2 className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-indigo-400" />
-            : <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 midnight:text-slate-500" />
-          }
-          <input
-            type="text"
-            value={query}
-            onChange={onQueryChange}
-            disabled={disabled}
-            placeholder="Search symbols or text…"
-            className="w-full rounded-md border border-gray-200 bg-gray-50 py-1.5 pl-8 pr-3 text-xs text-gray-900 placeholder:text-gray-400 focus:border-indigo-300 focus:outline-none focus:ring-1 focus:ring-indigo-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-indigo-600 midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-100 midnight:focus:border-indigo-500"
-          />
-        </div>
+      <div className="shrink-0 space-y-1.5 border-b border-line p-3">
+        <SearchField
+          size="sm"
+          value={query}
+          onChange={setQuery}
+          disabled={disabled}
+          placeholder="Search symbols or text"
+        />
         <div className="flex gap-1.5">
           <Select size="sm" className="min-w-0 flex-1" value={kind} onChange={setKind} options={KIND_OPTIONS} aria-label="Kind" />
           <Select size="sm" className="min-w-0 flex-1" value={lang} onChange={setLang} options={LANG_OPTIONS} aria-label="Language" />
@@ -125,38 +115,37 @@ export default function CodeSearchPanel({ onLocateResult, workingDir = null, dis
       </div>
 
       {/* Results */}
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
-        {error && (
-          <div className="flex items-start gap-2 rounded-md bg-red-50 dark:bg-red-950/20 midnight:bg-red-950/20 px-3 py-2 text-xs text-red-600 dark:text-red-300 midnight:text-red-300">
-            <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-            {error}
+      <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
+        {error && <Notice tone="error">{error}</Notice>}
+
+        {loading && !(results?.length > 0) && (
+          <div className="flex items-center justify-center gap-2 py-8 text-[12px] text-fg-subtle">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Searching…
           </div>
         )}
 
         {results === null && !loading && !error && (
-          <div className="py-8 text-center">
-            <Hash className="mx-auto h-6 w-6 text-gray-200 dark:text-slate-700 midnight:text-slate-700 mb-2" />
-            <p className="text-xs text-gray-400 dark:text-slate-600 midnight:text-slate-600">
-              {disabled ? 'Choose a working folder to search code.' : 'Search symbols, functions, classes…'}
-            </p>
-          </div>
+          <p className="px-4 py-8 text-center text-[12px] text-fg-subtle">
+            {disabled ? 'Choose a working folder to search code.' : 'Find functions, classes, imports or any text in this folder.'}
+          </p>
         )}
 
         {results?.length === 0 && !loading && (
-          <div className="py-8 text-center">
-            <Box className="mx-auto h-6 w-6 text-gray-200 dark:text-slate-700 midnight:text-slate-700 mb-2" />
-            <p className="text-xs text-gray-400 dark:text-slate-600 midnight:text-slate-600">No results found</p>
-          </div>
+          <p className="px-4 py-8 text-center text-[12px] text-fg-subtle">No results.</p>
         )}
 
+        {/* A new search over old results: they dim, and the count line says it's searching. */}
         {results?.length > 0 && (
-          <div className="space-y-0.5">
-            <p className="mb-1.5 px-1 text-[10px] text-gray-400 dark:text-slate-600 midnight:text-slate-600">
+          <div className="space-y-px" aria-busy={loading}>
+            <p className="mb-1 flex items-center gap-1.5 px-2.5 text-[12px] tabular-nums text-fg-subtle">
               {results.length} result{results.length !== 1 ? 's' : ''}
+              {loading ? <span className="ml-1 inline-flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Searching…</span> : null}
             </p>
-            {results.map((r, i) => (
-              <ResultRow key={i} result={r} onLocate={onLocateResult} />
-            ))}
+            <div className={`space-y-px transition-opacity ${loading ? 'opacity-60' : ''}`}>
+              {results.map((r, i) => (
+                <ResultRow key={i} result={r} onLocate={onLocateResult} />
+              ))}
+            </div>
           </div>
         )}
       </div>

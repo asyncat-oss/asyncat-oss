@@ -9,6 +9,7 @@ import { useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
 import { Copy, Check } from 'lucide-react';
 import 'highlight.js/styles/github.css';
+import IconButton from '../../../components/ui/IconButton.jsx';
 import { escapeHtml, useHighlighter } from '../../../utils/lazyRenderers.js';
 
 // File extension → highlight.js language.
@@ -61,26 +62,19 @@ export default function SyntaxFileViewer({ filePath, content, tooLarge, binary, 
 
   if (binary || tooLarge) {
     return (
-      <div className="rounded-lg border border-line bg-surface px-4 py-6 text-center text-xs text-fg-subtle">
-        {binary ? 'Binary file — preview not available.' : 'File is too large to preview.'}
+      <div className="rounded-lg border border-line bg-surface px-4 py-6 text-center text-[12px] text-fg-subtle">
+        {binary ? 'This file isn’t text, so there’s no preview.' : 'This file is too large to preview.'}
       </div>
     );
   }
 
   return (
     <div className="overflow-hidden rounded-lg border border-line bg-canvas">
-      <div className="flex items-center justify-between gap-2 border-b border-line bg-surface px-3 py-1.5">
-        <span className="min-w-0 truncate font-mono text-[11px] text-fg-muted">{filePath}</span>
-        <div className="flex shrink-0 items-center gap-1.5">
-          <span className="text-[10px] text-fg-subtle">{lang === 'plaintext' ? 'text' : lang}</span>
-          <button
-            type="button"
-            onClick={copy}
-            className="rounded p-1 text-fg-subtle transition-colors hover:bg-hover hover:text-fg"
-            title="Copy"
-          >
-            {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
-          </button>
+      <div className="flex items-center justify-between gap-2 border-b border-line bg-surface py-1 pl-3 pr-1">
+        <span className="min-w-0 truncate font-mono text-[12px] text-fg-muted">{filePath}</span>
+        <div className="flex shrink-0 items-center gap-1">
+          <span className="text-[11px] text-fg-subtle">{lang === 'plaintext' ? 'text' : lang}</span>
+          <IconButton size="sm" icon={copied ? Check : Copy} label={copied ? 'Copied' : 'Copy'} onClick={copy} />
         </div>
       </div>
 
