@@ -10,7 +10,7 @@ export const Badge = ({ children, color = 'gray', title }) => {
     blue: 'bg-accent-soft text-accent',
   };
   return (
-    <span title={title} className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium leading-4 ${colors[color] || colors.gray}`}>
+    <span title={title} className={`inline-flex items-center gap-1 whitespace-nowrap rounded-md px-1.5 py-0.5 text-[11px] font-medium leading-4 ${colors[color] || colors.gray}`}>
       {children}
     </span>
   );
