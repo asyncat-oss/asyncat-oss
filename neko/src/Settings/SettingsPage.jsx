@@ -307,7 +307,7 @@ const SettingsPage = () => {
               <SettingsSearchResults results={results} icons={ICONS} onPick={openResult} />
             </div>
           ) : (
-            <nav ref={mobileNavRef} className="-mx-4 flex gap-1 overflow-x-auto px-4 pb-3" aria-label="Settings pages">
+            <nav ref={mobileNavRef} className="-mx-4 flex scroll-px-4 gap-1 overflow-x-auto px-4 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Settings pages">
               {tabs.map((item) => <div key={item.id}>{renderNavButton(item, true)}</div>)}
             </nav>
           )}
