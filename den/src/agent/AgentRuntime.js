@@ -12,6 +12,7 @@
 
 import { ToolCallFormatter } from './ToolCallFormatter.js';
 import { toolRegistry } from './tools/toolRegistry.js';
+import { NO_PROJECT_TOOL_CATEGORIES } from './toolScopes.js';
 import { permissionManager, PermissionManager } from './PermissionManager.js';
 import { AgentSession } from './AgentSession.js';
 import { buildAgentSystemPrompt, loadSoul } from './prompts/agentSystemPrompt.js';
@@ -359,6 +360,9 @@ export class AgentRuntime {
     // Optional hard allow-list of tool names (used to scope sub-agents to a
     // focused toolset). Planning + ask_user are always kept available so the
     // sub-agent can still organise itself and request clarification.
+    // A chat without a project folder: file, code and shell tools are left
+    // out, and a call to one says why.
+    this.noProject = opts.noProject === true;
     this.allowedTools = Array.isArray(opts.allowedTools) && opts.allowedTools.length
       ? new ToolNameSet(opts.allowedTools.filter(Boolean).map(String))
       : null;
@@ -1003,12 +1007,11 @@ export class AgentRuntime {
       let repairRequested = false;
       for (const tc of toolCalls) {
         if (!toolRegistry.has(tc.tool_name) || !knownTools.includes(tc.tool_name)) {
+          const unavailable = this._unavailableTool(tc.tool_name);
           const unknownResult = {
             success: false,
-            code: 'unknown_tool',
-            error: this.agentMode === 'plan' && toolRegistry.has(tc.tool_name)
-              ? `Tool "${tc.tool_name}" is not available in Plan mode.`
-              : `Unknown tool: "${tc.tool_name}"`,
+            code: unavailable.code,
+            error: unavailable.error,
           };
           this.onEvent({
             type: 'tool_start',
@@ -1018,22 +1021,16 @@ export class AgentRuntime {
               args: tc.arguments,
               permission: 'none',
               permissionDecision: 'not_applicable',
-              permissionReason: this.agentMode === 'plan' && toolRegistry.has(tc.tool_name)
-                ? 'Unavailable in Plan mode'
-                : 'Unknown tool; not sent for approval',
+              permissionReason: unavailable.reason,
               workingDir: this.workingDir,
-              description: this.agentMode === 'plan' && toolRegistry.has(tc.tool_name)
-                ? `Unavailable in Plan mode: ${tc.tool_name}`
-                : `Unknown tool: ${tc.tool_name}`,
+              description: unavailable.description,
               round,
             }
           });
           this.session.recordToolCall(tc.tool_name, tc.arguments, unknownResult, {
             permissionLevel: 'none',
             permissionDecision: 'not_applicable',
-            permissionReason: this.agentMode === 'plan' && toolRegistry.has(tc.tool_name)
-              ? 'Unavailable in Plan mode'
-              : 'Unknown tool; not sent for approval',
+            permissionReason: unavailable.reason,
             workingDir: this.workingDir,
             startedAt: new Date().toISOString(),
             toolCallId: tc.call_id,
@@ -2006,6 +2003,32 @@ export class AgentRuntime {
     const error = new Error('Agent run stopped by user.');
     error.name = 'AbortError';
     throw error;
+  }
+
+  // Why a called tool can't run here, in words the model can pass on: a tool
+  // that exists but is outside this chat's scope is not "unknown".
+  _unavailableTool(name) {
+    const tool = toolRegistry.get(name);
+    if (!tool) {
+      return { code: 'unknown_tool', error: `Unknown tool: "${name}"`, reason: 'Unknown tool; not sent for approval', description: `Unknown tool: ${name}` };
+    }
+    if (this.agentMode === 'plan') {
+      return { code: 'tool_unavailable', error: `Tool "${name}" is not available in Plan mode.`, reason: 'Unavailable in Plan mode', description: `Unavailable in Plan mode: ${name}` };
+    }
+    if (this.noProject && !NO_PROJECT_TOOL_CATEGORIES.has(tool.category)) {
+      return {
+        code: 'needs_project',
+        error: `"${name}" needs a project with a folder. Reading and writing files and running commands only work in a project: tell the user to open a project or add a folder, then ask again.`,
+        reason: 'Needs a project with a folder',
+        description: `Needs a project with a folder: ${name}`,
+      };
+    }
+    return {
+      code: 'tool_unavailable',
+      error: `"${name}" isn't available in this chat. Answer without it, or tell the user what it would need.`,
+      reason: 'Not available in this chat',
+      description: `Not available in this chat: ${name}`,
+    };
   }
 
   _buildPermissionDiff(toolName, args = {}) {

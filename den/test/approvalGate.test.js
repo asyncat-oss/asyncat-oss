@@ -100,3 +100,14 @@ test('writing a new file diffs against /dev/null, with no removed empty line', (
   const changed = runtime._buildPermissionDiff('write_file', { path: 'old.md', content: 'two' });
   assert.deepEqual(changed.split('\n'), ['--- a/old.md', '+++ b/old.md', '-one', '+two']);
 });
+
+test('a file tool called in a chat without a project says it needs one, not that it is unknown', async () => {
+  const { toolRegistry } = await import('../src/agent/tools/toolRegistry.js');
+  const { fileTools } = await import('../src/agent/tools/fileTools.js');
+  if (!toolRegistry.has('write_file')) toolRegistry.registerAll(fileTools);
+  const runtime = Object.assign(Object.create(AgentRuntime.prototype), { noProject: true, agentMode: 'action' });
+  const writeFile = runtime._unavailableTool('write_file');
+  assert.equal(writeFile.code, 'needs_project');
+  assert.match(writeFile.error, /needs a project with a folder/);
+  assert.equal(runtime._unavailableTool('no_such_tool').code, 'unknown_tool');
+});

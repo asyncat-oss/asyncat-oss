@@ -1833,6 +1833,7 @@ router.post('/run', withWorkspaceContext, async (req, res) => {
       agentProfileId: profile?.id || null,
       workingDir: resolvedWorkingDir,
       workspaceRoot: resolvedWorkingContext.rootPath || resolvedWorkingDir,
+      noProject: !hasProjectContext,
       maxRounds: resolvedMaxRounds,
       autoApprove: resolvedAutoApprove,
       // A local model isn't held while the run waits for the user.
