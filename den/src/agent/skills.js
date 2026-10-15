@@ -152,6 +152,11 @@ export function createSkill({ name, description, category, brain_region, weight,
   const filename = `${slugifyName(name)}.md`;
   const filePath = path.join(USER_SKILLS_DIR, filename);
   if (fs.existsSync(filePath)) throw new Error(`Skill "${name}" already exists`);
+  // A skill of yours by a built-in's name would quietly take its place.
+  const slug = slugifyName(name);
+  if (readSkillsFromDir(BUNDLED_SKILLS_DIR, 'bundled').some((skill) => slugifyName(String(skill.name || '')) === slug)) {
+    throw new Error(`A built-in skill called "${name.trim()}" already exists. Pick another name.`);
+  }
   const content = buildSkillMarkdown({
     name: name.trim(), description, brain_region: regionForCategory(category ?? brain_region), weight, tags, when_to_use, body, created_by,
   });

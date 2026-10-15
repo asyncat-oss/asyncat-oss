@@ -110,3 +110,13 @@ test('a new skill is saved with its category as brain_region, and read back by n
 test('a skill saved from a chat suggestion is filed under Recall', () => {
   assert.equal(categoryForRegion(skills.skillFromDraft({ name: 'From a chat' }).brain_region), 'Recall');
 });
+
+test("a new skill can't take a built-in skill's name", async () => {
+  const res = await fetch(`${base}/skills`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name: 'code-review', description: 'Mine', category: 'Workflow' }),
+  });
+  assert.equal(res.status, 409);
+  assert.match((await res.json()).error, /built-in skill called "code-review" already exists/);
+});
