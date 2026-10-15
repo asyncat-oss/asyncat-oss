@@ -4,7 +4,9 @@
 // them off. Desktop app only (electron/shortcuts.js).
 
 import { useCallback, useEffect, useState } from 'react';
-import { Globe2 } from 'lucide-react';
+import PropTypes from 'prop-types';
+import { Check, Copy, Globe2 } from 'lucide-react';
+import IconButton from '../components/ui/IconButton.jsx';
 import Button from '../components/ui/Button.jsx';
 import Notice from '../components/ui/Notice.jsx';
 import Switch from '../components/ui/Switch.jsx';
@@ -18,6 +20,27 @@ const SHORTCUTS = [
 ];
 
 const TITLE = 'System-wide';
+
+// A command to copy: on its own line, scrolling sideways when long instead
+// of breaking mid-word inside the sentence, with a Copy button.
+function CommandBlock({ command }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(command);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* the text can still be selected */ }
+  };
+  return (
+    <span className="mt-1.5 flex min-w-0 items-center gap-1 rounded-lg border border-line bg-hover py-0.5 pl-2.5 pr-0.5">
+      <code className="min-w-0 flex-1 select-all overflow-x-auto whitespace-nowrap py-1 font-mono text-[11px] text-fg">{command}</code>
+      <IconButton icon={copied ? Check : Copy} label={copied ? 'Copied' : 'Copy the command'} size="sm" onClick={copy} />
+    </span>
+  );
+}
+
+CommandBlock.propTypes = { command: PropTypes.string.isRequired };
 
 export default function GlobalShortcutsSection() {
   const api = typeof window !== 'undefined' ? window.electronAPI : null;
@@ -107,7 +130,8 @@ export default function GlobalShortcutsSection() {
                   {status.tone === 'warning' ? <span className="block text-amber-700 dark:text-amber-400">{status.text}. Pick other keys.</span> : null}
                   {id === 'quickAsk' && quickAskCommand && entry?.enabled ? (
                     <span className="mt-1 block">
-                      On Wayland, bind <code className="select-all break-all rounded bg-hover px-1 py-0.5 font-mono text-[11px] text-fg">{quickAskCommand}</code> in your desktop&apos;s keyboard settings.
+                      On Wayland, bind this command in your desktop&apos;s keyboard settings:
+                      <CommandBlock command={quickAskCommand} />
                     </span>
                   ) : null}
                 </>
