@@ -50,3 +50,17 @@ for (const theme of ['.dark', '.midnight']) {
     }
   });
 }
+
+// Code in answers sits on the sidebar grey (BlockBasedMessageRenderer's
+// CODE_SURFACE); the dark themes' highlight.js colours stay readable on it.
+test('dark and midnight code colours are readable on the code surface', () => {
+  const colours = [...css.matchAll(/^:is\(\.dark, \.midnight\)[^{]*\{\s*color:\s*(#[0-9a-f]{6})/gim)].map((match) => match[1].toLowerCase());
+  assert.ok(colours.length >= 5, `found only ${colours.length} code colours`);
+  for (const theme of ['.dark', '.midnight']) {
+    const surface = themeTokens(theme).sidebar;
+    for (const colour of colours) {
+      const ratio = contrast(colour, surface);
+      assert.ok(ratio >= 4.5, `${colour} on ${theme} ${surface} is ${ratio.toFixed(2)}:1`);
+    }
+  }
+});

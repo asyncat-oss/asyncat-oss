@@ -716,9 +716,9 @@ export const BlockRenderer = ({ block, onTermClick }) => {
 // Code, LaTeX, diagrams and diffs all start with the same line: what the
 // block is on the left, quiet actions on the right.
 
-// The surface the highlight.js palette below is tuned for (GitHub light and
-// dark), shared by every block that shows code.
-const CODE_SURFACE = 'bg-[#f6f8fa] dark:bg-[#0d1117]';
+// The surface of every block that shows code: a step back from the page, in
+// the app's own greys (the dark themes' code colours are in index.css).
+const CODE_SURFACE = 'bg-sidebar';
 
 const BlockHeader = ({ label, children }) => (
   <div className="flex items-center justify-between gap-2 border-b border-line px-3.5 py-1.5">
@@ -791,7 +791,7 @@ const MathBlock = ({ latex }) => {
 const CodeBlock = ({ content, language = 'text', actions = null }) => {
   const [copyStatus, handleCopy] = useCopy(content);
 
-  // Inject explicit hljs palettes once
+  // The light code colours, injected once (dark and midnight: index.css).
   useEffect(() => {
     if (document.getElementById('hljs-palette')) return;
     const style = document.createElement('style');
@@ -818,26 +818,6 @@ const CodeBlock = ({ content, language = 'text', actions = null }) => {
       .hljs-attr { color: #0550ae; }
       .hljs-property { color: #0550ae; }
       .hljs-tag { color: #116329; }
-      /* ── Dark / Midnight mode (GitHub Dark Dimmed-ish) ── */
-      .dark .hljs, .midnight .hljs { color: #c9d1d9; }
-      .dark .hljs-keyword, .midnight .hljs-keyword { color: #ff7b72; }
-      .dark .hljs-string, .midnight .hljs-string { color: #a5d6ff; }
-      .dark .hljs-number, .midnight .hljs-number { color: #79c0ff; }
-      .dark .hljs-function .hljs-title, .midnight .hljs-function .hljs-title,
-      .dark .hljs-title.function_, .midnight .hljs-title.function_ { color: #d2a8ff; }
-      .dark .hljs-comment, .midnight .hljs-comment { color: #8b949e; font-style: italic; }
-      .dark .hljs-class .hljs-title, .midnight .hljs-class .hljs-title,
-      .dark .hljs-title.class_, .midnight .hljs-title.class_ { color: #ffa657; }
-      .dark .hljs-variable, .midnight .hljs-variable { color: #ffa657; }
-      .dark .hljs-operator, .midnight .hljs-operator { color: #ff7b72; }
-      .dark .hljs-punctuation, .midnight .hljs-punctuation { color: #c9d1d9; }
-      .dark .hljs-params, .midnight .hljs-params { color: #c9d1d9; }
-      .dark .hljs-built_in, .midnight .hljs-built_in { color: #ffa657; }
-      .dark .hljs-meta, .midnight .hljs-meta { color: #79c0ff; }
-      .dark .hljs-literal, .midnight .hljs-literal { color: #79c0ff; }
-      .dark .hljs-attr, .midnight .hljs-attr { color: #79c0ff; }
-      .dark .hljs-property, .midnight .hljs-property { color: #79c0ff; }
-      .dark .hljs-tag, .midnight .hljs-tag { color: #7ee787; }
     `;
     document.head.appendChild(style);
   }, []);

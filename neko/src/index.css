@@ -16,52 +16,25 @@
   background: var(--as-fg) !important;
 }
 
-/* ── highlight.js theme overrides for dark/midnight ─────────────────────── */
-/* Light mode uses github theme (imported per component) */
-/* Dark mode: override with a dark palette */
-.dark .hljs {
+/* ── highlight.js in dark and midnight ──────────────────────────────────── */
+/* Light uses highlight.js's github theme (imported where code is shown); in
+   the dark themes these colours replace it. Plain code and comments use the
+   text tokens, as the notes' code blocks do. Every class github.css colours
+   is covered, so none keeps its dark-on-light colour. */
+:is(.dark, .midnight) .hljs {
   background: transparent !important;
-  color: #abb2bf !important;
+  color: var(--as-fg) !important;
 }
-.dark .hljs-keyword,
-.dark .hljs-selector-tag,
-.dark .hljs-built_in,
-.dark .hljs-name,
-.dark .hljs-tag { color: #c678dd !important; }
-.dark .hljs-string,
-.dark .hljs-title,
-.dark .hljs-section,
-.dark .hljs-attribute,
-.dark .hljs-literal,
-.dark .hljs-template-tag,
-.dark .hljs-template-variable,
-.dark .hljs-type,
-.dark .hljs-addition { color: #98c379 !important; }
-.dark .hljs-deletion,
-.dark .hljs-selector-attr,
-.dark .hljs-selector-pseudo,
-.dark .hljs-meta { color: #e06c75 !important; }
-.dark .hljs-doctag,
-.dark .hljs-attr { color: #e5c07b !important; }
-.dark .hljs-symbol,
-.dark .hljs-bullet,
-.dark .hljs-link,
-.dark .hljs-number,
-.dark .hljs-regexp,
-.dark .hljs-variable { color: #61afef !important; }
-.dark .hljs-comment,
-.dark .hljs-quote { color: #5c6370 !important; font-style: italic; }
-.dark .hljs-emphasis { font-style: italic; }
-.dark .hljs-strong { font-weight: bold; }
-
-.midnight .hljs { background: transparent !important; color: #9f9f9f !important; }
-.midnight .hljs-keyword,
-.midnight .hljs-built_in { color: #a78bfa !important; }
-.midnight .hljs-string,
-.midnight .hljs-title { color: #86efac !important; }
-.midnight .hljs-number,
-.midnight .hljs-variable { color: #7dd3fc !important; }
-.midnight .hljs-comment { color: #545454 !important; font-style: italic; }
+:is(.dark, .midnight) :is(.hljs-keyword, .hljs-selector-tag, .hljs-built_in, .hljs-name, .hljs-tag) { color: #c678dd !important; }
+:is(.dark, .midnight) :is(.hljs-string, .hljs-title, .hljs-section, .hljs-attribute, .hljs-literal, .hljs-template-tag, .hljs-template-variable, .hljs-type, .hljs-addition) { color: #98c379 !important; }
+:is(.dark, .midnight) :is(.hljs-deletion, .hljs-selector-attr, .hljs-selector-pseudo, .hljs-meta) { color: #e06c75 !important; }
+:is(.dark, .midnight) :is(.hljs-doctag, .hljs-attr, .hljs-property, .hljs-selector-id, .hljs-selector-class) { color: #e5c07b !important; }
+:is(.dark, .midnight) :is(.hljs-symbol, .hljs-bullet, .hljs-link, .hljs-number, .hljs-regexp, .hljs-variable, .hljs-operator) { color: #61afef !important; }
+:is(.dark, .midnight) :is(.hljs-comment, .hljs-quote, .hljs-code, .hljs-formula) { color: var(--as-fg-subtle) !important; font-style: italic; }
+:is(.dark, .midnight) :is(.hljs-subst, .hljs-params, .hljs-punctuation, .hljs-emphasis, .hljs-strong) { color: inherit !important; }
+:is(.dark, .midnight) :is(.hljs-addition, .hljs-deletion) { background: transparent !important; }
+:is(.dark, .midnight) .hljs-emphasis { font-style: italic; }
+:is(.dark, .midnight) .hljs-strong { font-weight: bold; }
 @theme {
   --font-sora: "Sora", sans-serif;
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
