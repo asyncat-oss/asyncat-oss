@@ -5,6 +5,7 @@ import Dialog from '../components/ui/Dialog.jsx';
 import Button from '../components/ui/Button.jsx';
 import { Field, Input } from '../components/ui/Field.jsx';
 import Select from '../components/ui/Select.jsx';
+import Switch from '../components/ui/Switch.jsx';
 import { Segmented } from '../components/ui/Tabs.jsx';
 import { aiProviderApi } from '../Settings/settingApi.js';
 import { ProviderLogo } from './modelLogos.jsx';
@@ -329,18 +330,13 @@ export default function ProviderConnectDialog({ entry = null, profile = null, ca
                 </>
               ) : null}
               {!isRuntime ? (
-                <label className="flex items-start gap-2.5 sm:col-span-2">
-                  <input
-                    type="checkbox"
-                    checked={supportsTools}
-                    onChange={(event) => setSupportsTools(event.target.checked)}
-                    className="mt-0.5 h-4 w-4 rounded border-line-strong accent-[var(--as-accent)]"
-                  />
-                  <span>
-                    <span className="block text-[13px] font-medium text-fg">Native tool calling</span>
-                    <span className="block text-[12px] leading-5 text-fg-subtle">Let agents call tools through the provider&apos;s own function calling. Turn off if the model doesn&apos;t support it.</span>
-                  </span>
-                </label>
+                <div className="flex items-start justify-between gap-4 sm:col-span-2">
+                  <div className="min-w-0">
+                    <p id="provider-native-tools" className="text-[13px] font-medium text-fg">Native tool calling</p>
+                    <p className="text-[12px] leading-5 text-fg-subtle">Let agents call tools through the provider&apos;s own function calling. Turn off if the model doesn&apos;t support it.</p>
+                  </div>
+                  <Switch checked={supportsTools} onChange={setSupportsTools} aria-labelledby="provider-native-tools" className="mt-0.5" />
+                </div>
               ) : null}
             </div>
           ) : null}
