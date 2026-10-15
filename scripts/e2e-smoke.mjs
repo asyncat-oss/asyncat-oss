@@ -682,7 +682,34 @@ async function main() {
     await noCrash();
   });
 
-  for (const [label, route] of [['Models', '/models'], ['Settings → Profile', '/settings/profile'], ['Settings → Connections', '/settings/connections'], ['Settings → Notifications', '/settings/notifications'], ['Settings → Background', '/settings/background'], ['Settings → Engines', '/settings/runtime'], ['Tools & Skills', '/tools'], ['Files → System', '/files/system']]) {
+  await check('old Settings addresses lead to the new pages', async () => {
+    for (const [from, to] of [['/settings/profile', 'general'], ['/settings/background', 'general'], ['/settings/advanced', 'about'], ['/settings/mcp', 'connections']]) {
+      await page.goto(`${app}${from}`, { waitUntil: 'domcontentloaded' });
+      await waitFor(() => page.evaluate((id) => document.querySelector('main[data-settings-page]')?.dataset.settingsPage === id, to), { timeout: 10000, what: `${from} to open Settings → ${to}` });
+    }
+    await page.goto(`${app}/settings/runtime`, { waitUntil: 'domcontentloaded' });
+    await waitFor(() => page.evaluate(() => `${location.pathname}${location.search}` === '/models?view=local'), { timeout: 10000, what: 'Settings → Engines to lead to Models' });
+    // A link to part of a page scrolls to it: Your data is far down Privacy &
+    // safety. Only the page scrolls, never the app's frame around it.
+    const dataInView = () => page.evaluate(() => {
+      const main = document.querySelector('main[data-settings-page="privacy"]');
+      const section = main?.querySelector('[data-settings-section="data"]');
+      if (!section) return false;
+      const top = section.getBoundingClientRect().top - main.getBoundingClientRect().top;
+      const frameStill = [...document.querySelectorAll('*')].every((el) => el === main || !el.contains(main) || el.scrollTop === 0);
+      return main.scrollTop > 0 && top > -4 && top < main.clientHeight / 2 && frameStill;
+    });
+    await page.goto(`${app}/settings/data`, { waitUntil: 'domcontentloaded' });
+    await waitFor(dataInView, { timeout: 10000, what: '/settings/data to scroll to Your data' });
+    await page.goto(`${app}/settings/general`, { waitUntil: 'domcontentloaded' });
+    const box = await page.waitForSelector('[data-settings-search]', { timeout: 10000 });
+    await box.type('export');
+    await page.keyboard.press('Enter');
+    await waitFor(async () => (await page.evaluate(() => `${location.pathname}${location.hash}`)) === '/settings/privacy#data' && await dataInView(), { timeout: 10000, what: 'searching "export" to scroll to Your data' });
+    await noCrash();
+  });
+
+  for (const [label, route] of [['Models', '/models'], ['Settings → General', '/settings/general'], ['Settings → Appearance', '/settings/appearance'], ['Settings → Shortcuts', '/settings/shortcuts'], ['Settings → Connections', '/settings/connections'], ['Settings → Notifications', '/settings/notifications'], ['Settings → Workbench', '/settings/workbench'], ['Settings → Desktop', '/settings/desktop'], ['Settings → About', '/settings/about'], ['Tools & Skills', '/tools'], ['Files → System', '/files/system']]) {
     await check(`${label} opens`, async () => {
       await page.goto(`${app}${route}`, { waitUntil: 'domcontentloaded' });
       // Pages keep live connections open (/api/events), so the network never
