@@ -453,7 +453,9 @@ export function headingId(text) {
 }
 
 export const BlockRenderer = ({ block, onTermClick }) => {
-  const baseStyles = "leading-7 text-fg";
+  // break-words: a long path or JSON line wraps instead of running off a
+  // narrow window.
+  const baseStyles = "leading-7 text-fg break-words";
 
   const renderContent = (content, options) => {
     const parsed = parseInlineMarkdown(content, onTermClick, options);

@@ -1441,7 +1441,7 @@ function AnswerEvent({
     <div className={MESSAGE_TEXT}>
       {blocks.length > 0
         ? blocks.map((block, i) => <BlockRenderer key={i} block={block} />)
-        : <p className="whitespace-pre-wrap">{displayAnswer}</p>}
+        : <p className="whitespace-pre-wrap break-words">{displayAnswer}</p>}
     </div>
   );
 
@@ -1906,7 +1906,7 @@ function StreamingPreview({ text, reasoningText = '' }) {
       <div className={MESSAGE_TEXT}>
         {blocks.length > 0
           ? blocks.map((block, i) => <BlockRenderer key={`${block.type}-${i}`} block={block} />)
-          : <p className="whitespace-pre-wrap">{clean}</p>}
+          : <p className="whitespace-pre-wrap break-words">{clean}</p>}
         <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-fg align-text-bottom" />
       </div>
       <div className="mt-2 h-7" aria-hidden="true" />
