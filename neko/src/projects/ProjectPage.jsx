@@ -127,11 +127,11 @@ export default function ProjectPage() {
         rootPath: primaryFolder.path,
         projectId: project.id,
         projectName: project.name,
-        projectEmoji: project.emoji || '📁',
+        projectEmoji: project.emoji || null,
         relativePath: '.',
         workingDir: primaryFolder.path,
       }
-      : { rootId: null, projectId: project.id, projectName: project.name, projectEmoji: project.emoji || '📁' };
+      : { rootId: null, projectId: project.id, projectName: project.name, projectEmoji: project.emoji || null };
     navigate('/home', {
       state: { startProjectChat: { experienceMode: 'work', workingContext, initialMessage: text.trim() } },
     });
@@ -200,7 +200,9 @@ export default function ProjectPage() {
             ← All projects
           </button>
           <div className="flex items-start gap-3">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-line bg-surface text-2xl">{project.emoji || '📁'}</span>
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-line bg-surface text-2xl" aria-hidden="true">
+              {project.emoji || <Folder className="h-5 w-5 text-fg-subtle" strokeWidth={1.75} />}
+            </span>
             <div className="min-w-0 flex-1">
               <h1 className="truncate text-[22px] font-semibold tracking-[-0.02em] text-fg">{project.name}</h1>
               {project.description ? <p className="mt-0.5 text-[13px] leading-5 text-fg-muted">{project.description}</p> : null}

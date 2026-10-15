@@ -69,8 +69,8 @@ export default function AgentsGallery({ onEdit, onCreate }) {
               onClick={() => onCreate(template)}
               className="flex flex-col rounded-2xl border border-line p-4 text-left transition-colors hover:border-line-strong hover:bg-hover"
             >
-              <span className="text-2xl">{template.icon}</span>
-              <span className="mt-2 text-[13px] font-medium text-fg">{template.name}</span>
+              <template.glyph className="h-5 w-5 text-fg-muted" strokeWidth={1.75} aria-hidden="true" />
+              <span className="mt-2.5 text-[13px] font-medium text-fg">{template.name}</span>
               <span className="mt-1 line-clamp-2 text-[12px] leading-5 text-fg-muted">{template.description}</span>
             </button>
           ))}

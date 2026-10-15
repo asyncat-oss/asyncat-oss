@@ -9,7 +9,8 @@ import { useToast, errorDetail } from '../../components/toastContext';
 import { projectApi } from '../projectApi.js';
 import eventBus from '../../utils/eventBus.js';
 
-const EMOJIS = ['📁', '💼', '🚀', '🧪', '📚', '✍️', '🎨', '🏡', '🌱', '🍳', '🧳', '💡', '📈', '🛠️', '🎮', '🎵', '🧠', '❤️', '🐱', '⭐'];
+// '' is no emoji: the project shows a plain folder glyph.
+const EMOJIS = ['', '📁', '💼', '🚀', '🧪', '📚', '✍️', '🎨', '🏡', '🌱', '🍳', '🧳', '💡', '📈', '🛠️', '🎮', '🎵', '🧠', '❤️', '🐱', '⭐'];
 const MAX_INSTRUCTIONS = 20000;
 const MAX_FILES = 20;
 
@@ -52,7 +53,7 @@ OptionalSection.propTypes = {
 export default function ProjectDialog({ open, project = null, initialFolder = '', onClose, onSaved, onDeleted }) {
   const editing = Boolean(project);
   const [name, setName] = useState('');
-  const [emoji, setEmoji] = useState('📁');
+  const [emoji, setEmoji] = useState('');
   const [description, setDescription] = useState('');
   const [folder, setFolder] = useState('');
   const [instructions, setInstructions] = useState('');
@@ -68,7 +69,7 @@ export default function ProjectDialog({ open, project = null, initialFolder = ''
   useEffect(() => {
     if (!open) return;
     setName(project?.name || (initialFolder ? folderName(initialFolder) : ''));
-    setEmoji(project?.emoji || '📁');
+    setEmoji(project?.emoji || '');
     setDescription(project?.description || '');
     setFolder(editing ? '' : initialFolder || '');
     setInstructions('');
@@ -206,13 +207,15 @@ export default function ProjectDialog({ open, project = null, initialFolder = ''
           <div className="flex flex-wrap gap-1.5">
             {EMOJIS.map((option) => (
               <button
-                key={option}
+                key={option || 'none'}
                 type="button"
                 onClick={() => setEmoji(option)}
                 aria-pressed={emoji === option}
+                aria-label={option ? undefined : 'No emoji'}
+                title={option ? undefined : 'No emoji'}
                 className={`flex h-8 w-8 items-center justify-center rounded-lg text-base transition-colors ${emoji === option ? 'bg-selected ring-1 ring-line-strong' : 'hover:bg-hover'}`}
               >
-                {option}
+                {option || <Folder className="h-4 w-4 text-fg-subtle" strokeWidth={1.75} />}
               </button>
             ))}
           </div>

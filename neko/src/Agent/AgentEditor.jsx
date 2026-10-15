@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronDown, ImagePlus, MessageSquare, Plus, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Bot, ChevronDown, ImagePlus, MessageSquare, Plus, Trash2, X } from 'lucide-react';
 import Button from '../components/ui/Button';
 import { Field, Input } from '../components/ui/Field';
 import Select from '../components/ui/Select.jsx';
@@ -16,7 +16,8 @@ import eventBus from '../utils/eventBus.js';
 import AgentAvatar from './AgentAvatar.jsx';
 import ConnectorPicker from '../Connectors/ConnectorPicker.jsx';
 
-const EMOJIS = ['🤖', '🧠', '🔍', '✍️', '🧑‍🏫', '🧑‍💻', '🎨', '📊', '🧪', '🩺', '⚖️', '🍳', '🌍', '🎧', '📚', '🐱'];
+// '' is no emoji: the agent shows a plain bot glyph.
+const EMOJIS = ['', '🤖', '🧠', '🔍', '✍️', '🧑‍🏫', '🧑‍💻', '🎨', '📊', '🧪', '🩺', '⚖️', '🍳', '🌍', '🎧', '📚', '🐱'];
 const CAPABILITY_HINTS = {
   web: 'Search the web and read or use web pages.',
   files: 'Read, write and run code in a project folder.',
@@ -29,7 +30,7 @@ const DEFAULT_CAPABILITIES = ['web', 'files', 'documents', 'memory'];
 
 const blankAgent = () => ({
   name: '',
-  icon: '🤖',
+  icon: '',
   avatar_image: null,
   description: '',
   instructions: '',
@@ -99,7 +100,7 @@ export default function AgentEditor({ agentId = null, template = null, onClose }
   const [agent, setAgent] = useState(() => {
     const base = blankAgent();
     if (!template) return base;
-    return { ...base, name: template.name, icon: template.icon, description: template.description, instructions: template.instructions, starter_prompts: template.starters, capabilities: template.capabilities };
+    return { ...base, name: template.name, description: template.description, instructions: template.instructions, starter_prompts: template.starters, capabilities: template.capabilities };
   });
   const [savedId, setSavedId] = useState(agentId);
   const [loading, setLoading] = useState(Boolean(agentId));
@@ -276,7 +277,7 @@ export default function AgentEditor({ agentId = null, template = null, onClose }
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto grid max-w-6xl gap-8 px-5 py-6 sm:px-8 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="min-w-0 space-y-6">
-            {error && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">{error}</p>}
+            {error && <p role="alert" className="rounded-lg bg-red-500/10 px-3 py-2 text-[13px] text-red-700 dark:text-red-400">{error}</p>}
 
             <section className="space-y-4">
               <Field label="Picture">
@@ -288,13 +289,15 @@ export default function AgentEditor({ agentId = null, template = null, onClose }
                     </span>
                   ) : EMOJIS.map((emoji) => (
                     <button
-                      key={emoji}
+                      key={emoji || 'none'}
                       type="button"
                       onClick={() => update({ icon: emoji })}
-                      aria-pressed={agent.icon === emoji}
-                      className={`flex h-8 w-8 items-center justify-center rounded-lg text-base transition-colors ${agent.icon === emoji ? 'bg-selected ring-1 ring-line-strong' : 'hover:bg-hover'}`}
+                      aria-pressed={(agent.icon || '') === emoji}
+                      aria-label={emoji ? undefined : 'No emoji'}
+                      title={emoji ? undefined : 'No emoji'}
+                      className={`flex h-8 w-8 items-center justify-center rounded-lg text-base transition-colors ${(agent.icon || '') === emoji ? 'bg-selected ring-1 ring-line-strong' : 'hover:bg-hover'}`}
                     >
-                      {emoji}
+                      {emoji || <Bot className="h-4 w-4 text-fg-subtle" strokeWidth={1.75} />}
                     </button>
                   ))}
                   <Button size="xs" variant="ghost" icon={ImagePlus} onClick={() => avatarInput.current?.click()}>Upload</Button>
@@ -403,7 +406,7 @@ export default function AgentEditor({ agentId = null, template = null, onClose }
 
           <aside className="lg:pt-1">
             <div className="sticky top-6 space-y-3">
-              <div className="text-[12px] font-medium uppercase tracking-wide text-fg-subtle">Preview</div>
+              <div className="text-[12px] font-medium text-fg-subtle">Preview</div>
               <div className="rounded-2xl border border-line bg-surface p-5 text-center">
                 <div className="flex justify-center"><AgentAvatar agent={agent} size="lg" /></div>
                 <div className="mt-3 text-[16px] font-semibold text-fg">{agent.name || 'Your agent'}</div>

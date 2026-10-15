@@ -6,7 +6,7 @@
 
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Sparkles, TerminalSquare } from 'lucide-react';
+import { BrainCircuit, TerminalSquare } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader.jsx';
 import { Tabs } from '../components/ui/Tabs.jsx';
 import AgentsGallery from './AgentsGallery.jsx';
@@ -14,7 +14,7 @@ import AgentEditor from './AgentEditor.jsx';
 import CodingAgentsSection from './CodingAgentsSection.jsx';
 
 const TABS = [
-  { value: 'agents', label: 'Your agents', icon: Sparkles },
+  { value: 'agents', label: 'Your agents', icon: BrainCircuit },
   { value: 'coding', label: 'Coding agents', icon: TerminalSquare },
 ];
 

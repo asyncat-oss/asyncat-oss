@@ -82,7 +82,9 @@ export default function ProjectsHome() {
                 className="flex min-h-[8rem] flex-col rounded-2xl border border-line bg-surface p-4 text-left transition-colors hover:border-line-strong hover:bg-hover"
               >
                 <span className="flex items-center gap-2.5">
-                  <span className="text-xl">{project.emoji || '📁'}</span>
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center text-xl" aria-hidden="true">
+                    {project.emoji || <Folder className="h-[18px] w-[18px] text-fg-subtle" strokeWidth={1.75} />}
+                  </span>
                   <span className="truncate text-[15px] font-medium text-fg">{project.name}</span>
                 </span>
                 <span className="mt-1.5 line-clamp-2 text-[13px] leading-5 text-fg-muted">
