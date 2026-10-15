@@ -150,6 +150,15 @@ export default function MemoryTab({ memory, owners }) {
   const filtered = Boolean(query.trim()) || kind !== 'all' || scope !== 'all';
 
   async function deleteMemory(mem) {
+    // The same question the skills ask: a deleted memory can't come back.
+    const text = String(mem.content || '').trim();
+    const ok = await confirm({
+      title: 'Delete this memory?',
+      message: `“${text.length > 120 ? `${text.slice(0, 117)}…` : text}” will be deleted. This can't be undone.`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!ok) return;
     setDeletingId(mem.id);
     try {
       await agentApi.deleteMemory(mem.key, mem.id);
