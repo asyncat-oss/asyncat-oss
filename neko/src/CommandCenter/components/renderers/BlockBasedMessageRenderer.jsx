@@ -1,9 +1,10 @@
 // BlockBasedMessageRenderer.jsx - Shared markdown/block renderer for agent answers
 import { lazy, Suspense, useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { escapeHtml, highlightCode, useHighlighter, useKatex } from '../../../utils/lazyRenderers.js';
-import { Copy, Check, ExternalLink, Globe2, FolderOpen } from 'lucide-react';
-import { fileIconMeta } from '../../../files/fileUtils.js';
+import { Copy, Check, ChevronRight, ExternalLink, File, Globe2, FolderOpen, Loader2 } from 'lucide-react';
 import { useUiPreferences } from '../../../contexts/UiPreferencesContext.jsx';
+import Button from '../../../components/ui/Button.jsx';
+import Dialog from '../../../components/ui/Dialog.jsx';
 import { openWebLink } from '../../../utils/openWebLink.js';
 import { FollowUps, InteractiveTable } from './InteractiveBlocks.jsx';
 
@@ -52,11 +53,13 @@ const MathSpan = ({ latex, displayMode = false }) => {
       <span className="block my-4 overflow-x-auto text-center relative group/math">
         <span dangerouslySetInnerHTML={{ __html: html }} />
         <button
+          type="button"
           onClick={handleCopy}
-          className="absolute top-0 right-0 opacity-0 group-hover/math:opacity-100 transition-opacity px-1.5 py-0.5 text-xs text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 midnight:text-slate-500 midnight:hover:text-slate-300 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 rounded"
+          className="absolute top-0 right-0 flex h-6 w-6 items-center justify-center rounded-md border border-line bg-surface text-fg-subtle opacity-0 transition-opacity hover:text-fg focus-visible:opacity-100 group-hover/math:opacity-100"
           title="Copy LaTeX"
+          aria-label={copied ? 'Copied' : 'Copy LaTeX'}
         >
-          {copied ? '✓' : 'copy'}
+          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
         </button>
       </span>
     );
@@ -66,11 +69,12 @@ const MathSpan = ({ latex, displayMode = false }) => {
     <span className="inline relative group/imath">
       <span dangerouslySetInnerHTML={{ __html: html }} />
       <button
+        type="button"
         onClick={handleCopy}
-        className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 opacity-0 group-hover/imath:opacity-100 transition-opacity px-1.5 py-0.5 text-[10px] text-gray-600 bg-white shadow-md border border-gray-200 dark:text-gray-300 dark:bg-gray-800 dark:border-gray-700 midnight:text-slate-300 midnight:bg-slate-800 midnight:border-slate-700 rounded z-10 pointer-events-none group-hover/imath:pointer-events-auto whitespace-nowrap"
+        className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 opacity-0 group-hover/imath:opacity-100 transition-opacity rounded-md border border-line bg-elevated px-1.5 py-0.5 text-[11px] text-fg-muted shadow-sm z-10 pointer-events-none group-hover/imath:pointer-events-auto whitespace-nowrap"
         title="Copy LaTeX"
       >
-        {copied ? '✓ Copied' : 'Copy LaTeX'}
+        {copied ? 'Copied' : 'Copy LaTeX'}
       </button>
     </span>
   );
@@ -191,7 +195,7 @@ const InlineFilePath = ({ rawPath }) => {
   const fileName = segments[segments.length - 1] || rawPath;
   const ext = fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : '';
   const isDir = !ext || ext.length > 12 || rawPath.endsWith('/');
-  const { Icon, color } = fileIconMeta(ext, isDir ? 'dir' : 'file');
+  const Icon = isDir ? FolderOpen : File;
 
   const displayPath = segments.length > 2
     ? `…/${segments.slice(-2).join('/')}`
@@ -200,13 +204,9 @@ const InlineFilePath = ({ rawPath }) => {
   return (
     <span
       title={rawPath}
-      className="inline-flex items-center gap-1 mx-0.5 px-1.5 py-0.5 rounded font-mono leading-normal align-middle text-[0.88em] max-w-[32ch] bg-gray-100 dark:bg-gray-800 midnight:bg-slate-700 text-[#5555a0] dark:text-indigo-300 midnight:text-indigo-300 select-all"
+      className="inline-flex items-center gap-1 mx-0.5 px-1.5 py-0.5 rounded-md font-mono leading-normal align-middle text-[0.86em] max-w-[32ch] bg-hover text-fg select-all"
     >
-      {isDir ? (
-        <FolderOpen className={`w-3 h-3 flex-shrink-0 ${color}`} />
-      ) : (
-        <Icon className={`w-3 h-3 flex-shrink-0 ${color}`} />
-      )}
+      <Icon className="w-3 h-3 flex-shrink-0 text-fg-subtle" />
       <span className="truncate">{displayPath}</span>
     </span>
   );
@@ -273,10 +273,10 @@ const WebsiteCard = ({ item, number }) => {
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-center gap-2">
           {number && <span className="shrink-0 text-[12px] tabular-nums text-fg-subtle">{number}</span>}
-          <span className="truncate text-sm font-medium text-fg">{item.title}</span>
+          <span className="truncate text-[14px] font-medium text-fg">{item.title}</span>
         </span>
         {item.description && (
-          <span className="mt-1 line-clamp-2 text-xs leading-4 text-fg-muted">{item.description}</span>
+          <span className="mt-1 line-clamp-2 text-[12px] leading-4 text-fg-muted">{item.description}</span>
         )}
         <span className="mt-1.5 flex min-w-0 items-center gap-1 text-[12px] text-accent">
           <span className="truncate">{item.domain}</span>
@@ -296,7 +296,7 @@ const InlineImage = ({ src, alt }) => {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="my-1 inline-flex align-middle overflow-hidden rounded-md border border-gray-200 bg-gray-50 shadow-sm transition hover:border-blue-300 hover:shadow-md dark:border-gray-700 dark:bg-gray-800 midnight:border-slate-700 midnight:bg-slate-800"
+        className="my-1 inline-flex align-middle overflow-hidden rounded-md border border-line bg-hover transition-colors hover:border-line-strong"
         title={label}
       >
         <img
@@ -307,51 +307,36 @@ const InlineImage = ({ src, alt }) => {
           onError={(e) => { e.currentTarget.style.display = 'none'; }}
         />
       </button>
-      {open && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setOpen(false)} />
-          <div className="relative max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900">
-            <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-700 midnight:border-slate-700">
-              <span className="truncate text-sm font-medium text-gray-800 dark:text-gray-100 midnight:text-slate-100">{label}</span>
-              <div className="flex flex-shrink-0 items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => window.open(src, '_blank', 'noopener,noreferrer')}
-                  className="rounded-lg bg-blue-500 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-600"
-                >
-                  Open
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setOpen(false)}
-                  className="flex h-8 w-8 items-center justify-center rounded-full text-lg leading-none text-gray-400 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-slate-800"
-                  aria-label="Close image preview"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-            <div className="max-h-[calc(90vh-3.5rem)] overflow-auto bg-gray-950/95 p-3">
-              <img src={src} alt={label} className="mx-auto max-h-[78vh] max-w-full object-contain" />
-            </div>
-          </div>
+      <Dialog
+        open={open}
+        size="xl"
+        title={label}
+        onClose={() => setOpen(false)}
+        footer={(
+          <Button variant="secondary" icon={ExternalLink} onClick={() => window.open(src, '_blank', 'noopener,noreferrer')}>
+            Open
+          </Button>
+        )}
+      >
+        <div className="flex justify-center rounded-lg bg-hover p-2">
+          <img src={src} alt={label} className="max-h-[65vh] max-w-full object-contain" />
         </div>
-      )}
+      </Dialog>
     </>
   );
 };
 
-// ─── Annotated term chip (clickable, opens explain panel) ───────────────────
+// ─── Annotated term (clickable, opens explain panel) ────────────────────────
+// A dotted underline, so a term reads as part of the sentence.
 
 const AnnotatedTerm = ({ term, definition, onTermClick }) => (
   <button
     type="button"
     onClick={() => onTermClick && onTermClick(term, definition)}
-    className="inline-flex items-baseline gap-0.5 mx-0.5 px-1.5 py-0.5 rounded-md text-indigo-700 dark:text-indigo-300 midnight:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 midnight:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 midnight:border-indigo-700 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 midnight:hover:bg-indigo-900/50 transition-colors cursor-pointer leading-normal font-medium text-[0.92em]"
-    title="Click to learn more"
+    className="inline rounded-sm text-fg underline decoration-fg-subtle decoration-dotted underline-offset-4 transition-colors hover:decoration-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+    title={definition}
   >
     {term}
-    <span className="text-[0.65em] text-indigo-400 dark:text-indigo-500 midnight:text-indigo-500 leading-none select-none">●</span>
   </button>
 );
 
@@ -421,7 +406,7 @@ const parseInlineMarkdown = (text, onTermClick, options = {}) => {
         }
       } else if (m[8] !== undefined) {
         // **bold**
-        parts.push(<strong key={`b-${key++}`} className="font-bold">{m[8]}</strong>);
+        parts.push(<strong key={`b-${key++}`} className="font-semibold">{m[8]}</strong>);
       } else if (m[9] !== undefined) {
         // *italic*
         parts.push(<em key={`i-${key++}`} className="italic">{m[9]}</em>);
@@ -439,7 +424,7 @@ const parseInlineMarkdown = (text, onTermClick, options = {}) => {
       } else if (m[11] !== undefined) {
         // (from Source)
         parts.push(
-          <span key={`cite-${key++}`} className="text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400 italic ml-1">
+          <span key={`cite-${key++}`} className="ml-1 text-[13px] text-fg-subtle">
             (from {m[11]})
           </span>
         );
@@ -510,7 +495,7 @@ export const BlockRenderer = ({ block, onTermClick }) => {
                 if (linkItem) return <WebsiteCard key={`${linkItem.url}-${i}`} item={linkItem} />;
 
                 return (
-                  <div key={i} className={`rounded-lg border border-gray-200 bg-white p-3 text-sm dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900 ${baseStyles}`}>
+                  <div key={i} className={`rounded-xl border border-line p-3 text-[14px] ${baseStyles}`}>
                     {renderContent(item)}
                   </div>
                 );
@@ -581,7 +566,7 @@ export const BlockRenderer = ({ block, onTermClick }) => {
                 }
 
                 return (
-                  <div key={i} className={`rounded-lg border border-gray-200 bg-white p-3 text-sm dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900 ${baseStyles}`}>
+                  <div key={i} className={`rounded-xl border border-line p-3 text-[14px] ${baseStyles}`}>
                     {item.number}. {renderContent(item.text)}
                   </div>
                 );
@@ -602,10 +587,10 @@ export const BlockRenderer = ({ block, onTermClick }) => {
                     {renderContent(item.text)}
                   </div>
                   {item.subItems.length > 0 && (
-                    <div className="pl-6 space-y-1 text-sm">
+                    <div className="pl-6 space-y-1 text-[14px]">
                       {item.subItems.map((sub, j) => (
                         <div key={j} className="flex gap-2 items-start">
-                          <span className="mt-0.5 text-xs font-normal text-fg-subtle">→</span>
+                          <span className="mt-0.5 text-[12px] font-normal text-fg-subtle">→</span>
                           <span className="flex-1 leading-relaxed text-fg-muted">
                             {renderContent(sub)}
                           </span>
@@ -620,22 +605,24 @@ export const BlockRenderer = ({ block, onTermClick }) => {
         );
       }
 
-    case 'todo':
+    case 'todo': {
+      // A read-only box: the answer's own to-do list, not a control.
+      const done = Boolean(block.properties?.completed || block.properties?.checked);
       return (
-        <div className="mb-3">
-          <label className="flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 midnight:hover:bg-slate-700/50 p-2 rounded-lg transition-colors">
-            <input
-              type="checkbox"
-              checked={block.properties?.completed || false}
-              readOnly
-              className="w-4 h-4 text-blue-600 rounded"
-            />
-            <span className={`${baseStyles} ${block.properties?.completed ? 'line-through opacity-60' : ''}`}>
-              {renderContent(block.content)}
-            </span>
-          </label>
+        <div className="mb-2 flex items-start gap-3 px-1">
+          <span
+            role="img"
+            aria-label={done ? 'Done' : 'Not done'}
+            className={`mt-1.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border ${done ? 'border-accent bg-accent' : 'border-line-strong bg-canvas'}`}
+          >
+            {done ? <Check className="h-3 w-3 text-canvas" strokeWidth={3} /> : null}
+          </span>
+          <span className={`${baseStyles} ${done ? 'line-through opacity-60' : ''}`}>
+            {renderContent(block.content)}
+          </span>
         </div>
       );
+    }
 
     case 'quote':
       return (
@@ -662,7 +649,7 @@ export const BlockRenderer = ({ block, onTermClick }) => {
       // Chart blocks — render as interactive Recharts
       if (block.properties?.language?.toLowerCase() === 'chart') {
         return (
-          <Suspense fallback={<div className="my-3 h-64 rounded-xl border border-gray-200/80 dark:border-gray-700/60 midnight:border-slate-700/60" />}>
+          <Suspense fallback={<div className="my-3 h-64 rounded-xl border border-line" />}>
             <ChartBlock content={block.content} fallback={<CodeBlock content={block.content} language="json" />} />
           </Suspense>
         );
@@ -722,48 +709,74 @@ export const BlockRenderer = ({ block, onTermClick }) => {
   }
 };
 
+// ─── Shared header for code-like blocks ─────────────────────────────────────
+// Code, LaTeX, diagrams and diffs all start with the same line: what the
+// block is on the left, quiet actions on the right.
+
+// The surface the highlight.js palette below is tuned for (GitHub light and
+// dark), shared by every block that shows code.
+const CODE_SURFACE = 'bg-[#f6f8fa] dark:bg-[#0d1117]';
+
+const BlockHeader = ({ label, children }) => (
+  <div className="flex items-center justify-between gap-2 border-b border-line px-3.5 py-1.5">
+    <span className="select-none text-[12px] font-medium text-fg-subtle">{label}</span>
+    <div className="flex items-center gap-0.5">{children}</div>
+  </div>
+);
+
+const BlockAction = ({ onClick, title, children }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    title={title}
+    className="flex h-7 select-none items-center gap-1.5 rounded-md px-2 text-[12px] font-medium text-fg-subtle outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/40"
+  >
+    {children}
+  </button>
+);
+
+// Copy, or a green check for a moment once copied.
+const useCopy = (text) => {
+  const [copyStatus, setCopyStatus] = useState(null);
+  const copy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyStatus('copied');
+    } catch (error) {
+      console.error('Failed to copy:', error);
+      setCopyStatus('failed');
+    }
+    setTimeout(() => setCopyStatus(null), 2000);
+  }, [text]);
+  return [copyStatus, copy];
+};
+
+const CopyAction = ({ status, onCopy, label = 'Copy' }) => (
+  <BlockAction onClick={onCopy}>
+    {status === 'copied' ? (
+      <>
+        <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+        Copied
+      </>
+    ) : (
+      <>
+        <Copy className="w-3.5 h-3.5" />
+        {status === 'failed' ? "Couldn't copy" : label}
+      </>
+    )}
+  </BlockAction>
+);
+
 // ─── Math block with copy-as-LaTeX button ───────────────────────────────────
 const MathBlock = ({ latex }) => {
-  const [copyStatus, setCopyStatus] = useState(null);
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(latex);
-      setCopyStatus('copied');
-      setTimeout(() => setCopyStatus(null), 2000);
-    } catch {
-      setCopyStatus('failed');
-      setTimeout(() => setCopyStatus(null), 2000);
-    }
-  };
+  const [copyStatus, handleCopy] = useCopy(latex);
 
   return (
-    <div className="mb-4 overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-slate-700">
-      {/* Header bar */}
-      <div className="flex items-center justify-between px-4 py-2 bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800 border-b border-gray-200 dark:border-gray-700 midnight:border-slate-700">
-        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 midnight:text-slate-400 uppercase tracking-wide">
-          LaTeX
-        </span>
-        <button
-          onClick={handleCopy}
-          className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 midnight:text-slate-300 midnight:hover:text-slate-100 hover:bg-gray-200 dark:hover:bg-gray-700 midnight:hover:bg-slate-600 rounded transition-colors"
-          title="Copy LaTeX source"
-        >
-          {copyStatus === 'copied' ? (
-            <>
-              <Check className="w-3.5 h-3.5 text-green-600 dark:text-green-500" />
-              <span className="text-green-600 dark:text-green-500">Copied!</span>
-            </>
-          ) : (
-            <>
-              <Copy className="w-3.5 h-3.5" />
-              Copy LaTeX
-            </>
-          )}
-        </button>
-      </div>
-      {/* Rendered math */}
-      <div className="py-5 px-6 bg-gray-50 dark:bg-gray-900 midnight:bg-slate-900 overflow-x-auto text-center">
+    <div className="mb-4 overflow-hidden rounded-xl border border-line">
+      <BlockHeader label="LaTeX">
+        <CopyAction status={copyStatus} onCopy={handleCopy} label="Copy LaTeX" />
+      </BlockHeader>
+      <div className="overflow-x-auto px-6 py-5 text-center">
         <MathSpan latex={latex} displayMode={true} />
       </div>
     </div>
@@ -771,8 +784,9 @@ const MathBlock = ({ latex }) => {
 };
 
 // ─── Code block with syntax highlighting ────────────────────────────────────
-const CodeBlock = ({ content, language = 'text' }) => {
-  const [copyStatus, setCopyStatus] = useState(null);
+// `actions` are extra header buttons beside Copy (the HTML block's preview).
+const CodeBlock = ({ content, language = 'text', actions = null }) => {
+  const [copyStatus, handleCopy] = useCopy(content);
 
   // Inject explicit hljs palettes once
   useEffect(() => {
@@ -828,47 +842,12 @@ const CodeBlock = ({ content, language = 'text' }) => {
   const hljs = useHighlighter();
   const highlighted = useMemo(() => highlightCode(hljs, content, language || 'text'), [hljs, content, language]);
 
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(content);
-      setCopyStatus('copied');
-      setTimeout(() => setCopyStatus(null), 2000);
-    } catch (error) {
-      console.error('Failed to copy code:', error);
-      setCopyStatus('failed');
-      setTimeout(() => setCopyStatus(null), 2000);
-    }
-  };
-
-  const { Icon, color } = fileIconMeta(language, 'file');
-
   return (
-    <div className="mb-4 overflow-hidden rounded-xl border border-line bg-[#f6f8fa] dark:bg-[#0d1117]">
-      <div className="flex items-center justify-between border-b border-line px-3.5 py-1.5">
-        <div className="flex items-center gap-1.5">
-          <Icon className={`w-3.5 h-3.5 ${color} opacity-70`} />
-          <span className="select-none text-[12px] font-medium text-fg-subtle">
-            {language || 'text'}
-          </span>
-        </div>
-        <button
-          type="button"
-          onClick={handleCopy}
-          className="flex h-7 select-none items-center gap-1.5 rounded-md px-2 text-[12px] font-medium text-fg-subtle transition-colors hover:bg-hover hover:text-fg"
-        >
-          {copyStatus === 'copied' ? (
-            <>
-              <Check className="w-3.5 h-3.5 text-green-600 dark:text-green-500" />
-              <span className="text-green-600 dark:text-green-500">Copied</span>
-            </>
-          ) : (
-            <>
-              <Copy className="w-3.5 h-3.5" />
-              Copy
-            </>
-          )}
-        </button>
-      </div>
+    <div className={`mb-4 overflow-hidden rounded-xl border border-line ${CODE_SURFACE}`}>
+      <BlockHeader label={language || 'text'}>
+        {actions}
+        <CopyAction status={copyStatus} onCopy={handleCopy} />
+      </BlockHeader>
 
       <pre className="overflow-x-auto px-4 py-3.5">
         <code
@@ -903,7 +882,7 @@ const MermaidBlock = ({ content }) => {
         if (!mermaidInitialized) {
           mermaid.initialize({
             startOnLoad: false,
-            theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default',
+            theme: document.documentElement.matches('.dark, .midnight') ? 'dark' : 'neutral',
             // Diagrams come from model output: keep mermaid's default sanitizing of
             // labels and links (loose allowed javascript: URLs in click handlers).
             securityLevel: 'strict',
@@ -929,36 +908,26 @@ const MermaidBlock = ({ content }) => {
   }
 
   return (
-    <div className="mb-6 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 midnight:border-slate-800 shadow-sm">
-      <div className="flex items-center justify-between px-4 py-2 bg-gray-100 dark:bg-gray-900 midnight:bg-slate-900 border-b border-gray-200 dark:border-gray-800 midnight:border-slate-800">
-        <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 midnight:text-slate-400 tracking-wide uppercase">
-          Diagram
-        </span>
-        <button
-          onClick={() => setShowSource(v => !v)}
-        className="text-[10px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 midnight:hover:text-slate-300 transition-colors"
-        >
+    <div className="mb-6 overflow-hidden rounded-xl border border-line">
+      <BlockHeader label="Diagram">
+        <BlockAction onClick={() => setShowSource(v => !v)}>
           {showSource ? 'Show diagram' : 'View source'}
-        </button>
-      </div>
+        </BlockAction>
+      </BlockHeader>
       {showSource ? (
-        <pre className="p-5 overflow-x-auto bg-gray-50 dark:bg-gray-950 midnight:bg-slate-950 text-[13px] font-mono leading-relaxed text-gray-700 dark:text-gray-300 midnight:text-slate-300">
+        <pre className={`overflow-x-auto p-4 font-mono text-[13px] leading-relaxed text-fg ${CODE_SURFACE}`}>
           {content}
         </pre>
       ) : svg ? (
         <div
           ref={containerRef}
-          className="p-4 bg-white dark:bg-gray-950 midnight:bg-slate-950 overflow-x-auto flex justify-center"
+          className="flex justify-center overflow-x-auto p-4"
           dangerouslySetInnerHTML={{ __html: svg }}
         />
       ) : (
-        <div className="p-8 flex items-center justify-center text-xs text-gray-400 midnight:text-slate-500">
-          <span className="flex gap-0.5">
-            <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 midnight:bg-slate-600 animate-bounce" style={{ animationDelay: '0ms' }} />
-            <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 midnight:bg-slate-600 animate-bounce" style={{ animationDelay: '150ms' }} />
-            <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600 midnight:bg-slate-600 animate-bounce" style={{ animationDelay: '300ms' }} />
-          </span>
-          <span className="ml-2">Rendering diagram…</span>
+        <div className="flex items-center justify-center gap-2 p-8 text-[12px] text-fg-subtle">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          Drawing the diagram…
         </div>
       )}
     </div>
@@ -966,59 +935,38 @@ const MermaidBlock = ({ content }) => {
 };
 
 // ─── Diff block with colored +/- lines ──────────────────────────────────────
+// Added and removed lines keep green and red: there they are status.
+const DIFF_LINE = {
+  added: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+  removed: 'bg-red-500/10 text-red-700 dark:text-red-300',
+  hunk: 'text-fg-subtle',
+  meta: 'text-fg-subtle',
+  plain: 'text-fg',
+};
+
+const diffLineKind = (line) => {
+  if (line.startsWith('+') && !line.startsWith('+++')) return 'added';
+  if (line.startsWith('-') && !line.startsWith('---')) return 'removed';
+  if (line.startsWith('@@')) return 'hunk';
+  if (line.startsWith('diff ') || line.startsWith('index ') || line.startsWith('---') || line.startsWith('+++')) return 'meta';
+  return 'plain';
+};
+
 const DiffBlock = ({ content }) => {
-  const [copyStatus, setCopyStatus] = useState(null);
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(content);
-      setCopyStatus('copied');
-      setTimeout(() => setCopyStatus(null), 2000);
-    } catch {
-      setCopyStatus('failed');
-      setTimeout(() => setCopyStatus(null), 2000);
-    }
-  };
-
+  const [copyStatus, handleCopy] = useCopy(content);
   const lines = (content || '').split('\n');
 
   return (
-    <div className="mb-6 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 midnight:border-slate-800 shadow-sm">
-      <div className="flex items-center justify-between px-4 py-2 bg-gray-100 dark:bg-gray-900 midnight:bg-slate-900 border-b border-gray-200 dark:border-gray-800 midnight:border-slate-800">
-        <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 midnight:text-slate-400 tracking-wide uppercase">Diff</span>
-        <button
-          onClick={handleCopy}
-          className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 midnight:text-slate-400 midnight:hover:text-slate-200 hover:bg-gray-200 dark:hover:bg-gray-800 midnight:hover:bg-slate-800 rounded transition-colors"
-        >
-          {copyStatus === 'copied' ? (
-            <><Check className="w-3.5 h-3.5 text-green-600 dark:text-green-500" /><span className="text-green-600 dark:text-green-500">Copied!</span></>
-          ) : (
-            <><Copy className="w-3.5 h-3.5" /> Copy</>
-          )}
-        </button>
-      </div>
-      <pre className="p-5 overflow-x-auto bg-gray-50 dark:bg-gray-950 midnight:bg-slate-950 text-[13px] font-mono leading-relaxed">
-        {lines.map((line, i) => {
-          let className = 'text-gray-700 dark:text-gray-300 midnight:text-slate-300';
-          let bgClass = '';
-          if (line.startsWith('+') && !line.startsWith('+++')) {
-            className = 'text-emerald-700 dark:text-emerald-300 midnight:text-emerald-300';
-            bgClass = 'bg-emerald-50 dark:bg-emerald-900/20 midnight:bg-emerald-900/20';
-          } else if (line.startsWith('-') && !line.startsWith('---')) {
-            className = 'text-red-700 dark:text-red-300 midnight:text-red-300';
-            bgClass = 'bg-red-50 dark:bg-red-900/20 midnight:bg-red-900/20';
-          } else if (line.startsWith('@@')) {
-            className = 'text-sky-600 dark:text-sky-300 midnight:text-sky-300 font-medium';
-            bgClass = 'bg-sky-50/50 dark:bg-sky-900/10 midnight:bg-sky-900/10';
-          } else if (line.startsWith('diff ') || line.startsWith('index ') || line.startsWith('---') || line.startsWith('+++')) {
-            className = 'text-gray-500 dark:text-gray-500 midnight:text-slate-500 italic';
-          }
-          return (
-            <div key={i} className={`px-1 -mx-1 ${bgClass}`}>
-              <span className={className}>{line || ' '}</span>
-            </div>
-          );
-        })}
+    <div className={`mb-6 overflow-hidden rounded-xl border border-line ${CODE_SURFACE}`}>
+      <BlockHeader label="Diff">
+        <CopyAction status={copyStatus} onCopy={handleCopy} />
+      </BlockHeader>
+      <pre className="overflow-x-auto px-4 py-3.5 font-mono text-[13px] leading-relaxed">
+        {lines.map((line, i) => (
+          <div key={i} className={`-mx-1 px-1 ${DIFF_LINE[diffLineKind(line)]}`}>
+            {line || ' '}
+          </div>
+        ))}
       </pre>
     </div>
   );
@@ -1039,23 +987,20 @@ const CollapsibleBlock = ({ summary, content, onTermClick }) => {
   }, [content]);
 
   return (
-    <div className="mb-6 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 midnight:border-slate-800 shadow-sm">
+    <div className="mb-6 overflow-hidden rounded-xl border border-line">
       <button
+        type="button"
         onClick={() => setOpen(v => !v)}
-        className="flex items-center gap-2 w-full px-4 py-3 text-left bg-gray-50 dark:bg-gray-900 midnight:bg-slate-900 hover:bg-gray-100 dark:hover:bg-gray-800 midnight:hover:bg-slate-800 transition-colors"
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 px-4 py-2.5 text-left outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40"
       >
-        <svg
-          className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${open ? 'rotate-90' : ''}`}
-          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
-        <span className="text-sm font-medium text-gray-700 dark:text-gray-200 midnight:text-slate-200">
+        <ChevronRight className={`h-3.5 w-3.5 text-fg-subtle transition-transform duration-200 ${open ? 'rotate-90' : ''}`} />
+        <span className="text-[14px] font-medium text-fg">
           {summary}
         </span>
       </button>
       {open && (
-        <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800 bg-white dark:bg-gray-950 midnight:bg-slate-950">
+        <div className="border-t border-line px-4 py-3">
           <div className="space-y-1">
             {innerBlocks.map((block, i) => (
               <BlockRenderer key={`details-${i}`} block={block} onTermClick={onTermClick} />
@@ -1069,19 +1014,6 @@ const CollapsibleBlock = ({ summary, content, onTermClick }) => {
 
 // ─── HTML block — code view + open in Preview panel ─────────────────────────
 const HtmlPreviewBlock = ({ content }) => {
-  const [copyStatus, setCopyStatus] = useState(null);
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(content);
-      setCopyStatus('copied');
-      setTimeout(() => setCopyStatus(null), 2000);
-    } catch {
-      setCopyStatus('failed');
-      setTimeout(() => setCopyStatus(null), 2000);
-    }
-  };
-
   const handleOpenPreview = () => {
     let previewUrl;
     if (window?.electronAPI) {
@@ -1095,33 +1027,16 @@ const HtmlPreviewBlock = ({ content }) => {
   };
 
   return (
-    <div className="mb-6 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 midnight:border-slate-800 shadow-sm">
-      <div className="flex items-center justify-between px-4 py-2 bg-gray-100 dark:bg-gray-900 midnight:bg-slate-900 border-b border-gray-200 dark:border-gray-800 midnight:border-slate-800">
-        <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 tracking-wide uppercase">
-          HTML
-        </span>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleCopy}
-            className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-          >
-            {copyStatus === 'copied' ? (
-              <><Check className="w-3 h-3 text-green-500" /> Copied</>
-            ) : (
-              <><Copy className="w-3 h-3" /> Copy</>
-            )}
-          </button>
-          <button
-            onClick={handleOpenPreview}
-            className="flex items-center gap-1 text-[10px] text-indigo-500 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 transition-colors font-medium"
-          >
-            <ExternalLink className="w-3 h-3" />
-            Open in Preview
-          </button>
-        </div>
-      </div>
-      <CodeBlock content={content} language="html" />
-    </div>
+    <CodeBlock
+      content={content}
+      language="html"
+      actions={(
+        <BlockAction onClick={handleOpenPreview}>
+          <ExternalLink className="w-3.5 h-3.5" />
+          Open in preview
+        </BlockAction>
+      )}
+    />
   );
 };
 
