@@ -35,6 +35,8 @@ test('groups follow den\'s order, then categories it did not list, and skip empt
   assert.deepEqual(groups[3].skills.map((skill) => skill.name), ['loose']);
   assert.deepEqual(groupByCategory([], CATEGORIES), []);
   assert.deepEqual(groupByCategory(skills.slice(0, 1)).map((group) => group.name), ['Workflow'], 'without a list from den');
+  const sorted = groupByCategory([{ name: 'zebra', category: 'Workflow' }, { name: 'apple', category: 'Workflow' }], CATEGORIES);
+  assert.deepEqual(sorted[0].skills.map((skill) => skill.name), ['apple', 'zebra'], 'by name inside a group');
 });
 
 test('the New skill form offers the plain names', () => {

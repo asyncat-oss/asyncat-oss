@@ -2,10 +2,10 @@
 // the grouped rows, the inspector's sections, and the light Markdown that
 // tool and skill descriptions use.
 
-import { Fragment, useMemo } from 'react';
+import { Fragment, useEffect, useMemo, useRef } from 'react';
 import PropTypes from 'prop-types';
 import Skeleton from '../components/ui/Skeleton.jsx';
-import { inlineTokens, parseMarkdownBlocks } from './markdownBlocks.js';
+import { inlineTokens, parseMarkdownBlocks, plainText } from './markdownBlocks.js';
 
 /** Toolbar and list on the left, the open item on the right (under it on small screens). */
 export function ListWithInspector({ toolbar, list, inspector, label }) {
@@ -52,8 +52,15 @@ CatalogGroup.propTypes = {
 
 /** One row of a group: a name with small badges, then a line of description. */
 export function CatalogRow({ name, mono = false, badges = null, description, meta = null, selected, onSelect }) {
+  const ref = useRef(null);
+  // A row opened from elsewhere (a new skill, a filter) scrolls into view.
+  useEffect(() => {
+    if (selected) ref.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [selected]);
+
   return (
     <button
+      ref={ref}
       type="button"
       onClick={onSelect}
       aria-current={selected ? 'true' : undefined}
@@ -63,7 +70,7 @@ export function CatalogRow({ name, mono = false, badges = null, description, met
         <span className={`min-w-0 truncate text-[13px] font-medium text-fg ${mono ? 'font-mono' : ''}`}>{name}</span>
         {badges}
       </span>
-      <span className="mt-0.5 block truncate text-[12px] leading-5 text-fg-muted">{description || 'No description'}</span>
+      <span className="mt-0.5 block truncate text-[12px] leading-5 text-fg-muted">{plainText(description) || 'No description'}</span>
       {meta ? <span className="block truncate text-[11px] leading-4 text-fg-subtle">{meta}</span> : null}
     </button>
   );
@@ -78,6 +85,13 @@ CatalogRow.propTypes = {
   selected: PropTypes.bool,
   onSelect: PropTypes.func.isRequired,
 };
+
+/** A tag: smaller and quieter than a Badge, outlined instead of filled. */
+export function TagChip({ children }) {
+  return <span className="inline-flex items-center rounded-md border border-line px-1.5 py-px text-[11px] leading-4 text-fg-muted">{children}</span>;
+}
+
+TagChip.propTypes = { children: PropTypes.node };
 
 /** Grey rows while the list loads. */
 export function ListSkeleton() {

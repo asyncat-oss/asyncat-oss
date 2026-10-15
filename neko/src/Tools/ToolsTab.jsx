@@ -125,7 +125,7 @@ export default function ToolsTab({ catalog }) {
 
   let list;
   if (error) {
-    list = <Notice tone="error" action={<Button size="xs" variant="ghost" onClick={reload}>Try again</Button>}>Couldn&apos;t load the tools: {error}</Notice>;
+    list = <Notice tone="error" action={<Button size="xs" variant="ghost" onClick={() => reload()}>Try again</Button>}>Couldn&apos;t load the tools: {error}</Notice>;
   } else if (loading) {
     list = <ListSkeleton />;
   } else if (!groups.length) {

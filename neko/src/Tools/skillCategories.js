@@ -23,7 +23,8 @@ export function skillMatches(skill, query) {
 
 /**
  * Skills in groups: [{ name, description, skills }], in the order den gave
- * the categories, then any category it didn't list. Empty groups are left out.
+ * the categories, then any category it didn't list, each group's skills by
+ * name. Empty groups are left out.
  */
 export function groupByCategory(skills = [], categories = []) {
   const groups = new Map(categories.map((category) => [category.name, { name: category.name, description: category.description || '', skills: [] }]));
@@ -32,7 +33,9 @@ export function groupByCategory(skills = [], categories = []) {
     if (!groups.has(name)) groups.set(name, { name, description: '', skills: [] });
     groups.get(name).skills.push(skill);
   }
-  return [...groups.values()].filter((group) => group.skills.length > 0);
+  const filled = [...groups.values()].filter((group) => group.skills.length > 0);
+  for (const group of filled) group.skills.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  return filled;
 }
 
 /** The New skill form's choices: [{ value, label }]. */

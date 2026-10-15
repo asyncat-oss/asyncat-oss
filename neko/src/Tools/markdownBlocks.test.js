@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { inlineTokens, parseMarkdownBlocks } from './markdownBlocks.js';
+import { inlineTokens, parseMarkdownBlocks, plainText } from './markdownBlocks.js';
 
 test('blocks: headings, numbered and bulleted items, and joined paragraphs', () => {
   const text = [
@@ -47,4 +47,9 @@ test('inline: code and bold between plain text', () => {
   assert.deepEqual(inlineTokens('plain'), [{ type: 'text', text: 'plain' }]);
   assert.deepEqual(inlineTokens(''), []);
   assert.deepEqual(inlineTokens('an `unclosed tick'), [{ type: 'text', text: 'an `unclosed tick' }]);
+});
+
+test('plain text drops the marks for a one-line preview', () => {
+  assert.equal(plainText('Lay out a bed: spacing and **sun** needs, with `full sun`.'), 'Lay out a bed: spacing and sun needs, with full sun.');
+  assert.equal(plainText(undefined), '');
 });

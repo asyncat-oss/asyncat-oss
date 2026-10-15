@@ -20,3 +20,18 @@ export function getSkillOrigin(skill) {
   }
   return 'user';
 }
+
+/** Each origin's name on a badge and in the filter. */
+export const ORIGIN_LABELS = { default: 'Built-in', user: 'Yours', auto: 'Automatic' };
+
+/** How many skills came from each place: { default, user, auto }. */
+export function originCounts(skills = []) {
+  const counts = { default: 0, user: 0, auto: 0 };
+  for (const skill of skills) counts[getSkillOrigin(skill)] += 1;
+  return counts;
+}
+
+/** The skills from `origin` ('all' for every one). */
+export function filterByOrigin(skills = [], origin = 'all') {
+  return origin === 'all' ? skills : skills.filter((skill) => getSkillOrigin(skill) === origin);
+}

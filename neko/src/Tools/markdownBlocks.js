@@ -59,3 +59,8 @@ export function inlineTokens(text) {
   if (lastIndex < source.length) tokens.push({ type: 'text', text: source.slice(lastIndex) });
   return tokens;
 }
+
+/** The text without its Markdown marks, for a one-line preview. */
+export function plainText(text) {
+  return inlineTokens(text).map((token) => token.text).join('');
+}
