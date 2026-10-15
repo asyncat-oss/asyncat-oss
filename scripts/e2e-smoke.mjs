@@ -460,7 +460,7 @@ async function main() {
     });
     assert(saved.conversationId, 'the rated chat was not saved');
     await page.goto(`${app}/models?tab=training`, { waitUntil: 'domcontentloaded' });
-    await waitFor(() => page.evaluate(() => document.querySelector('[data-guide-step="data"]')?.innerText.includes('rated 👍 (1)')), { timeout: 20000, what: 'the rated answer in the training steps' });
+    await waitFor(() => page.evaluate(() => document.querySelector('[data-guide-step="data"]')?.innerText.includes('marked good (1)')), { timeout: 20000, what: 'the rated answer in the training steps' });
     await noCrash();
   });
 

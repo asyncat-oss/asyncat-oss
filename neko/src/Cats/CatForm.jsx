@@ -278,7 +278,7 @@ export function SpaceSection({ form, set, cat = null }) {
         </div>
         <div className="rounded-xl border border-line px-3.5 py-3">
           <p className="flex items-center gap-2 text-[13px] font-medium text-fg"><Brain className="h-4 w-4 text-fg-subtle" />Its own memories</p>
-          <p className="mt-1 text-[12px] leading-5 text-fg-muted">What it learns, and your 👍 / 👎 and &ldquo;next time&rdquo; notes, stay with it. Your chats don&apos;t see them.</p>
+          <p className="mt-1 text-[12px] leading-5 text-fg-muted">What it learns, and your thumbs up or down and &ldquo;next time&rdquo; notes, stay with it. Your chats don&apos;t see them.</p>
           {cat?.id ? <Link to={`/tools?tab=memory&scope=cat:${cat.id}`} className="mt-1 inline-block text-[12px] text-accent hover:underline">See and edit its memories</Link> : null}
         </div>
       </div>

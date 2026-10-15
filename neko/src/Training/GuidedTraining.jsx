@@ -1,4 +1,4 @@
-// Models → Training as four steps: pick data (chat answers you rated 👍,
+// Models → Training as four steps: pick data (chat answers you marked good,
 // notes, project files), see what fits the GPU and roughly how long it
 // takes, train, then use the adapter in llama.cpp and compare answers
 // with it off and on.
@@ -68,7 +68,7 @@ function Stepper({ step, reached, onPick }) {
               aria-current={current ? 'step' : undefined}
               className={`inline-flex items-center gap-1.5 rounded-full py-1 pl-1 pr-2.5 text-[12px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/40 ${current ? 'bg-selected text-fg' : done ? 'text-fg-muted hover:bg-hover hover:text-fg' : 'text-fg-subtle'} disabled:cursor-default`}
             >
-              <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[11px] tabular-nums ${current ? 'bg-fg text-canvas' : done ? 'bg-accent text-canvas' : 'bg-hover'}`}>{done ? <Check className="h-2.5 w-2.5" strokeWidth={3} /> : item.id}</span>
+              <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[11px] tabular-nums ${current ? 'bg-fg text-canvas' : done ? 'bg-accent text-canvas' : 'bg-hover text-fg-muted'}`}>{done ? <Check className="h-2.5 w-2.5" strokeWidth={3} /> : item.id}</span>
               {item.label}
             </button>
           </li>
@@ -134,8 +134,8 @@ function DataStep({ onBuilt }) {
           disabled={!sources.ratedAnswers}
           onChange={(value) => setChoice((current) => ({ ...current, ratedChats: value }))}
           icon={MessageSquare}
-          title={`Chat answers you rated 👍 (${sources.ratedAnswers})`}
-          hint={sources.ratedAnswers ? `From ${sources.ratedChats} chat${sources.ratedChats === 1 ? '' : 's'}, each with the conversation before it.` : 'None yet. Rate good answers with 👍 under them in chats.'}
+          title={`Chat answers you marked good (${sources.ratedAnswers})`}
+          hint={sources.ratedAnswers ? `From ${sources.ratedChats} chat${sources.ratedChats === 1 ? '' : 's'}, each with the conversation before it.` : 'None yet. Mark a good answer with the thumbs up under it in a chat.'}
         />
         <Choice
           checked={choice.notes && sources.notes > 0}
