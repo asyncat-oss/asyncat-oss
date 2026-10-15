@@ -1,10 +1,19 @@
+// The llama.cpp engine behind downloaded language models (Models → Local
+// models → Engine): which build runs them, managed builds to install, update
+// or remove, every engine found on this computer, and one set by its path.
+
 import { useMemo, useState } from 'react';
 import {
-  Check, ChevronDown, ChevronUp, Cpu, Download, HardDrive, RefreshCw,
-  RotateCcw, Settings2, TerminalSquare, Trash2, TriangleAlert, Wrench, Zap,
+  CheckCircle2, ChevronDown, Download, HardDrive, RefreshCw,
+  ArrowLeftRight, RotateCcw, Settings2, TerminalSquare, Trash2,
 } from 'lucide-react';
 import { Badge } from './modelPageShared.jsx';
+import Button from '../components/ui/Button.jsx';
+import { Input } from '../components/ui/Field.jsx';
+import Notice from '../components/ui/Notice.jsx';
+import { Progress } from '../components/ui/Progress.jsx';
 import Select from '../components/ui/Select.jsx';
+import { useConfirm } from '../components/confirmContext.js';
 import { downloadProgressText, formatBytes } from './engineProgress.js';
 import { buildsBehind, buildsNewerText, profileForCapability } from './engineVersions.js';
 
@@ -18,15 +27,6 @@ const INSTALL_PROFILE_LABELS = {
 };
 
 const INSTALL_PROFILE_ORDER = ['cpu_safe', 'apple_metal', 'nvidia_gpu', 'amd_rocm', 'vulkan', 'intel_sycl'];
-
-const capabilityBadgeColor = (hint) => {
-  if (hint === 'nvidia') return 'green';
-  if (hint === 'apple') return 'blue';
-  if (hint === 'amd') return 'amber';
-  if (hint === 'vulkan') return 'purple';
-  if (hint === 'intel') return 'cyan';
-  return 'gray';
-};
 
 const readableRuntime = (candidate) => (
   candidate?.runtime === 'python' ? 'llama-cpp-python' : 'llama.cpp'
@@ -52,7 +52,6 @@ const hardwareSummary = (hardware) => {
 const installStatusTone = (status) => {
   if (status === 'error') return 'red';
   if (status === 'complete') return 'green';
-  if (status === 'queued' || status === 'running') return 'blue';
   return 'gray';
 };
 
@@ -75,8 +74,9 @@ const recommendationCopy = (recommendation, current, hardware) => {
   return 'CPU-safe runtime is the recommended default for this machine.';
 };
 
+// Rows in one bordered box, with lines between them.
 const SettingGroup = ({ children, className = '' }) => (
-  <section className={`overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950 ${className}`}>
+  <section className={`divide-y divide-line rounded-xl border border-line ${className}`}>
     {children}
   </section>
 );
@@ -86,32 +86,25 @@ const CUSTOM_RUNTIMES = [
   { value: 'python', label: 'Python' },
 ];
 
-const SettingRow = ({ label, detail, children, divider = true }) => (
-  <div className={`grid gap-3 px-4 py-4 sm:grid-cols-[minmax(150px,240px)_1fr] sm:items-center ${divider ? 'border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800' : ''}`}>
+const SettingRow = ({ label, detail, children }) => (
+  <div className="grid gap-3 px-4 py-3 sm:grid-cols-[minmax(150px,240px)_1fr] sm:items-center">
     <div className="min-w-0">
-      <p className="text-sm font-semibold text-gray-950 dark:text-gray-100 midnight:text-slate-100">{label}</p>
+      <p className="text-[13px] font-medium text-fg">{label}</p>
       {detail && (
-        <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400 midnight:text-slate-400">{detail}</p>
+        <p className="mt-0.5 break-words text-[12px] leading-5 text-fg-muted">{detail}</p>
       )}
     </div>
     <div className="min-w-0 sm:justify-self-end">{children}</div>
   </div>
 );
 
-const StatusNote = ({ tone = 'gray', children }) => {
-  const tones = {
-    gray: 'border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 midnight:border-slate-800 midnight:bg-slate-900 midnight:text-slate-300',
-    red: 'border-red-100 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300',
-    green: 'border-green-100 bg-green-50 text-green-700 dark:border-green-900/50 dark:bg-green-950/20 dark:text-green-300',
-    amber: 'border-amber-100 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200',
-    blue: 'border-blue-100 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-300',
-  };
-  return (
-    <div className={`rounded-xl border px-4 py-3 text-sm ${tones[tone] || tones.gray}`}>
-      {children}
-    </div>
-  );
-};
+// A finished action: a light green line with a check.
+const SuccessNote = ({ children }) => (
+  <p role="status" className="flex items-start gap-2 rounded-lg bg-emerald-500/10 px-3 py-2 text-[13px] text-emerald-700 dark:text-emerald-400">
+    <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+    <span className="min-w-0">{children}</span>
+  </p>
+);
 
 const EngineRuntimeSection = ({
   engineData,
@@ -145,10 +138,10 @@ const EngineRuntimeSection = ({
   onRefreshCatalog,
   installReadiness = null,
 }) => {
+  const confirm = useConfirm();
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [customRuntime, setCustomRuntime] = useState('binary');
   const [customPath, setCustomPath] = useState('');
-  const [confirmRemove, setConfirmRemove] = useState(null);
 
   const recommendation = engineData?.recommendation || null;
   const current = engineData?.current || null;
@@ -219,7 +212,7 @@ const EngineRuntimeSection = ({
       return {
         key: engineKey(recommendationCandidate),
         label: 'Switch',
-        icon: Zap,
+        icon: ArrowLeftRight,
         onClick: () => onSwitch?.({
           runtime: recommendationCandidate.runtime,
           path: recommendationCandidate.path,
@@ -270,7 +263,6 @@ const EngineRuntimeSection = ({
   const jobMessage = activeBuildJob?.message || activeInstallJob?.message || jobStatus;
   const jobProgress = activeBuildJob?.progress ?? activeBuildJob?.percent ?? activeInstallJob?.progress ?? activeInstallJob?.percent ?? 0;
   const jobBytes = activeBuildJob ? '' : downloadProgressText(activeInstallJob);
-  const PrimaryActionIcon = primaryAction?.icon;
 
   const submitCustom = (retry = false) => {
     const path = customPath.trim();
@@ -284,56 +276,45 @@ const EngineRuntimeSection = ({
     onSwitch?.({ runtime: selected.runtime, path: selected.path }, false);
   };
 
-  const requestRemove = (key) => {
-    if (confirmRemove !== key) {
-      setConfirmRemove(key);
-      return;
-    }
-    setConfirmRemove(null);
-    onRemoveManagedEngine?.(key);
+  const requestRemove = async (key) => {
+    const name = key === 'python' ? 'Asyncat llama-cpp-python' : (INSTALL_PROFILE_LABELS[key] || 'This build');
+    const ok = await confirm({
+      title: 'Remove this engine?',
+      message: `${name} is deleted from this computer. You can install it again later.`,
+      confirmLabel: 'Remove',
+      destructive: true,
+    });
+    if (ok) onRemoveManagedEngine?.(key);
   };
+
+  const busyKey = Boolean(switchingKey) || Boolean(installingKey);
 
   return (
     <div className="space-y-5">
       <SettingGroup>
-        <div className="flex flex-col gap-4 border-b border-gray-100 px-4 py-4 dark:border-gray-800 midnight:border-slate-800 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex min-w-0 items-start gap-3">
-            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gray-950 text-white dark:bg-gray-100 dark:text-gray-950 midnight:bg-slate-800 midnight:text-slate-100">
-              <Cpu className="h-4 w-4" />
-            </div>
-            <div className="min-w-0">
-              <h3 className="text-sm font-semibold text-gray-950 dark:text-gray-100 midnight:text-slate-100">
-                Runtime selections
-              </h3>
-              <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400 midnight:text-slate-400">
-                {recommendationCopy(recommendation, current, engineData?.hardware)}
-              </p>
-            </div>
+        <div className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <h3 className="text-[13px] font-medium text-fg">Runtime selections</h3>
+            <p className="mt-0.5 text-[12px] leading-5 text-fg-muted">
+              {recommendationCopy(recommendation, current, engineData?.hardware)}
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {current?.capabilityLabel && (
-              <Badge color={capabilityBadgeColor(current.capabilityHint)}>{current.capabilityLabel}</Badge>
-            )}
+            {current?.capabilityLabel && <Badge>{current.capabilityLabel}</Badge>}
             {primaryAction && (
-              <button
-                type="button"
+              <Button
+                variant="primary"
+                icon={primaryAction.icon}
                 onClick={primaryAction.onClick}
-                disabled={Boolean(switchingKey) || Boolean(installingKey)}
-                className="inline-flex items-center gap-2 rounded-lg bg-gray-950 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-gray-800 disabled:opacity-50 dark:bg-gray-100 dark:text-gray-950 dark:hover:bg-gray-200 midnight:bg-slate-800 midnight:text-slate-100 midnight:ring-1 midnight:ring-slate-700"
+                disabled={busyKey}
+                loading={switchingKey === primaryAction.key || installingKey === primaryAction.key}
               >
-                {PrimaryActionIcon && <PrimaryActionIcon className={`h-3.5 w-3.5 ${switchingKey === primaryAction.key || installingKey === primaryAction.key ? 'animate-spin' : ''}`} />}
                 {primaryAction.label} recommended
-              </button>
+              </Button>
             )}
-            <button
-              type="button"
-              onClick={() => onRescan?.({ clearActions: true })}
-              disabled={loading}
-              className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800 midnight:border-slate-700 midnight:bg-slate-900"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <Button icon={RefreshCw} onClick={() => onRescan?.({ clearActions: true })} loading={loading}>
               Rescan
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -344,7 +325,7 @@ const EngineRuntimeSection = ({
           <Select
             value={selectableCandidates.length ? currentKey : ''}
             onChange={handleEngineSelect}
-            disabled={selectableCandidates.length === 0 || Boolean(switchingKey) || Boolean(installingKey)}
+            disabled={selectableCandidates.length === 0 || busyKey}
             placeholder="Not detected"
             aria-label="GGUF engine"
             className="sm:w-[360px]"
@@ -359,61 +340,47 @@ const EngineRuntimeSection = ({
         <SettingRow
           label="MLX"
           detail="Used by MLX model folders on Apple Silicon or Linux."
-          divider={false}
         >
-          <div className="flex w-full items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-950 midnight:border-slate-700 midnight:bg-slate-950 sm:w-[360px]">
-            <span className="truncate font-medium text-gray-800 dark:text-gray-100 midnight:text-slate-100">
-              {mlxLabel}
-            </span>
-            <Badge color={mlxReady ? 'blue' : (mlxSupported ? 'amber' : 'gray')}>
+          <div className="flex items-center gap-2 text-[13px] text-fg sm:w-[360px]">
+            <span className="min-w-0">{mlxLabel}</span>
+            <Badge color={mlxReady ? 'green' : (mlxSupported ? 'amber' : 'gray')}>
               {mlxReady ? 'Ready' : (mlxSupported ? 'Install' : 'System')}
             </Badge>
           </div>
         </SettingRow>
       </SettingGroup>
 
-      {actionError && (
-        <StatusNote tone="red">
-          <span className="flex items-start gap-2">
-            <TriangleAlert className="mt-0.5 h-4 w-4 flex-shrink-0" />
-            <span>{actionError}</span>
-          </span>
-        </StatusNote>
-      )}
-      {actionSuccess && <StatusNote tone="green">{actionSuccess}</StatusNote>}
-      {!actionError && !actionSuccess && installNotice && <StatusNote tone="gray">{installNotice}</StatusNote>}
+      {actionError && <Notice tone="error">{actionError}</Notice>}
+      {actionSuccess && <SuccessNote>{actionSuccess}</SuccessNote>}
+      {!actionError && !actionSuccess && installNotice && <Notice tone="info">{installNotice}</Notice>}
 
       {jobStatus && (
         <SettingGroup>
-          <div className="px-4 py-4">
+          <div className="px-4 py-3">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-gray-950 dark:text-gray-100 midnight:text-slate-100">
+                <p className="text-[13px] font-medium text-fg">
                   {activeBuildJob ? 'Building runtime' : 'Installing runtime'}
                 </p>
-                <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">{jobMessage}</p>
+                <p className="mt-0.5 truncate text-[12px] text-fg-muted">{jobMessage}</p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <Badge color={installStatusTone(jobStatus)}>{jobStatus}</Badge>
                 {(jobStatus === 'running' || jobStatus === 'queued') && (activeBuildJob ? onCancelBuild : onCancelInstall) && (
-                  <button
-                    type="button"
-                    onClick={() => (activeBuildJob ? onCancelBuild() : onCancelInstall())}
-                    className="rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-fg hover:bg-hover"
-                  >
+                  <Button variant="ghost" onClick={() => (activeBuildJob ? onCancelBuild() : onCancelInstall())}>
                     Cancel
-                  </button>
+                  </Button>
                 )}
               </div>
             </div>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800 midnight:bg-slate-800">
-              <div
-                className="h-full rounded-full bg-blue-500 transition-all"
-                style={{ width: `${Math.max(5, Math.min(100, jobProgress || 0))}%` }}
-              />
-            </div>
+            <Progress
+              className="mt-3"
+              value={Math.max(5, Math.min(100, jobProgress || 0))}
+              tone={jobStatus === 'error' ? 'error' : 'accent'}
+              label={activeBuildJob ? 'Building runtime' : 'Installing runtime'}
+            />
             {jobBytes && (
-              <p className="mt-1.5 text-xs tabular-nums text-fg-muted">{jobBytes}</p>
+              <p className="mt-1.5 text-[12px] tabular-nums text-fg-subtle">{jobBytes}</p>
             )}
           </div>
         </SettingGroup>
@@ -424,33 +391,22 @@ const EngineRuntimeSection = ({
           label="Managed builds"
           detail="Install CPU-safe and hardware builds side by side, then switch between them below."
         >
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => onRefreshCatalog?.(true)}
-              disabled={loadingCatalog}
-              className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${loadingCatalog ? 'animate-spin' : ''}`} />
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            <Badge>Stable</Badge>
+            <Button icon={RefreshCw} onClick={() => onRefreshCatalog?.(true)} loading={loadingCatalog}>
               Check for updates
-            </button>
-            <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-600 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-300">
-              Stable
-            </div>
+            </Button>
           </div>
         </SettingRow>
 
         {managedBuildRows.length === 0 && (
           <SettingRow
             label="No managed downloads"
-            detail="No compatible release asset was found for this machine."
-            divider={false}
-          >
-            <Badge color="gray">Check updates</Badge>
-          </SettingRow>
+            detail="No compatible release asset was found for this machine. Check for updates to look again."
+          />
         )}
 
-        {managedBuildRows.map((row, index) => {
+        {managedBuildRows.map((row) => {
           const installed = Boolean(row.installed);
           const isCurrent = Boolean(row.installed?.isCurrent);
           const assetInfo = row.assetInfo;
@@ -470,61 +426,53 @@ const EngineRuntimeSection = ({
               key={row.profile}
               label={INSTALL_PROFILE_LABELS[row.profile] || row.profile}
               detail={detail}
-              divider={index < managedBuildRows.length - 1}
             >
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                {isCurrent && <Badge color="green">Selected</Badge>}
-                {installed && !isCurrent && <Badge color="blue">Installed</Badge>}
+              <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                {isCurrent && <Badge color="blue">Selected</Badge>}
+                {installed && !isCurrent && <Badge>Installed</Badge>}
                 {installed && !isCurrent && (
-                  <button
-                    type="button"
+                  <Button
                     onClick={() => onSwitch?.({ runtime: row.installed.runtime, path: row.installed.path }, false)}
-                    disabled={Boolean(switchingKey) || Boolean(installingKey)}
-                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                    disabled={busyKey}
                   >
                     Switch
-                  </button>
+                  </Button>
                 )}
                 {assetInfo && !installed && (
-                  <button
-                    type="button"
+                  <Button
+                    icon={Download}
                     onClick={() => onInstall?.({
                       profile: row.profile,
                       releaseTag: assetInfo.release.tagName,
                       assetName: assetInfo.asset.name,
                     }, false)}
                     disabled={Boolean(installingKey)}
-                    className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
                   >
-                    <Download className="h-3.5 w-3.5" />
                     Install
-                  </button>
+                  </Button>
                 )}
                 {assetInfo && installed && (
-                  <button
-                    type="button"
+                  <Button
+                    icon={RefreshCw}
                     onClick={() => onInstall?.({
                       profile: row.profile,
                       releaseTag: assetInfo.release.tagName,
                       assetName: assetInfo.asset.name,
                     }, false)}
                     disabled={Boolean(installingKey) || Boolean(removingKey)}
-                    className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
                   >
-                    <RefreshCw className="h-3.5 w-3.5" />
                     {behind > 0 ? 'Update' : 'Reinstall'}
-                  </button>
+                  </Button>
                 )}
                 {installed && (
-                  <button
-                    type="button"
+                  <Button
+                    variant="danger"
+                    icon={Trash2}
                     onClick={() => requestRemove(row.profile)}
-                    disabled={Boolean(installingKey) || Boolean(switchingKey) || Boolean(removingKey)}
-                    className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:bg-gray-900 dark:text-red-300 dark:hover:bg-red-950/20"
+                    disabled={busyKey || Boolean(removingKey)}
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    {removingKey === row.profile ? 'Removing…' : (confirmRemove === row.profile ? 'Confirm remove' : 'Remove')}
-                  </button>
+                    {removingKey === row.profile ? 'Removing…' : 'Remove'}
+                  </Button>
                 )}
               </div>
             </SettingRow>
@@ -535,44 +483,39 @@ const EngineRuntimeSection = ({
           <SettingRow
             label={`Build ${INSTALL_PROFILE_LABELS[installProfile]}`}
             detail="No managed download matched this machine, but Asyncat can try a local build."
-            divider={false}
           >
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <button
-                type="button"
+            <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+              <Button
+                icon={TerminalSquare}
                 onClick={() => onBuildGpuRuntime?.(installProfile, false)}
                 disabled={Boolean(activeBuildJob)}
-                className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
               >
-                <TerminalSquare className="h-3.5 w-3.5" />
                 Build
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                icon={RefreshCw}
                 onClick={() => onBuildGpuRuntime?.(installProfile, true)}
                 disabled={!canRetry || Boolean(activeBuildJob)}
-                className="inline-flex items-center gap-2 rounded-lg bg-gray-950 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 dark:bg-gray-100 dark:text-gray-950"
               >
-                <RefreshCw className="h-3.5 w-3.5" />
                 Build and retry
-              </button>
+              </Button>
             </div>
           </SettingRow>
         )}
       </SettingGroup>
 
       <div>
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-slate-100">Engines and frameworks</h3>
-          <span className="text-xs text-gray-400 dark:text-gray-500">{hardwareSummary(engineData?.hardware)}</span>
+        <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <h3 className="text-[13px] font-semibold text-fg">Engines and frameworks</h3>
+          <span className="text-[12px] text-fg-subtle">{hardwareSummary(engineData?.hardware)}</span>
         </div>
         <SettingGroup>
           {candidates.length === 0 && (
-            <div className="px-4 py-6 text-sm text-gray-500 dark:text-gray-400 midnight:text-slate-400">
+            <p className="px-4 py-5 text-[13px] text-fg-muted">
               No local chat runtimes were detected yet.
-            </div>
+            </p>
           )}
-          {candidates.map((candidate, index) => {
+          {candidates.map((candidate) => {
             const key = engineKey(candidate);
             const external = candidate.runtime === 'binary' && !candidate.managed;
             const versionTag = candidate.version?.build ? `b${candidate.version.build}` : null;
@@ -580,88 +523,83 @@ const EngineRuntimeSection = ({
             const managedAlternative = externalBehind > 0
               ? managedAssetsByProfile.get(profileForCapability(candidate.capabilityHint)) || null
               : null;
+            const RuntimeIcon = candidate.runtime === 'python' ? Settings2 : HardDrive;
             return (
               <div
                 key={candidate.id || key}
-                className={`grid gap-3 px-4 py-4 lg:grid-cols-[1fr_auto] lg:items-center ${index < candidates.length - 1 ? 'border-b border-gray-100 dark:border-gray-800 midnight:border-slate-800' : ''}`}
+                className="grid gap-3 px-4 py-3 lg:grid-cols-[1fr_auto] lg:items-center"
               >
                 <div className="flex min-w-0 items-start gap-3">
-                  <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gray-50 text-gray-500 ring-1 ring-gray-200 dark:bg-gray-950 dark:text-gray-300 dark:ring-gray-800 midnight:bg-slate-900 midnight:ring-slate-800">
-                    {candidate.runtime === 'python' ? <Settings2 className="h-4 w-4" /> : <HardDrive className="h-4 w-4" />}
-                  </div>
+                  <RuntimeIcon className="mt-0.5 h-4 w-4 shrink-0 text-fg-subtle" strokeWidth={1.75} />
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-semibold text-gray-950 dark:text-gray-100 midnight:text-slate-100">{engineTitle(candidate)}</p>
-                      {candidate.isCurrent && <Badge color="green">Selected</Badge>}
-                      {candidate.isRecommended && <Badge color="amber">Recommended</Badge>}
-                      {candidate.managed && <Badge color="gray">Managed</Badge>}
-                      <Badge color={capabilityBadgeColor(candidate.capabilityHint)}>{candidate.capabilityLabel}</Badge>
+                      <p className="text-[13px] font-medium text-fg">{engineTitle(candidate)}</p>
+                      {candidate.isCurrent && <Badge color="blue">Selected</Badge>}
+                      {candidate.isRecommended && <Badge>Recommended</Badge>}
+                      {candidate.managed && <Badge>Managed</Badge>}
+                      <Badge>{candidate.capabilityLabel}</Badge>
                       {versionTag && <span className="font-mono text-[11px] text-fg-subtle">{versionTag}</span>}
                     </div>
-                    <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">{candidate.source || 'Detected runtime'}</p>
-                    <p className="mt-1 truncate font-mono text-[11px] text-gray-400 dark:text-gray-500 midnight:text-slate-500">{candidate.path}</p>
+                    <p className="mt-0.5 truncate text-[12px] text-fg-muted">{candidate.source || 'Detected runtime'}</p>
+                    <p className="mt-0.5 truncate font-mono text-[11px] text-fg-subtle">{candidate.path}</p>
                     {externalBehind > 0 && (
-                      <div className="mt-2 rounded-lg border border-line bg-surface px-3 py-2 text-xs leading-5 text-fg-muted">
+                      <div className="mt-2 text-[12px] leading-5 text-fg-muted">
                         <p>
                           You have llama.cpp {versionTag}; {engineCatalog?.latestTag || 'a newer build'} is out ({buildsNewerText(externalBehind)}).
                           {' '}This copy wasn&apos;t installed by Asyncat, so update it the way you installed it, for example with your package manager.
                           {managedAlternative ? ' Or let Asyncat install and update a build for you.' : ''}
                         </p>
                         {managedAlternative && (
-                          <button
-                            type="button"
+                          <Button
+                            size="xs"
+                            icon={Download}
+                            className="mt-2"
                             onClick={() => onInstall?.({
                               profile: managedAlternative.profile,
                               releaseTag: managedAlternative.release.tagName,
                               assetName: managedAlternative.asset.name,
                             }, false)}
                             disabled={Boolean(installingKey)}
-                            className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-line bg-canvas px-2.5 py-1 text-[11px] font-semibold text-fg hover:bg-hover disabled:opacity-50"
                           >
-                            <Download className="h-3 w-3" />
                             Install {INSTALL_PROFILE_LABELS[managedAlternative.profile] || 'a managed build'}
-                          </button>
+                          </Button>
                         )}
                       </div>
                     )}
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                <div className="flex flex-wrap items-center gap-2 pl-7 lg:justify-end lg:pl-0">
                   {candidate.isCurrent ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-green-700 dark:text-green-300">
-                      <Check className="h-3.5 w-3.5" />
+                    <span className="inline-flex h-8 items-center gap-1.5 px-1 text-[13px] font-medium text-accent">
+                      <CheckCircle2 className="h-4 w-4" />
                       Active
                     </span>
                   ) : (
-                    <button
-                      type="button"
+                    <Button
                       onClick={() => onSwitch?.({ runtime: candidate.runtime, path: candidate.path }, false)}
-                      disabled={Boolean(switchingKey) || Boolean(installingKey)}
-                      className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                      disabled={busyKey}
+                      loading={switchingKey === key}
                     >
-                      {switchingKey === key ? 'Switching...' : 'Switch'}
-                    </button>
+                      {switchingKey === key ? 'Switching…' : 'Switch'}
+                    </Button>
                   )}
                   {!candidate.isCurrent && canRetry && (
-                    <button
-                      type="button"
+                    <Button
                       onClick={() => onSwitch?.({ runtime: candidate.runtime, path: candidate.path }, true)}
-                      disabled={Boolean(switchingKey) || Boolean(installingKey)}
-                      className="rounded-lg bg-gray-950 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 dark:bg-gray-100 dark:text-gray-950"
+                      disabled={busyKey}
                     >
                       Retry model
-                    </button>
+                    </Button>
                   )}
                   {candidate.managed && candidate.runtime === 'python' && (
-                    <button
-                      type="button"
+                    <Button
+                      variant="danger"
+                      icon={Trash2}
                       onClick={() => requestRemove('python')}
-                      disabled={Boolean(switchingKey) || Boolean(installingKey) || Boolean(removingKey)}
-                      className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:bg-gray-900 dark:text-red-300 dark:hover:bg-red-950/20"
+                      disabled={busyKey || Boolean(removingKey)}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      {removingKey === 'python' ? 'Removing…' : (confirmRemove === 'python' ? 'Confirm remove' : 'Remove')}
-                    </button>
+                      {removingKey === 'python' ? 'Removing…' : 'Remove'}
+                    </Button>
                   )}
                 </div>
               </div>
@@ -671,39 +609,30 @@ const EngineRuntimeSection = ({
       </div>
 
       {missingRuntimeTools.length > 0 && (
-        <StatusNote tone="amber">
-          <span className="flex items-start gap-2">
-            <TriangleAlert className="mt-0.5 h-4 w-4 flex-shrink-0" />
-            <span className="min-w-0">
-              Missing runtime tools: {missingRuntimeTools.map(item => item.id).join(', ')}
-              {installCommand && (
-                <span className="mt-1 block truncate font-mono text-xs">{installCommand}</span>
-              )}
-            </span>
-          </span>
-        </StatusNote>
+        <Notice tone="warning">
+          Missing runtime tools: {missingRuntimeTools.map(item => item.id).join(', ')}
+          {installCommand && (
+            <span className="mt-1 block select-all truncate font-mono">{installCommand}</span>
+          )}
+        </Notice>
       )}
 
       <SettingGroup>
         <button
           type="button"
           onClick={() => setShowAdvanced(value => !value)}
-          className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
+          aria-expanded={showAdvanced}
+          className="flex w-full items-center justify-between gap-3 rounded-xl px-4 py-3 text-left outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-accent/40"
         >
-          <span className="flex min-w-0 items-center gap-3">
-            <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gray-50 text-gray-500 ring-1 ring-gray-200 dark:bg-gray-950 dark:text-gray-300 dark:ring-gray-800">
-              <Wrench className="h-4 w-4" />
-            </span>
-            <span className="min-w-0">
-              <span className="block text-sm font-semibold text-gray-950 dark:text-gray-100 midnight:text-slate-100">Advanced runtime tools</span>
-              <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">External binary/Python paths, retry actions, and recovery.</span>
-            </span>
+          <span className="min-w-0">
+            <span className="block text-[13px] font-medium text-fg">Use an engine by its path</span>
+            <span className="mt-0.5 block text-[12px] leading-5 text-fg-muted">A llama-server or Python you installed yourself, retrying the model, or going back to the previous engine.</span>
           </span>
-          {showAdvanced ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+          <ChevronDown className={`h-4 w-4 shrink-0 text-fg-subtle transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
         </button>
 
         {showAdvanced && (
-          <div className="border-t border-gray-100 px-4 py-4 dark:border-gray-800 midnight:border-slate-800">
+          <div className="px-4 py-3">
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-[150px_1fr_auto]">
               <Select
                 value={customRuntime}
@@ -711,42 +640,40 @@ const EngineRuntimeSection = ({
                 aria-label="Runtime kind"
                 options={CUSTOM_RUNTIMES}
               />
-              <input
+              <Input
                 value={customPath}
                 onChange={(event) => setCustomPath(event.target.value)}
                 placeholder={customRuntime === 'python' ? '/path/to/python' : '/path/to/llama-server'}
-                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 outline-none placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200"
+                aria-label={customRuntime === 'python' ? 'Python path' : 'llama-server path'}
+                className="font-mono"
               />
               <div className="flex gap-2">
-                <button
-                  type="button"
+                <Button
+                  size="md"
                   onClick={() => submitCustom(false)}
-                  disabled={!customPath.trim() || Boolean(switchingKey) || Boolean(installingKey)}
-                  className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+                  disabled={!customPath.trim() || busyKey}
                 >
                   Switch
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  size="md"
                   onClick={() => submitCustom(true)}
-                  disabled={!customPath.trim() || !canRetry || Boolean(switchingKey) || Boolean(installingKey)}
-                  className="rounded-lg bg-gray-950 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 dark:bg-gray-100 dark:text-gray-950"
+                  disabled={!customPath.trim() || !canRetry || busyKey}
                 >
                   Retry
-                </button>
+                </Button>
               </div>
             </div>
 
             {revertSelection && (
-              <button
-                type="button"
+              <Button
+                icon={RotateCcw}
+                className="mt-3"
                 onClick={() => onSwitch?.(revertSelection, false)}
-                disabled={Boolean(switchingKey) || Boolean(installingKey)}
-                className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-950/20"
+                disabled={busyKey}
               >
-                <RotateCcw className="h-3.5 w-3.5" />
                 Revert to previous engine
-              </button>
+              </Button>
             )}
           </div>
         )}
