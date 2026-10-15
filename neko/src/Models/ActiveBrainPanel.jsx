@@ -10,6 +10,7 @@ import { localModelName, sameLocalFile } from '../CommandCenter/utils/chatModel.
 import { ProviderLogo, LocalModelLogo } from './modelLogos.jsx';
 import { imagesSummary, listeningSummary, speakingSummary } from './media/mediaSummary.js';
 import { useMediaStatus } from './media/useMediaStatus.js';
+import { providerPlace } from './providerPlace.js';
 
 const DOT = {
   idle: 'bg-fg-subtle/50',
@@ -91,7 +92,6 @@ const ActiveBrainPanel = ({
   const hasActive = providerIsExternal || localReady || Boolean(localDefault);
   const rawModel = activeConfig?.settings?.model_name || activeConfig?.model || '';
   const displayModel = rawModel === 'openrouter/auto' ? 'Auto (OpenRouter picks)' : friendlyModelName(rawModel);
-  const isLocalProvider = activeConfig?.provider_type === 'local';
 
   let title = 'No default model';
   let subtitle = 'Choose a connected provider or load a downloaded model to start chatting.';
@@ -101,7 +101,7 @@ const ActiveBrainPanel = ({
     title = displayModel || activeProviderName;
     subtitle = isMlx
       ? 'Downloaded model · MLX engine'
-      : `${activeProviderName} · ${isLocalProvider ? 'runs on your computer' : 'cloud provider'}`;
+      : `${activeProviderName} · ${providerPlace(activeConfig)}`;
     status = 'ready';
     statusText = 'Default for new chats';
   } else if (!engineHasDefault) {
