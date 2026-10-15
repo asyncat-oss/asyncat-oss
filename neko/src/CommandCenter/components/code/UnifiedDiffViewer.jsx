@@ -3,8 +3,9 @@
  *  - line numbers (old + new) in the gutter
  *  - syntax-highlighted context lines
  *  - colored add/remove lines with full-row backgrounds
- *  - collapsible unchanged hunks
  *  - file header with +N/-N stats
+ *  - a one-line note for a binary or mode-only change, which has no lines
+ * diffParse.js reads the diff.
  */
 
 import { useMemo } from 'react';
@@ -12,60 +13,7 @@ import { useMemo } from 'react';
 // 1.7 MB to the startup bundle. It shares one core with the chat renderer.
 import { highlightCode, useHighlighter } from '../../../utils/lazyRenderers.js';
 import 'highlight.js/styles/github.css';
-
-// ── Diff parser ───────────────────────────────────────────────────────────────
-
-function parseDiff(diffText) {
-  if (!diffText) return [];
-  const lines = diffText.split('\n');
-  const files = [];
-  let current = null;
-  let hunk = null;
-  let oldLine = 0;
-  let newLine = 0;
-
-  for (const raw of lines) {
-    if (raw.startsWith('diff --git') || raw.startsWith('--- ') || raw.startsWith('+++ ')) {
-      if (raw.startsWith('+++ ') && current) {
-        current.newPath = raw.slice(4).replace(/^b\//, '');
-      } else if (raw.startsWith('--- ') && !raw.startsWith('--- /dev/null')) {
-        if (!current) { current = { oldPath: '', newPath: '', hunks: [], additions: 0, deletions: 0 }; files.push(current); }
-        current.oldPath = raw.slice(4).replace(/^a\//, '');
-      } else if (raw.startsWith('diff --git')) {
-        current = { oldPath: '', newPath: '', hunks: [], additions: 0, deletions: 0 };
-        files.push(current);
-      }
-      continue;
-    }
-
-    if (raw.startsWith('@@ ')) {
-      const m = raw.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)/);
-      if (m) {
-        oldLine = parseInt(m[1], 10);
-        newLine = parseInt(m[2], 10);
-        hunk = { header: raw, lines: [] };
-        if (current) current.hunks.push(hunk);
-      }
-      continue;
-    }
-
-    if (!hunk) continue;
-
-    if (raw.startsWith('+') && !raw.startsWith('+++')) {
-      hunk.lines.push({ type: 'add', text: raw.slice(1), oldLine: null, newLine: newLine++ });
-      if (current) current.additions++;
-    } else if (raw.startsWith('-') && !raw.startsWith('---')) {
-      hunk.lines.push({ type: 'del', text: raw.slice(1), oldLine: oldLine++, newLine: null });
-      if (current) current.deletions++;
-    } else if (raw.startsWith('\\')) {
-      // "No newline at end of file" — skip
-    } else {
-      hunk.lines.push({ type: 'ctx', text: raw.slice(1), oldLine: oldLine++, newLine: newLine++ });
-    }
-  }
-
-  return files;
-}
+import { diffFilePath, emptyDiffNote, parseUnifiedDiff } from './diffParse.js';
 
 function detectLangFromPath(filePath) {
   const ext = filePath?.split('.').pop()?.toLowerCase() || '';
@@ -91,36 +39,36 @@ function DiffLine({ line, lang }) {
   const html = useMemo(() => highlightCode(hljs, line.text, lang), [hljs, line.text, lang]);
 
   const rowBg = line.type === 'add'
-    ? 'bg-emerald-50/80 dark:bg-emerald-950/30 midnight:bg-emerald-950/30'
+    ? 'bg-emerald-500/10'
     : line.type === 'del'
-      ? 'bg-red-50/80 dark:bg-red-950/30 midnight:bg-red-950/30'
+      ? 'bg-red-500/10'
       : '';
 
   const marker = line.type === 'add' ? '+' : line.type === 'del' ? '-' : ' ';
   const markerColor = line.type === 'add'
-    ? 'text-emerald-600 dark:text-emerald-400 midnight:text-emerald-400'
+    ? 'text-emerald-600 dark:text-emerald-400'
     : line.type === 'del'
-      ? 'text-red-600 dark:text-red-400 midnight:text-red-400'
-      : 'text-gray-300 dark:text-slate-700 midnight:text-slate-700';
+      ? 'text-red-600 dark:text-red-400'
+      : 'text-fg-subtle';
 
   return (
     <tr className={`group ${rowBg}`}>
       {/* old line number */}
-      <td className="w-10 select-none px-1.5 py-0 text-right font-mono text-[10px] text-gray-300 dark:text-slate-700 midnight:text-slate-700 border-r border-gray-100 dark:border-slate-800 midnight:border-slate-800">
+      <td className="w-10 select-none border-r border-line px-1.5 py-0 text-right font-mono text-[11px] text-fg-subtle">
         {line.oldLine ?? ''}
       </td>
       {/* new line number */}
-      <td className="w-10 select-none px-1.5 py-0 text-right font-mono text-[10px] text-gray-300 dark:text-slate-700 midnight:text-slate-700 border-r border-gray-100 dark:border-slate-800 midnight:border-slate-800">
+      <td className="w-10 select-none border-r border-line px-1.5 py-0 text-right font-mono text-[11px] text-fg-subtle">
         {line.newLine ?? ''}
       </td>
       {/* +/- marker */}
-      <td className={`w-5 select-none px-1 py-0 text-center font-mono text-[11px] font-bold ${markerColor}`}>
+      <td className={`w-5 select-none px-1 py-0 text-center font-mono text-[11px] font-semibold ${markerColor}`}>
         {marker}
       </td>
       {/* code */}
       <td className="py-0 px-2 w-full overflow-hidden">
         <code
-          className="block font-mono text-[11px] leading-5 whitespace-pre-wrap break-all"
+          className="block whitespace-pre-wrap break-all font-mono text-[12px] leading-5 text-fg"
           dangerouslySetInnerHTML={{ __html: html || '​' }}
         />
       </td>
@@ -134,7 +82,7 @@ function Hunk({ hunk, lang }) {
   return (
     <tbody>
       <tr className="select-none">
-        <td colSpan={4} className="px-3 py-0.5 font-mono text-[10px] text-sky-600 dark:text-sky-400 midnight:text-sky-400 bg-sky-50/60 dark:bg-sky-950/20 midnight:bg-sky-950/20 border-y border-sky-100 dark:border-sky-900/40 midnight:border-sky-900/40">
+        <td colSpan={4} className="border-y border-line bg-hover px-3 py-0.5 font-mono text-[11px] text-fg-subtle">
           {hunk.header}
         </td>
       </tr>
@@ -148,68 +96,49 @@ function Hunk({ hunk, lang }) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function UnifiedDiffViewer({ diff, filePath, className = '' }) {
-  const files = useMemo(() => parseDiff(diff), [diff]);
+  const files = useMemo(() => parseUnifiedDiff(diff, filePath), [diff, filePath]);
 
-  if (!diff || files.length === 0) {
-    // Try rendering as a single-file diff (no file header)
-    const lines = (diff || '').split('\n');
-    const hasHunks = lines.some(l => l.startsWith('@@'));
-    if (hasHunks) {
-      const syntheticFile = { oldPath: filePath || 'file', newPath: filePath || 'file', hunks: [], additions: 0, deletions: 0 };
-      let hunk = null;
-      let oldL = 1, newL = 1;
-      for (const raw of lines) {
-        if (raw.startsWith('@@ ')) {
-          const m = raw.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
-          if (m) { oldL = parseInt(m[1]); newL = parseInt(m[2]); }
-          hunk = { header: raw, lines: [] };
-          syntheticFile.hunks.push(hunk);
-        } else if (hunk) {
-          if (raw.startsWith('+') && !raw.startsWith('+++')) { hunk.lines.push({ type: 'add', text: raw.slice(1), oldLine: null, newLine: newL++ }); syntheticFile.additions++; }
-          else if (raw.startsWith('-') && !raw.startsWith('---')) { hunk.lines.push({ type: 'del', text: raw.slice(1), oldLine: oldL++, newLine: null }); syntheticFile.deletions++; }
-          else if (!raw.startsWith('\\')) { hunk.lines.push({ type: 'ctx', text: raw.slice(1), oldLine: oldL++, newLine: newL++ }); }
-        }
-      }
-      if (syntheticFile.hunks.length > 0) {
-        return <FileDiff key="single" file={syntheticFile} />;
-      }
-    }
-    return <div className={`px-4 py-3 text-xs text-gray-400 midnight:text-slate-500 ${className}`}>No diff available.</div>;
+  if (files.length === 0) {
+    return <div className={`px-4 py-3 text-[12px] text-fg-subtle ${className}`}>No changes to show.</div>;
   }
 
   return (
     <div className={`flex flex-col gap-0 ${className}`}>
-      {files.map((file, i) => <FileDiff key={i} file={file} />)}
+      {files.map((file, i) => <FileDiff key={i} file={file} fallbackPath={filePath} />)}
     </div>
   );
 }
 
-function FileDiff({ file }) {
-  const displayPath = file.newPath || file.oldPath || 'unknown';
-  const lang = detectLangFromPath(displayPath);
+function FileDiff({ file, fallbackPath }) {
+  const displayPath = diffFilePath(file, fallbackPath);
+  const lang = detectLangFromPath(file.newPath || file.oldPath || fallbackPath);
 
   return (
-    <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-slate-800 midnight:border-slate-800 bg-white dark:bg-slate-950 midnight:bg-slate-950">
+    <div className="overflow-hidden rounded-lg border border-line bg-canvas">
       {/* file header */}
-      <div className="flex items-center justify-between gap-3 border-b border-gray-100 dark:border-slate-800 midnight:border-slate-800 bg-gray-50 dark:bg-slate-900 midnight:bg-slate-900 px-3 py-1.5">
-        <span className="min-w-0 truncate font-mono text-[11px] text-gray-700 dark:text-slate-300 midnight:text-slate-300">{displayPath}</span>
-        <div className="flex shrink-0 items-center gap-2 font-mono text-[10px]">
-          {file.additions > 0 && <span className="text-emerald-600 dark:text-emerald-400 midnight:text-emerald-400">+{file.additions}</span>}
-          {file.deletions > 0 && <span className="text-red-600 dark:text-red-400 midnight:text-red-400">-{file.deletions}</span>}
+      <div className="flex items-center justify-between gap-3 border-b border-line bg-surface px-3 py-1.5">
+        <span className="min-w-0 truncate font-mono text-[12px] text-fg-muted" title={displayPath}>{displayPath}</span>
+        <div className="flex shrink-0 items-center gap-2 font-mono text-[11px] tabular-nums">
+          {file.additions > 0 && <span className="text-emerald-600 dark:text-emerald-400">+{file.additions}</span>}
+          {file.deletions > 0 && <span className="text-red-600 dark:text-red-400">−{file.deletions}</span>}
         </div>
       </div>
-      {/* diff table */}
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse table-fixed" style={{ minWidth: '100%' }}>
-          <colgroup>
-            <col style={{ width: '2.5rem' }} />
-            <col style={{ width: '2.5rem' }} />
-            <col style={{ width: '1.25rem' }} />
-            <col style={{ width: 'auto' }} />
-          </colgroup>
-          {file.hunks.map((hunk, i) => <Hunk key={i} hunk={hunk} lang={lang} />)}
-        </table>
-      </div>
+      {/* A binary or mode-only change has no lines: say so instead of an empty table. */}
+      {file.hunks.length === 0 ? (
+        <p className="px-3 py-2 text-[12px] text-fg-subtle">{emptyDiffNote(file)}</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse table-fixed" style={{ minWidth: '100%' }}>
+            <colgroup>
+              <col style={{ width: '2.5rem' }} />
+              <col style={{ width: '2.5rem' }} />
+              <col style={{ width: '1.25rem' }} />
+              <col style={{ width: 'auto' }} />
+            </colgroup>
+            {file.hunks.map((hunk, i) => <Hunk key={i} hunk={hunk} lang={lang} />)}
+          </table>
+        </div>
+      )}
     </div>
   );
 }
