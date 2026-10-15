@@ -345,3 +345,25 @@ test('a run waiting for the user lets other chats use llama-server, then loads i
   (await queued).release();
   assert.equal(llama.getStatus().model, 'cherry-1b.gguf');
 });
+
+test('a plain chat and a Quick ask each count once in Models → Usage', async () => {
+  const chatId = await newChat('Usage');
+  await call('PUT', `/api/ai/chats/${chatId}/model`, { model: apple, makeDefault: false });
+  const count = (where, ...args) => db.prepare(`SELECT COUNT(*) AS n FROM ai_model_usage_events WHERE ${where}`).get(...args).n;
+  assert.equal(count('conversation_id = ?', chatId), 0);
+
+  assert.equal((await chat({ conversationId: chatId })).answer, 'I am apple-model.');
+  const row = db.prepare('SELECT * FROM ai_model_usage_events WHERE conversation_id = ?').get(chatId);
+  assert.equal(count('conversation_id = ?', chatId), 1);
+  assert.equal(row.operation, 'chat');
+  assert.equal(row.model, 'apple-model');
+  assert.equal(row.provider_profile_id, apple.profileId);
+  assert.deepEqual([row.input_tokens, row.output_tokens, row.total_tokens, row.estimated], [10, 4, 14, 0]);
+
+  // Quick ask names no chat: it runs on the default model.
+  assert.equal((await call('PUT', '/api/ai/providers/default-model', { model: apple })).status, 200);
+  const before = count("operation = 'quick-ask'");
+  assert.equal((await chat({ source: 'quick-ask' })).answer, 'I am apple-model.');
+  assert.equal(count("operation = 'quick-ask'"), before + 1);
+  assert.equal(db.prepare("SELECT conversation_id FROM ai_model_usage_events WHERE operation = 'quick-ask' ORDER BY created_at DESC LIMIT 1").get().conversation_id, null);
+});

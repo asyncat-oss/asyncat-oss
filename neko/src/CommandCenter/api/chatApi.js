@@ -32,6 +32,8 @@ export const chatApi = {
         ...(opts.model ? { model: opts.model } : {}),
         ...(opts.ctxSize ? { ctxSize: opts.ctxSize } : {}),
         ephemeral: opts.ephemeral === true,
+        // Where the question came from, for Models → Usage ("quick-ask").
+        ...(opts.source ? { source: opts.source } : {}),
       }),
     });
 

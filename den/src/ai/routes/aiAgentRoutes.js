@@ -59,6 +59,7 @@ import { downloadSize } from '../../connectors/launchers.js';
 import { listExternalSessions, readExternalSession } from '../../agent/externalSessions.js';
 import { getExternalUsage } from '../../agent/externalUsage.js';
 import { cleanChatTitle } from '../chatTitle.js';
+import { recordDirectChatUsage } from '../directChatUsage.js';
 
 const router = express.Router();
 const pendingPermissions = new Map();
@@ -435,6 +436,8 @@ router.post('/chat/stream', withWorkspaceContext, async (req, res) => {
   const { client: aiClient, model, providerInfo } = resolvedClient;
 
   let answer = '';
+  // Counted in Models → Usage once the answer ends or is stopped.
+  let usageCall = null;
   try {
     const modelCapabilities = getModelCapabilities(
       providerInfo?.providerId,
@@ -479,10 +482,12 @@ router.post('/chat/stream', withWorkspaceContext, async (req, res) => {
 
     // Only a level the model has, mapped to its nearest one (xhigh → high…).
     const reasoningEffort = normalizeReasoningEffort(req.body?.reasoningEffort, modelCapabilities);
+    usageCall = { messages, startedAt: Date.now(), usage: null };
     const stream = await aiClient.client.chat.completions.create({
       model,
       messages,
       stream: true,
+      stream_options: { include_usage: true },
       ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
     }, { signal: abortController.signal });
 
@@ -494,6 +499,7 @@ router.post('/chat/stream', withWorkspaceContext, async (req, res) => {
         writeAgentSse(res, { type: 'delta', data: { content: delta } });
       }
       if (chunk?.usage) {
+        usageCall.usage = chunk.usage;
         writeAgentSse(res, {
           type: 'usage_update',
           data: {
@@ -515,6 +521,22 @@ router.post('/chat/stream', withWorkspaceContext, async (req, res) => {
       writeAgentSse(res, { type: 'done', data: { answer: '', stopReason: 'error' } });
     }
   } finally {
+    if (usageCall && (answer || usageCall.usage)) {
+      recordDirectChatUsage({
+        userId: req.user.id,
+        workspaceId: req.workspaceId,
+        // A temporary chat keeps its counts, not what it belonged to.
+        conversationId: temporary ? null : conversationId,
+        model,
+        providerInfo,
+        operation: req.body?.source === 'quick-ask' ? 'quick-ask' : 'chat',
+        messages: usageCall.messages,
+        answer,
+        usage: usageCall.usage,
+        latencyMs: Date.now() - usageCall.startedAt,
+        stopped: abortController.signal.aborted,
+      });
+    }
     opened.release();
     res.off('close', abort);
     if (!res.writableEnded) res.end();

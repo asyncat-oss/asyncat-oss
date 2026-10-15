@@ -169,7 +169,7 @@ export default function QuickAsk() {
     let answer = '';
     let error = null;
     try {
-      const stream = chatApi.runStream(question, conversationHistory(before), controller.signal, { reasoningEffort: 'auto' });
+      const stream = chatApi.runStream(question, conversationHistory(before), controller.signal, { reasoningEffort: 'auto', source: 'quick-ask' });
       for await (const event of stream) {
         if (event.type === 'delta') {
           answer += event.data?.content || '';
