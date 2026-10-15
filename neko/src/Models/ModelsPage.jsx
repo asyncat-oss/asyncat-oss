@@ -1,7 +1,12 @@
+// Models: language models, voice, images, usage and training under one page,
+// with one search across the models and providers on it.
+
 import { lazy, Suspense, useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { RefreshCw, TriangleAlert, X, Loader2 } from 'lucide-react';
+import { RefreshCw, X, Loader2 } from 'lucide-react';
 import Button from '../components/ui/Button.jsx';
+import IconButton from '../components/ui/IconButton.jsx';
+import Notice from '../components/ui/Notice.jsx';
 import { Segmented, Tabs } from '../components/ui/Tabs.jsx';
 import ActiveBrainPanel from './ActiveBrainPanel.jsx';
 import ProvidersSection from './ProvidersSection.jsx';
@@ -356,11 +361,9 @@ const ModelsPage = () => {
         <main className="min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-5xl space-y-6 px-6 py-6 lg:px-10">
             {deleteError ? (
-              <p role="alert" className="flex items-center gap-2 rounded-xl bg-red-500/10 px-4 py-3 text-[13px] text-red-700 dark:text-red-400">
-                <TriangleAlert className="h-4 w-4 shrink-0" />
-                <span className="flex-1">{deleteError}</span>
-                <button type="button" onClick={() => setDeleteError('')} aria-label="Dismiss" className="rounded p-0.5 hover:bg-red-500/10"><X className="h-3.5 w-3.5" /></button>
-              </p>
+              <Notice tone="error" action={<IconButton icon={X} label="Dismiss" size="sm" onClick={() => setDeleteError('')} />}>
+                {deleteError}
+              </Notice>
             ) : null}
 
             {activeTab === 'chat' && (
@@ -389,7 +392,7 @@ const ModelsPage = () => {
                   onBrowseProviders={() => setActiveView('add')}
                 />
 
-                <Segmented value={activeView} onChange={setActiveView} items={viewItems} label="Language model sources" />
+                <Segmented value={activeView} onChange={setActiveView} items={viewItems} label="Language model sources" className="max-w-full overflow-x-auto [&>button]:shrink-0 [&>button]:whitespace-nowrap" />
 
                 {activeView === 'local' ? (
                   <div className="space-y-6">
