@@ -210,6 +210,23 @@ const ChatsPage = () => {
     setServerSearchResults(prev => (prev ? withPinned(prev, id, pinned) : prev));
   }), []);
 
+  // Renamed or deleted from the sidebar.
+  useEffect(() => {
+    const offRenamed = eventBus.on('conversationRenamed', ({ id, title } = {}) => {
+      if (!id) return;
+      const rename = (list) => list.map(c => (c.id === id ? { ...c, title } : c));
+      setConversations(rename);
+      setServerSearchResults(prev => (prev ? rename(prev) : prev));
+    });
+    const offDeleted = eventBus.on('conversationDeleted', ({ ids = [] } = {}) => {
+      const gone = new Set(ids);
+      const others = (list) => list.filter(c => !gone.has(c.id));
+      setConversations(others);
+      setServerSearchResults(prev => (prev ? others(prev) : prev));
+    });
+    return () => { offRenamed(); offDeleted(); };
+  }, []);
+
   // Searches titles and messages 400 ms after typing stops. Each keystroke
   // cancels the search before it, so a slow answer for an older query never
   // replaces the results for what is in the box now. While older chats are
@@ -280,6 +297,7 @@ const ChatsPage = () => {
       const rename = (list) => list.map(c => c.id === itemId ? { ...c, title: newTitle } : c);
       setConversations(rename);
       setServerSearchResults(prev => (prev ? rename(prev) : prev));
+      eventBus.emit('conversationRenamed', { id: itemId, title: newTitle });
       setActionModal(null);
     } catch (err) {
       console.error('Failed to rename item:', err);
@@ -331,6 +349,7 @@ const ChatsPage = () => {
     setServerSearchResults(prev => (prev ? others(prev) : prev));
     try {
       await chatApi.deleteConversation(chat.id);
+      eventBus.emit('conversationDeleted', { ids: [chat.id] });
     } catch (err) {
       console.error('Failed to delete item:', err);
       toast.error("Couldn't delete the chat", { detail: errorDetail(err) });
@@ -485,6 +504,8 @@ const ChatsPage = () => {
       const results = await Promise.allSettled(items.map(item => (
         chatApi.deleteConversation(item.id)
       )));
+      const deletedIds = items.filter((_, index) => results[index].status === 'fulfilled').map(item => item.id);
+      if (deletedIds.length) eventBus.emit('conversationDeleted', { ids: deletedIds });
       if (results.some(result => result.status === 'rejected')) {
         throw new Error('Some selected items could not be deleted');
       }

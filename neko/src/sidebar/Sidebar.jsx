@@ -670,6 +670,7 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
     )));
     try {
       await chatApi.updateConversation(conversationId, { title });
+      eventBus.emit("conversationRenamed", { id: conversationId, title });
     } catch (err) {
       toast.error("Couldn't rename the chat", { detail: errorDetail(err) });
       loadRecentConversations();
@@ -706,10 +707,26 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
     }
   }, [loadRecentConversations, toast]);
 
-  // Pinned from the All chats page.
-  useEffect(() => eventBus.on("conversationPinned", ({ id, pinned } = {}) => {
-    if (id) setConversationCatalog((current) => withPinned(current, id, pinned));
-  }), []);
+  // Pinned, renamed or deleted on the All chats page, or restored from Trash.
+  useEffect(() => {
+    const offs = [
+      eventBus.on("conversationPinned", ({ id, pinned } = {}) => {
+        if (id) setConversationCatalog((current) => withPinned(current, id, pinned));
+      }),
+      eventBus.on("conversationRenamed", ({ id, title } = {}) => {
+        if (!id) return;
+        setConversationCatalog((current) => current.map((conversation) => (
+          conversation.id === id ? { ...conversation, title } : conversation
+        )));
+      }),
+      eventBus.on("conversationDeleted", ({ ids = [] } = {}) => {
+        const gone = new Set(ids);
+        setConversationCatalog((current) => current.filter((conversation) => !gone.has(conversation.id)));
+      }),
+      eventBus.on("conversationsUpdated", () => loadRecentConversations()),
+    ];
+    return () => offs.forEach((off) => off());
+  }, [loadRecentConversations]);
 
   const deleteConversation = useCallback(async (conversation) => {
     const confirmed = await confirm({
@@ -723,6 +740,7 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
     if (conversation.id === routeConversationId) navigate("/home");
     try {
       await chatApi.deleteConversation(conversation.id);
+      eventBus.emit("conversationDeleted", { ids: [conversation.id] });
     } catch (err) {
       toast.error("Couldn't delete the chat", { detail: errorDetail(err) });
       loadRecentConversations();
