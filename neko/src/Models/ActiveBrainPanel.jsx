@@ -124,12 +124,17 @@ const ActiveBrainPanel = ({
     statusText = 'Error';
   }
 
-  const runtimeLabel = engineData?.current?.capabilityLabel || '';
-  const hardwareLabel = showHardwareBadge ? hardwareBadgeLabel : '';
+  // The built-in engine's facts belong to a downloaded default or a running
+  // engine, not to a cloud or custom default (or none); its context size
+  // only once a model is loaded.
+  const engineFacts = !providerIsExternal && (Boolean(localDefault) || isRunning);
+  const runtimeLabel = engineFacts ? engineData?.current?.capabilityLabel || '' : '';
+  const hardwareLabel = engineFacts && showHardwareBadge ? hardwareBadgeLabel : '';
   const supportsImageInput = Boolean(activeConfig?.capabilities?.supportsImageInput);
   const busy = Boolean(providerAction) || Boolean(switchingEngine) || Boolean(installingEngine);
   const activeProfileId = activeConfig?.profile_id;
-  const ctxSize = serverStatus?.ctxSize ? Number(serverStatus.ctxSize).toLocaleString() : '';
+  const ctxSize = serverStatus?.ctxSize && isRunning ? Number(serverStatus.ctxSize).toLocaleString() : '';
+  const shownCtx = engineFacts ? ctxSize : '';
 
   return (
     <section className="rounded-2xl border border-line bg-surface">
@@ -224,11 +229,11 @@ const ActiveBrainPanel = ({
         <Capability icon={Volume2} label="Speaking" status={speaking.tone} value={speaking.value} />
         <Capability icon={Eye} label="Sees images" status={supportsImageInput ? 'ready' : 'idle'} value={supportsImageInput ? 'Yes' : 'No'} />
         <Capability icon={Image} label="Makes images" status={makesImages.tone} value={makesImages.value} />
-        {(runtimeLabel || hardwareLabel || (ctxSize && !engineHoldsOther)) ? (
+        {(runtimeLabel || hardwareLabel || (shownCtx && !engineHoldsOther)) ? (
           <span className="inline-flex flex-wrap items-center gap-x-3.5 gap-y-1 text-fg-subtle sm:ml-auto">
             {runtimeLabel ? <span className="inline-flex items-center gap-1.5 whitespace-nowrap"><Gauge className="h-3.5 w-3.5" />{runtimeLabel}</span> : null}
             {hardwareLabel ? <span className="inline-flex items-center gap-1.5 whitespace-nowrap"><Cpu className="h-3.5 w-3.5" />{hardwareLabel}</span> : null}
-            {ctxSize && !engineHoldsOther ? <span className="whitespace-nowrap tabular-nums">{ctxSize} ctx</span> : null}
+            {shownCtx && !engineHoldsOther ? <span className="whitespace-nowrap tabular-nums">{shownCtx} ctx</span> : null}
           </span>
         ) : null}
       </div>
