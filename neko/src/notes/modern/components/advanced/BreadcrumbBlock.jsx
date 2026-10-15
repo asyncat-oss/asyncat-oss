@@ -1,3 +1,5 @@
+// A breadcrumb block: a trail of links, the last one being where you are.
+
 import { Navigation } from 'lucide-react';
 
 const BreadcrumbBlock = ({ block }) => {
@@ -9,27 +11,27 @@ const BreadcrumbBlock = ({ block }) => {
   ];
 
   return (
-    <div className="border border-gray-200 dark:border-gray-700 midnight:border-gray-800 rounded-lg p-4 bg-white dark:bg-gray-800 midnight:bg-gray-900">
-      <div className="flex items-center gap-2 mb-3">
-        <Navigation className="w-4 h-4" />
-        <span className="font-medium">Breadcrumb Navigation</span>
+    <div className="rounded-xl border border-line p-4">
+      <div className="mb-3 flex items-center gap-2 text-[13px] font-medium text-fg">
+        <Navigation className="h-4 w-4 text-fg-subtle" />
+        Breadcrumb
       </div>
       <nav className="flex" aria-label="Breadcrumb">
-        <ol className="inline-flex items-center space-x-1">
+        <ol className="inline-flex flex-wrap items-center gap-y-1 text-[13px]">
           {items.map((item, index) => (
             <li key={index} className="inline-flex items-center">
               {index > 0 && (
-                <span className="mx-2 text-gray-400 dark:text-gray-500 midnight:text-gray-600">/</span>
+                <span className="mx-2 text-fg-subtle">/</span>
               )}
               {item.url ? (
                 <a
                   href={item.url}
-                  className="text-blue-600 dark:text-blue-400 midnight:text-blue-300 hover:text-blue-800 dark:hover:text-blue-300 midnight:hover:text-blue-200"
+                  className="text-accent hover:underline"
                 >
                   {item.label}
                 </a>
               ) : (
-                <span className="text-gray-500 dark:text-gray-400 midnight:text-gray-500">{item.label}</span>
+                <span className="text-fg-muted">{item.label}</span>
               )}
             </li>
           ))}
