@@ -7,6 +7,7 @@ import Button from '../../../components/ui/Button.jsx';
 import Dialog from '../../../components/ui/Dialog.jsx';
 import { openWebLink } from '../../../utils/openWebLink.js';
 import { FollowUps, InteractiveTable } from './InteractiveBlocks.jsx';
+import { diffLineKind } from './diffLines.js';
 
 // mhchem extension — enables \ce{H2O}, \ce{CO2}, chemical equations in KaTeX
 import 'highlight.js/styles/github.css';
@@ -942,14 +943,6 @@ const DIFF_LINE = {
   hunk: 'text-fg-subtle',
   meta: 'text-fg-subtle',
   plain: 'text-fg',
-};
-
-const diffLineKind = (line) => {
-  if (line.startsWith('+') && !line.startsWith('+++')) return 'added';
-  if (line.startsWith('-') && !line.startsWith('---')) return 'removed';
-  if (line.startsWith('@@')) return 'hunk';
-  if (line.startsWith('diff ') || line.startsWith('index ') || line.startsWith('---') || line.startsWith('+++')) return 'meta';
-  return 'plain';
 };
 
 const DiffBlock = ({ content }) => {
