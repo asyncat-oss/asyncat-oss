@@ -69,15 +69,25 @@ function parseDate(value) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
+// What a page that isn't a feed (or a broken one) says, instead of the XML
+// parser's own words ("about:blank:1:220: text data outside of root node.").
+const NOT_A_FEED = "That address didn't return an RSS or Atom feed.";
+
 export function parseFeedXml(xml, sourceUrl) {
-  const dom = new JSDOM(xml, { contentType: 'text/xml' });
+  let dom;
+  try {
+    dom = new JSDOM(xml, { contentType: 'text/xml' });
+  } catch {
+    throw new Error(NOT_A_FEED);
+  }
   const doc = dom.window.document;
   if (doc.querySelector('parsererror')) {
-    throw new Error('Feed XML could not be parsed.');
+    throw new Error(NOT_A_FEED);
   }
 
   const rssChannel = doc.getElementsByTagName('channel')?.[0] || null;
   const atomFeed = doc.getElementsByTagName('feed')?.[0] || null;
+  if (!rssChannel && !atomFeed) throw new Error(NOT_A_FEED);
   const root = rssChannel || atomFeed || doc;
   const atomMode = Boolean(atomFeed && !rssChannel);
 
