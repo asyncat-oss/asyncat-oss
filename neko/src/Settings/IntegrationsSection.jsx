@@ -16,7 +16,7 @@ import { Field, Input } from '../components/ui/Field.jsx';
 import Switch from '../components/ui/Switch.jsx';
 import Skeleton from '../components/ui/Skeleton.jsx';
 import { errorDetail, useToast } from '../components/toastContext.js';
-import { LogoTile, ProviderLogo } from '../Models/modelLogos.jsx';
+import { LogoTile, MonoProviderLogo } from '../Models/modelLogos.jsx';
 import { integrationsApi, configApi } from './settingApi';
 
 const CHANNELS = [
@@ -771,7 +771,7 @@ export default function IntegrationsSection() {
 
       <ServiceCard
         id="huggingface"
-        logo={<ProviderLogo providerId="huggingface" name="Hugging Face" size="sm" />}
+        logo={<MonoProviderLogo providerId="huggingface" name="Hugging Face" size="sm" />}
         name="Hugging Face"
         description="Download gated models and private repositories from the Hugging Face Hub on the Models page."
         configured={hfConfigured}

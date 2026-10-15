@@ -264,16 +264,33 @@ HFAuthorLogo.propTypes = {
   className: PropTypes.string,
 };
 
-/** A provider's mark on its own, sized by className, for inline use in pills. */
+/**
+ * A provider's mark on its own, sized by className, for inline use in pills
+ * and rows. It is drawn in the text colour around it (grey in the app's
+ * chrome), never in brand colours or on a coloured tile.
+ */
 export const ProviderGlyph = ({ providerId, className = 'h-4 w-4' }) => {
-  if (providerId === 'asyncat') return <AsyncatMark className={className} />;
+  if (providerId === 'asyncat') return <AsyncatMark variant="glyph" className={className} />;
   const cfg = providerLogoConfig(providerId);
   if (!cfg?.path) return null;
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className={`${className} ${cfg.color ? '' : 'text-fg'}`} style={cfg.color ? { color: cfg.color } : undefined} fill="currentColor">
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="currentColor">
       <path d={cfg.path} />
     </svg>
   );
+};
+
+/** A provider's logo tile in the app's greys: its mark without the brand colour. */
+export const MonoProviderLogo = ({ providerId, name = '', size = 'md', className = '' }) => {
+  const cfg = providerLogoConfig(providerId);
+  return <LogoTile cfg={cfg?.path ? { path: cfg.path } : cfg} label={name || providerId} size={size} className={className} />;
+};
+
+MonoProviderLogo.propTypes = {
+  providerId: PropTypes.string,
+  name: PropTypes.string,
+  size: PropTypes.oneOf(['xs', 'sm', 'md', 'lg']),
+  className: PropTypes.string,
 };
 
 ProviderGlyph.propTypes = {
