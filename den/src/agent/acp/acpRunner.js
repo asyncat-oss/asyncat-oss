@@ -47,11 +47,13 @@ export function toolContentText(content = []) {
   }).filter(Boolean).join('\n').slice(0, 4000);
 }
 
-function unifiedDiff(filePath, oldText = '', newText = '') {
+function unifiedDiff(filePath, oldText, newText = '') {
   if (oldText === newText) return null;
-  const a = String(oldText || '').split('\n');
-  const b = String(newText || '').split('\n');
-  const lines = [`--- a/${filePath}`, `+++ b/${filePath}`];
+  // No old text: a new file, diffed against /dev/null without an empty
+  // "removed" line.
+  const a = oldText ? String(oldText).split('\n') : [];
+  const b = newText ? String(newText).split('\n') : [];
+  const lines = [oldText == null ? '--- /dev/null' : `--- a/${filePath}`, `+++ b/${filePath}`];
   for (let i = 0; i < Math.max(a.length, b.length) && lines.length < 120; i += 1) {
     if (a[i] === b[i]) lines.push(` ${a[i] ?? ''}`);
     else {

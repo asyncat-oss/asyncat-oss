@@ -2013,7 +2013,10 @@ export class AgentRuntime {
       try {
         const plan = planPatch(args, this.workingDir);
         if (plan.error || !plan.changes?.length) return null;
-        const diffs = plan.changes.map((change) => this._unifiedDiff(change.path, change.before ?? '', change.after ?? '')).filter(Boolean);
+        const diffs = plan.changes.map((change) => this._unifiedDiff(change.path, change.before ?? '', change.after ?? '', {
+          created: change.before == null,
+          removed: change.after == null,
+        })).filter(Boolean);
         return diffs.length ? diffs.join('\n') : null;
       } catch {
         return null;
@@ -2034,18 +2037,21 @@ export class AgentRuntime {
       const relative = path.relative(rootPath, targetPath);
       if (relative.startsWith('..') || path.isAbsolute(relative)) return null;
 
-      const oldContent = fs.existsSync(targetPath) ? fs.readFileSync(targetPath, 'utf8') : '';
-      return this._unifiedDiff(args.path, oldContent, String(args.content ?? ''));
+      const exists = fs.existsSync(targetPath);
+      const oldContent = exists ? fs.readFileSync(targetPath, 'utf8') : '';
+      return this._unifiedDiff(args.path, oldContent, String(args.content ?? ''), { created: !exists });
     } catch {
       return null;
     }
   }
 
-  _unifiedDiff(filePath, oldContent, newContent) {
+  // A new file diffs against /dev/null, and an empty side has no lines (not
+  // one empty line shown as removed).
+  _unifiedDiff(filePath, oldContent, newContent, { created = false, removed = false } = {}) {
     if (oldContent === newContent) return null;
-    const oldLines = oldContent.split('\n');
-    const newLines = newContent.split('\n');
-    const lines = [`--- a/${filePath}`, `+++ b/${filePath}`];
+    const oldLines = oldContent === '' ? [] : oldContent.split('\n');
+    const newLines = newContent === '' ? [] : newContent.split('\n');
+    const lines = [created ? '--- /dev/null' : `--- a/${filePath}`, removed ? '+++ /dev/null' : `+++ b/${filePath}`];
     const maxLines = 120;
     const maxLen = Math.max(oldLines.length, newLines.length);
 

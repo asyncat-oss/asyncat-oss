@@ -88,3 +88,15 @@ test('the approval diff for edit_file shows the change the tool makes', async ()
   assert.deepEqual(changed(diffFor({ old_string: 'pears: 1\nplums: 2', new_string: '  pears: 3\n  plums: 4' })),
     ['-  pears: 1', '+  pears: 3', '-  plums: 2', '+  plums: 4']);
 });
+
+test('writing a new file diffs against /dev/null, with no removed empty line', () => {
+  const folder = fs.mkdtempSync(path.join(scratch, 'newfile-'));
+  const runtime = Object.assign(Object.create(AgentRuntime.prototype), { workingDir: folder });
+  const diff = runtime._buildPermissionDiff('write_file', { path: 'birds/heron.md', content: '# Heron\nTall bird' });
+  assert.deepEqual(diff.split('\n'), ['--- /dev/null', '+++ b/birds/heron.md', '+# Heron', '+Tall bird']);
+
+  // An existing file keeps its a/ header.
+  fs.writeFileSync(path.join(folder, 'old.md'), 'one');
+  const changed = runtime._buildPermissionDiff('write_file', { path: 'old.md', content: 'two' });
+  assert.deepEqual(changed.split('\n'), ['--- a/old.md', '+++ b/old.md', '-one', '+two']);
+});

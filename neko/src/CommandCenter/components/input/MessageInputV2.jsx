@@ -257,7 +257,7 @@ function PermissionDiff({ diff }) {
                   : header ? "text-fg-subtle" : "text-fg-muted"
             }`}
           >
-            {line || " "}
+            {line === "--- /dev/null" ? "New file" : line === "+++ /dev/null" ? "File deleted" : (line || " ")}
           </div>
         );
       })}
