@@ -18,24 +18,55 @@ export const USER_SKILLS_DIR = path.join(
 
 let loadedSkills = [];
 
+// A frontmatter value with the indented lines under its key: `key: |` keeps
+// the lines, `key: >` folds them into one, `key:` over `- item` lines is a
+// list, and a plain value carries on over indented lines.
+function frontmatterValue({ value, lines }) {
+  const filled = lines.filter((line) => line.trim());
+  if (!filled.length) return /^[|>][+-]?\d*$/.test(value) ? '' : value;
+  const indent = Math.min(...filled.map((line) => line.match(/^\s*/)[0].length));
+  const text = lines.map((line) => (line.trim() ? line.slice(indent) : '')).join('\n').trim();
+  if (/^\|[+-]?\d*$/.test(value)) return text;
+  if (/^>[+-]?\d*$/.test(value)) {
+    return text.split(/\n\s*\n/).map((part) => part.split('\n').map((line) => line.trim()).join(' ')).join('\n');
+  }
+  if (!value && filled.every((line) => /^\s*-(\s|$)/.test(line))) {
+    return filled.map((line) => line.replace(/^\s*-\s*/, '').replace(/^(["'])(.*)\1$/, '$2'));
+  }
+  return [value, ...filled.map((line) => line.trim())].filter(Boolean).join(' ');
+}
+
 function parseFrontmatter(content, fallbackName) {
   const lines = content.split('\n');
   const frontmatter = {};
   let inFrontmatter = false;
   let bodyStart = 0;
+  // The key being read: indented lines below it belong to it, never keys of their own.
+  let open = null;
+  const close = () => {
+    if (open) frontmatter[open.key] = frontmatterValue(open);
+    open = null;
+  };
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const line = lines[i].replace(/\r$/, '');
     if (line.trim() === '---') {
       if (!inFrontmatter) { inFrontmatter = true; }
-      else { bodyStart = i + 1; break; }
+      else { close(); bodyStart = i + 1; break; }
       continue;
     }
-    if (inFrontmatter && line.includes(':')) {
-      const [key, ...valueParts] = line.split(':');
-      frontmatter[key.trim()] = valueParts.join(':').trim();
+    if (!inFrontmatter) continue;
+    if (/^\s/.test(line) || !line.trim()) {
+      open?.lines.push(line);
+      continue;
+    }
+    close();
+    const colon = line.indexOf(':');
+    if (colon > 0 && !line.startsWith('#')) {
+      open = { key: line.slice(0, colon).trim(), value: line.slice(colon + 1).trim(), lines: [] };
     }
   }
+  close();
 
   return {
     name: frontmatter.name || fallbackName,
@@ -91,17 +122,23 @@ function slugifyName(name) {
   return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
+// `key: value`, or `key: |` over indented lines when the text has several.
+function frontmatterLines(key, value) {
+  const text = String(value ?? '').replace(/\r\n?/g, '\n').trim();
+  return text.includes('\n') ? [`${key}: |`, ...text.split('\n').map((line) => `  ${line}`.trimEnd())] : [`${key}: ${text}`];
+}
+
 function buildSkillMarkdown({ name, description = '', brain_region = 'unknown', weight = 1, tags = [], when_to_use = '', body = '', created_by = null }) {
   const tagLine = Array.isArray(tags) ? tags.join(', ') : tags;
   const lines = [
     '---',
     `name: ${name}`,
-    `description: ${description}`,
+    ...frontmatterLines('description', description),
     `brain_region: ${brain_region}`,
     `weight: ${weight}`,
     `tags: [${tagLine}]`,
   ];
-  if (when_to_use) lines.push(`when_to_use: ${when_to_use}`);
+  if (when_to_use) lines.push(...frontmatterLines('when_to_use', when_to_use));
   if (created_by) lines.push(`created_by: ${created_by}`);
   lines.push('---');
   if (body) lines.push('', body);
