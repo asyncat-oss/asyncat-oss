@@ -17,40 +17,9 @@ import Select from '../components/ui/Select.jsx';
 import { backdropCloses, useLayer } from '../components/ui/floating.js';
 import { useMemoryOwners } from './useMemoryOwners.js';
 import { getSkillOrigin } from './skillOrigin.js';
+import ToolsTab from './ToolsTab.jsx';
+import { useToolCatalog } from './useCatalogs.js';
 import { DEFAULT_CATEGORY, categoryOptions, groupByCategory, skillCategory, skillMatches } from './skillCategories.js';
-
-const PERM_META = {
-  safe:      { label: 'Safe',      dot: 'bg-emerald-500 midnight:bg-emerald-600/80', badge: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300 midnight:bg-emerald-950/30 midnight:text-emerald-400/75' },
-  moderate:  { label: 'Moderate',  dot: 'bg-amber-500 midnight:bg-amber-600/80',   badge: 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300 midnight:bg-amber-950/30 midnight:text-amber-400/75' },
-  dangerous: { label: 'Dangerous', dot: 'bg-red-500 midnight:bg-red-600/80',     badge: 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300 midnight:bg-red-950/30 midnight:text-red-400/75' },
-};
-
-const OS_META = {
-  mac:   { label: 'macOS',   badge: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300 midnight:bg-slate-800 midnight:text-slate-300' },
-  linux: { label: 'Linux',   badge: 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 midnight:bg-blue-950/30 midnight:text-blue-400/75' },
-  win:   { label: 'Windows', badge: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-300 midnight:bg-indigo-950/30 midnight:text-indigo-400/75' },
-};
-
-const ALL_OS = ['mac', 'linux', 'win'];
-
-// Tools with non-trivial platform info. Absence = works on all platforms, no special deps.
-// platforms: which OSes support this tool (subset = restricted)
-// deps: per-OS dependency note shown in the inspector
-const TOOL_OS_INFO = {
-  // macOS + Linux only — no Windows implementation
-  screen_key:         { platforms: ['mac', 'linux'], deps: { mac: 'osascript (built-in)', linux: 'xdotool (apt install xdotool)' } },
-  // All platforms — needs external tool on some
-  take_screenshot:    { platforms: ALL_OS, deps: { mac: 'screencapture (built-in)', linux: 'scrot or gnome-screenshot', win: 'PowerShell (built-in)' } },
-  screen_read:        { platforms: ALL_OS, deps: { mac: 'Tesseract (brew install tesseract)', linux: 'Tesseract (apt install tesseract-ocr)', win: 'Tesseract (installer)' } },
-  screen_click:       { platforms: ALL_OS, deps: { mac: 'cliclick (brew install cliclick)', linux: 'xdotool (apt install xdotool)', win: 'PowerShell (built-in)' } },
-  screen_type:        { platforms: ALL_OS, deps: { mac: 'cliclick (brew install cliclick)', linux: 'xdotool (apt install xdotool)', win: 'PowerShell (built-in)' } },
-  window_list:        { platforms: ALL_OS, deps: { mac: 'osascript (built-in)', linux: 'xdotool (apt install xdotool)', win: 'PowerShell (built-in)' } },
-  window_focus:       { platforms: ALL_OS, deps: { mac: 'osascript (built-in)', linux: 'xdotool (apt install xdotool)', win: 'PowerShell (built-in)' } },
-  active_app:         { platforms: ALL_OS, deps: { mac: 'osascript (built-in)', linux: 'xdotool (apt install xdotool)', win: 'PowerShell (built-in)' } },
-  notify:             { platforms: ALL_OS, deps: { mac: 'osascript — grant Notifications in System Settings', linux: 'notify-send (apt install libnotify-bin)', win: 'PowerShell (built-in)' } },
-  app_open:           { platforms: ALL_OS, deps: { mac: 'open (built-in)', linux: 'xdg-open (built-in)', win: 'Start-Process (built-in)' } },
-  app_list:           { platforms: ALL_OS, deps: { mac: '/Applications (built-in)', linux: '.desktop files (built-in)', win: 'Get-StartApps (built-in)' } },
-};
 
 const SKILL_ORIGIN_FILTERS = [
   { id: 'all', label: 'All' },
@@ -76,12 +45,6 @@ function formatSkillAge(isoString) {
   if (months < 12) return `${months} month${months > 1 ? 's' : ''} ago`;
   const years = Math.floor(days / 365);
   return `${years} year${years > 1 ? 's' : ''} ago`;
-}
-
-function formatLabel(value) {
-  return (value || 'general')
-    .replace(/[_-]+/g, ' ')
-    .replace(/\b\w/g, char => char.toUpperCase());
 }
 
 function renderInlineMarkdown(text, keyPrefix) {
@@ -224,57 +187,6 @@ MarkdownPanel.propTypes = {
   emptyText: PropTypes.string,
 };
 
-function ToolCard({ tool, isFirst, selected, onSelect }) {
-  const perm = PERM_META[tool.permission] || PERM_META.moderate;
-  const osInfo = TOOL_OS_INFO[tool.name];
-  const isRestricted = osInfo?.platforms && osInfo.platforms.length < ALL_OS.length;
-
-  return (
-    <div className={isFirst ? '' : 'border-t border-gray-100 dark:border-gray-800 midnight:border-slate-800'}>
-      <button
-        onClick={onSelect}
-        className={`group w-full px-4 py-3 text-left transition-colors ${
-          selected
-            ? 'bg-gray-100/80 dark:bg-gray-800/70 midnight:bg-slate-900'
-            : 'hover:bg-gray-50/70 dark:hover:bg-gray-800/45 midnight:hover:bg-slate-900/55'
-        }`}
-      >
-        <div className="flex items-start gap-3">
-          <span className={'mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full ' + perm.dot} />
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="truncate font-mono text-sm font-medium text-gray-900 dark:text-gray-100 midnight:text-slate-100">{tool.name}</span>
-              <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${perm.badge}`}>{perm.label}</span>
-              {isRestricted && osInfo.platforms.map(os => (
-                <span key={os} className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${OS_META[os]?.badge}`}>
-                  {OS_META[os]?.label}
-                </span>
-              ))}
-            </div>
-            <p className="mt-1 line-clamp-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{tool.description || 'No description'}</p>
-          </div>
-          <div className="mt-0.5 text-gray-300 transition-colors group-hover:text-gray-500 dark:text-gray-600 dark:group-hover:text-gray-400">
-            <ChevronRight className="h-4 w-4" />
-          </div>
-        </div>
-      </button>
-    </div>
-  );
-}
-
-ToolCard.propTypes = {
-  tool: PropTypes.shape({
-    name: PropTypes.string.isRequired,
-    description: PropTypes.string,
-    permission: PropTypes.string,
-    category: PropTypes.string,
-    parameters: PropTypes.oneOfType([PropTypes.string, PropTypes.object]),
-  }).isRequired,
-  isFirst: PropTypes.bool,
-  selected: PropTypes.bool,
-  onSelect: PropTypes.func.isRequired,
-};
-
 function SkillCard({ skill, isFirst, selected, onSelect }) {
   const origin = getSkillOrigin(skill);
   const originMeta = SKILL_ORIGIN_META[origin] || SKILL_ORIGIN_META.default;
@@ -331,39 +243,6 @@ SkillCard.propTypes = {
   onSelect: PropTypes.func.isRequired,
 };
 
-function ToolSection({ category, catTools, selectedToolName, onSelectTool }) {
-  const sortedTools = useMemo(() => [...catTools].sort((a, b) => a.name.localeCompare(b.name)), [catTools]);
-
-  return (
-    <section className="mb-6">
-      <div className="flex items-center justify-between gap-3 px-2 py-2">
-        <div className="min-w-0">
-          <h2 className="truncate text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-300">{formatLabel(category)}</h2>
-        </div>
-        <span className="rounded bg-gray-100/50 px-2 py-0.5 font-mono text-[10px] text-gray-500 dark:bg-gray-800/50 midnight:bg-slate-800/50">{catTools.length}</span>
-      </div>
-      <div>
-        {sortedTools.map((tool, idx) => (
-          <ToolCard key={tool.name} tool={tool} isFirst={idx === 0} selected={tool.name === selectedToolName} onSelect={() => onSelectTool(tool)} />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-ToolSection.propTypes = {
-  category: PropTypes.string.isRequired,
-  catTools: PropTypes.arrayOf(PropTypes.shape({
-    name: PropTypes.string.isRequired,
-    description: PropTypes.string,
-    permission: PropTypes.string,
-    category: PropTypes.string,
-    parameters: PropTypes.oneOfType([PropTypes.string, PropTypes.object]),
-  })).isRequired,
-  selectedToolName: PropTypes.string,
-  onSelectTool: PropTypes.func.isRequired,
-};
-
 function SkillSection({ group, selectedSkillName, onSelectSkill }) {
   const sortedSkills = useMemo(() => [...group.skills].sort((a, b) => a.name.localeCompare(b.name)), [group.skills]);
 
@@ -402,104 +281,6 @@ SkillSection.propTypes = {
   }).isRequired,
   selectedSkillName: PropTypes.string,
   onSelectSkill: PropTypes.func.isRequired,
-};
-
-function ToolInspector({ tool }) {
-  if (!tool) {
-    return (
-      <div className="flex h-full min-h-[280px] items-center justify-center px-6 text-center text-sm text-gray-400">
-        Select a tool to inspect its description and parameters.
-      </div>
-    );
-  }
-
-  const perm = PERM_META[tool.permission] || PERM_META.moderate;
-
-  return (
-    <div className="h-full overflow-y-auto p-5">
-      <div className="mb-5 flex items-start gap-3">
-        <span className={'mt-2 h-2 w-2 flex-shrink-0 rounded-full ' + perm.dot} />
-        <div className="min-w-0">
-          <h3 className="break-words font-mono text-base font-semibold text-gray-950 dark:text-white midnight:text-slate-100">{tool.name}</h3>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${perm.badge}`}>{perm.label}</span>
-            <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 midnight:bg-slate-800 dark:text-gray-400 midnight:text-slate-400">
-              {formatLabel(tool.category)}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="border-t border-gray-100 pt-5 dark:border-gray-800 midnight:border-slate-800">
-        <p className="mb-3 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Description</p>
-        <MarkdownPanel content={tool.description} />
-      </div>
-
-      {(() => {
-        const osInfo = TOOL_OS_INFO[tool.name];
-        if (!osInfo) {
-          return (
-            <div className="mt-5 border-t border-gray-100 pt-5 dark:border-gray-800 midnight:border-slate-800">
-              <p className="mb-3 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Platform Support</p>
-              <div className="flex gap-2">
-                {ALL_OS.map(os => (
-                  <span key={os} className={`rounded px-2 py-1 text-[10px] font-medium ${OS_META[os].badge}`}>
-                    ✓ {OS_META[os].label}
-                  </span>
-                ))}
-              </div>
-            </div>
-          );
-        }
-        const supported = osInfo.platforms || ALL_OS;
-        return (
-          <div className="mt-5 border-t border-gray-100 pt-5 dark:border-gray-800 midnight:border-slate-800">
-            <p className="mb-3 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Platform Support</p>
-            <div className="space-y-2">
-              {ALL_OS.map(os => {
-                const isSupported = supported.includes(os);
-                const dep = osInfo.deps?.[os];
-                return (
-                  <div key={os} className="flex items-start gap-2">
-                    <span className={`mt-0.5 flex-shrink-0 text-[11px] font-semibold w-14 ${isSupported ? 'text-gray-700 dark:text-gray-300 midnight:text-slate-300' : 'text-gray-300 dark:text-gray-600 midnight:text-slate-600'}`}>
-                      {isSupported ? '✓' : '✗'} {OS_META[os].label}
-                    </span>
-                    {isSupported && dep && (
-                      <span className="text-[11px] leading-4 text-gray-500 dark:text-gray-400 midnight:text-slate-400 font-mono bg-gray-50 dark:bg-gray-800/50 midnight:bg-slate-800/50 rounded px-1.5 py-0.5">
-                        {dep}
-                      </span>
-                    )}
-                    {!isSupported && (
-                      <span className="text-[11px] leading-4 text-gray-400 dark:text-gray-600 midnight:text-slate-600 italic">Not supported</span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })()}
-
-      {tool.parameters && (
-        <div className="mt-5 border-t border-gray-100 pt-5 dark:border-gray-800 midnight:border-slate-800">
-          <p className="mb-3 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Parameters</p>
-          <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-lg border border-gray-100 bg-gray-50 p-3 font-mono text-xs leading-5 text-gray-700 dark:border-gray-800 dark:bg-gray-950/50 dark:text-gray-300 midnight:border-slate-800 midnight:bg-slate-950/60">
-            {typeof tool.parameters === 'string' ? tool.parameters : JSON.stringify(tool.parameters, null, 2)}
-          </pre>
-        </div>
-      )}
-    </div>
-  );
-}
-
-ToolInspector.propTypes = {
-  tool: PropTypes.shape({
-    name: PropTypes.string.isRequired,
-    description: PropTypes.string,
-    permission: PropTypes.string,
-    category: PropTypes.string,
-    parameters: PropTypes.oneOfType([PropTypes.string, PropTypes.object]),
-  }),
 };
 
 function SkillInspector({ skill, onRequestDelete, isDeleting }) {
@@ -728,31 +509,24 @@ function ToolsSkillsTabs({ initialTab = 'tools' }) {
   const requestedTab = searchParams.get('tab');
   const startTab = ['tools', 'skills', 'memory'].includes(requestedTab) ? requestedTab : initialTab;
   const [activeTab, setActiveTab] = useState(startTab);
-  const [tools, setTools] = useState([]);
+  const toolCatalog = useToolCatalog();
   const [skills, setSkills] = useState([]);
   // Planning, Workflow, … in den's order (den/src/agent/skillCategories.js).
   const [skillCategories, setSkillCategories] = useState([]);
-  const [loadingTools, setLoadingTools] = useState(true);
   const [loadingSkills, setLoadingSkills] = useState(true);
-  const [errorTools, setErrorTools] = useState(null);
   const [errorSkills, setErrorSkills] = useState(null);
-  const [toolSearch, setToolSearch] = useState('');
   const [skillSearch, setSkillSearch] = useState('');
   const [skillOriginFilter, setSkillOriginFilter] = useState('all');
-  const [selectedToolName, setSelectedToolName] = useState(null);
   const [selectedSkillName, setSelectedSkillName] = useState(null);
   const [reloadingSkills, setReloadingSkills] = useState(false);
   const [reloadSkillsSuccess, setReloadSkillsSuccess] = useState(false);
   const [newSkillOpen, setNewSkillOpen] = useState(false);
-  const toolsFetchedRef = useRef(false);
   const skillsFetchedRef = useRef(false);
 
   const [skillToDelete, setSkillToDelete] = useState(null);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deletingSkill, setDeletingSkill] = useState(false);
 
-  const [osFilter, setOsFilter] = useState('all');
-  const [toolsSidebarOpen, setToolsSidebarOpen] = useState(true);
   const [skillsSidebarOpen, setSkillsSidebarOpen] = useState(true);
 
   const [memories, setMemories] = useState([]);
@@ -779,12 +553,6 @@ function ToolsSkillsTabs({ initialTab = 'tools' }) {
   }, [linkedScope]);
 
   useEffect(() => {
-    if (toolsFetchedRef.current) return;
-    toolsFetchedRef.current = true;
-    fetchTools();
-  }, []);
-
-  useEffect(() => {
     if (skillsFetchedRef.current) return;
     skillsFetchedRef.current = true;
     fetchSkills();
@@ -808,19 +576,6 @@ function ToolsSkillsTabs({ initialTab = 'tools' }) {
     fetchMemories();
     agentApi.getMemoryStats().then(res => { if (res?.success) setMemoryStats(res); }).catch(() => {});
   }, [activeTab, fetchMemories]);
-
-  async function fetchTools() {
-    setLoadingTools(true);
-    setErrorTools(null);
-    try {
-      const res = await agentApi.getTools();
-      setTools(res.tools || []);
-    } catch (err) {
-      setErrorTools(err.message || 'Failed to load tools');
-    } finally {
-      setLoadingTools(false);
-    }
-  }
 
   async function fetchSkills() {
     setLoadingSkills(true);
@@ -898,25 +653,6 @@ function ToolsSkillsTabs({ initialTab = 'tools' }) {
     }
   }
 
-  const filteredTools = useMemo(() => {
-    let result = tools;
-    // OS filter — tools without an entry in TOOL_OS_INFO support all platforms
-    if (osFilter !== 'all') {
-      result = result.filter(t => {
-        const info = TOOL_OS_INFO[t.name];
-        if (!info?.platforms) return true; // no restriction = works everywhere
-        return info.platforms.includes(osFilter);
-      });
-    }
-    if (!toolSearch.trim()) return result;
-    const q = toolSearch.toLowerCase();
-    return result.filter(t =>
-      t.name.toLowerCase().includes(q) ||
-      (t.description || '').toLowerCase().includes(q) ||
-      (t.category || '').toLowerCase().includes(q)
-    );
-  }, [tools, toolSearch, osFilter]);
-
   const filteredSkills = useMemo(() => {
     const byOrigin = skillOriginFilter === 'all'
       ? skills
@@ -924,33 +660,14 @@ function ToolsSkillsTabs({ initialTab = 'tools' }) {
     return byOrigin.filter(skill => skillMatches(skill, skillSearch));
   }, [skills, skillSearch, skillOriginFilter]);
 
-  const toolsByCategory = useMemo(() => {
-    const groups = {};
-    for (const tool of filteredTools) {
-      const cat = tool.category || 'general';
-      if (!groups[cat]) groups[cat] = [];
-      groups[cat].push(tool);
-    }
-    return groups;
-  }, [filteredTools]);
-
   const skillGroups = useMemo(() => groupByCategory(filteredSkills, skillCategories), [filteredSkills, skillCategories]);
 
-  const selectedTool = useMemo(
-    () => filteredTools.find(tool => tool.name === selectedToolName) || filteredTools[0] || null,
-    [filteredTools, selectedToolName]
-  );
-  const activeToolName = selectedTool?.name || null;
   const selectedSkill = useMemo(
     () => filteredSkills.find(skill => skill.name === selectedSkillName) || filteredSkills[0] || null,
     [filteredSkills, selectedSkillName]
   );
   const activeSkillName = selectedSkill?.name || null;
 
-  const safeCount   = tools.filter(t => t.permission === 'safe').length;
-  const modCount    = tools.filter(t => t.permission === 'moderate').length;
-  const dangerCount = tools.filter(t => t.permission === 'dangerous').length;
-  const toolCategoryCount = Object.keys(toolsByCategory).length;
   const skillGroupCount = skillGroups.length;
   const defaultSkillCount = skills.filter(s => getSkillOrigin(s) === 'default').length;
   const userSkillCount = skills.filter(s => getSkillOrigin(s) === 'user').length;
@@ -989,141 +706,15 @@ function ToolsSkillsTabs({ initialTab = 'tools' }) {
           value={toolsTabActive ? 'tools' : skillsTabActive ? 'skills' : 'memory'}
           onChange={setActiveTab}
           items={[
-            { value: 'tools', label: 'Tools', icon: Wrench, meta: tools.length ? String(tools.length) : null },
+            { value: 'tools', label: 'Tools', icon: Wrench, meta: toolCatalog.tools.length ? String(toolCatalog.tools.length) : null },
             { value: 'skills', label: 'Skills', icon: Bot, meta: skills.length ? String(skills.length) : null },
             { value: 'memory', label: 'Memory', icon: BookMarked },
           ]}
         />
       </PageHeader>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto">
-        {toolsTabActive && (
-          <div className={`grid h-full overflow-hidden ${toolsSidebarOpen ? 'lg:grid-cols-[260px_minmax(0,1fr)]' : 'lg:grid-cols-1'}`}>
-            {toolsSidebarOpen && (
-            <aside className="border-b border-gray-100 px-6 py-5 dark:border-gray-800 midnight:border-slate-800 lg:overflow-y-auto lg:border-b-0 lg:border-r">
-              <div className="space-y-5">
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 midnight:text-slate-500">What this shows</p>
-                  <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-gray-400 midnight:text-slate-400">
-                    Tools are the actions the agent can request while working, from reading files to running shell commands and using workspace services.
-                  </p>
-                </div>
-                <div className="border-t border-gray-100 pt-4 dark:border-gray-800 midnight:border-slate-800">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 midnight:text-slate-500">Permission levels</p>
-                  <div className="mt-3 space-y-2 text-xs">
-                    <div className="flex items-center justify-between gap-3"><span className="flex items-center gap-2 text-gray-600 dark:text-gray-400 midnight:text-slate-400"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Safe</span><span className="font-mono text-gray-800 dark:text-gray-200 midnight:text-slate-200">{safeCount}</span></div>
-                    <div className="flex items-center justify-between gap-3"><span className="flex items-center gap-2 text-gray-600 dark:text-gray-400 midnight:text-slate-400"><span className="h-1.5 w-1.5 rounded-full bg-amber-500" />Moderate</span><span className="font-mono text-gray-800 dark:text-gray-200 midnight:text-slate-200">{modCount}</span></div>
-                    <div className="flex items-center justify-between gap-3"><span className="flex items-center gap-2 text-gray-600 dark:text-gray-400 midnight:text-slate-400"><span className="h-1.5 w-1.5 rounded-full bg-red-500" />Dangerous</span><span className="font-mono text-gray-800 dark:text-gray-200 midnight:text-slate-200">{dangerCount}</span></div>
-                  </div>
-                </div>
-                <div className="border-t border-gray-100 pt-4 dark:border-gray-800 midnight:border-slate-800">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 midnight:text-slate-500">Operating System</p>
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {[{ id: 'all', label: 'All' }, { id: 'mac', label: 'macOS' }, { id: 'linux', label: 'Linux' }, { id: 'win', label: 'Windows' }].map(opt => (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        onClick={() => setOsFilter(opt.id)}
-                        className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
-                          osFilter === opt.id
-                            ? 'bg-gray-200 text-gray-900 dark:bg-gray-700 dark:text-white midnight:bg-slate-700 midnight:text-slate-100'
-                            : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 midnight:text-slate-400 midnight:hover:text-slate-200'
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="border-t border-gray-100 pt-4 dark:border-gray-800 midnight:border-slate-800">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 midnight:text-slate-500">Catalog</p>
-                  <div className="mt-3 space-y-2 text-xs">
-                    <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400 midnight:text-slate-400">Visible tools</span><span className="font-mono text-gray-800 dark:text-gray-200 midnight:text-slate-200">{filteredTools.length}</span></div>
-                    <div className="flex items-center justify-between gap-3"><span className="text-gray-500 dark:text-gray-400 midnight:text-slate-400">Groups</span><span className="font-mono text-gray-800 dark:text-gray-200 midnight:text-slate-200">{toolCategoryCount}</span></div>
-                  </div>
-                </div>
-                <div className="border-t border-gray-100 pt-4 dark:border-gray-800 midnight:border-slate-800">
-                  <button
-                    onClick={() => setToolsSidebarOpen(false)}
-                    className="flex items-center gap-1.5 text-[10px] font-medium text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 midnight:text-slate-400 midnight:hover:text-slate-200"
-                  >
-                    <PanelLeftClose className="h-3.5 w-3.5" />
-                    Close sidebar
-                  </button>
-                </div>
-              </div>
-            </aside>
-            )}
-
-            <main className="relative min-h-0 min-w-0 overflow-hidden px-4 py-5 sm:px-6">
-              <div className="mx-auto grid h-full max-w-7xl grid-rows-[minmax(0,1fr)_minmax(280px,42vh)] gap-4 xl:grid-cols-[minmax(0,1fr)_380px] xl:grid-rows-none">
-                <section className="flex min-h-0 min-w-0 flex-col">
-                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-center gap-2">
-                      {!toolsSidebarOpen && (
-                        <button
-                          onClick={() => setToolsSidebarOpen(true)}
-                          title="Show sidebar"
-                          className="rounded-md border border-gray-200 bg-white p-1.5 text-gray-500 shadow-sm transition-colors hover:text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-gray-200 midnight:border-slate-700 midnight:bg-slate-950 midnight:text-slate-400 midnight:hover:text-slate-200"
-                        >
-                          <PanelLeft className="h-4 w-4" />
-                        </button>
-                      )}
-                      <div>
-                        <h2 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-slate-100">Tool Catalog</h2>
-                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Search by name, description, or group. Select a row to inspect parameters.</p>
-                      </div>
-                    </div>
-                    <div className="relative w-full sm:w-80">
-                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                      <input
-                        type="text"
-                        value={toolSearch}
-                        onChange={e => setToolSearch(e.target.value)}
-                        placeholder="Search tools"
-                        className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm text-gray-700 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-300 focus:ring-2 focus:ring-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:focus:border-gray-600 dark:focus:ring-gray-800 midnight:border-slate-800 midnight:bg-slate-950"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-                  {loadingTools && (
-                    <div className="flex items-center justify-center gap-2 py-20 text-gray-400">
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                    <span className="text-sm">Loading tools...</span>
-                    </div>
-                  )}
-                  {errorTools && (
-                    <div className="flex flex-col items-center justify-center gap-3 py-20">
-                    <AlertCircle className="h-6 w-6 text-red-500" />
-                    <p className="text-sm font-medium text-red-600 dark:text-red-400">Failed to load tools</p>
-                    <button onClick={fetchTools} className="text-xs text-gray-500 underline hover:text-gray-700">Try again</button>
-                    </div>
-                  )}
-                  {!loadingTools && !errorTools && Object.keys(toolsByCategory).length === 0 && (
-                    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-gray-200 bg-white py-20 text-gray-400 dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
-                    <Search className="h-6 w-6" />
-                    <p className="text-sm">{toolSearch ? 'No tools match your search' : 'No tools available'}</p>
-                    </div>
-                  )}
-                  {!loadingTools && !errorTools && Object.entries(toolsByCategory).length > 0 && (
-                    <div className="space-y-4 pb-4">
-                      {Object.entries(toolsByCategory).map(([category, catTools]) => (
-                        <ToolSection key={category} category={category} catTools={catTools} selectedToolName={activeToolName} onSelectTool={tool => setSelectedToolName(tool.name)} />
-                      ))}
-                    </div>
-                  )}
-                  </div>
-                </section>
-
-                <aside className="min-h-0 overflow-hidden border-l border-gray-100 dark:border-gray-800 midnight:border-slate-800">
-                  <ToolInspector tool={selectedTool} />
-                </aside>
-              </div>
-            </main>
-          </div>
-        )}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        {toolsTabActive && <ToolsTab catalog={toolCatalog} />}
 
         {skillsTabActive && (
           <div className={`grid h-full overflow-hidden ${skillsSidebarOpen ? 'lg:grid-cols-[260px_minmax(0,1fr)]' : 'lg:grid-cols-1'}`}>
