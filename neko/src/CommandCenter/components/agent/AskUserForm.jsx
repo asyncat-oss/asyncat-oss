@@ -3,10 +3,11 @@
 
 import { useState } from 'react';
 import PropTypes from 'prop-types';
-import { Send } from 'lucide-react';
+import { Check, Send } from 'lucide-react';
+import Button from '../../../components/ui/Button.jsx';
 import { formAnswer, formHasAnswer } from './askForm.js';
 
-const INPUT = 'w-full rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200';
+const INPUT = 'w-full rounded-lg border border-line-strong bg-canvas px-2.5 py-1.5 text-[13px] text-fg outline-none placeholder:text-fg-subtle focus:border-accent focus:ring-2 focus:ring-accent/20';
 
 export default function AskUserForm({ fields, onSubmit }) {
   const [values, setValues] = useState({});
@@ -23,7 +24,7 @@ export default function AskUserForm({ fields, onSubmit }) {
     >
       {fields.map((field, index) => (
         <label key={field.id} className="block">
-          <span className="mb-1 block text-[11px] font-medium text-gray-600 dark:text-gray-300">{field.label}</span>
+          <span className="mb-1 block text-[12px] font-medium text-fg-muted">{field.label}</span>
           {field.kind === 'choice' ? (
             <span className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={field.label}>
               {field.choices.map((choice) => (
@@ -33,8 +34,9 @@ export default function AskUserForm({ fields, onSubmit }) {
                   role="radio"
                   aria-checked={values[field.id] === choice}
                   onClick={() => set(field.id, choice)}
-                  className={`rounded-lg border px-2.5 py-1 text-xs transition-colors ${values[field.id] === choice ? 'border-gray-900 bg-gray-900 text-white dark:border-gray-200 dark:bg-gray-200 dark:text-gray-900' : 'border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800'}`}
+                  className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[13px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/40 ${values[field.id] === choice ? 'border-line-strong bg-selected text-fg' : 'border-line text-fg-muted hover:bg-hover hover:text-fg'}`}
                 >
+                  {values[field.id] === choice ? <Check className="h-3.5 w-3.5" /> : null}
                   {choice}
                 </button>
               ))}
@@ -53,13 +55,9 @@ export default function AskUserForm({ fields, onSubmit }) {
           )}
         </label>
       ))}
-      <button
-        type="submit"
-        disabled={!ready}
-        className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 px-3 py-1.5 text-xs text-white transition-colors hover:bg-gray-800 disabled:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600"
-      >
-        <Send className="h-3 w-3" /> Send
-      </button>
+      <Button type="submit" variant="primary" icon={Send} disabled={!ready}>
+        Send
+      </Button>
     </form>
   );
 }
