@@ -7,9 +7,9 @@ const MAIN_URL = import.meta.env.VITE_USER_URL;
 const handleResponse = async (response) => {
 	if (!response.ok) {
 		const errorData = await response.json().catch(() => ({}));
-		throw new Error(
+		throw Object.assign(new Error(
 			errorData.error || errorData.message || "An error occurred"
-		);
+		), { status: response.status, code: errorData.code || null, data: errorData });
 	}
 	return response.json();
 };

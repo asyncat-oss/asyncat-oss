@@ -1570,6 +1570,10 @@ router.get('/runtimes/:id/plan', async (req, res) => {
   try {
     res.json({ success: true, plan: await planManagedRuntimeInstall(String(req.params.id || '').trim()) });
   } catch (err) {
+    // No build for this computer is an answer, not a failed check.
+    if (err.code === 'ENGINE_UNAVAILABLE') {
+      return res.status(409).json({ success: false, error: err.message, code: 'engine_unavailable', unavailable: true, platform: process.platform });
+    }
     const status = /Unknown runtime/i.test(err.message) ? 404 : /not supported/i.test(err.message) ? 400 : 502;
     res.status(status).json({ success: false, error: err.message });
   }

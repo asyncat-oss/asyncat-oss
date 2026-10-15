@@ -1768,6 +1768,9 @@ export function listManagedRuntimes() {
       platforms: spec.platforms || null,
       supported: support.supported,
       unsupportedReason: support.reason,
+      // Known to have no ready-made download for this computer (after a check).
+      noDownload: !support.supported || runtimesWithoutDownload.has(spec.id),
+      platform: process.platform,
       managedInstalled,
       detected: managedInstalled || configuredExists,
       source: managedInstalled ? 'managed' : (configuredExists ? 'external' : 'missing'),
@@ -1996,6 +1999,11 @@ function engineUnavailable(message) {
   return Object.assign(new Error(message), { code: 'ENGINE_UNAVAILABLE' });
 }
 
+// Engines whose latest release was checked and has no build for this
+// computer (whisper.cpp publishes none for Linux). The runtime list says so,
+// so the app offers no Install that can only fail.
+const runtimesWithoutDownload = new Set();
+
 /**
  * The latest release of a binary runtime and the asset that suits this
  * computer: an explicit capability, else the detected GPU when the engine
@@ -2027,11 +2035,13 @@ async function resolveRuntimeRelease(spec, capability = null, signal = null) {
     ranked = rankFor('cpu_safe');
   }
   if (ranked.length === 0) {
+    runtimesWithoutDownload.add(spec.id);
     throw engineUnavailable(
       `No prebuilt ${spec.label} download is available for ${process.platform}-${process.arch}. ` +
       `Install it with your package manager or set ${spec.envKey}.`
     );
   }
+  runtimesWithoutDownload.delete(spec.id);
   return { release, asset: ranked[0], capability: targetCapability };
 }
 

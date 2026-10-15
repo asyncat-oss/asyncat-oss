@@ -363,6 +363,19 @@ function downloadRows(downloads, describe) {
 
 export const ENGINE_NAMES = { whisper: 'whisper.cpp', piper: 'Piper', sd: 'stable-diffusion.cpp' };
 
+const PLATFORM_NAMES = { linux: 'Linux', darwin: 'macOS', win32: 'Windows' };
+
+/**
+ * An engine with no ready-made download for this computer, said calmly:
+ *   "There's no ready-made whisper.cpp for Linux. Install whisper.cpp with
+ *    your package manager, then press Check again."
+ */
+export function noDownloadText(runtimeId, platform) {
+  const name = ENGINE_NAMES[runtimeId] || runtimeId;
+  const where = PLATFORM_NAMES[platform] ? `for ${PLATFORM_NAMES[platform]}` : 'for this computer';
+  return `There's no ready-made ${name} ${where}. Install ${name} with your package manager, then press Check again.`;
+}
+
 const BUILDS = {
   cpu_safe: 'CPU build',
   nvidia: 'CUDA build',
@@ -405,7 +418,7 @@ export function engineSummary(runtimeId, runtime, { bytes = null, loaded = false
   const name = ENGINE_NAMES[runtimeId] || runtime?.label || runtimeId;
   const state = engineState(runtime, { enginePath, job });
   if (state === 'unsupported') return { state, value: runtime.unsupportedReason || "Can't run on this computer", meta: [], path: null };
-  if (state === 'missing') return { state, value: 'Not installed', meta: [], path: null };
+  if (state === 'missing') return { state: runtime?.noDownload ? 'nodownload' : state, value: 'Not installed', meta: [], path: null };
   if (state === 'external') {
     return { state, value: name, meta: ['found on this computer', loaded ? 'loaded' : null].filter(Boolean), path: runtime.configuredPath || enginePath };
   }

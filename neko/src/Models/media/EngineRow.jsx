@@ -15,13 +15,45 @@ import Skeleton from '../../components/ui/Skeleton.jsx';
 import { useConfirm } from '../../components/confirmContext.js';
 import { errorDetail, useToast } from '../../components/toastContext.js';
 import ActionButton from './ActionButton.jsx';
-import { ENGINE_NAMES, buildWords, enginePlanText, engineSummary, stepErrorText, stepProgressText, stepSizeText } from './mediaFormat.js';
+import { ENGINE_NAMES, buildWords, enginePlanText, engineSummary, noDownloadText, stepErrorText, stepProgressText, stepSizeText } from './mediaFormat.js';
 import { useEngine } from './useEngine.js';
 
 const REMOVE_TEXT = {
   whisper: 'Listening on this computer stops until you install it again. Your models stay.',
   piper: 'Speaking on this computer stops until you install it again. Your voices stay.',
   sd: 'Making images on this computer stops until you install it again. Your models stay.',
+};
+
+const ENV_KEYS = { whisper: 'WHISPER_BINARY_PATH', piper: 'PIPER_BINARY_PATH', sd: 'IMAGEGEN_BINARY_PATH' };
+
+/**
+ * No ready-made download for this computer: a calm note on installing it
+ * another way, with the setting for one kept elsewhere under Details.
+ */
+function NoDownloadNote({ runtimeId, platform, onCheckAgain = null, checking = false }) {
+  return (
+    <div className="space-y-1.5" data-engine-no-download>
+      <p className="text-[13px] leading-5 text-fg-muted">{noDownloadText(runtimeId, platform)}</p>
+      <details className="text-[12px] leading-5 text-fg-subtle">
+        <summary className="w-fit cursor-pointer rounded outline-none hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/40">Details</summary>
+        <p className="mt-1">
+          Installed it somewhere Asyncat doesn&apos;t look? Point the <code className="font-mono">{ENV_KEYS[runtimeId]}</code> setting at it.
+        </p>
+      </details>
+      {onCheckAgain ? (
+        <div className="-ml-3">
+          <Button variant="ghost" size="sm" loading={checking} onClick={onCheckAgain}>Check again</Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+NoDownloadNote.propTypes = {
+  runtimeId: PropTypes.string.isRequired,
+  platform: PropTypes.string,
+  onCheckAgain: PropTypes.func,
+  checking: PropTypes.bool,
 };
 
 function MetaLine({ parts }) {
@@ -46,7 +78,8 @@ export default function EngineRow({ runtimeId, loaded = false, enginePath = null
   const engine = useEngine(runtimeId, { onChanged });
   const menuRef = useRef(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [plan, setPlan] = useState(null); // { loading, data, error } while the plan is open
+  const [plan, setPlan] = useState(null); // { loading, data, error, unavailable } while the plan is open
+  const [checking, setChecking] = useState(false);
   const name = ENGINE_NAMES[runtimeId] || runtimeId;
   const summary = engineSummary(runtimeId, engine.runtime, { bytes: engine.bytes, loaded, enginePath, job: engine.job });
   const canShow = Boolean(window.electronAPI?.shellShowInFolder && summary.path);
@@ -56,7 +89,19 @@ export default function EngineRow({ runtimeId, loaded = false, enginePath = null
     try {
       setPlan({ loading: false, data: await engine.plan(), error: '' });
     } catch (err) {
-      setPlan({ loading: false, data: null, error: errorDetail(err) });
+      setPlan({ loading: false, data: null, error: errorDetail(err), unavailable: Boolean(err?.data?.unavailable), platform: err?.data?.platform || null });
+    }
+  };
+
+  // After installing it another way: look for the engine again.
+  const checkAgain = async () => {
+    setChecking(true);
+    try {
+      await engine.refresh();
+      await onChanged?.();
+      setPlan(null);
+    } finally {
+      setChecking(false);
     }
   };
 
@@ -111,7 +156,11 @@ export default function EngineRow({ runtimeId, loaded = false, enginePath = null
       >
         <div className="sm:pl-36">
           {running ? <Progress value={percent} label={`Installing ${name}`} /> : null}
-          {step.error ? <p role="alert" className="text-[12px] leading-5 text-red-600 dark:text-red-400">{stepErrorText(step.error)}</p> : null}
+          {step.error && step.unavailable && !step.status ? (
+            <NoDownloadNote runtimeId={runtimeId} platform={engine.runtime?.platform} />
+          ) : step.error ? (
+            <p role="alert" className="text-[12px] leading-5 text-red-600 dark:text-red-400">{stepErrorText(step.error)}</p>
+          ) : null}
         </div>
       </PropertyRow>
     );
@@ -122,7 +171,7 @@ export default function EngineRow({ runtimeId, loaded = false, enginePath = null
     installedVersion: engine.runtime?.managedInstalled ? engine.runtime.version : null,
     working: state === 'managed' || state === 'external',
   }) : null;
-  const bodyOpen = state === 'installing' || Boolean(plan) || Boolean(engine.error);
+  const bodyOpen = state === 'installing' || state === 'nodownload' || Boolean(plan) || Boolean(engine.error);
 
   const value = state === 'loading' ? <Skeleton className="h-4 w-40" /> : state === 'external' ? (
     <span className="block min-w-0">
@@ -136,6 +185,8 @@ export default function EngineRow({ runtimeId, loaded = false, enginePath = null
   let control = null;
   if (state === 'missing' && !plan) {
     control = <ActionButton size="sm" blocked={downloadBlocked} onClick={openPlan}>Install</ActionButton>;
+  } else if (state === 'nodownload') {
+    control = null;
   } else if (state === 'managed' || state === 'external') {
     control = (
       <>
@@ -179,6 +230,9 @@ export default function EngineRow({ runtimeId, loaded = false, enginePath = null
       open={bodyOpen}
     >
       <div className="space-y-2 sm:pl-36">
+        {state === 'nodownload' && !plan ? (
+          <NoDownloadNote runtimeId={runtimeId} platform={engine.runtime?.platform} onCheckAgain={checkAgain} checking={checking} />
+        ) : null}
         {state === 'installing' ? (
           <DownloadLine
             label="Installing"
@@ -195,6 +249,8 @@ export default function EngineRow({ runtimeId, loaded = false, enginePath = null
                 <Skeleton className="h-4 w-64 max-w-full" />
                 <Skeleton className="h-3 w-80 max-w-full" />
               </>
+            ) : plan.unavailable ? (
+              <NoDownloadNote runtimeId={runtimeId} platform={plan.platform || engine.runtime?.platform} />
             ) : plan.error ? (
               <p className="text-[12px] leading-5 text-red-600 dark:text-red-400">Couldn&apos;t check for a download: {plan.error}</p>
             ) : planText.newest ? (
@@ -206,7 +262,11 @@ export default function EngineRow({ runtimeId, loaded = false, enginePath = null
               </div>
             )}
             <div className="-ml-3 flex flex-wrap items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setPlan(null)}>Not now</Button>
+              {plan.unavailable ? (
+                <Button variant="ghost" size="sm" loading={checking} onClick={checkAgain}>Check again</Button>
+              ) : (
+                <Button variant="ghost" size="sm" onClick={() => setPlan(null)}>Not now</Button>
+              )}
               {planText?.newest ? (
                 <ActionButton variant="ghost" size="sm" blocked={downloadBlocked} onClick={install}>Reinstall</ActionButton>
               ) : planText ? (

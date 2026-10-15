@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   FIT, buildImageFiles, buildVoiceFiles, downloadsFor, engineState, engineSummary, enginePlanText, filesCountText, folderOf,
-  gpuLine, installText, jobPercent, sizeText, stepErrorText, stepProgressText, stepSizeText, totalText, versionText, voicesByLanguage,
+  gpuLine, installText, jobPercent, sizeText, stepErrorText, stepProgressText, stepSizeText, totalText, versionText, voicesByLanguage, noDownloadText,
 } from './mediaFormat.js';
 
 test('sizes and step states read plainly', () => {
@@ -211,4 +211,15 @@ test('the engine row says which copy runs, and the plan says what an update cost
   assert.equal(enginePlanText('sd', { assetName: 'sd-bin.zip', downloadBytes: 30_000_000 }, { working: true }).detail, 'sd-bin.zip. Images keep working while it downloads.');
   assert.equal(installText({ progress: { downloadedBytes: 4_000_000, totalBytes: 12_000_000 } }), 'Installing · 4 of 12 MB');
   assert.equal(installText({ progress: { percent: 2 } }), 'Installing');
+});
+
+test('an engine with no download for this computer says so calmly, with no Install', () => {
+  assert.equal(
+    noDownloadText('whisper', 'linux'),
+    "There's no ready-made whisper.cpp for Linux. Install whisper.cpp with your package manager, then press Check again.",
+  );
+  assert.match(noDownloadText('sd', 'freebsd'), /for this computer\./);
+  assert.equal(engineSummary('whisper', { supported: true, noDownload: true }).state, 'nodownload');
+  assert.equal(engineSummary('whisper', { supported: true, noDownload: false }).state, 'missing');
+  assert.equal(engineSummary('whisper', { supported: true, noDownload: true, configuredPath: '/usr/bin/whisper-server' }).state, 'external');
 });
