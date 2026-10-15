@@ -199,7 +199,6 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
   const savingConversationIdsRef = useRef(new Set());
   const loadConversationRequestRef = useRef(0);
   const agentAbortControllersRef = useRef(new Map());
-  const runStartedAtRef = useRef(null);
   const chatRunsRef = useRef(chatRuns);
   const currentConversationIdRef = useRef(state.currentConversationId);
   // Per chat, the ids of every message this window has seen. Saves send them
@@ -782,7 +781,6 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
     hasActiveRuns,
     chatRunPreviews,
     agentAbortControllersRef,
-    runStartedAtRef,
     currentConversationIdRef,
     onProjectsChange,
   };

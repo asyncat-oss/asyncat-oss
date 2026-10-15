@@ -259,7 +259,6 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
   // Text to put back in the composer after a send fails (see handleAgentRun).
   const [composerRestore, setComposerRestore] = useState(null);
   const fallbackAgentAbortControllersRef = useRef(new Map());
-  const fallbackRunStartedAtRef = useRef(null);
   const fallbackCurrentConversationIdRef = useRef(null);
 
   const {
@@ -284,7 +283,6 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     chatRuns = {},
     updateChatRun = () => {},
     agentAbortControllersRef = fallbackAgentAbortControllersRef,
-    runStartedAtRef = fallbackRunStartedAtRef,
     currentConversationIdRef = fallbackCurrentConversationIdRef,
     workingContext = null,
     setWorkingContext = () => {},
@@ -1360,7 +1358,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     ];
 
     setError(null);
-    runStartedAtRef.current = Date.now();
+    const runStartedAt = Date.now();
     if (runConversationId === currentConversationIdRef.current) {
       setMessages(optimisticMessages);
       setConversationHistory(optimisticConversationHistory);
@@ -1418,6 +1416,8 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
         ...prev,
         goal: submittedGoal,
         running: true,
+        // Kept with the run, so another chat's run never lends its start time.
+        startedAt: runStartedAt,
         streamingText: '',
         streamingReasoning: '',
         session: null,
@@ -3270,7 +3270,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                     isRunning={agentRunning}
                     streamingText={agentStreamingText}
                     streamingReasoning={agentStreamingReasoning}
-                    runStartedAt={runStartedAtRef.current}
+                    runStartedAt={currentRun.startedAt || null}
                     sessionId={savedSessionId}
                     session={agentCurrentSession}
                     onViewArtifactInPanel={handleViewArtifactInPanel}
@@ -3353,7 +3353,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                 onReasoningEffortChange={handleReasoningEffortChange}
                 isRunning={agentRunning}
                 onStop={handleAgentStop}
-                runStartedAt={runStartedAtRef.current}
+                runStartedAt={currentRun.startedAt || null}
                 externalFileAttachment={externalFileAttachment}
                 onNativeFileAttach={setExternalFileAttachment}
                 workingContext={workingContext}

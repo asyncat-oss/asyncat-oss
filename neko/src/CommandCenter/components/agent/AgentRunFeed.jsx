@@ -2893,10 +2893,13 @@ export default function AgentRunFeed({
         const hasStopReason = seg.workEvents.some(ev => ev.type === 'stop_reason');
         const segUsage = [...seg.workEvents].reverse().find(ev => ev.type === 'usage_update')?.data || null;
 
-        // Per-segment elapsed time: from first event in segment → answer arrival
+        // Per-segment elapsed time: from first event in segment → answer
+        // arrival. The run's start time stands in only for the segment the
+        // run is producing now, never for a loaded message such as a Cat's
+        // greeting.
         const segStartMs = seg.goalEvent?.arrivedAt
           || seg.workEvents[0]?.arrivedAt
-          || (si === 0 ? runStartedAt : null);
+          || (segIsRunning ? runStartedAt : null);
         const segEndMs = seg.answerEvent?.arrivedAt;
         const segElapsedMs = segStartMs && segEndMs && segEndMs > segStartMs
           ? segEndMs - segStartMs : 0;
