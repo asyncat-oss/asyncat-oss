@@ -47,7 +47,7 @@ export function migrateScheduledTasksToCats(database = db, { now = new Date() } 
       const enabled = Boolean(task.enabled);
       const catId = insertCat(task.user_id, {
         name: task.name,
-        avatar: '⏰',
+        avatar: '',
         mission: task.prompt,
         profileId,
         providerProfileId,

@@ -127,7 +127,7 @@ export const createCatTool = {
     properties: {
       mission: { type: 'string', description: 'What the Cat looks after, as complete instructions in plain words.' },
       name: { type: 'string', description: 'Short name, e.g. "Inbox Cat". Defaults to the start of the mission.' },
-      avatar: { type: 'string', description: 'An emoji for its picture.' },
+      avatar: { type: 'string', description: 'An emoji for its picture, only when the user asks for one. Leave out for the plain cat icon.' },
       ...WAKE_PROPERTIES,
       timezone: { type: 'string', description: 'IANA time zone such as "Europe/London". Defaults to this computer\'s.' },
       project_id: { type: 'string', description: 'A project it shares with the user. Defaults to this chat\'s project; "none" for none.' },

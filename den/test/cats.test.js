@@ -578,3 +578,16 @@ test('deleting a Cat stops it and keeps its chat', async () => {
   const conversation = await chatService.getConversation(userId, cat.conversationId);
   assert.ok(conversation.messages.length >= 3);
 });
+
+test('a Cat without a picture gets no emoji, and the old filled-in ones are cleared', async () => {
+  const plain = await engine.createCat(userId, { name: 'Plain', mission: 'Look after the plants.', timezone: 'UTC' });
+  assert.equal(plain.avatar, '', 'the page shows the plain cat glyph');
+  const chosen = await engine.createCat(userId, { name: 'Fox', avatar: '🦊', mission: 'Watch the fox.', timezone: 'UTC' });
+  assert.equal(chosen.avatar, '🦊', 'a picked one stays');
+
+  db.prepare("UPDATE cats SET avatar = '🐱' WHERE id = ?").run(plain.id);
+  assert.equal(store.hydrateCat(db.prepare('SELECT * FROM cats WHERE id = ?').get(plain.id), { includeRuns: false }).avatar, '', 'read as no picture');
+  store.ensureCatTables(db);
+  assert.equal(db.prepare('SELECT avatar FROM cats WHERE id = ?').get(plain.id).avatar, '');
+  assert.equal(db.prepare('SELECT avatar FROM cats WHERE id = ?').get(chosen.id).avatar, '🦊');
+});

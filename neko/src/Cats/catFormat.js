@@ -35,7 +35,7 @@ export const TRIGGER_LABELS = {
 export const TRIGGER_ORDER = ['schedule', 'email', 'rss', 'webpage', 'folder'];
 
 // '' is no picture: the Cat shows a plain cat glyph.
-export const AVATARS = ['', '🐱', '😺', '🐈', '🐈‍⬛', '🦁', '🐯', '🐾', '🦊', '🦉', '🐝', '🌱', '📬', '📰', '🔎', '🛠️', '💸'];
+export const AVATARS = ['', '😺', '🐈', '🐈‍⬛', '🦁', '🐯', '🐾', '🦊', '🦉', '🐝', '🌱', '📬', '📰', '🔎', '🛠️', '💸'];
 
 /** A new trigger of `kind` with sensible starting values. */
 export function defaultTrigger(kind) {

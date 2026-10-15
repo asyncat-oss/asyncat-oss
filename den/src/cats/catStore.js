@@ -32,7 +32,11 @@ export { cleanSite, siteAllowed };
 export const FREEDOM_LEVELS = ['ask_first', 'ask_risky', 'alone'];
 export const TRIGGER_KINDS = ['schedule', 'email', 'rss', 'webpage', 'folder', 'chat'];
 export const FOLDER_MODES = ['own', 'project', 'custom'];
-export const DEFAULT_AVATAR = '🐱';
+// A Cat without a picture shows the app's plain cat glyph. Older versions
+// filled in an emoji instead (and moved scheduled tasks over with one);
+// those are cleared, since nobody picked them.
+export const DEFAULT_AVATAR = '';
+const LEGACY_DEFAULT_AVATARS = ['🐱', '⏰'];
 const MAX_ALLOWED_TOOLS = 64;
 const MAX_SITES = 50;
 const MAX_TRIGGERS = 12;
@@ -49,7 +53,7 @@ export function ensureCatTables(database = db) {
       user_id                  TEXT NOT NULL,
       workspace_id             TEXT,
       name                     TEXT NOT NULL,
-      avatar                   TEXT NOT NULL DEFAULT '${DEFAULT_AVATAR}',
+      avatar                   TEXT NOT NULL DEFAULT '',
       mission                  TEXT NOT NULL,
       profile_id               TEXT,
       provider_profile_id      TEXT,
@@ -147,6 +151,7 @@ export function ensureCatTables(database = db) {
     CREATE INDEX IF NOT EXISTS idx_cat_inbox_open ON cat_inbox(user_id, status, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_cat_inbox_cat ON cat_inbox(cat_id, created_at DESC);
   `);
+  database.prepare(`UPDATE cats SET avatar = '' WHERE avatar IN (${LEGACY_DEFAULT_AVATARS.map(() => '?').join(', ')})`).run(...LEGACY_DEFAULT_AVATARS);
 }
 
 ensureCatTables(db);
@@ -226,7 +231,7 @@ function cleanMission(mission) {
 
 function cleanAvatar(avatar) {
   const value = String(avatar ?? '').trim();
-  if (!value) return DEFAULT_AVATAR;
+  if (!value || LEGACY_DEFAULT_AVATARS.includes(value)) return DEFAULT_AVATAR;
   if (value.startsWith('data:image/')) {
     if (value.length > MAX_AVATAR_CHARS) throw catError('That picture is too big. Use one under 300 KB.');
     if (!/^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(value)) throw catError('The picture must be a PNG, JPEG, WebP or GIF.');
@@ -582,7 +587,7 @@ export function hydrateCat(row, { running = null, queued = 0, includeRuns = true
     userId: row.user_id,
     workspaceId: row.workspace_id || defaultWorkspaceId(row.user_id),
     name: row.name,
-    avatar: row.avatar || DEFAULT_AVATAR,
+    avatar: LEGACY_DEFAULT_AVATARS.includes(row.avatar) ? DEFAULT_AVATAR : row.avatar || DEFAULT_AVATAR,
     mission: row.mission,
     profileId: row.profile_id || null,
     profileName: lookupName('agent_profiles', row.profile_id),
