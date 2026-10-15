@@ -410,7 +410,7 @@ function NotePanel({ html, noteId, title, fullHeight }) {
       <NoteProvider>
         <Suspense fallback={<div className="flex-1" />}>
           <ModernNoteEditor
-            note={{ id: noteId, title: title || 'Untitled Note', content: html || '' }}
+            note={{ id: noteId, title: title || 'Untitled note', content: html || '' }}
             onBack={() => {}}
           />
         </Suspense>

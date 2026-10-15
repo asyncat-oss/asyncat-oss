@@ -81,7 +81,7 @@ const TOOL_META = {
   execute_shell:       { icon: Terminal,    label: 'Run command' },
   clipboard_read:      { icon: Copy,        label: 'Read clipboard' },
   clipboard_write:     { icon: Copy,        label: 'Write clipboard' },
-  reveal_in_finder:    { icon: FolderOpen,  label: 'Reveal in Finder' },
+  reveal_in_finder:    { icon: FolderOpen,  label: 'Show in folder' },
   open_preview:        { icon: Globe,       label: 'Open preview' },
   git_clone:         { icon: GitBranch,   label: 'Clone repo' },
   git_pull:          { icon: GitBranch,   label: 'Git pull' },
