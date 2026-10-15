@@ -35,6 +35,9 @@
             document.documentElement.classList.add('dark');
           }
         } catch (_) {}
+        // The app's own windows have a frame that never scrolls (index.css);
+        // the Quick ask window keeps its clear corners.
+        if (window.location.pathname !== '/quick') document.documentElement.classList.add('app-frame');
       })();
     </script>
     <script>

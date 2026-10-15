@@ -230,6 +230,17 @@ body {
   font-feature-settings: "cv11";
 }
 
+/* The app's frame never scrolls as a whole: an element focused off-screen
+   used to drag the whole window up, leaving it blank. It also shows the
+   app's own background, never the browser's white. Not in the Quick ask
+   window (no app-frame class there), whose corners stay clear. */
+html.app-frame,
+html.app-frame body {
+  height: 100%;
+  overflow: hidden;
+  background: var(--color-canvas);
+}
+
 html::-webkit-scrollbar,
 body::-webkit-scrollbar {
   width: 8px;

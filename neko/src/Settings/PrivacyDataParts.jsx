@@ -2,10 +2,10 @@
 // Downloads) and "Delete everything" (done by the server's next start, which
 // follows right away).
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import { AlertTriangle, Check, Download, Trash2, Upload } from 'lucide-react';
-import Button, { buttonClass } from '../components/ui/Button.jsx';
+import Button from '../components/ui/Button.jsx';
 import Checkbox from '../components/ui/Checkbox.jsx';
 import Dialog from '../components/ui/Dialog.jsx';
 import { CONTROL_CLASS, Field, Input } from '../components/ui/Field.jsx';
@@ -33,6 +33,7 @@ export function ImportChats({ title = 'Bring your chats from ChatGPT or Claude',
   const [preview, setPreview] = useState(null); // { token, preview }
   const [withMemories, setWithMemories] = useState(true);
   const [importing, setImporting] = useState(false);
+  const fileRef = useRef(null);
   const [done, setDone] = useState(null);
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasted, setPasted] = useState('');
@@ -92,11 +93,12 @@ export function ImportChats({ title = 'Bring your chats from ChatGPT or Claude',
             Ask either for a copy of your data (ChatGPT: Settings → Data controls → Export; Claude: Settings → Privacy → Export data), then pick the .zip it emails you. Chats keep their titles and dates; ones brought over before are skipped.
           </p>
         </div>
-        <label className={`${buttonClass('secondary', 'sm')} cursor-pointer self-start focus-within:ring-2 focus-within:ring-accent/40 ${reading ? 'pointer-events-none opacity-60' : ''}`}>
-          <Upload className="h-3.5 w-3.5" strokeWidth={2} />
+        {/* A real button opens the hidden picker: an off-screen file input
+            in the tab order dragged the whole window up when focused. */}
+        <Button size="sm" variant="secondary" icon={Upload} className="self-start" loading={reading} onClick={() => fileRef.current?.click()}>
           {reading ? 'Reading…' : 'Pick the export'}
-          <input type="file" accept=".zip,.json,application/zip,application/json" className="sr-only" onChange={pick} aria-label="Export file" />
-        </label>
+        </Button>
+        <input ref={fileRef} type="file" hidden tabIndex={-1} accept=".zip,.json,application/zip,application/json" onChange={pick} aria-label="Export file" />
       </div>
       {info ? (
         <div className="mt-3 rounded-lg bg-hover px-3 py-2.5 text-[12px] leading-5 text-fg-muted" data-import-preview>
