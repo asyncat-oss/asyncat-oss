@@ -15,6 +15,7 @@ import {
   keysFromEvent,
   loadKeyboardShortcuts,
   saveKeyboardShortcuts,
+  shortcutRefusal,
 } from '../utils/keyboardShortcutsUtils.js';
 import Keys from './Keys.jsx';
 
@@ -28,7 +29,11 @@ export default function KeyboardShortcutsSection() {
   const confirm = useConfirm();
   const [shortcuts, setShortcuts] = useState(loadKeyboardShortcuts);
   const [recording, setRecording] = useState(null);
+  // Why the last key pressed while recording can't be used.
+  const [refusal, setRefusal] = useState('');
   const isMac = isMacPlatform();
+
+  useEffect(() => { setRefusal(''); }, [recording]);
 
   useEffect(() => {
     const reload = () => setShortcuts(loadKeyboardShortcuts());
@@ -51,6 +56,11 @@ export default function KeyboardShortcutsSection() {
         setRecording(null);
         return;
       }
+      const refused = shortcutRefusal(event, { mac: isMac });
+      if (refused) {
+        setRefusal(refused);
+        return;
+      }
       const keys = keysFromEvent(event);
       if (!keys) return;
       const id = recording;
@@ -70,7 +80,7 @@ export default function KeyboardShortcutsSection() {
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [recording, shortcuts, confirm]);
+  }, [recording, shortcuts, confirm, isMac]);
 
   const reset = () => {
     setRecording(null);
@@ -94,7 +104,11 @@ export default function KeyboardShortcutsSection() {
               <span className="min-w-0 text-[13px] font-medium text-fg">{shortcut.label}</span>
               <div className="flex shrink-0 items-center gap-2">
                 {isRecording
-                  ? <span className="text-[12px] text-fg-muted" aria-live="polite">Press {isMac ? '⌘' : 'Ctrl'} and a key…</span>
+                  ? (
+                    <span className={`text-right text-[12px] ${refusal ? 'text-amber-700 dark:text-amber-400' : 'text-fg-muted'}`} aria-live="polite">
+                      {refusal || `Press ${isMac ? '⌘' : 'Ctrl'} and a key…`}
+                    </span>
+                  )
                   : <Keys keys={shortcutKeys(shortcut, isMac)} />}
                 <Button size="xs" variant="ghost" onClick={() => setRecording(isRecording ? null : id)} aria-label={isRecording ? 'Cancel' : `Change the shortcut for ${shortcut.label}`}>
                   {isRecording ? 'Cancel' : 'Change'}

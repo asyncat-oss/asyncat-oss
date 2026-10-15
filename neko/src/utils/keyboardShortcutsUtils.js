@@ -17,6 +17,28 @@ const DEFAULT_SHORTCUTS = {
 
 const STORAGE_KEY = 'keyboardShortcuts';
 
+// Ctrl (⌘) with these edits text or runs the window everywhere, so no
+// shortcut may take it: Ctrl+C on Projects stopped copying in every field.
+const RESERVED = {
+  a: 'selecting all',
+  c: 'copying',
+  v: 'pasting',
+  x: 'cutting',
+  z: 'undoing',
+  y: 'redoing',
+  w: 'closing the window',
+  q: 'quitting',
+  r: 'reloading',
+  f: 'finding text',
+};
+
+const MODIFIERS = ['Control', 'Meta', 'Shift', 'Alt', 'AltGraph', 'OS'];
+
+/** Whether Ctrl (⌘) with `key` belongs to editing or the window. */
+export function isReservedKey(key) {
+  return Object.hasOwn(RESERVED, String(key || '').toLowerCase());
+}
+
 /**
  * The shortcuts with the keys someone saved. Only the keys are taken from
  * what was saved: older versions saved whole entries, with labels such as
@@ -26,7 +48,8 @@ export function mergeSavedShortcuts(saved) {
   const merged = {};
   for (const [id, shortcut] of Object.entries(DEFAULT_SHORTCUTS)) {
     const own = saved && typeof saved === 'object' ? saved[id] : null;
-    merged[id] = own && typeof own.key === 'string' && own.key
+    // A saved key that copying, pasting and the like need goes back to the default.
+    merged[id] = own && typeof own.key === 'string' && own.key && !isReservedKey(own.key)
       ? { ...shortcut, key: own.key, ctrl: own.ctrl !== false, meta: own.meta !== false }
       : shortcut;
   }
@@ -82,10 +105,28 @@ export function assignShortcut(shortcuts, id, keys) {
  */
 export function keysFromEvent(event) {
   if (!event.ctrlKey && !event.metaKey) return null;
-  if (['Control', 'Meta', 'Shift', 'Alt', 'AltGraph', 'OS'].includes(event.key)) return null;
+  if (MODIFIERS.includes(event.key)) return null;
   if (!event.key || event.key === 'Dead' || event.key === 'Unidentified') return null;
+  if (shortcutRefusal(event)) return null;
   const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
   return { key, ctrl: true, meta: true };
+}
+
+/**
+ * Why a key press being recorded can't be a shortcut, in a sentence, or
+ * null: Shift or Alt with it (they would be ignored), or a key that edits
+ * text or runs the window.
+ *   "Ctrl+C is for copying. Pick another key."
+ */
+export function shortcutRefusal(event, { mac = false } = {}) {
+  if (!event?.ctrlKey && !event?.metaKey) return null;
+  if (!event.key || MODIFIERS.includes(event.key)) return null;
+  if (event.shiftKey || event.altKey) {
+    return `Shortcuts are ${mac ? '⌘' : 'Ctrl'} and one key, without Shift or ${mac ? 'Option' : 'Alt'}. Pick another.`;
+  }
+  const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+  if (isReservedKey(key)) return `${mac ? '⌘' : 'Ctrl+'}${key.toUpperCase()} is for ${RESERVED[key]}. Pick another key.`;
+  return null;
 }
 
 export const DEFAULT_KEYBOARD_SHORTCUTS = DEFAULT_SHORTCUTS;

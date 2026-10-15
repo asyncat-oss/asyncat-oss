@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_KEYBOARD_SHORTCUTS, assignShortcut, findConflict, keysFromEvent, mergeSavedShortcuts } from './keyboardShortcutsUtils.js';
+import { DEFAULT_KEYBOARD_SHORTCUTS, assignShortcut, findConflict, keysFromEvent, mergeSavedShortcuts, shortcutRefusal } from './keyboardShortcutsUtils.js';
 
 test('shortcut labels use the names the sidebar uses', () => {
   const labels = Object.fromEntries(Object.entries(DEFAULT_KEYBOARD_SHORTCUTS).map(([id, item]) => [id, item.label]));
@@ -52,4 +52,20 @@ test('recording takes Ctrl or ⌘ and one key, never a plain key', () => {
   assert.equal(keysFromEvent({ key: 'j', ctrlKey: false, metaKey: false }), null);
   assert.equal(keysFromEvent({ key: 'Control', ctrlKey: true, metaKey: false }), null);
   assert.equal(keysFromEvent({ key: 'Shift', ctrlKey: true, metaKey: false }), null);
+});
+
+test('copy, paste and the other editing keys, Shift and Alt are refused while recording', () => {
+  const press = (key, extra = {}) => ({ key, ctrlKey: true, metaKey: false, shiftKey: false, altKey: false, ...extra });
+  assert.equal(shortcutRefusal(press('c')), 'Ctrl+C is for copying. Pick another key.');
+  assert.equal(shortcutRefusal(press('v'), { mac: true }), '⌘V is for pasting. Pick another key.');
+  assert.equal(keysFromEvent(press('c')), null);
+  assert.match(shortcutRefusal(press('L', { shiftKey: true })), /without Shift or Alt/);
+  assert.equal(keysFromEvent(press('L', { shiftKey: true })), null);
+  assert.equal(shortcutRefusal(press('j')), null);
+  assert.equal(shortcutRefusal(press('Shift', { shiftKey: true })), null, 'only a modifier: still waiting');
+});
+
+test('a saved shortcut on an editing key goes back to its default', () => {
+  const merged = mergeSavedShortcuts({ dock3: { key: 'c', ctrl: true, meta: true } });
+  assert.equal(merged.dock3.key, DEFAULT_KEYBOARD_SHORTCUTS.dock3.key);
 });
