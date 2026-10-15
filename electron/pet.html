@@ -31,7 +31,6 @@
       height: 104px;
       object-fit: contain;
       filter: drop-shadow(0 5px 9px rgba(0, 0, 0, 0.35));
-      animation: bob 2.6s ease-in-out infinite;
     }
     #sprite.show { display: block; }
 
@@ -68,41 +67,51 @@
     @keyframes ear { 0%, 88%, 100% { transform: rotate(0deg); } 91% { transform: rotate(-12deg); } 94% { transform: rotate(4deg); } }
     @keyframes step { 0%, 100% { transform: rotate(14deg); } 50% { transform: rotate(-14deg); } }
     @keyframes trot { from { transform: translateY(0); } to { transform: translateY(-1.5px); } }
-    @media (prefers-reduced-motion: reduce) {
-      #cat *, #sprite { animation: none !important; }
-    }
-    @keyframes bob {
-      0%, 100% { transform: translateY(0); }
-      50%      { transform: translateY(-7px); }
-    }
+    /* Status: a small dark-grey pill with one mark in it. A blue dot while
+       an agent works, a green check when it is done, an amber "!" when it
+       needs your answer. Same colours as the app's dark theme. */
     #bubble {
       position: absolute;
-      top: 8px;
-      right: 12px;
-      min-width: 28px;
-      height: 28px;
-      padding: 0 7px;
-      border-radius: 14px;
-      background: rgba(17, 24, 39, 0.92);
-      color: #fff;
+      top: 10px;
+      right: 14px;
+      min-width: 22px;
+      height: 22px;
+      padding: 0 6px;
+      box-sizing: border-box;
+      border-radius: 11px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(31, 41, 55, 0.95);
       display: none;
       align-items: center;
       justify-content: center;
-      font-size: 15px;
-      font-weight: 600;
-      box-shadow: 0 2px 7px rgba(0, 0, 0, 0.32);
-      animation: pop 0.18s ease-out;
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+      animation: fade 0.15s ease-out;
     }
     #bubble.show { display: flex; }
-    @keyframes pop {
-      from { transform: scale(0.6); opacity: 0; }
-      to   { transform: scale(1);   opacity: 1; }
+    #bubble[data-status="working"]::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #8aa8ff;
+      animation: pulse 1.6s ease-in-out infinite;
+    }
+    #bubble[data-status="done"] { color: #34d399; }
+    #bubble[data-status="needs-approval"] { color: #fbbf24; }
+    #bubble svg { width: 12px; height: 12px; }
+    @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+    @media (prefers-reduced-motion: reduce) {
+      #cat *, #sprite, #bubble, #bubble::before { animation: none !important; }
     }
   </style>
 </head>
 <body>
   <div id="wrap">
-    <div id="bubble"></div>
+    <div id="bubble" role="status"></div>
     <img id="sprite" alt="pet" />
     <div id="cat" data-pose="sit" aria-label="Asyncat cat">
       <svg class="pose-sit" viewBox="0 0 124 150" aria-hidden="true"><g class="cat-o"><g class="cat-tail"><path class="t" d="M82 134 C 104 136, 116 122, 110 106 C 106 96, 110 88, 118 90"></path></g><path class="s cat-body" d="M30 72 H70 L84 132 C 86 140 82 144 74 144 H26 C 18 144 14 140 16 132 Z"></path><rect class="s" x="28" y="132" width="16" height="12" rx="5"></rect><rect class="s" x="56" y="132" width="16" height="12" rx="5"></rect><g class="cat-head"><rect class="s" x="20" y="18" width="60" height="58" rx="6"></rect><g class="cat-ear-l"><polygon class="s" points="21,22 33,3 42,20"></polygon></g><g class="cat-ear-r"><polygon class="s" points="58,20 67,3 79,22"></polygon></g></g></g><g class="cat-f"><g class="cat-tail"><path class="t" d="M82 134 C 104 136, 116 122, 110 106 C 106 96, 110 88, 118 90"></path></g><path class="s cat-body" d="M30 72 H70 L84 132 C 86 140 82 144 74 144 H26 C 18 144 14 140 16 132 Z"></path><rect class="s" x="28" y="132" width="16" height="12" rx="5"></rect><rect class="s" x="56" y="132" width="16" height="12" rx="5"></rect><g class="cat-head"><rect class="s" x="20" y="18" width="60" height="58" rx="6"></rect><g class="cat-ear-l"><polygon class="s" points="21,22 33,3 42,20"></polygon></g><g class="cat-ear-r"><polygon class="s" points="58,20 67,3 79,22"></polygon></g></g></g><g class="cat-d"><path class="toe" d="M36 137v5M64 137v5"></path><g class="cat-head"><g class="cat-ear-l"><polygon class="inner" points="27,20 33,10 37,20"></polygon></g><g class="cat-ear-r"><polygon class="inner" points="63,20 67,10 73,20"></polygon></g><g class="cat-eyes"><rect class="eye" x="28" y="35" width="15" height="20" rx="3"></rect><rect class="eye" x="57" y="35" width="15" height="20" rx="3"></rect><g class="cat-pupils"><rect class="pupil" x="33.5" y="38" width="4" height="14" rx="2"></rect><rect class="pupil" x="62.5" y="38" width="4" height="14" rx="2"></rect></g><rect class="shine" x="31" y="39" width="3" height="3"></rect><rect class="shine" x="60" y="39" width="3" height="3"></rect></g><polygon class="nose" points="47,58 53,58 50,61.5"></polygon><path class="whisker" d="M40 60C31 58 22 59 13 62M40 65C31 64 22 66 14 70M60 60C69 58 78 59 87 62M60 65C69 64 78 66 86 70"></path></g></g></svg>
@@ -114,24 +123,25 @@
     const cat = document.getElementById('cat');
     const bubble = document.getElementById('bubble');
 
+    const CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+    const LABELS = { working: 'Working', done: 'Done', 'needs-approval': 'Needs your answer' };
+
     function setStatus(s) {
       // The cat walks while an agent is working and sits otherwise.
       cat.dataset.pose = s === 'working' ? 'walk' : 'sit';
-      if (s === 'working') {
-        bubble.textContent = '⚙️';
-        bubble.style.background = 'rgba(37, 99, 235, 0.95)';
-        bubble.className = 'show';
-      } else if (s === 'done') {
-        bubble.textContent = '✓';
-        bubble.style.background = 'rgba(22, 163, 74, 0.95)';
-        bubble.className = 'show';
-      } else if (s === 'needs-approval') {
-        bubble.textContent = '⏰';
-        bubble.style.background = 'rgba(220, 38, 38, 0.95)';
-        bubble.className = 'show';
-      } else {
+      if (!LABELS[s]) {
         bubble.className = '';
+        bubble.removeAttribute('data-status');
+        bubble.removeAttribute('aria-label');
+        bubble.textContent = '';
+        return;
       }
+      bubble.dataset.status = s;
+      bubble.setAttribute('aria-label', LABELS[s]);
+      bubble.title = LABELS[s];
+      if (s === 'done') bubble.innerHTML = CHECK;
+      else bubble.textContent = s === 'needs-approval' ? '!' : '';
+      bubble.className = 'show';
     }
 
     window.petAPI?.onInit((d) => {
