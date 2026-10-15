@@ -1,3 +1,6 @@
+// A table block: editable cells, an optional header row, and buttons on
+// hover to add or remove rows and columns.
+
 import React, {
   useState,
   useRef,
@@ -9,6 +12,7 @@ import React, {
 } from "react";
 import { Plus, X } from "lucide-react";
 import { sanitizeTableCell } from "../../../utils/sanitizer";
+import Switch from "../../../components/ui/Switch.jsx";
 
 // Memoized Table Cell component to prevent cursor jumping
 const TABLE_SELECTION_STYLE_ID = "table-selection-overlay-style";
@@ -395,7 +399,7 @@ const TableCell = React.memo(
         suppressContentEditableWarning
         className={`outline-none resize-none bg-transparent ${
           isHeader ? "font-semibold text-center" : ""
-        } text-gray-900 dark:text-gray-100 midnight:text-gray-100 focus:bg-blue-50 dark:focus:bg-blue-950 midnight:focus:bg-indigo-950`}
+        } text-fg focus:bg-accent-soft`}
         style={{
           width: "100%",
           minHeight: "2.5rem",
@@ -2074,16 +2078,15 @@ const TableBlock = forwardRef(({ block, onChange, commonProps }, ref) => {
         onMouseEnter={() => setIsHeaderButtonVisible(true)}
         onMouseLeave={() => setIsHeaderButtonVisible(false)}
       >
-        <button
-          onClick={toggleHeader}
-          className={`px-2 py-1 rounded text-xs font-medium transition-colors select-none ${
-            hasHeader
-              ? "bg-blue-500 dark:bg-blue-600 midnight:bg-indigo-600 text-white"
-              : "bg-white dark:bg-gray-800 midnight:bg-gray-900 border border-gray-300 dark:border-gray-600 midnight:border-gray-700 text-gray-600 dark:text-gray-400 midnight:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 midnight:hover:text-gray-300"
-          }`}
-        >
-          Header
-        </button>
+        <label className="flex select-none items-center gap-2 text-[12px] text-fg-muted">
+          <Switch
+            size="sm"
+            checked={hasHeader}
+            onChange={() => toggleHeader()}
+            label="Header row"
+          />
+          Header row
+        </label>
       </div>
 
       {/* Table Container with Hover Zones */}
@@ -2100,7 +2103,7 @@ const TableBlock = forwardRef(({ block, onChange, commonProps }, ref) => {
             }`}
           >
             {isTableSelected && (
-              <div className="pointer-events-none absolute inset-0 rounded-xl bg-blue-500/25 dark:bg-blue-400/20 midnight:bg-indigo-500/25 backdrop-blur-[1px] z-40"></div>
+              <div className="pointer-events-none absolute inset-0 z-40 rounded-xl bg-accent-soft ring-2 ring-inset ring-accent/40"></div>
             )}
             <table
               ref={tableElementRef}
@@ -2129,9 +2132,7 @@ const TableBlock = forwardRef(({ block, onChange, commonProps }, ref) => {
                           key={colIndex}
                           ref={(el) => (colRefs.current[colIndex] = el)}
                           className={`p-0 relative ${
-                            isHeader
-                              ? "bg-gray-50 dark:bg-gray-800 midnight:bg-gray-900"
-                              : "bg-white dark:bg-gray-900 midnight:bg-gray-950"
+                            isHeader ? "bg-hover" : "bg-canvas"
                           }`}
                           style={{
                             width: `${getColumnWidth}px`,
@@ -2199,7 +2200,7 @@ const TableBlock = forwardRef(({ block, onChange, commonProps }, ref) => {
                 isVisible && (
                   <button
                     onClick={() => removeColumn(colIndex)}
-                    className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 midnight:hover:bg-red-900/20 bg-white dark:bg-gray-800 midnight:bg-gray-900 rounded-full border border-gray-200 dark:border-gray-600 midnight:border-gray-700 shadow-lg transition-all duration-200 opacity-0 animate-[fadeIn_100ms_ease-out_forwards]"
+                    className="flex h-5 w-5 items-center justify-center rounded-full border border-line-strong bg-elevated text-fg-subtle opacity-0 shadow-sm transition-colors hover:text-red-600 dark:hover:text-red-400 animate-[fadeIn_100ms_ease-out_forwards]"
                     title="Delete this column"
                   >
                     <X className="w-3 h-3" />
@@ -2247,7 +2248,7 @@ const TableBlock = forwardRef(({ block, onChange, commonProps }, ref) => {
                 isFirstColumnVisible && (
                   <button
                     onClick={() => removeRow(rowIndex)}
-                    className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 midnight:hover:bg-red-900/20 bg-white dark:bg-gray-800 midnight:bg-gray-900 rounded-full border border-gray-200 dark:border-gray-600 midnight:border-gray-700 shadow-lg transition-all duration-200 opacity-0 animate-[fadeIn_100ms_ease-out_forwards]"
+                    className="flex h-5 w-5 items-center justify-center rounded-full border border-line-strong bg-elevated text-fg-subtle opacity-0 shadow-sm transition-colors hover:text-red-600 dark:hover:text-red-400 animate-[fadeIn_100ms_ease-out_forwards]"
                     title="Delete this row"
                   >
                     <X className="w-3 h-3" />
@@ -2321,7 +2322,7 @@ const TableBlock = forwardRef(({ block, onChange, commonProps }, ref) => {
               {hoveredAddRow === rowIndex && !isScrolling && (
                 <button
                   onClick={() => addRow(rowIndex + 1)}
-                  className="w-5 h-5 flex items-center justify-center text-blue-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 midnight:hover:bg-blue-900/20 bg-white dark:bg-gray-800 midnight:bg-gray-900 rounded-full border border-gray-200 dark:border-gray-600 midnight:border-gray-700 shadow-sm transition-all duration-200 opacity-0 animate-[fadeIn_100ms_ease-out_forwards]"
+                  className="flex h-5 w-5 items-center justify-center rounded-full border border-line-strong bg-elevated text-fg-muted opacity-0 shadow-sm transition-colors hover:text-fg animate-[fadeIn_100ms_ease-out_forwards]"
                   title="Add row"
                 >
                   <Plus className="w-3 h-3" />
@@ -2376,7 +2377,7 @@ const TableBlock = forwardRef(({ block, onChange, commonProps }, ref) => {
               {hoveredAddCol === colIndex && !isScrolling && isColVisible && (
                 <button
                   onClick={() => addColumn(colIndex + 1)}
-                  className="w-5 h-5 flex items-center justify-center text-blue-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 midnight:hover:bg-blue-900/20 bg-white dark:bg-gray-800 midnight:bg-gray-900 rounded-full border border-gray-200 dark:border-gray-600 midnight:border-gray-700 shadow-sm transition-all duration-200 opacity-0 animate-[fadeIn_100ms_ease-out_forwards]"
+                  className="flex h-5 w-5 items-center justify-center rounded-full border border-line-strong bg-elevated text-fg-muted opacity-0 shadow-sm transition-colors hover:text-fg animate-[fadeIn_100ms_ease-out_forwards]"
                   title="Add column"
                 >
                   <Plus className="w-3 h-3" />
@@ -2429,15 +2430,7 @@ const TableBlock = forwardRef(({ block, onChange, commonProps }, ref) => {
         }
 
         .table-scroll-container:hover::-webkit-scrollbar-thumb {
-          background: rgba(156, 163, 175, 0.15);
-        }
-
-        .dark .table-scroll-container:hover::-webkit-scrollbar-thumb {
-          background: rgba(107, 114, 128, 0.15);
-        }
-
-        .midnight .table-scroll-container:hover::-webkit-scrollbar-thumb {
-          background: rgba(165, 180, 252, 0.15);
+          background: var(--as-line-strong);
         }
 
         /* Firefox scrollbar styling - ultra thin and subtle */
@@ -2447,15 +2440,7 @@ const TableBlock = forwardRef(({ block, onChange, commonProps }, ref) => {
         }
 
         .table-scroll-container:hover {
-          scrollbar-color: rgba(156, 163, 175, 0.15) transparent;
-        }
-
-        .dark .table-scroll-container:hover {
-          scrollbar-color: rgba(107, 114, 128, 0.15) transparent;
-        }
-
-        .midnight .table-scroll-container:hover {
-          scrollbar-color: rgba(165, 180, 252, 0.15) transparent;
+          scrollbar-color: var(--as-line-strong) transparent;
         }
         
         .table-container {
@@ -2463,39 +2448,22 @@ const TableBlock = forwardRef(({ block, onChange, commonProps }, ref) => {
           border-radius: 12px;
           overflow: hidden;
           position: relative;
-          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
-          background: white;
+          background: var(--as-canvas);
           width: fit-content;
           min-width: max-content;
-        }
-
-        .dark .table-container {
-          background: rgb(17 24 39);
-        }
-
-        .midnight .table-container {
-          background: rgb(15 23 42);
         }
         
         .table-block-container table {
           width: 100%;
           font-size: 14px;
           position: relative;
-          border: 2px solid rgb(209 213 219);
+          border: 1px solid var(--as-line-strong);
           background: transparent;
         }
 
-        .dark .table-block-container table {
-          border-color: rgb(75 85 99);
-        }
-
-        .midnight .table-block-container table {
-          border-color: rgb(55 65 81);
-        }
-
         .table-block-container td {
-          border-right: 1px solid rgb(229 231 235);
-          border-bottom: 1px solid rgb(229 231 235);
+          border-right: 1px solid var(--as-line);
+          border-bottom: 1px solid var(--as-line);
           padding: 0;
           margin: 0;
           vertical-align: top;
@@ -2510,14 +2478,6 @@ const TableBlock = forwardRef(({ block, onChange, commonProps }, ref) => {
           min-height: 2.5rem;
           height: auto;
           vertical-align: top;
-        }
-
-        .dark .table-block-container td {
-          border-color: rgb(55 65 81);
-        }
-
-        .midnight .table-block-container td {
-          border-color: rgb(75 85 99);
         }
 
         .table-block-container tbody tr td:last-child {
@@ -2607,7 +2567,7 @@ const TableBlock = forwardRef(({ block, onChange, commonProps }, ref) => {
 
         .table-block-container [contenteditable]:focus {
           outline: none;
-          box-shadow: inset 0 0 0 2px rgb(59, 130, 246);
+          box-shadow: inset 0 0 0 2px var(--as-accent);
           position: relative;
           z-index: 2;
           border-radius: inherit;
@@ -2615,7 +2575,7 @@ const TableBlock = forwardRef(({ block, onChange, commonProps }, ref) => {
         
         .table-block-container [contenteditable]:empty:before {
           content: attr(placeholder);
-          color: #9ca3af;
+          color: var(--as-fg-subtle);
           pointer-events: none;
           font-style: italic;
           position: absolute;
@@ -2635,13 +2595,6 @@ const TableBlock = forwardRef(({ block, onChange, commonProps }, ref) => {
           box-sizing: border-box;
         }
         
-        .dark .table-block-container [contenteditable]:empty:before {
-          color: #6b7280;
-        }
-        
-        .midnight .table-block-container [contenteditable]:empty:before {
-          color: #a5b4fc;
-        }
 
         /* Ensure BR tags work properly and don't show as text */
         .table-block-container [contenteditable] br {
@@ -2658,16 +2611,6 @@ const TableBlock = forwardRef(({ block, onChange, commonProps }, ref) => {
           white-space: pre;
         }
 
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-            transform: scale(0.8);
-          }
-          to {
-            opacity: 1;
-            transform: scale(1);
-          }
-        }
       `}</style>
     </div>
   );
