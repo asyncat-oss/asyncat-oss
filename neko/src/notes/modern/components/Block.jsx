@@ -189,6 +189,7 @@ const Block = forwardRef(
       rapidDeleteMode = false, // NEW: Rapid delete mode
       isAllBlocksSelected = false, // NEW: All blocks selected state
       isSelected = false,
+      isActive = false,
       dragListeners,
       dragAttributes,
     },
@@ -1571,6 +1572,7 @@ const Block = forwardRef(
               contentRef={contentRef}
               commonProps={commonProps}
               readOnly={readOnly}
+              active={isActive}
             />
           );
 
@@ -1593,6 +1595,7 @@ const Block = forwardRef(
               contentRef={contentRef}
               commonProps={commonProps}
               readOnly={readOnly}
+              active={isActive}
             />
           );
 

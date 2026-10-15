@@ -1,16 +1,18 @@
 // A link preview block: a card with the page's title, description and site
 // that opens the link. Without a link it asks for one.
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { ExternalLink, Loader2, Globe, Copy, Check, Pencil } from "lucide-react";
 import apiClient from "../../../services/apiClient";
 import Button from "../../../components/ui/Button.jsx";
 import { Field, Input } from "../../../components/ui/Field.jsx";
+import { useLinkFieldFocus } from "./linkFieldFocus.js";
 
 const LinkPreviewBlock = ({
   block,
   onChange,
   readOnly = false,
+  active = false,
 }) => {
   const [url, setUrl] = useState(block.properties?.url || "");
   const [isLoading, setIsLoading] = useState(false);
@@ -170,11 +172,7 @@ const LinkPreviewBlock = ({
     }
   };
 
-  useEffect(() => {
-    if (isEditing && inputRef.current) {
-      inputRef.current.focus();
-    }
-  }, [isEditing]);
+  useLinkFieldFocus(inputRef, isEditing, active);
 
   if (isEditing) {
     return (

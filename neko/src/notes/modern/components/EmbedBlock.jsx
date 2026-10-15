@@ -3,6 +3,7 @@
 
 import { useState, useRef } from 'react';
 import PropTypes from 'prop-types';
+import { useLinkFieldFocus } from './linkFieldFocus.js';
 import { Link, Youtube, ExternalLink, Pencil } from 'lucide-react';
 import Select from '../../../components/ui/Select.jsx';
 import Button from '../../../components/ui/Button.jsx';
@@ -27,12 +28,13 @@ EmbedTile.propTypes = {
   detail: PropTypes.node,
 };
 
-const EmbedBlock = ({ block, onChange }) => {
+const EmbedBlock = ({ block, onChange, active = false }) => {
   const [url, setUrl] = useState(block.properties?.url || '');
   const [embedType, setEmbedType] = useState(block.properties?.type || 'generic');
   const [isLoading, setIsLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(!block.properties?.url);
   const inputRef = useRef(null);
+  useLinkFieldFocus(inputRef, isEditing, active);
 
   const embedTypes = [
     { type: 'youtube', label: 'YouTube', icon: Youtube, pattern: /(?:youtube\.com\/(?:[^/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?/\s]{11})/ },
@@ -134,7 +136,6 @@ const EmbedBlock = ({ block, onChange }) => {
               value={url}
               onChange={(e) => handleUrlChange(e.target.value)}
               placeholder="A YouTube, Vimeo, CodePen or Figma link"
-              autoFocus
             />
           </Field>
 
