@@ -96,7 +96,11 @@ export default function SkillsTab({ catalog }) {
   const counts = originCounts(skills);
   const filters = [
     { value: 'all', label: 'All', meta: String(skills.length) },
-    ...['default', 'user', 'auto'].map((value) => ({ value, label: ORIGIN_LABELS[value], meta: String(counts[value]) })),
+    // A source with nothing in it (Automatic, for most people) isn't offered,
+    // unless it is the one picked.
+    ...['default', 'user', 'auto']
+      .filter((value) => counts[value] > 0 || origin === value)
+      .map((value) => ({ value, label: ORIGIN_LABELS[value], meta: String(counts[value]) })),
   ];
 
   async function reloadFromDisk() {
