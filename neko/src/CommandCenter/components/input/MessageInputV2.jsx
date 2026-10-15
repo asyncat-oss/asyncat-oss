@@ -29,6 +29,7 @@ import Button from "../../../components/ui/Button.jsx";
 import Notice from "../../../components/ui/Notice.jsx";
 import AsyncatMark from "../../../components/ui/AsyncatMark.jsx";
 import { CONTROL_CLASS } from "../../../components/ui/Field.jsx";
+import { chosenProjectEmoji } from "../../utils/projectEmoji.js";
 
 function getAgentTrigger(value, cursor) {
   const beforeCursor = value.slice(0, cursor);
@@ -937,6 +938,7 @@ export const MessageInputV2 = ({
     }
   }, [activeRoot, fileRootsLoaded, isWorkExperience, onWorkingContextChange, workingContext?.rootId]);
   const activeContextLabel = labelForWorkingContext(activeWorkingContext, activeRoot);
+  const activeProjectEmoji = chosenProjectEmoji(activeWorkingContext?.projectEmoji);
   const supportsReasoningControl = supportsReasoning && modelCapabilities?.reasoningType === 'effort_string';
   const currentReasoningOptions = useMemo(() => {
     if (!supportsReasoningControl) return [];
@@ -2056,7 +2058,7 @@ export const MessageInputV2 = ({
                   const RootIcon = rootIcon(activeRoot?.kind);
                   return <RootIcon className="h-3.5 w-3.5 shrink-0 opacity-80" />;
                 })()}
-                <span className="truncate">{activeWorkingContext.projectEmoji ? `${activeWorkingContext.projectEmoji} ` : ''}{activeWorkingContext.projectName || "Project"}</span>
+                <span className="truncate">{activeProjectEmoji ? `${activeProjectEmoji} ` : ''}{activeWorkingContext.projectName || "Project"}</span>
                 {activeWorkingContext.rootId ? (
                   <>
                     <span className="text-fg-subtle/60">/</span>

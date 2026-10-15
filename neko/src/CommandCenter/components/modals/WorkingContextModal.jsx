@@ -1,8 +1,11 @@
+// "Choose a project" for the composer's project chip: no project, or a
+// project and (when it has several) which of its folders.
 import { useMemo } from 'react';
 import PropTypes from 'prop-types';
 import { Check, Folder, FolderKanban, Settings, ShieldOff } from 'lucide-react';
 import Dialog from '../../../components/ui/Dialog';
 import Button from '../../../components/ui/Button';
+import { chosenProjectEmoji } from '../../utils/projectEmoji.js';
 
 /**
  * Choose the project a chat belongs to. A project gives the chat its
@@ -33,7 +36,7 @@ export function WorkingContextModal({
     const known = new Map(projects.map((project) => [project.id, project]));
     // Projects that only appear through their folders still get a row.
     for (const [projectId, roots] of rootsByProject) {
-      if (!known.has(projectId)) known.set(projectId, { id: projectId, name: roots[0].projectName || 'Project', emoji: roots[0].projectEmoji || '📁' });
+      if (!known.has(projectId)) known.set(projectId, { id: projectId, name: roots[0].projectName || 'Project', emoji: roots[0].projectEmoji || null });
     }
     return [...known.values()].map((project) => ({
       ...project,
@@ -63,8 +66,8 @@ export function WorkingContextModal({
           onClick={() => onSelect('none')}
           className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${noProjectActive ? 'bg-selected' : 'hover:bg-hover'}`}
         >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-hover text-fg-muted">
-            <ShieldOff className="h-4 w-4" />
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line bg-surface text-fg-subtle">
+            <ShieldOff className="h-4 w-4" strokeWidth={1.75} />
           </span>
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-medium text-fg">No project</span>
@@ -92,8 +95,8 @@ export function WorkingContextModal({
                   : onSelect({ projectOnly: true, project }))}
                 className="flex w-full items-center gap-3 px-3 py-2.5 text-left"
               >
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line bg-surface text-base">
-                  {project.emoji || '📁'}
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line bg-surface text-base text-fg-subtle">
+                  {chosenProjectEmoji(project.emoji) || <Folder className="h-4 w-4" strokeWidth={1.75} />}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium text-fg">{project.name}</span>

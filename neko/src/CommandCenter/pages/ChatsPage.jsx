@@ -8,14 +8,16 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import eventBus from '../../utils/eventBus.js';
 import { chatApi, chatFoldersApi } from '../api';
 import { useCommandCenter } from '../context/CommandCenterContextEnhanced';
-import { MessageSquare, CheckSquare, Clock, Search, Folder, FolderOpen, MoreHorizontal, Plus, Pencil, Pin, PinOff, Square, Trash2, Wrench, X, BookMarked, Loader2 } from 'lucide-react';
+import { CheckSquare, Clock, Search, Folder, FolderOpen, MoreHorizontal, Plus, Pencil, Pin, PinOff, Square, Trash2, Wrench, X, BookMarked, Loader2 } from 'lucide-react';
 
 import { getRelativeTime, parseConversationDate } from '../utils/conversationUtils.js';
+import { chosenProjectEmoji } from '../utils/projectEmoji.js';
 import { useConfirm } from '../../components/confirmContext.js';
 import { useToast, errorDetail } from '../../components/toastContext.js';
 import ConversationBadge from '../../components/ConversationBadge.jsx';
 import { ProviderGlyph } from '../../Models/modelLogos.jsx';
 import AsyncatMark from '../../components/ui/AsyncatMark.jsx';
+import Cat from '../../components/ui/Cat.jsx';
 import { useAgents } from '../../Agent/useAgents.js';
 import { conversationEngine, engineDisplayName } from '../../Agent/externalAgentFormat.js';
 import Button from '../../components/ui/Button.jsx';
@@ -39,8 +41,9 @@ function formatWorkingContextLabel(context) {
   const folder = context.relativePath && context.relativePath !== '.'
     ? basenamePath(context.relativePath)
     : context.rootLabel || basenamePath(context.workingDir) || basenamePath(context.rootPath);
+  const emoji = chosenProjectEmoji(context.projectEmoji);
   return context.projectName
-    ? `${context.projectEmoji || '📁'} ${context.projectName}${folder ? ` / ${folder}` : ''}`
+    ? `${emoji ? `${emoji} ` : ''}${context.projectName}${folder ? ` / ${folder}` : ''}`
     : folder || null;
 }
 
@@ -598,7 +601,7 @@ const ChatsPage = () => {
               {bookmarkCount > 0 && (
                 <>
                   <span aria-hidden="true">·</span>
-                  <span className="inline-flex shrink-0 items-center gap-0.5 text-amber-600 dark:text-amber-400">
+                  <span className="inline-flex shrink-0 items-center gap-0.5" title={`${bookmarkCount} saved ${bookmarkCount === 1 ? 'message' : 'messages'}`}>
                     <BookMarked className="h-3 w-3" />
                     {bookmarkCount}
                   </span>
@@ -759,10 +762,10 @@ const ChatsPage = () => {
           ) : error ? (
             <div className="py-10 text-center text-sm font-medium text-red-600 dark:text-red-400">{error}</div>
           ) : filteredConversations.length === 0 && filteredActiveChatRuns.length === 0 ? (
-            <div className="py-20 text-center">
-              <MessageSquare className="mx-auto mb-3 h-5 w-5 text-fg-subtle" />
-              <p role="status" className="text-sm text-fg-muted">
-                {!trimmedQuery ? 'No conversations yet' : serverSearching ? 'Searching…' : 'No chats match that'}
+            <div className="py-16 text-center">
+              {!trimmedQuery ? <Cat pose="sleep" className="mx-auto mb-4 w-28" outline={4} /> : null}
+              <p role="status" className="text-[13px] text-fg-muted">
+                {!trimmedQuery ? 'No chats yet' : serverSearching ? 'Searching…' : 'No chats match that'}
               </p>
             </div>
           ) : searchMode ? (
