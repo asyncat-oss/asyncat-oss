@@ -10,28 +10,24 @@ const parseConversationDate = (value) => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
-const getRelativeConversationTime = (dateString) => {
+// "Just now", "5 min ago", "3 h ago", "2 d ago", then a date: the same words
+// on All chats, a project's chat list and the sidebar.
+const relativeAgo = (dateString, dateOptions, now = Date.now()) => {
   const date = parseConversationDate(dateString);
   if (!date) return '';
-  const diffH = Math.floor((Date.now() - date.getTime()) / 3_600_000);
-  if (diffH < 1) return 'Just now';
-  if (diffH < 24) return `${diffH}h ago`;
-  const diffD = Math.floor(diffH / 24);
-  if (diffD < 7) return `${diffD}d ago`;
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const minutes = Math.floor((now - date.getTime()) / 60_000);
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days} d ago`;
+  return date.toLocaleDateString('en-US', dateOptions);
 };
 
-const getRelativeTime = (dateString) => {
-  const date = parseConversationDate(dateString);
-  if (!date) return '';
-  const now = new Date();
-  const diffH = Math.floor((now - date) / 3_600_000);
-  if (diffH < 1) return 'Just now';
-  if (diffH < 24) return `${diffH}h ago`;
-  const diffD = Math.floor(diffH / 24);
-  if (diffD < 7) return `${diffD}d ago`;
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-};
+const getRelativeConversationTime = (dateString, now) => relativeAgo(dateString, { month: 'short', day: 'numeric' }, now);
+
+const getRelativeTime = (dateString, now) => relativeAgo(dateString, { month: 'short', day: 'numeric', year: 'numeric' }, now);
 
 const getSourceDomain = (url) => {
   try {

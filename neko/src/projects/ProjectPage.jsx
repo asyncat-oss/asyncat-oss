@@ -13,19 +13,7 @@ import ProjectFolders from './components/ProjectFolders';
 import { projectApi } from './projectApi.js';
 import eventBus from '../utils/eventBus.js';
 import { chosenProjectEmoji } from '../CommandCenter/utils/projectEmoji.js';
-
-function timeAgo(value) {
-  const then = new Date(value).getTime();
-  if (!Number.isFinite(then)) return '';
-  const minutes = Math.round((Date.now() - then) / 60000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes} min ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} h ago`;
-  const days = Math.round(hours / 24);
-  if (days < 30) return `${days} d ago`;
-  return new Date(then).toLocaleDateString();
-}
+import { getRelativeTime } from '../CommandCenter/utils/conversationUtils.js';
 
 function SectionTitle({ icon: Icon, title, action }) {
   return (
@@ -256,7 +244,7 @@ export default function ProjectPage() {
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[14px] text-fg">{chat.title || 'Untitled chat'}</span>
                         <span className="mt-0.5 block text-[12px] text-fg-subtle">
-                          {timeAgo(chat.last_message_at)}
+                          {getRelativeTime(chat.last_message_at)}
                           {chat.engine && chat.engine !== 'asyncat' ? ` · ${chat.engine === 'claude-code' ? 'Claude Code' : 'Codex'}` : ''}
                         </span>
                       </span>
