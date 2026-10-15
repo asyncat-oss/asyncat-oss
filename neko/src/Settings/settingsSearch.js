@@ -9,6 +9,8 @@ export const SETTINGS_INDEX = [
   { tab: 'general', section: 'window', label: 'Closing the window', terms: ['background', 'tray', 'close window', 'closing the window', 'quit', 'keep running', 'start at login', 'log in', 'autostart'] },
   { tab: 'general', section: 'setup', label: 'First-run setup', terms: ['setup', 'run setup again', 'first-run setup', 'welcome', 'onboarding'] },
   { tab: 'appearance', terms: ['appearance', 'theme', 'dark mode', 'light mode', 'midnight', 'system theme', 'colour', 'color', 'motion', 'animation', 'fade', 'sidebar', 'navigation', 'compact', 'icons only', 'hide from sidebar'] },
+  { tab: 'personalization', terms: ['personalization', 'personalisation', 'preferences', 'about me', 'about you', 'what should asyncat know', 'custom instructions', 'how to answer', 'answer style', 'response style', 'tone of answers', 'language', 'british spelling'] },
+  { tab: 'personalization', section: 'instructions', label: 'Instructions file', terms: ['instructions file', 'soul', 'persona', 'system prompt', 'agent rules', 'default.md', 'reset instructions'] },
   { tab: 'shortcuts', terms: ['shortcuts', 'keyboard', 'keys', 'hotkeys', 'key bindings', 'system-wide shortcuts', 'global shortcuts', 'quick ask shortcut', 'show or hide asyncat', 'wayland'] },
   { tab: 'notifications', terms: ['notifications', 'notify', 'alerts', 'quiet hours', 'do not disturb', 'sounds', 'desktop notification'] },
   { tab: 'connections', view: 'services', label: 'Services', terms: ['services', 'rss', 'feeds', 'read later', 'email', 'mail', 'imap', 'smtp', 'discord', 'slack', 'telegram', 'webhook', 'hugging face', 'hf token'] },

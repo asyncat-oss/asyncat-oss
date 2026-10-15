@@ -263,6 +263,15 @@ export const agentApi = {
     });
   },
 
+  // Back to the file Asyncat shipped: the edited copy is deleted.
+  resetSoul: async (name = 'default') => {
+    return await apiRequest(`${API_BASE_URL}/agent/soul/reset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+  },
+
   listSouls: async () => {
     return await apiRequest(`${API_BASE_URL}/agent/souls`);
   },

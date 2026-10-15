@@ -6,6 +6,7 @@
 export const SETTINGS_TABS = [
   { id: 'general', group: 'App', label: 'General', description: 'Your name and picture, how new chats start, and what closing the window does.', sections: ['new-chats', 'window', 'setup'] },
   { id: 'appearance', group: 'App', label: 'Appearance', description: 'Theme, motion and what the sidebar shows.' },
+  { id: 'personalization', group: 'App', label: 'Personalization', description: 'What Asyncat should know about you, how it answers, and its instructions file.', sections: ['instructions'] },
   { id: 'shortcuts', group: 'App', label: 'Shortcuts', description: 'Keys for getting around Asyncat, and the ones that work from any app.' },
   { id: 'notifications', group: 'App', label: 'Notifications', description: 'What shows a notification, for chats and Cats, and quiet hours.' },
   { id: 'connections', group: 'Agents', label: 'Connections', description: 'Connectors that give agents tools from other apps, and the services Asyncat uses.' },
@@ -36,6 +37,11 @@ export const TAB_ALIASES = {
   mcp: { tab: 'connections', view: 'connectors' },
   keyboard: { tab: 'shortcuts' },
   hotkeys: { tab: 'shortcuts' },
+  personalisation: { tab: 'personalization' },
+  preferences: { tab: 'personalization' },
+  // The instructions file was the Soul tab in Tools & Skills.
+  soul: { tab: 'personalization', section: 'instructions' },
+  instructions: { tab: 'personalization', section: 'instructions' },
   pet: { tab: 'desktop', section: 'pet' },
   tray: { tab: 'general', section: 'window' },
   'quick-ask': { tab: 'desktop', section: 'quick-ask' },

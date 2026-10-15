@@ -17,6 +17,7 @@ import {
   Plug,
   Settings2,
   ShieldCheck,
+  UserRoundPen,
   Wrench,
 } from 'lucide-react';
 import { useUiPreferences } from '../contexts/UiPreferencesContext';
@@ -34,6 +35,7 @@ import NewChatsSection from './NewChatsSection.jsx';
 import ConnectorsSection from '../Connectors/ConnectorsSection.jsx';
 import PrivacySection from './PrivacySection.jsx';
 import NotificationsSection from './NotificationsSection.jsx';
+import PersonalizationSection from './PersonalizationSection.jsx';
 import RunSetupAgain from '../welcome/RunSetupAgain.jsx';
 import { SettingsSearchBox, SettingsSearchResults } from './SettingsSearchBox.jsx';
 import { resultRoute, searchSettings } from './settingsSearch.js';
@@ -46,6 +48,7 @@ import { RowGroup, SettingsRow, SettingsSection } from '../components/ui/Rows.js
 const ICONS = {
   general: Settings2,
   appearance: Palette,
+  personalization: UserRoundPen,
   shortcuts: Keyboard,
   notifications: Bell,
   connections: Plug,
@@ -210,6 +213,8 @@ const SettingsPage = () => {
     switch (activeTab) {
       case 'appearance':
         return <AppearanceSection theme={theme} setThemeMode={setTheme} />;
+      case 'personalization':
+        return <PersonalizationSection />;
       case 'shortcuts':
         return renderShortcuts();
       case 'notifications':

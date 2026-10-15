@@ -89,6 +89,15 @@ export const profileApi = {
 	},
 };
 
+// Settings → Personalization: { about, answerStyle, limit }.
+export const personalizationApi = {
+	fetch: async () => apiCall(`${MAIN_URL}/api/users/me/personalization`),
+	save: async ({ about, answerStyle }) => apiCall(`${MAIN_URL}/api/users/me/personalization`, {
+		method: "PUT",
+		body: JSON.stringify({ about, answerStyle }),
+	}),
+};
+
 // ===========================================
 // INTEGRATIONS API FUNCTIONS
 // ===========================================

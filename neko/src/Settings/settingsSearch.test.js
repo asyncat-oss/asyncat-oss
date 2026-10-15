@@ -28,6 +28,10 @@ test('settings search finds where a setting lives now', () => {
   assert.equal(opens('update'), '/settings/about');
   assert.equal(opens('server'), '/settings/about#developer', 'Advanced moved to About');
   assert.equal(opens('export'), '/settings/privacy#data');
+  assert.equal(opens('about me'), '/settings/personalization');
+  assert.equal(opens('custom instructions'), '/settings/personalization');
+  assert.equal(opens('soul'), '/settings/personalization#instructions', 'the Soul tab became the instructions file');
+  assert.equal(opens('system prompt'), '/settings/personalization#instructions');
   assert.equal(opens('logs'), '/files/logs', 'Storage and logs are in Files');
   assert.equal(opens('engines'), '/models?view=local', 'engines are managed in Models');
   assert.deepEqual(searchSettings('', tabs), []);
@@ -75,6 +79,8 @@ test('old Settings addresses still lead somewhere sensible', () => {
   assert.deepEqual(resolveTab('engines'), { redirect: '/models?view=local' });
   assert.deepEqual(resolveTab('storage'), { redirect: '/files/logs' });
   assert.deepEqual(resolveTab('privacy'), { tab: 'privacy', view: null, section: null });
+  assert.deepEqual(resolveTab('soul'), { tab: 'personalization', view: null, section: 'instructions' });
+  assert.deepEqual(resolveTab('personalisation'), { tab: 'personalization', view: null, section: null });
   assert.equal(resolveTab(undefined).tab, 'general', 'Ctrl+, and /settings open General');
   assert.equal(resolveTab('nonsense').tab, 'general');
   for (const old of ['profile', 'account', 'security', 'background', 'runtime', 'engines', 'advanced', 'storage', 'server', 'updates', 'safety', 'data', 'notify', 'integrations', 'connectors', 'mcp']) {
