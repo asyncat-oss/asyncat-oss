@@ -1,5 +1,8 @@
+// The banner across the top of a note (a colour, a gradient or an image the
+// user can drag into place), or a quiet "Add banner" line when there is none.
+
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Image as ImageIcon, Plus, Settings, Loader, Move } from "lucide-react";
+import { Image as ImageIcon, Plus, Pencil, Loader2, Move } from "lucide-react";
 import BannerSelector from "./BannerSelector";
 import { attachmentApi } from "../../attachmentApi";
 
@@ -173,9 +176,9 @@ const NoteBanner = ({ note, onBannerChange, isEditable = true }) => {
       // Add loading state for images
       if (bannerData.type === "image" && !bannerStyle.backgroundImage) {
         return (
-          <div className="relative w-full h-32 sm:h-40 md:h-48 bg-gray-200 dark:bg-gray-700 midnight:bg-gray-800 animate-pulse">
-            <div className="absolute inset-0 flex items-center justify-center text-gray-500 dark:text-gray-400 midnight:text-gray-400">
-              Loading Banner...
+          <div className="relative h-32 w-full animate-pulse bg-hover sm:h-40 md:h-48">
+            <div className="absolute inset-0 flex items-center justify-center text-[13px] text-fg-subtle">
+              Loading banner…
             </div>
           </div>
         );
@@ -184,7 +187,7 @@ const NoteBanner = ({ note, onBannerChange, isEditable = true }) => {
       return (
         <div
           ref={bannerRef}
-          className={`group relative w-full h-32 sm:h-40 md:h-48 transition-all duration-300 bg-gray-100 dark:bg-gray-700 midnight:bg-gray-800 ${
+          className={`group relative h-32 w-full bg-hover transition-all duration-300 sm:h-40 md:h-48 ${
             bannerData.type === "image" && isEditable
               ? isDragging
                 ? "cursor-grabbing"
@@ -196,17 +199,12 @@ const NoteBanner = ({ note, onBannerChange, isEditable = true }) => {
             bannerData.type === "image" ? handleDragStart : undefined
           }
         >
-          {/* Overlay for better text readability - made lighter */}
-          <div className="absolute inset-0 bg-black/5 pointer-events-none" />
-
-          {/* Dragging overlay */}
+          {/* Dragging hint */}
           {isDragging && (
-            <div className="absolute inset-0 bg-blue-500/10 pointer-events-none flex items-center justify-center">
-              <div className="bg-white/95 dark:bg-gray-800/95 midnight:bg-gray-900/95 rounded-lg px-4 py-2 shadow-lg flex items-center gap-2">
-                <Move className="w-4 h-4 text-blue-600 dark:text-blue-500 midnight:text-blue-400" />
-                <span className="text-sm font-medium text-blue-600 dark:text-blue-500 midnight:text-blue-400">
-                  Drag to reposition
-                </span>
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/10">
+              <div className="flex items-center gap-2 rounded-lg border border-line bg-elevated px-3 py-1.5 text-[13px] font-medium text-fg shadow-sm">
+                <Move className="h-3.5 w-3.5 text-fg-subtle" />
+                Drag to reposition
               </div>
             </div>
           )}
@@ -214,21 +212,19 @@ const NoteBanner = ({ note, onBannerChange, isEditable = true }) => {
           {/* Loading indicator for images */}
           {bannerData.type === "image" && (
             <div
-              className="absolute inset-0 flex items-center justify-center text-gray-500 dark:text-gray-400 midnight:text-gray-400 bg-gray-100 dark:bg-gray-700 midnight:bg-gray-800 pointer-events-none"
+              className="pointer-events-none absolute inset-0 flex items-center justify-center bg-hover text-fg-subtle"
               style={{ zIndex: -1 }}
             >
               <ImageIcon className="w-8 h-8" />
             </div>
           )}
 
-          {/* Image loading overlay with blur effect */}
+          {/* Image loading veil */}
           {imageLoading && bannerData.type === "image" && (
-            <div className="absolute inset-0 bg-gray-200/80 dark:bg-gray-700/80 midnight:bg-gray-800/80 backdrop-blur-sm flex items-center justify-center z-20 pointer-events-none">
-              <div className="flex flex-col items-center space-y-2">
-                <Loader className="w-8 h-8 animate-spin text-gray-600 dark:text-gray-300 midnight:text-gray-300" />
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-300">
-                  Loading Banner...
-                </span>
+            <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-canvas/70">
+              <div className="flex items-center gap-2 text-[13px] text-fg-muted">
+                <Loader2 className="h-4 w-4 animate-spin text-fg-subtle" />
+                Loading banner…
               </div>
             </div>
           )}
@@ -237,12 +233,14 @@ const NoteBanner = ({ note, onBannerChange, isEditable = true }) => {
           {isEditable && (
             <div className="absolute top-3 right-3 flex gap-2 z-10">
               <button
+                type="button"
                 onClick={() => setShowBannerSelector(true)}
                 onMouseDown={(e) => e.stopPropagation()}
-                className="p-2 bg-white/90 dark:bg-gray-800/90 midnight:bg-gray-900/90 hover:bg-white dark:hover:bg-gray-800 midnight:hover:bg-gray-900 rounded-lg shadow-sm transition-all duration-200 text-gray-700 dark:text-gray-400 midnight:text-slate-300 hover:text-gray-900 dark:hover:text-white midnight:hover:text-slate-100"
+                className="flex h-7 items-center gap-1.5 rounded-lg border border-line bg-elevated px-2.5 text-[12px] font-medium text-fg-muted opacity-0 shadow-sm outline-none transition-opacity hover:text-fg focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-accent/40 group-hover:opacity-100"
                 title="Change banner"
               >
-                <Settings className="w-4 h-4" />
+                <Pencil className="h-3.5 w-3.5" />
+                Change banner
               </button>
             </div>
           )}
@@ -250,9 +248,10 @@ const NoteBanner = ({ note, onBannerChange, isEditable = true }) => {
           {/* Drag hint indicator - shows when hovering on image banners */}
           {bannerData.type === "image" && isEditable && !isDragging && (
             <div className="absolute top-3 left-3 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity duration-200 pointer-events-none">
-              <button className="p-2 bg-white/90 dark:bg-gray-800/90 midnight:bg-gray-900/90 rounded-lg shadow-sm text-gray-700 dark:text-gray-400 midnight:text-slate-300 hover:text-gray-900 dark:hover:text-white midnight:hover:text-slate-100">
-                <Move className="w-4 h-4" />
-              </button>
+              <span className="flex h-7 items-center gap-1.5 rounded-lg border border-line bg-elevated px-2.5 text-[12px] font-medium text-fg-muted shadow-sm">
+                <Move className="h-3.5 w-3.5" />
+                Drag to reposition
+              </span>
             </div>
           )}
         </div>
@@ -269,13 +268,13 @@ const NoteBanner = ({ note, onBannerChange, isEditable = true }) => {
             setShowBannerSelector(true);
           }}
           disabled={!isEditable}
-          className={`w-full h-12 border-2 border-dashed transition-colors flex items-center justify-center text-sm font-medium ${
+          className={`flex h-10 w-full items-center justify-center gap-1.5 text-[13px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40 ${
             isEditable
-              ? "border-gray-300 dark:border-gray-600 midnight:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500 midnight:hover:border-gray-600 text-gray-500 dark:text-gray-400 midnight:text-slate-400 hover:text-gray-700 dark:hover:text-gray-300 midnight:hover:text-slate-300 group"
-              : "border-gray-200 dark:border-gray-700 midnight:border-gray-800 text-gray-400 dark:text-gray-500 midnight:text-slate-500 cursor-default opacity-60"
+              ? "text-fg-subtle hover:bg-hover hover:text-fg-muted"
+              : "cursor-default text-fg-subtle opacity-60"
           }`}
         >
-          <Plus className="w-4 h-4 mr-2" />
+          <Plus className="h-3.5 w-3.5" />
           <span>Add banner</span>
         </button>
       </div>
