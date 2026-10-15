@@ -1,4 +1,4 @@
-// Settings → Privacy & safety → "New chats start in": the last mode used,
+// Settings → General → "New chats start in": the last mode used,
 // or always Plan, or always Action.
 
 const KEY = 'asyncat_new_chat_mode';

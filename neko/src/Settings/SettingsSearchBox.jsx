@@ -1,36 +1,23 @@
 // The search box at the top of Settings, and the pages it finds.
 
 import PropTypes from 'prop-types';
-import { Search, X } from 'lucide-react';
+import SearchField from '../components/ui/SearchField.jsx';
 
 export function SettingsSearchBox({ value, onChange, onSubmit }) {
   return (
-    <div className="relative">
-      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-subtle" />
-      <input
-        type="search"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === 'Escape' && value) {
-            event.preventDefault();
-            onChange('');
-          } else if (event.key === 'Enter') {
-            event.preventDefault();
-            onSubmit();
-          }
-        }}
-        placeholder="Search settings"
-        aria-label="Search settings"
-        className="h-8 w-full rounded-lg border border-line bg-canvas pl-8 pr-7 text-[13px] text-fg outline-none placeholder:text-fg-subtle focus:border-accent focus:ring-2 focus:ring-accent/20 [&::-webkit-search-cancel-button]:hidden"
-        data-settings-search
-      />
-      {value ? (
-        <button type="button" onClick={() => onChange('')} aria-label="Clear the search" className="absolute right-1.5 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded text-fg-subtle hover:bg-hover hover:text-fg">
-          <X className="h-3 w-3" />
-        </button>
-      ) : null}
-    </div>
+    <SearchField
+      value={value}
+      onChange={onChange}
+      size="sm"
+      placeholder="Search settings"
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          onSubmit();
+        }
+      }}
+      data-settings-search
+    />
   );
 }
 
@@ -43,7 +30,7 @@ export function SettingsSearchResults({ results, icons, onPick }) {
       {results.map((result) => {
         const Icon = icons[result.tab];
         return (
-          <li key={`${result.tab}:${result.view || ''}`}>
+          <li key={`${result.tab}:${result.view || ''}:${result.section || ''}:${result.route || ''}`}>
             <button
               type="button"
               onClick={() => onPick(result)}

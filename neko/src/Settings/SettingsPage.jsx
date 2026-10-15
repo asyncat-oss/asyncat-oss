@@ -1,16 +1,22 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+// Settings: a column of pages on the left (a row of them on a phone), with a
+// search box that finds a setting by name, and the page on the right. The
+// pages and where old addresses lead are in settingsTabs.js.
+
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
+  AppWindow,
   ArrowLeft,
   Bell,
   Cpu,
+  Folder,
   Info,
+  Keyboard,
+  Monitor,
   Palette,
-  AppWindow,
   Plug,
-  Power,
+  Settings2,
   ShieldCheck,
-  UserRound,
   Wrench,
 } from 'lucide-react';
 import { useUiPreferences } from '../contexts/UiPreferencesContext';
@@ -19,34 +25,37 @@ import AppearanceSection from './AppearanceSection';
 import ServerSection from './ServerSection';
 import UpdateSection from './UpdateSection';
 import IntegrationsSection from './IntegrationsSection';
-import RuntimeSection from './RuntimeSection';
 import WorkbenchSection from './WorkbenchSection';
 import BackgroundSection from './BackgroundSection';
+import KeyboardShortcutsSection from './KeyboardShortcutsSection.jsx';
+import GlobalShortcutsSection from './GlobalShortcutsSection.jsx';
+import DesktopSection from './DesktopSection.jsx';
+import NewChatsSection from './NewChatsSection.jsx';
 import ConnectorsSection from '../Connectors/ConnectorsSection.jsx';
 import PrivacySection from './PrivacySection.jsx';
 import NotificationsSection from './NotificationsSection.jsx';
 import RunSetupAgain from '../welcome/RunSetupAgain.jsx';
 import { SettingsSearchBox, SettingsSearchResults } from './SettingsSearchBox.jsx';
 import { resultRoute, searchSettings } from './settingsSearch.js';
+import { SETTINGS_TABS, resolveTab } from './settingsTabs.js';
 import { Segmented } from '../components/ui/Tabs.jsx';
 import Switch from '../components/ui/Switch.jsx';
 import Button from '../components/ui/Button.jsx';
-import { RowGroup, SettingsRow } from '../components/ui/Rows.jsx';
+import { RowGroup, SettingsRow, SettingsSection } from '../components/ui/Rows.jsx';
 
-const TAB_ALIASES = {
-  general: 'profile',
-  account: 'profile',
-  security: 'profile',
-  integrations: 'connections',
-  connectors: 'connections',
-  mcp: 'connections',
-  server: 'advanced',
-  storage: 'advanced',
-  updates: 'about',
-  engines: 'runtime',
-  safety: 'privacy',
-  data: 'privacy',
-  notify: 'notifications',
+const ICONS = {
+  general: Settings2,
+  appearance: Palette,
+  shortcuts: Keyboard,
+  notifications: Bell,
+  connections: Plug,
+  privacy: ShieldCheck,
+  workbench: AppWindow,
+  desktop: Monitor,
+  about: Info,
+  // Search results that live outside Settings.
+  files: Folder,
+  models: Cpu,
 };
 
 const DEV_OPTIONS_KEY = 'asyncat_developer_options';
@@ -57,96 +66,26 @@ function readDevOptions() {
 
 const SettingsPage = () => {
   const { tab } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const { theme, setTheme } = useUiPreferences();
-  const [connectionsView, setConnectionsView] = useState(tab === 'connectors' || tab === 'mcp' ? 'connectors' : 'services');
+  const where = resolveTab(tab);
+  const [connectionsView, setConnectionsView] = useState(where.view || 'services');
   const [devOptions, setDevOptions] = useState(readDevOptions);
   const [query, setQuery] = useState('');
+  const mainRef = useRef(null);
 
-  const tabs = useMemo(() => [
-    {
-      id: 'profile',
-      group: 'Personal',
-      label: 'Profile',
-      description: 'Your local display name and avatar.',
-      icon: UserRound,
-    },
-    {
-      id: 'appearance',
-      group: 'App',
-      label: 'Appearance',
-      description: 'Theme, navigation, motion, and keyboard preferences.',
-      icon: Palette,
-    },
-    {
-      id: 'notifications',
-      group: 'App',
-      label: 'Notifications',
-      description: 'What shows a notification, for chats and Cats, and quiet hours.',
-      icon: Bell,
-    },
-    {
-      id: 'connections',
-      group: 'App',
-      label: 'Connections',
-      description: 'Connectors that give agents tools from other apps, and the services Asyncat uses.',
-      icon: Plug,
-    },
-    {
-      id: 'privacy',
-      group: 'App',
-      label: 'Privacy & safety',
-      description: 'What agents may do and where they may go, your saved keys, and your data: where it lives, export it, delete it.',
-      icon: ShieldCheck,
-    },
-    {
-      id: 'workbench',
-      group: 'App',
-      label: 'Workbench',
-      description: 'Browser, terminal, panel layout, and local browsing data.',
-      icon: AppWindow,
-    },
-    {
-      id: 'background',
-      group: 'System',
-      label: 'Background',
-      description: 'Keep Asyncat running for your Cats after you close the window, and start it when you log in.',
-      icon: Power,
-    },
-    {
-      id: 'runtime',
-      group: 'System',
-      label: 'Engines',
-      description: 'The local engines Asyncat uses, their versions and the disk space they take.',
-      icon: Cpu,
-    },
-    {
-      id: 'advanced',
-      group: 'System',
-      label: 'Advanced',
-      description: 'Developer options and the local server.',
-      icon: Wrench,
-    },
-    {
-      id: 'about',
-      group: 'System',
-      label: 'About',
-      description: 'Version information and application updates.',
-      icon: Info,
-    },
-  ], []);
-
-  const requestedTab = TAB_ALIASES[tab] || tab || 'profile';
-  const activeTab = tabs.some((item) => item.id === requestedTab) ? requestedTab : 'profile';
+  const tabs = SETTINGS_TABS;
+  const activeTab = where.tab || 'general';
   const activeTabInfo = tabs.find((item) => item.id === activeTab) || tabs[0];
+  const section = location.hash ? decodeURIComponent(location.hash.slice(1)) : where.section;
   const groups = [...new Set(tabs.map((item) => item.group))];
-  const icons = useMemo(() => Object.fromEntries(tabs.map((item) => [item.id, item.icon])), [tabs]);
   const results = useMemo(() => searchSettings(query, tabs), [query, tabs]);
 
   const openResult = (result) => {
     if (!result) return;
     setQuery('');
-    navigate(`/settings/${resultRoute(result)}`);
+    navigate(resultRoute(result));
   };
 
   const changeDevOptions = (value) => {
@@ -155,36 +94,73 @@ const SettingsPage = () => {
   };
 
   useEffect(() => {
-    // Storage & logs moved to Files.
-    if (tab === 'storage') navigate('/files/logs', { replace: true });
-    if (tab === 'connectors' || tab === 'mcp') setConnectionsView('connectors');
-    if (tab === 'integrations') setConnectionsView('services');
-    // Projects moved out of Settings to their own pages.
-    if (tab === 'projects' || tab === 'workspace') navigate('/projects', { replace: true });
-  }, [navigate, tab]);
+    // Engines went to Models, Storage & logs to Files, Projects to their own pages.
+    if (where.redirect) navigate(where.redirect, { replace: true });
+    if (where.view) setConnectionsView(where.view);
+  }, [navigate, where.redirect, where.view]);
 
-  const renderProfile = () => (
-    <div className="space-y-5">
-      <GeneralSection />
-      <RunSetupAgain />
+  // A new page starts at its top; a link to a section (#window) scrolls to
+  // it once it has drawn (some sections wait for the server first).
+  useEffect(() => {
+    const main = mainRef.current;
+    if (!main) return undefined;
+    if (!section) {
+      main.scrollTop = 0;
+      return undefined;
+    }
+    let tries = 0;
+    let timer = null;
+    const find = () => {
+      const target = main.querySelector(`[data-settings-section="${CSS.escape(section)}"]`);
+      if (target) target.scrollIntoView({ block: 'start' });
+      else if (tries++ < 20) timer = setTimeout(find, 100);
+    };
+    find();
+    return () => clearTimeout(timer);
+  }, [activeTab, section, location.key]);
+
+  const renderGeneral = () => (
+    <div className="space-y-8">
+      <div data-settings-section="profile" className="scroll-mt-6">
+        <GeneralSection />
+      </div>
+      <div data-settings-section="new-chats" className="scroll-mt-6">
+        <NewChatsSection />
+      </div>
+      <div data-settings-section="window" className="scroll-mt-6">
+        <BackgroundSection />
+      </div>
+      <div data-settings-section="setup" className="scroll-mt-6">
+        <RunSetupAgain />
+      </div>
     </div>
   );
 
-  const renderAdvanced = () => (
-    <div className="space-y-6">
-      <RowGroup>
-        <SettingsRow label="Storage and logs" hint="Moved to Files, with everything else Asyncat keeps on this computer.">
-          <Button onClick={() => navigate('/files/logs')}>Open Files</Button>
-        </SettingsRow>
-        <SettingsRow
-          label="Developer options"
-          hint="Show the server's ports and paths, its service addresses, its database and its restart button. Most people never need these."
-          stack={false}
-          data-developer-options
-        >
-          <Switch checked={devOptions} onChange={changeDevOptions} label="Developer options" />
-        </SettingsRow>
-      </RowGroup>
+  const renderShortcuts = () => (
+    <div className="space-y-8">
+      <KeyboardShortcutsSection />
+      <GlobalShortcutsSection />
+    </div>
+  );
+
+  const renderAbout = () => (
+    <div className="space-y-8">
+      <UpdateSection />
+      <SettingsSection icon={Wrench} title="Developer options" data-settings-section="developer" className="scroll-mt-6">
+        <RowGroup>
+          <SettingsRow label="Storage and logs" hint="In Files, with everything else Asyncat keeps on this computer.">
+            <Button onClick={() => navigate('/files/logs')}>Open Files</Button>
+          </SettingsRow>
+          <SettingsRow
+            label="Developer options"
+            hint="Show the server's ports and paths, its service addresses, its database and its restart button. Most people never need these."
+            stack={false}
+            data-developer-options
+          >
+            <Switch checked={devOptions} onChange={changeDevOptions} label="Developer options" />
+          </SettingsRow>
+        </RowGroup>
+      </SettingsSection>
       {devOptions ? <ServerSection /> : null}
     </div>
   );
@@ -205,11 +181,12 @@ const SettingsPage = () => {
   );
 
   const renderContent = () => {
+    if (where.redirect) return null;
     switch (activeTab) {
-      case 'profile':
-        return renderProfile();
       case 'appearance':
         return <AppearanceSection theme={theme} setThemeMode={setTheme} />;
+      case 'shortcuts':
+        return renderShortcuts();
       case 'notifications':
         return <NotificationsSection />;
       case 'connections':
@@ -218,21 +195,17 @@ const SettingsPage = () => {
         return <PrivacySection />;
       case 'workbench':
         return <WorkbenchSection />;
-      case 'background':
-        return <BackgroundSection />;
-      case 'runtime':
-        return <RuntimeSection />;
-      case 'advanced':
-        return renderAdvanced();
+      case 'desktop':
+        return <DesktopSection />;
       case 'about':
-        return <UpdateSection />;
+        return renderAbout();
       default:
-        return renderProfile();
+        return renderGeneral();
     }
   };
 
   const renderNavButton = (item, mobile = false) => {
-    const Icon = item.icon;
+    const Icon = ICONS[item.id];
     const selected = item.id === activeTab;
     return (
       <button
@@ -269,16 +242,14 @@ const SettingsPage = () => {
           </div>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-3 pb-3">
+        <nav className="flex-1 overflow-y-auto px-3 pb-3" aria-label="Settings pages">
           {query.trim() ? (
             <div className="pt-2">
-              <SettingsSearchResults results={results} icons={icons} onPick={openResult} />
+              <SettingsSearchResults results={results} icons={ICONS} onPick={openResult} />
             </div>
           ) : groups.map((group) => (
             <div key={group}>
-              <div className="px-2.5 pb-1 pt-4 text-[11px] font-medium capitalize text-fg-subtle">
-                {group.toLowerCase()}
-              </div>
+              <div className="px-2.5 pb-1 pt-4 text-[11px] font-medium text-fg-subtle">{group}</div>
               <div className="space-y-px">
                 {tabs.filter((item) => item.group === group).map((item) => (
                   <div key={item.id}>{renderNavButton(item)}</div>
@@ -295,12 +266,12 @@ const SettingsPage = () => {
             <button
               type="button"
               onClick={() => navigate('/home')}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-fg-muted hover:bg-hover"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-fg-muted outline-none hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/40"
               aria-label="Back to Asyncat"
             >
               <ArrowLeft className="h-4 w-4" />
             </button>
-            <div className="text-sm font-semibold">Settings</div>
+            <h1 className="text-[15px] font-semibold">Settings</h1>
             <div className="h-8 w-8" />
           </div>
           <div className="pb-2">
@@ -308,16 +279,16 @@ const SettingsPage = () => {
           </div>
           {query.trim() ? (
             <div className="max-h-64 overflow-y-auto pb-3">
-              <SettingsSearchResults results={results} icons={icons} onPick={openResult} />
+              <SettingsSearchResults results={results} icons={ICONS} onPick={openResult} />
             </div>
           ) : (
-            <nav className="flex gap-1 overflow-x-auto pb-3">
+            <nav className="-mx-4 flex gap-1 overflow-x-auto px-4 pb-3" aria-label="Settings pages">
               {tabs.map((item) => <div key={item.id}>{renderNavButton(item, true)}</div>)}
             </nav>
           )}
         </div>
 
-        <main className="min-h-0 flex-1 overflow-y-auto">
+        <main ref={mainRef} className="min-h-0 flex-1 overflow-y-auto" data-settings-page={activeTab}>
           <div className="mx-auto w-full max-w-5xl px-5 py-7 sm:px-8 sm:py-9">
             <header className="mb-7 border-b border-line pb-5">
               <h2 className="text-[22px] font-semibold tracking-[-0.02em]">{activeTabInfo.label}</h2>

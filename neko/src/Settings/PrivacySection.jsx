@@ -7,7 +7,6 @@ import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import { Archive, FolderOpen, Globe, KeyRound, ListChecks, Loader2, ShieldCheck, X } from 'lucide-react';
 import Button from '../components/ui/Button.jsx';
-import { Segmented } from '../components/ui/Tabs.jsx';
 import { RowGroup, SettingsRow, SettingsSection } from '../components/ui/Rows.jsx';
 import { errorDetail, useToast } from '../components/toastContext.js';
 import { Chips } from '../Cats/CatForm.jsx';
@@ -15,16 +14,10 @@ import { profilesApi } from '../CommandCenter/api';
 import catsApi from '../CommandCenter/api/catsApi.js';
 import { connectorToolLabel } from '../Connectors/connectorFormat.js';
 import privacyApi from '../services/privacyApi.js';
-import { alwaysAllowedChatTools, newChatMode, setAlwaysAllowedChatTools, setNewChatMode } from '../services/chatDefaults.js';
+import { alwaysAllowedChatTools, setAlwaysAllowedChatTools } from '../services/chatDefaults.js';
 import { ExportEverything, DeleteEverything, ImportChats } from './PrivacyDataParts.jsx';
 import LearningSettings from './LearningSettings.jsx';
 import SandboxSettings from './SandboxSettings.jsx';
-
-const MODE_HINTS = {
-  last: 'Each new chat starts in the mode you used last.',
-  plan: 'New chats start in Plan: the agent reads, searches and suggests, and changes nothing.',
-  action: 'New chats start in Action: the agent can change files and run commands, and asks first for risky steps.',
-};
 
 function toolLabel(name) {
   return connectorToolLabel(name) || String(name).replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
@@ -158,18 +151,12 @@ function keyText(secrets) {
 export default function PrivacySection() {
   const navigate = useNavigate();
   const toast = useToast();
-  const [mode, setMode] = useState(() => newChatMode());
   const [overview, setOverview] = useState(null);
 
   const load = useCallback(() => {
     privacyApi.overview().then(setOverview).catch((err) => setOverview({ error: err.message }));
   }, []);
   useEffect(() => { load(); }, [load]);
-
-  const changeMode = (value) => {
-    setMode(value);
-    setNewChatMode(value);
-  };
 
   const saveBlockedSites = async (sites) => {
     const before = overview.blockedSites;
@@ -186,17 +173,8 @@ export default function PrivacySection() {
 
   return (
     <div className="space-y-8" data-privacy>
-      <SettingsSection icon={ShieldCheck} title="What agents may do" hint="Plan and Action can be switched in the composer at any time; this is only where new chats start.">
+      <SettingsSection icon={ShieldCheck} title="Commands the agent runs" hint={<>Whether new chats start in Plan or Action is set in <button type="button" onClick={() => navigate('/settings/general#new-chats')} className="text-accent hover:underline">General</button>.</>}>
         <RowGroup>
-          <SettingsRow label="New chats start in" hint={MODE_HINTS[mode]}>
-            <Segmented
-              value={mode}
-              onChange={changeMode}
-              items={[{ value: 'last', label: 'Last used' }, { value: 'plan', label: 'Plan' }, { value: 'action', label: 'Action' }]}
-              label="New chats start in"
-              role="radiogroup"
-            />
-          </SettingsRow>
           <SandboxSettings />
         </RowGroup>
       </SettingsSection>
@@ -225,7 +203,7 @@ export default function PrivacySection() {
         </RowGroup>
       </SettingsSection>
 
-      <SettingsSection icon={Archive} title="Your data">
+      <SettingsSection icon={Archive} title="Your data" data-settings-section="data" className="scroll-mt-6">
         {overview && !overview.error ? (
           <div className="space-y-4">
             <ImportChats />

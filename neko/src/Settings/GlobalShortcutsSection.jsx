@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
 import { Globe2 } from 'lucide-react';
 import Switch from '../components/ui/Switch.jsx';
+import { acceleratorFromEvent, formatAccelerator } from './globalShortcutText.js';
 
 // System-wide shortcuts work in every app while Asyncat runs, and the app in
 // front never sees the key press, so they can block shortcuts in an editor or
@@ -11,51 +12,6 @@ const SHORTCUTS = [
   { id: 'quickAsk', label: 'Quick ask', description: 'Open Quick ask from any app.' },
   { id: 'toggleWindow', label: 'Show or hide Asyncat', description: 'Bring the Asyncat window forward, or hide it.' },
 ];
-
-const CODE_KEYS = {
-  Space: 'Space', Enter: 'Enter', Tab: 'Tab', Backspace: 'Backspace', Delete: 'Delete', Insert: 'Insert',
-  Home: 'Home', End: 'End', PageUp: 'PageUp', PageDown: 'PageDown',
-  ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right',
-  Slash: '/', Backslash: '\\', Comma: ',', Period: '.', Semicolon: ';', Quote: "'",
-  BracketLeft: '[', BracketRight: ']', Minus: '-', Equal: '=', Backquote: '`',
-};
-
-// The non-modifier key of a key press, in Electron's accelerator naming, or
-// null while only modifiers are held.
-function keyFromEvent(event) {
-  const { code } = event;
-  let match = /^Key([A-Z])$/.exec(code);
-  if (match) return match[1];
-  match = /^Digit([0-9])$/.exec(code);
-  if (match) return match[1];
-  match = /^F([0-9]{1,2})$/.exec(code);
-  if (match) return `F${match[1]}`;
-  return CODE_KEYS[code] || null;
-}
-
-function acceleratorFromEvent(event, isMac) {
-  const key = keyFromEvent(event);
-  if (!key) return null;
-  const parts = [];
-  if (isMac) {
-    if (event.metaKey) parts.push('Command');
-    if (event.ctrlKey) parts.push('Control');
-  } else {
-    if (event.ctrlKey) parts.push('Control');
-    if (event.metaKey) parts.push('Super');
-  }
-  if (event.altKey) parts.push('Alt');
-  if (event.shiftKey) parts.push('Shift');
-  parts.push(key);
-  return parts.join('+');
-}
-
-function formatAccelerator(accelerator, isMac) {
-  const names = isMac
-    ? { CommandOrControl: '⌘', Command: '⌘', Control: '⌃', Alt: '⌥', AltGr: '⌥', Shift: '⇧', Super: '⌘' }
-    : { CommandOrControl: 'Ctrl', Command: 'Cmd', Control: 'Ctrl', Alt: 'Alt', AltGr: 'AltGr', Shift: 'Shift', Super: 'Win' };
-  return String(accelerator || '').split('+').map(part => names[part] || part);
-}
 
 function Keys({ accelerator, isMac }) {
   return (
