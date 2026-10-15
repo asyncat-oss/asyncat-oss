@@ -29,16 +29,19 @@ export default function ToastProvider({ children }) {
     timers.current.delete(id);
   }, []);
 
-  const show = useCallback((type, message, { detail = '' } = {}) => {
+  // `action` adds one text button ({ label, onClick }), such as Undo; using it
+  // closes the toast.
+  const show = useCallback((type, message, { detail = '', action = null, duration } = {}) => {
     const text = String(message || '').trim();
     if (!text) return;
     const id = ++nextId.current;
     setToasts(list => {
       // The same notice is already up (e.g. a retried action failing again).
       if (list.some(t => t.type === type && t.message === text)) return list;
-      return [...list, { id, type, message: text, detail: String(detail || '') }].slice(-MAX_VISIBLE);
+      const withAction = action?.label && typeof action.onClick === 'function' ? action : null;
+      return [...list, { id, type, message: text, detail: String(detail || ''), action: withAction }].slice(-MAX_VISIBLE);
     });
-    timers.current.set(id, setTimeout(() => dismiss(id), DURATION[type] || DURATION.info));
+    timers.current.set(id, setTimeout(() => dismiss(id), duration || DURATION[type] || DURATION.info));
   }, [dismiss]);
 
   useEffect(() => {
@@ -60,7 +63,7 @@ export default function ToastProvider({ children }) {
           aria-live="polite"
           className="pointer-events-none fixed bottom-4 right-4 z-[200] flex w-[min(92vw,380px)] flex-col gap-2"
         >
-          {toasts.map(({ id, type, message, detail }) => {
+          {toasts.map(({ id, type, message, detail, action }) => {
             const { Icon, icon, role } = STYLE[type] || STYLE.info;
             return (
               <div
@@ -75,6 +78,15 @@ export default function ToastProvider({ children }) {
                     <p className="mt-0.5 break-words text-[12px] leading-5 text-fg-muted">{detail}</p>
                   )}
                 </div>
+                {action && (
+                  <button
+                    type="button"
+                    onClick={() => { dismiss(id); action.onClick(); }}
+                    className="-my-0.5 shrink-0 rounded-md px-2 py-0.5 text-[13px] font-medium text-fg outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-accent/40"
+                  >
+                    {action.label}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => dismiss(id)}
