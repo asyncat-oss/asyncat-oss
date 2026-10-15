@@ -11,6 +11,7 @@ import Notice from "../../components/ui/Notice.jsx";
 import Skeleton from "../../components/ui/Skeleton.jsx";
 import Cat from "../../components/ui/Cat.jsx";
 import { Trash2, RotateCcw, CheckSquare, Square, X } from "lucide-react";
+import PageHeader from '../../components/ui/PageHeader.jsx';
 
 const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
@@ -173,23 +174,21 @@ const TrashPage = () => {
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-transparent">
-      <div className="mx-auto flex h-full w-full max-w-4xl flex-col p-4 md:p-8">
-        <div className="mb-5 flex shrink-0 flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-fg">Trash</h1>
-            <p className="mt-1 text-[13px] text-fg-muted">Deleted chats stay here for 30 days</p>
-          </div>
-          {trashItems.length > 0 && (
-            <div className="flex items-center gap-2">
-              <Button variant="secondary" icon={allVisibleSelected ? CheckSquare : Square} onClick={selectAllVisible}>
-                {allVisibleSelected ? "Deselect all" : "Select"}
-              </Button>
-              <Button variant="danger" onClick={handleEmptyTrash}>
-                Empty Trash
-              </Button>
-            </div>
-          )}
-        </div>
+      <PageHeader
+        title="Trash"
+        description="Deleted chats stay here for 30 days"
+        actions={trashItems.length > 0 ? (
+          <>
+            <Button variant="secondary" icon={allVisibleSelected ? CheckSquare : Square} onClick={selectAllVisible}>
+              {allVisibleSelected ? "Deselect all" : "Select"}
+            </Button>
+            <Button variant="danger" onClick={handleEmptyTrash}>
+              Empty Trash
+            </Button>
+          </>
+        ) : null}
+      />
+      <div className="flex min-h-0 w-full max-w-4xl flex-1 flex-col p-4 md:px-8 md:pb-8 md:pt-5">
 
         {hasSelection && (
           <div className="mb-4 flex shrink-0 items-center justify-between gap-3 rounded-lg border border-line bg-surface px-3 py-2">

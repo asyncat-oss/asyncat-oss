@@ -27,6 +27,7 @@ import { Menu, MenuItem, MenuSeparator } from '../../components/ui/Menu.jsx';
 import SearchSnippet from '../../components/SearchSnippet.jsx';
 import { chatLink, hitMessageId, isPinned, markTitle, withPinned } from '../../sidebar/chatSearch.js';
 import { latestSearch } from '../../utils/latestSearch.js';
+import PageHeader from '../../components/ui/PageHeader.jsx';
 
 const ENGINE_FILTER_KEY = 'asyncat_chats_engine_filter';
 const ENGINE_ORDER = ['asyncat', 'claude-code', 'codex'];
@@ -668,18 +669,11 @@ const ChatsPage = () => {
 
   return (
     <div className="flex flex-col h-full bg-transparent overflow-hidden">
-      <div className="max-w-4xl w-full mx-auto p-4 md:p-8 flex flex-col h-full relative z-20">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-5 flex-shrink-0">
-          <div>
-            <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-fg">
-              Chats
-            </h1>
-            <p className="mt-1 text-[13px] text-fg-muted">
-              Conversations and agent runs
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
+      <PageHeader
+        title="Chats"
+        description="Conversations and agent runs"
+        actions={(
+          <>
             {selectableItems.length > 0 && (
               <Button variant="secondary" size="sm" icon={allVisibleSelected ? CheckSquare : Square} onClick={selectAllVisible}>
                 {allVisibleSelected ? 'Deselect all' : 'Select'}
@@ -688,8 +682,10 @@ const ChatsPage = () => {
             <Button variant="primary" size="sm" icon={Plus} onClick={handleNewChat}>
               New
             </Button>
-          </div>
-        </div>
+          </>
+        )}
+      />
+      <div className="max-w-4xl w-full p-4 md:px-8 md:pb-8 md:pt-5 flex min-h-0 flex-1 flex-col relative z-20">
 
         {/* Search */}
         <div className="relative mb-5 flex-shrink-0">
