@@ -386,7 +386,7 @@ const ProjectConversationGroup = memo(({
             <button
               type="button"
               onClick={onOpenProject}
-              className="flex h-8 w-full items-center rounded-lg pl-7 pr-2.5 text-left text-xs text-fg-subtle transition-colors hover:bg-hover hover:text-fg-muted"
+              className="flex h-8 w-full items-center rounded-lg pl-7 pr-2.5 text-left text-[12px] text-fg-subtle transition-colors hover:bg-hover hover:text-fg-muted"
             >
               <span className="truncate">{pinnedCount > 0 ? "Pinned above" : "No chats yet"} · Open project</span>
             </button>
@@ -742,7 +742,7 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
       hint: shortcutHint("navScheduled"),
       // Steps and questions waiting for your answer.
       badge: catsWaiting > 0 ? (
-        <span aria-label={`${catsWaiting} waiting for you`} className="absolute -right-1.5 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-semibold leading-none text-white">
+        <span aria-label={`${catsWaiting} waiting for you`} className="absolute -right-1.5 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-semibold leading-none text-amber-950">
           {catsWaiting > 9 ? '9+' : catsWaiting}
         </span>
       ) : null,
@@ -878,12 +878,12 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
               </SectionHeader>
               <div className="space-y-px">
                 {projectsLoading && projectGroups.length === 0 ? (
-                  <div className="px-2.5 py-2 text-xs text-fg-subtle">Loading projects…</div>
+                  <div className="px-2.5 py-2 text-[12px] text-fg-subtle">Loading projects…</div>
                 ) : projectGroups.length === 0 ? (
                   <button
                     type="button"
                     onClick={() => navigate("/projects", { state: { createProject: true } })}
-                    className="w-full rounded-lg px-2.5 py-2 text-left text-xs text-fg-subtle transition-colors hover:bg-hover hover:text-fg-muted"
+                    className="w-full rounded-lg px-2.5 py-2 text-left text-[12px] text-fg-subtle transition-colors hover:bg-hover hover:text-fg-muted"
                   >
                     Create your first project
                   </button>
@@ -930,12 +930,12 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
                 <button
                   type="button"
                   onClick={loadRecentConversations}
-                  className="w-full rounded-lg px-2.5 py-2 text-left text-xs text-fg-subtle transition-colors hover:bg-hover hover:text-fg-muted"
+                  className="w-full rounded-lg px-2.5 py-2 text-left text-[12px] text-fg-subtle transition-colors hover:bg-hover hover:text-fg-muted"
                 >
                   Couldn&apos;t load recents · Retry
                 </button>
               ) : recentConversations.length === 0 ? (
-                <div className="px-2.5 py-2 text-xs text-fg-subtle">
+                <div className="px-2.5 py-2 text-[12px] text-fg-subtle">
                   No recent conversations
                 </div>
               ) : recentConversations.map((conversation) => (
