@@ -1,6 +1,31 @@
+// An embed block: a link to a video, pen or design, shown as a card that
+// opens it. Without a link it asks for one.
+
 import { useState, useRef } from 'react';
-import { Link, Youtube, ExternalLink, RefreshCw, Edit3 } from 'lucide-react';
+import PropTypes from 'prop-types';
+import { Link, Youtube, ExternalLink, Pencil } from 'lucide-react';
 import Select from '../../../components/ui/Select.jsx';
+import Button from '../../../components/ui/Button.jsx';
+import { Field, Input } from '../../../components/ui/Field.jsx';
+
+// The placeholder for an embed we don't play inline: one icon and two lines.
+function EmbedTile({ icon: Icon, title, detail }) {
+  return (
+    <div className="flex aspect-video items-center justify-center rounded-xl border border-line bg-surface">
+      <div className="text-center">
+        <Icon className="mx-auto mb-2 h-8 w-8 text-fg-subtle" strokeWidth={1.5} />
+        <p className="text-[13px] font-medium text-fg">{title}</p>
+        {detail ? <p className="text-[12px] text-fg-subtle">{detail}</p> : null}
+      </div>
+    </div>
+  );
+}
+
+EmbedTile.propTypes = {
+  icon: PropTypes.elementType.isRequired,
+  title: PropTypes.node.isRequired,
+  detail: PropTypes.node,
+};
 
 const EmbedBlock = ({ block, onChange }) => {
   const [url, setUrl] = useState(block.properties?.url || '');
@@ -65,64 +90,32 @@ const EmbedBlock = ({ block, onChange }) => {
     switch (embedType) {
       case 'youtube': {
         const youtubeId = url.match(/(?:youtube\.com\/(?:[^/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?/\s]{11})/)?.[1];
-        return (
-          <div className="aspect-video bg-gray-900 dark:bg-gray-800 midnight:bg-gray-900 rounded-lg flex items-center justify-center">
-            <div className="text-center text-white">
-              <Youtube className="w-12 h-12 mx-auto mb-2" />
-              <p className="text-sm">YouTube Video</p>
-              <p className="text-xs opacity-75">{youtubeId}</p>
-            </div>
-          </div>
-        );
+        return <EmbedTile icon={Youtube} title="YouTube video" detail={youtubeId} />;
       }
 
       case 'vimeo':
-        return (
-          <div className="aspect-video bg-blue-900 dark:bg-blue-800 midnight:bg-blue-900 rounded-lg flex items-center justify-center">
-            <div className="text-center text-white">
-              <ExternalLink className="w-12 h-12 mx-auto mb-2" />
-              <p className="text-sm">Vimeo Video</p>
-              <p className="text-xs opacity-75">Click to view</p>
-            </div>
-          </div>
-        );
+        return <EmbedTile icon={ExternalLink} title="Vimeo video" detail="Click to view" />;
 
       case 'codepen':
-        return (
-          <div className="aspect-video bg-gray-900 dark:bg-gray-800 midnight:bg-gray-900 rounded-lg flex items-center justify-center border border-gray-700 dark:border-gray-600 midnight:border-gray-700">
-            <div className="text-center text-gray-300">
-              <ExternalLink className="w-12 h-12 mx-auto mb-2" />
-              <p className="text-sm">CodePen</p>
-              <p className="text-xs opacity-75">Interactive code demo</p>
-            </div>
-          </div>
-        );
+        return <EmbedTile icon={ExternalLink} title="CodePen" detail="Interactive code demo" />;
 
       case 'figma':
-        return (
-          <div className="aspect-video bg-purple-100 dark:bg-purple-900 midnight:bg-purple-950 rounded-lg flex items-center justify-center border">
-            <div className="text-center text-purple-800 dark:text-purple-200 midnight:text-purple-300">
-              <ExternalLink className="w-12 h-12 mx-auto mb-2" />
-              <p className="text-sm">Figma Design</p>
-              <p className="text-xs opacity-75">Design prototype</p>
-            </div>
-          </div>
-        );
+        return <EmbedTile icon={ExternalLink} title="Figma design" detail="Design prototype" />;
 
       default:
         return (
-          <div className="border border-gray-200 dark:border-gray-700 midnight:border-gray-800 rounded-lg p-4">
+          <div className="rounded-xl border border-line p-4 transition-colors hover:bg-hover">
             <div className="flex items-center gap-3">
-              <Link className="w-8 h-8 text-gray-400" />
-              <div className="flex-1">
-                <p className="font-medium text-gray-900 dark:text-gray-100 midnight:text-gray-200">
+              <Link className="h-6 w-6 flex-shrink-0 text-fg-subtle" strokeWidth={1.75} />
+              <div className="min-w-0 flex-1">
+                <p className="text-[14px] font-medium text-fg">
                   {getUrlTitle(url)}
                 </p>
-                <p className="text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-500 truncate">
+                <p className="truncate text-[12px] text-fg-subtle">
                   {url}
                 </p>
               </div>
-              <ExternalLink className="w-4 h-4 text-gray-400" />
+              <ExternalLink className="h-4 w-4 flex-shrink-0 text-fg-subtle" />
             </div>
           </div>
         );
@@ -131,28 +124,22 @@ const EmbedBlock = ({ block, onChange }) => {
 
   if (isEditing) {
     return (
-      <div className="embed-block border border-gray-200 dark:border-gray-700 midnight:border-gray-800 rounded-lg p-4">
+      <div className="embed-block rounded-xl border border-line p-4">
         <div className="space-y-3">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-400 mb-1">
-              Embed URL
-            </label>
-            <input
+          <Field label="Link to embed" htmlFor={`embed-url-${block.id}`}>
+            <Input
               ref={inputRef}
+              id={`embed-url-${block.id}`}
               type="url"
               value={url}
               onChange={(e) => handleUrlChange(e.target.value)}
-              placeholder="Paste a link to embed content (YouTube, Vimeo, CodePen, Figma...)"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 midnight:border-gray-700 rounded-md bg-white dark:bg-gray-800 midnight:bg-gray-900 text-gray-900 dark:text-gray-100 midnight:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="A YouTube, Vimeo, CodePen or Figma link"
               autoFocus
             />
-          </div>
+          </Field>
 
           {url && (
-            <div>
-              <label htmlFor={`embed-type-${block.id}`} className="block text-sm font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-400 mb-1">
-                Detected type
-              </label>
+            <Field label="Detected type" htmlFor={`embed-type-${block.id}`}>
               <Select
                 id={`embed-type-${block.id}`}
                 fullWidth={false}
@@ -161,26 +148,23 @@ const EmbedBlock = ({ block, onChange }) => {
                 onChange={setEmbedType}
                 options={embedTypes.map((type) => ({ value: type.type, label: type.label }))}
               />
-            </div>
+            </Field>
           )}
 
           <div className="flex gap-2">
-            <button
+            <Button
+              variant="primary"
               onClick={handleSaveUrl}
-              disabled={!url || isLoading}
-              className="px-4 py-2 bg-blue-600 dark:bg-blue-700 midnight:bg-indigo-600 text-white rounded-md hover:bg-blue-700 dark:hover:bg-blue-800 midnight:hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              disabled={!url}
+              loading={isLoading}
             >
-              {isLoading && <RefreshCw className="w-4 h-4 animate-spin" />}
-              {isLoading ? 'Loading...' : 'Embed'}
-            </button>
-            
+              Embed
+            </Button>
+
             {block.properties?.url && (
-              <button
-                onClick={() => setIsEditing(false)}
-                className="px-4 py-2 text-gray-600 dark:text-gray-400 midnight:text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 midnight:hover:text-gray-300"
-              >
+              <Button variant="ghost" onClick={() => setIsEditing(false)}>
                 Cancel
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -191,18 +175,14 @@ const EmbedBlock = ({ block, onChange }) => {
   return (
     <div className="embed-block group">
       {/* Controls - shown on hover */}
-      <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex justify-between items-center mb-2">
-        <div className="text-sm text-gray-500 dark:text-gray-400 midnight:text-gray-500">
+      <div className="mb-2 flex items-center justify-between opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-within:opacity-100">
+        <div className="text-[12px] text-fg-subtle">
           {embedTypes.find(t => t.type === embedType)?.label} embed
         </div>
-        
-        <button
-          onClick={() => setIsEditing(true)}
-          className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 midnight:bg-gray-800 text-gray-600 dark:text-gray-400 midnight:text-gray-500 rounded hover:bg-gray-200 dark:hover:bg-gray-600 midnight:hover:bg-gray-700"
-        >
-          <Edit3 className="w-3 h-3" />
-          Edit URL
-        </button>
+
+        <Button variant="ghost" size="xs" icon={Pencil} onClick={() => setIsEditing(true)}>
+          Edit link
+        </Button>
       </div>
 
       {/* Embed content */}

@@ -1,3 +1,5 @@
+// A toggle block: a title that opens and closes the text under it.
+
 import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
@@ -26,13 +28,13 @@ const ToggleBlock = ({ block, onChange, contentRef, commonProps }) => {
   };
 
   return (
-    <div className="toggle-block border border-gray-200 dark:border-gray-700 midnight:border-gray-800 rounded-lg">
+    <div className="toggle-block rounded-xl border border-line">
       {/* Toggle header */}
       <div 
-        className="flex items-center gap-2 p-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 midnight:hover:bg-gray-900/50 transition-colors rounded-t-lg"
+        className={`flex cursor-pointer items-center gap-2 p-3 transition-colors hover:bg-hover ${isOpen ? 'rounded-t-xl' : 'rounded-xl'}`}
         onClick={toggleOpen}
       >
-        <div className="text-gray-500 dark:text-gray-400 midnight:text-gray-500">
+        <div className="text-fg-subtle">
           {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
         </div>
         
@@ -40,7 +42,7 @@ const ToggleBlock = ({ block, onChange, contentRef, commonProps }) => {
           type="text"
           value={title}
           onChange={(e) => handleTitleChange(e.target.value)}
-          className="flex-1 font-medium bg-transparent border-none outline-none text-gray-900 dark:text-gray-100 midnight:text-gray-100"
+          className="flex-1 border-none bg-transparent font-medium text-fg outline-none placeholder:text-fg-subtle"
           placeholder="Toggle title"
           onClick={(e) => e.stopPropagation()}
         />
@@ -48,11 +50,11 @@ const ToggleBlock = ({ block, onChange, contentRef, commonProps }) => {
 
       {/* Toggle content */}
       {isOpen && (
-        <div className="border-t border-gray-200 dark:border-gray-700 midnight:border-gray-800 p-3">
+        <div className="border-t border-line p-3">
           <div
             ref={contentRef}
             contentEditable
-            className="outline-none text-gray-900 dark:text-gray-100 midnight:text-gray-100"
+            className="text-fg outline-none"
             style={{ minHeight: '1.5em', overflowWrap: 'anywhere', wordBreak: 'break-word', hyphens: 'none' }}
             placeholder="Type your toggle content..."
             {...commonProps}
