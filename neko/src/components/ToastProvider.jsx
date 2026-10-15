@@ -8,9 +8,9 @@ const DURATION = { error: 8000, success: 4000, info: 5000 };
 const MAX_VISIBLE = 4;
 
 const STYLE = {
-  error: { Icon: XCircle, icon: 'text-red-500 dark:text-red-400', role: 'alert' },
-  success: { Icon: CheckCircle2, icon: 'text-emerald-500 dark:text-emerald-400', role: 'status' },
-  info: { Icon: Info, icon: 'text-sky-500 dark:text-sky-400', role: 'status' },
+  error: { Icon: XCircle, icon: 'text-red-600 dark:text-red-400', role: 'alert' },
+  success: { Icon: CheckCircle2, icon: 'text-emerald-600 dark:text-emerald-400', role: 'status' },
+  info: { Icon: Info, icon: 'text-fg-subtle', role: 'status' },
 };
 
 /**
@@ -66,20 +66,20 @@ export default function ToastProvider({ children }) {
               <div
                 key={id}
                 role={role}
-                className="pointer-events-auto flex items-start gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-lg dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900"
+                className="pointer-events-auto flex items-start gap-2.5 rounded-xl border border-line bg-elevated px-3.5 py-3 text-fg shadow-xl shadow-black/10 animate-[fadeIn_120ms_ease-out] dark:shadow-black/40"
               >
                 <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${icon}`} aria-hidden="true" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100 midnight:text-slate-100">{message}</p>
+                  <p className="text-[13px] font-medium leading-5 text-fg">{message}</p>
                   {detail && (
-                    <p className="mt-0.5 break-words text-xs text-gray-500 dark:text-gray-400 midnight:text-slate-400">{detail}</p>
+                    <p className="mt-0.5 break-words text-[12px] leading-5 text-fg-muted">{detail}</p>
                   )}
                 </div>
                 <button
                   type="button"
                   onClick={() => dismiss(id)}
                   aria-label="Dismiss"
-                  className="-mr-1 rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                  className="-mr-1 -mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-fg-subtle outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/40"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
