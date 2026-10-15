@@ -124,7 +124,7 @@ export default function BackgroundSection() {
             {summary}
             {isMac ? ' On a Mac, Asyncat stays in the Dock after the window closes unless you choose Quit.' : ''}
             {' '}
-            <button type="button" onClick={() => navigate('/cats')} className="text-accent hover:underline">Open Cats</button>
+            <button type="button" onClick={() => navigate('/cats')} className="rounded text-accent hover:underline outline-none focus-visible:ring-2 focus-visible:ring-accent/40">Open Cats</button>
           </p>
         ) : null}
         <RowGroup>

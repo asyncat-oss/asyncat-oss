@@ -656,7 +656,7 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
               type="button"
               onClick={handleDownload}
               disabled={downloading}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-hover hover:text-fg disabled:opacity-50"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-hover hover:text-fg disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
               title={downloading ? 'Downloading…' : `Download ${filename}`}
               aria-label={`Download ${filename}`}
             >
@@ -668,7 +668,7 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
               type="button"
               onClick={handleFullscreen}
               disabled={loading}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-hover hover:text-fg disabled:opacity-50"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-hover hover:text-fg disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
               title="Open full screen"
               aria-label="Open full screen"
             >
@@ -679,7 +679,7 @@ export default function ArtifactCard({ artifact, defaultExpanded = false, onOpen
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onOpen(); }}
-              className="inline-flex h-7 min-w-7 items-center justify-center gap-1 rounded-md px-1.5 text-[12px] font-medium text-fg-muted transition-colors hover:bg-hover hover:text-fg @xs:px-2"
+              className="inline-flex h-7 min-w-7 items-center justify-center gap-1 rounded-md px-1.5 text-[12px] font-medium text-fg-muted transition-colors hover:bg-hover hover:text-fg @xs:px-2 outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
               title="Open in side panel"
               aria-label="Open in side panel"
             >

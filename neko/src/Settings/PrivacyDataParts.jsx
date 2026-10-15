@@ -139,7 +139,7 @@ export function ImportChats({ title = 'Bring your chats from ChatGPT or Claude',
             </div>
           </div>
         ) : (
-          <button type="button" onClick={() => setPasteOpen(true)} className="text-[12px] text-accent hover:underline">Paste memories from ChatGPT</button>
+          <button type="button" onClick={() => setPasteOpen(true)} className="rounded text-[12px] text-accent hover:underline outline-none focus-visible:ring-2 focus-visible:ring-accent/40">Paste memories from ChatGPT</button>
         )}
       </div>
     </div>

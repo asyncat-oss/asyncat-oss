@@ -2038,7 +2038,7 @@ export const MessageInputV2 = ({
                     <button
                       type="submit"
                       disabled={!canSubmit}
-                      className={`flex h-8 w-8 items-center justify-center rounded-full transition-[background-color,color,opacity,transform] duration-200 ${
+                      className={`flex h-8 w-8 items-center justify-center rounded-full outline-none transition-[background-color,color,opacity,transform] duration-200 focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface ${
                         canSubmit
                           ? "bg-fg text-canvas hover:opacity-90 active:scale-95"
                           : "cursor-not-allowed bg-hover text-fg-subtle"

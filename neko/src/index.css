@@ -230,6 +230,16 @@ body {
   font-feature-settings: "cv11";
 }
 
+/* Keyboard focus shows the accent ring everywhere, also on a control that
+   has no focus style of its own (instead of the browser's orange one).
+   Controls with their own ring (focus-visible:ring-…, outline-none) keep it. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--as-accent);
+    outline-offset: 2px;
+  }
+}
+
 /* The app's frame never scrolls as a whole: an element focused off-screen
    used to drag the whole window up, leaving it blank. It also shows the
    app's own background, never the browser's white. Not in the Quick ask
