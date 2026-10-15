@@ -362,7 +362,7 @@ const ModelsPage = () => {
               <Loader2 className="h-5 w-5 animate-spin" />
             </div>
           )}>
-            <TrainingPage />
+            <TrainingPage refreshKey={refreshCount} />
           </Suspense>
         </div>
       ) : (
@@ -455,7 +455,6 @@ const ModelsPage = () => {
                     providerAction={providerAction}
                     providerError={providerError}
                     highlightedItem={highlightedItem}
-                    onRefresh={loadProviderData}
                     onSave={handleProviderSave}
                     onDelete={handleProviderDelete}
                     onTest={handleProviderTest}
@@ -477,7 +476,6 @@ const ModelsPage = () => {
                 error={usageError}
                 range={usageRange}
                 onRangeChange={setUsageRange}
-                onRefresh={refreshUsageData}
                 catalog={providerCatalog}
               />
             )}

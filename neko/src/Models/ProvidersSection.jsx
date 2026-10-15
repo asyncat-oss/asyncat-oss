@@ -174,7 +174,6 @@ const ProvidersSection = ({
   providerAction,
   providerError,
   highlightedItem,
-  onRefresh,
   onSave,
   onDelete,
   onTest,
@@ -381,12 +380,7 @@ const ProvidersSection = ({
         <SectionHeader
           title="Your providers"
           description="New chats start on the one marked Default. Each chat can switch to another in the composer."
-          action={(
-            <div className="flex items-center gap-1">
-              <Button size="sm" variant="ghost" icon={RefreshCw} onClick={onRefresh} loading={loading}>Refresh</Button>
-              {profiles.length ? <Button size="sm" variant="secondary" icon={Plus} onClick={() => onViewChange('add')}>Add provider</Button> : null}
-            </div>
-          )}
+          action={profiles.length ? <Button size="sm" variant="secondary" icon={Plus} onClick={() => onViewChange('add')}>Add provider</Button> : null}
         />
       )}
 
@@ -457,7 +451,6 @@ ProvidersSection.propTypes = {
   providerAction: PropTypes.string,
   providerError: PropTypes.string,
   highlightedItem: PropTypes.object,
-  onRefresh: PropTypes.func.isRequired,
   onSave: PropTypes.func.isRequired,
   onDelete: PropTypes.func.isRequired,
   onTest: PropTypes.func.isRequired,

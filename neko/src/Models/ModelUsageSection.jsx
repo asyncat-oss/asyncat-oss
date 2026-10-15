@@ -1,9 +1,8 @@
 // Models → Usage: requests and tokens over a chosen range, the models that
 // used the most, and the latest requests.
 
-import { BarChart3, Clock, Gauge, History, RefreshCw } from 'lucide-react';
+import { BarChart3, Clock, Gauge, History } from 'lucide-react';
 import Cat from '../components/ui/Cat.jsx';
-import IconButton from '../components/ui/IconButton.jsx';
 import Notice from '../components/ui/Notice.jsx';
 import Skeleton from '../components/ui/Skeleton.jsx';
 import { Segmented } from '../components/ui/Tabs.jsx';
@@ -48,7 +47,7 @@ const Stat = ({ icon: Icon, label, value, detail }) => (
   </div>
 );
 
-const ModelUsageSection = ({ usage, loading, error, range, onRangeChange, onRefresh, catalog = [] }) => {
+const ModelUsageSection = ({ usage, loading, error, range, onRangeChange, catalog = [] }) => {
   const totals = usage?.totals || {};
   const models = usage?.models || [];
   const recent = usage?.recent || [];
@@ -57,9 +56,9 @@ const ModelUsageSection = ({ usage, loading, error, range, onRangeChange, onRefr
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
+      {/* The page header's Refresh loads it again. */}
+      <div className="flex items-center gap-3">
         <Segmented value={range} onChange={onRangeChange} items={RANGES} label="Time range" role="radiogroup" />
-        <IconButton icon={RefreshCw} label="Refresh usage" onClick={onRefresh} loading={loading} />
       </div>
 
       {error && <Notice tone="error">{error}</Notice>}

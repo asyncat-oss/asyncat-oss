@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import PropTypes from 'prop-types';
 import {
   Check, HardDrive, Zap,
-  Play, Square, Trash2, RefreshCw, ChevronDown, ChevronRight, ChevronUp,
+  Play, Square, Trash2, ChevronDown, ChevronRight, ChevronUp,
   Download, X, Settings2, Brain, FileJson,
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
@@ -140,7 +140,7 @@ const Fact = ({ icon: Icon, children }) => (
 
 Fact.propTypes = { icon: PropTypes.elementType.isRequired, children: PropTypes.node };
 
-const ReadinessBanner = ({ readiness, onInstall, installing, onRemove, onRefresh }) => {
+const ReadinessBanner = ({ readiness, onInstall, installing, onRemove }) => {
   if (!readiness) return null;
   const gpu = readiness.gpu;
 
@@ -159,7 +159,6 @@ const ReadinessBanner = ({ readiness, onInstall, installing, onRemove, onRefresh
               Training tools ready
             </span>
           )}
-          <IconButton icon={RefreshCw} label="Refresh" size="sm" onClick={onRefresh} />
         </div>
       </div>
 
@@ -203,7 +202,6 @@ ReadinessBanner.propTypes = {
   onInstall: PropTypes.func.isRequired,
   installing: PropTypes.bool.isRequired,
   onRemove: PropTypes.func.isRequired,
-  onRefresh: PropTypes.func.isRequired,
 };
 
 // ── Dataset dropdown ────────────────────────────────────────────────────────
@@ -630,7 +628,8 @@ JobCard.propTypes = {
 
 // ── Main Page ───────────────────────────────────────────────────────────────
 
-const TrainingPage = () => {
+// `refreshKey`: the Models page header's Refresh, which looks again.
+const TrainingPage = ({ refreshKey = 0 }) => {
   const [readiness, setReadiness] = useState(null);
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -657,6 +656,11 @@ const TrainingPage = () => {
       setLoading(false);
     }
   }, []);
+
+  // The Models header's Refresh.
+  useEffect(() => {
+    if (refreshKey) loadData();
+  }, [refreshKey, loadData]);
 
   useEffect(() => {
     const activePollCleanups = pollCleanups.current;
@@ -794,7 +798,6 @@ const TrainingPage = () => {
           onInstall={handleInstall}
           installing={installing}
           onRemove={handleRemove}
-          onRefresh={loadData}
         />
 
         {readiness ? (
@@ -853,5 +856,7 @@ const TrainingPage = () => {
     </div>
   );
 };
+
+TrainingPage.propTypes = { refreshKey: PropTypes.number };
 
 export default TrainingPage;
