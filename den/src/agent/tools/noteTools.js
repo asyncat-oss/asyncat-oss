@@ -106,22 +106,35 @@ Block types:
   barChart/lineChart/areaChart → properties: { data: { labels: ["A","B","C"], datasets: [{ label: "S1", data: [10,20,30] }] } }
   pieChart/donutChart          → properties: { data: { labels: ["A","B"], datasets: [{ label: "S", data: [60,40] }] } }
 
-Banner (top of note): { type: "gradient", gradient: "linear-gradient(45deg, #667eea, #764ba2)" }
-  or: { type: "color", color: "#4f46e5" }
-  Presets: Ocean "linear-gradient(45deg,#667eea,#764ba2)" · Sunset "linear-gradient(45deg,#FF6B6B,#FFE66D)" · Forest "linear-gradient(45deg,#11998e,#38ef7d)" · Cosmic "linear-gradient(45deg,#2E3192,#1BFFFF)"
+Banner: leave it out. Only when the user asks for one, a plain colour band: { type: "color", color: "#e5e7eb" }.
+The note's title already shows above the blocks: don't start them with a heading that repeats it.
 `.trim();
+
+// Notes made by agents stay calm: no gradient banners (a plain colour only),
+// and no first heading that only repeats the title shown above it.
+function agentBanner(banner) {
+  if (!banner || typeof banner !== 'object') return null;
+  if (banner.type !== 'color' || typeof banner.color !== 'string' || !banner.color.trim()) return null;
+  return { type: 'color', color: banner.color.trim() };
+}
+
+function withoutRepeatedTitle(blocks, title) {
+  const plain = (value) => String(value || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const [first, ...rest] = blocks;
+  if (first && /^heading[123]$/.test(first.type) && title && plain(first.content) === plain(title)) return rest;
+  return blocks;
+}
 
 // ── create_note ──────────────────────────────────────────────────────────────
 
 export const createNoteTool = {
   name: 'create_note',
-  description: `Create a rich note saved to the user's Notes library. Always use the "blocks" array for rich formatting — it supports headings, callouts, code, tables, charts, banners, and more. The note opens as a full block editor in the chat side panel.
+  description: `Create a rich note saved to the user's Notes library. Always use the "blocks" array for rich formatting — it supports headings, callouts, code, tables, charts and more. The note opens as a full block editor in the chat side panel.
 
 ${BLOCK_SCHEMA_DESC}
 
 Example:
-{ "title": "Plan", "banner": { "type": "gradient", "gradient": "linear-gradient(45deg, #667eea, #764ba2)" }, "blocks": [
-  { "type": "heading1", "content": "Project Plan" },
+{ "title": "Project plan", "blocks": [
   { "type": "callout", "content": "Q3 roadmap tracker.", "properties": { "type": "info", "title": "Overview" } },
   { "type": "heading2", "content": "Goals" },
   { "type": "bulletList", "content": "<strong>Launch</strong> new onboarding flow" },
@@ -142,16 +155,16 @@ Example:
       },
       banner: {
         type: 'object',
-        description: 'Optional banner at the top of the note. { "type": "gradient"|"color", "gradient": "css-string" | "color": "#hex" }',
+        description: 'Leave out unless the user asks for one: a plain colour band, { "type": "color", "color": "#hex" }.',
       },
     },
     required: ['title'],
   },
   execute: async (args, context) => {
     try {
-      const rawBlocks = args.blocks?.length
+      const rawBlocks = withoutRepeatedTitle(args.blocks?.length
         ? normalizeBlocks(args.blocks)
-        : textToBlocks(args.content || '');
+        : textToBlocks(args.content || ''), args.title);
 
       const htmlContent = blocksToHtml(rawBlocks);
 
@@ -162,12 +175,8 @@ Example:
         blocks: rawBlocks,
       };
 
-      if (args.banner) {
-        metadata.banner = {
-          ...args.banner,
-          setAt: new Date().toISOString(),
-        };
-      }
+      const banner = agentBanner(args.banner);
+      if (banner) metadata.banner = { ...banner, setAt: new Date().toISOString() };
 
       const note = await createNote({
         title: args.title || 'Untitled note',
@@ -192,7 +201,7 @@ Example:
 
 export const updateNoteTool = {
   name: 'update_note',
-  description: 'Update the title and/or content of an existing note. Use "blocks" array to set rich content (same schema as create_note). Pass "banner" to add/change the banner, or null to remove it.',
+  description: 'Update the title and/or content of an existing note. Use "blocks" array to set rich content (same schema as create_note). Pass "banner" (a plain colour, only when the user asks) to set it, or null to remove it.',
   category: 'notes',
   permission: PermissionLevel.SAFE,
   parameters: {
@@ -208,7 +217,7 @@ export const updateNoteTool = {
       },
       banner: {
         type: 'object',
-        description: 'Update the banner. { "type": "gradient"|"color", "gradient": "css" | "color": "#hex" }. Pass null to remove.',
+        description: 'A plain colour band, { "type": "color", "color": "#hex" }, only when the user asks. Pass null to remove.',
       },
     },
     required: ['note_id'],
@@ -241,10 +250,11 @@ export const updateNoteTool = {
 
       if ('banner' in args) {
         const meta = updates.metadata || { ...existingMeta };
+        const banner = agentBanner(args.banner);
         if (args.banner === null) {
           delete meta.banner;
-        } else {
-          meta.banner = { ...args.banner, setAt: new Date().toISOString() };
+        } else if (banner) {
+          meta.banner = { ...banner, setAt: new Date().toISOString() };
         }
         updates.metadata = meta;
       }
