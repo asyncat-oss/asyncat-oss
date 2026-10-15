@@ -19,13 +19,13 @@ import {
   useMemo,
 } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { flushSync } from "react-dom";
 import { MessageInputV2 } from "./components/input/MessageInputV2";
 import AgentRunFeed, { CurrentPlanPanel, buildEventSegments } from './components/agent/AgentRunFeed';
 import { extractLocalhostUrl } from './utils/localhostUrl.js';
 import CommandCenterSidePanel from './components/sidebars/CommandCenterSidePanel';
 import ChatFloatingNav from './components/nav/ChatFloatingNav';
 import ConversationLoadingSkeleton from './components/loading/ConversationLoadingSkeleton';
-import DeleteConfirmationModal from "./components/modals/DeleteConfirmationModal";
 import { useAudioStatus } from "./hooks/useAudioStatus";
 import { useAgentNotifications } from './hooks/useAgentNotifications';
 import { catsApi } from './api/catsApi.js';
@@ -35,6 +35,12 @@ import useActiveBrainStatus from "./hooks/useActiveBrainStatus.js";
 import { useChatModels } from "./hooks/useChatModels.js";
 import { useUiPreferences } from '../contexts/UiPreferencesContext.jsx';
 import { useToast, errorDetail } from '../components/toastContext.js';
+import { useConfirm } from '../components/confirmContext.js';
+import { Menu, MenuItem } from '../components/ui/Menu.jsx';
+import Popover from '../components/ui/Popover.jsx';
+import { useLayer } from '../components/ui/floating.js';
+import IconButton from '../components/ui/IconButton.jsx';
+import { CONTROL_CLASS } from '../components/ui/Field.jsx';
 import { chatApi, agentApi, gitApi } from "./api";
 import { aiProviderApi, audioApi } from "../Settings/settingApi.js";
 import { cleanReasoningAnswer } from "./utils/reasoningParser.js";
@@ -57,6 +63,8 @@ import {
   PenLine,
   Search,
   MessageSquareQuote,
+  Loader2,
+  Check,
 } from "lucide-react";
 import AgentAvatar from "../Agent/AgentAvatar.jsx";
 import { useAgents } from "../Agent/useAgents.js";
@@ -86,16 +94,58 @@ const TerminalPanel = lazy(() => import('./components/sidebars/TerminalPanel'));
 const EMPTY_AGENT_EVENTS = [];
 
 function getVoicePlaceholder(sttReady, ttsReady, fallback) {
-  if (sttReady && ttsReady) {
-    return "Full voice active - click the mic to speak, and replies will play aloud...";
-  }
-  if (sttReady) {
-    return "Speech input active - click the mic to dictate, then send your message...";
-  }
-  if (ttsReady) {
-    return "Speech output active - type a message and play replies aloud...";
-  }
+  if (sttReady && ttsReady) return "Ask anything, or press the mic to talk…";
+  if (sttReady) return "Ask anything, or press the mic to dictate…";
   return fallback;
+}
+
+// A header button that opens a panel: neutral, and selected while its panel shows.
+function panelToggleClass(active, compact = false) {
+  return `relative inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/40 ${
+    compact ? 'h-7 rounded-md px-2 text-xs' : 'h-8 rounded-lg px-2 text-xs sm:px-2.5 sm:text-sm'
+  } ${active ? 'bg-selected text-fg' : 'text-fg-muted hover:bg-hover hover:text-fg'}`;
+}
+
+// A small count beside a header button's label.
+const COUNT_CLASS = 'rounded-full bg-hover px-1.5 py-0.5 text-[11px] leading-none tabular-nums text-fg-subtle';
+
+// The rename field in the Branches popover. onDone(name) saves the new name
+// and onDone(null) keeps the old one; `fromKey` is true for Enter and Escape.
+// Enter or leaving the field saves, and Escape cancels. While it is open it is
+// a layer above the popover, so Escape reaches it instead of closing the
+// popover (which would blur the field and save the half-typed name).
+function BranchNameField({ value, onChange, onDone }) {
+  const inputRef = useRef(null);
+  const doneRef = useRef(false);
+  useLayer(true, inputRef);
+  const finish = (name, fromKey) => {
+    doneRef.current = true;
+    onDone(name, fromKey);
+  };
+  return (
+    <input
+      ref={inputRef}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && value.trim()) {
+          // Or the key would also press the rename button that gets focus next.
+          e.preventDefault();
+          finish(value, true);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
+          finish(null, true);
+        }
+      }}
+      onBlur={() => {
+        if (!doneRef.current) finish(value.trim() ? value : null, false);
+      }}
+      aria-label="Branch name"
+      className={`h-7 px-2 text-xs ${CONTROL_CLASS}`}
+      autoFocus
+    />
+  );
 }
 
 function getArtifactIdentity(artifact = {}) {
@@ -247,11 +297,11 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
   const scrollContainerRef = useRef(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
 
+  const confirm = useConfirm();
   const exportMenuRef = useRef(null);
   const branchMenuRef = useRef(null);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState("");
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showBranchMenu, setShowBranchMenu] = useState(false);
   const [editingBranchId, setEditingBranchId] = useState(null);
@@ -456,7 +506,6 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     }
   }, [currentConversationId, currentConversationIdRef, isTemporaryChat, setConversationMetadata, toast]);
   const [agentLoadingSession, setAgentLoadingSession] = useState(false);
-  const [showDeleteAgentConfirm, setShowDeleteAgentConfirm] = useState(false);
   // Track whether we're on an xl+ (≥1280px) viewport so we can skip mounting
   // the mobile-overlay SidePanel on desktop. CSS display:none alone is NOT
   // enough — a hidden <webview> still runs JS and plays audio in Electron.
@@ -729,28 +778,6 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
       });
     }
   }, [messages, scrollToBottom]);
-
-  useEffect(() => {
-    if (!showExportMenu) return;
-    const handler = (e) => {
-      if (!exportMenuRef.current?.contains(e.target)) {
-        setShowExportMenu(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [showExportMenu]);
-
-  useEffect(() => {
-    if (!showBranchMenu) return;
-    const handler = (e) => {
-      if (!branchMenuRef.current?.contains(e.target)) {
-        setShowBranchMenu(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [showBranchMenu]);
 
   const refreshGitState = useCallback(async () => {
     if (!workingContext?.workingDir) {
@@ -1110,6 +1137,26 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     setConversationMetadata,
   ]);
 
+  // Ends a branch rename: saves `name`, or keeps the old name when it is null.
+  // After Enter or Escape, focus goes back to that branch's rename button, so
+  // a second Escape closes the popover.
+  const finishBranchRename = useCallback((branchId, name, fromKey) => {
+    const finish = () => {
+      if (name) {
+        handleRenameBranch(branchId, name);
+      } else {
+        setEditingBranchId(null);
+        setBranchNameDraft('');
+      }
+    };
+    if (!fromKey) {
+      finish();
+      return;
+    }
+    flushSync(finish);
+    document.querySelector(`[data-branch-rename="${CSS.escape(branchId)}"]`)?.focus({ preventScroll: true });
+  }, [handleRenameBranch]);
+
   const handleStartRename = useCallback(() => {
     setEditTitle(conversationTitle || "");
     setIsEditingTitle(true);
@@ -1158,7 +1205,6 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
       console.error("Failed to delete conversation:", error);
       toast.error("Couldn't delete the chat", { detail: errorDetail(error) });
     }
-    setShowDeleteConfirm(false);
   }, [
     currentConversationId,
     handleClearConversation,
@@ -1166,6 +1212,17 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     triggerConversationRefresh,
     toast,
   ]);
+
+  // The trash button in the header: the same question the sidebar asks.
+  const askDeleteConversation = useCallback(async () => {
+    const ok = await confirm({
+      title: 'Delete chat?',
+      message: `"${conversationTitle || 'Untitled conversation'}" will be moved to Trash, where you can restore it.`,
+      confirmLabel: 'Move to Trash',
+      destructive: true,
+    });
+    if (ok) handleDeleteConversation();
+  }, [confirm, conversationTitle, handleDeleteConversation]);
 
   const handleKeyDown = useCallback(
     (e) => {
@@ -2309,25 +2366,6 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
     try { localStorage.setItem('asyncat_reasoning_effort', value); } catch { /* localStorage may be unavailable */ }
   }, []);
 
-  const handleAgentDelete = useCallback(async () => {
-    if (!agentCurrentSessionId) return;
-    try {
-      await agentApi.deleteSession(agentCurrentSessionId);
-      setCurrentChatRun({
-        events: [],
-        goal: '',
-        session: null,
-        sessionId: null,
-        conversationHistory: [],
-        streamingText: '',
-        streamingReasoning: '',
-        running: false,
-      });
-      triggerConversationRefresh();
-    } catch { /* non-fatal */ }
-    setShowDeleteAgentConfirm(false);
-  }, [agentCurrentSessionId, setCurrentChatRun, triggerConversationRefresh]);
-
   const persistedAgentEvents = useMemo(() => {
     if (agentEvents.length > 0) return agentEvents;
     return buildEventsFromMessages(messages);
@@ -2542,15 +2580,14 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                 : `${completed}/${plan.length} done`;
             })()
           : event.data?.thought || event.data?.description || event.data?.message || event.data?.answer || '';
+        // Colour only for how it ended; every other step is a grey dot.
         const dot = type === 'error'
-          ? 'bg-red-400'
+          ? 'bg-red-500'
           : type === 'answer'
-            ? 'bg-emerald-400'
-            : type === 'tool_start'
-              ? 'bg-blue-400'
-              : type === 'plan_update'
-                ? 'bg-indigo-400'
-                : 'bg-gray-300 dark:bg-gray-600';
+            ? 'bg-emerald-500'
+            : type === 'tool_start' || type === 'plan_update'
+              ? 'bg-fg-subtle'
+              : 'bg-line-strong';
         return { id: `${type}_${index}`, label, detail, dot };
       });
   }, [persistedAgentEvents]);
@@ -2667,13 +2704,9 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
 
   if (!commandCenterContext) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-indigo-200 dark:border-indigo-800 midnight:border-gray-800 border-t-indigo-600 dark:border-t-indigo-400 midnight:border-t-indigo-300 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-500 dark:text-gray-400 midnight:text-gray-400">
-            Initializing Command Center...
-          </p>
-        </div>
+      <div role="status" className="flex h-full items-center justify-center gap-2 text-[13px] text-fg-muted">
+        <Loader2 className="h-4 w-4 animate-spin text-fg-subtle" />
+        Loading chat…
       </div>
     );
   }
@@ -2733,16 +2766,14 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
             <button
               type="button"
               onClick={() => toggleSidePanelTab('code')}
-              className={`relative flex items-center gap-1.5 rounded-lg px-2 py-1.5 transition-colors text-sm font-medium ${
-                showActivitySidebar && sidePanelTab === 'code'
-                  ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
-                  : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
-              }`}
-              title="Code & Git"
+              aria-pressed={showActivitySidebar && sidePanelTab === 'code'}
+              aria-label="Code and Git"
+              className={panelToggleClass(showActivitySidebar && sidePanelTab === 'code')}
+              title="Code and Git"
             >
-              <Code2 className="w-4 h-4" />
+              <Code2 className="h-4 w-4" />
               {gitState?.detected && (
-                <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                <span className={COUNT_CLASS}>
                   {gitState.changedCount || 0}
                   {(gitState.ahead || gitState.behind)
                     ? ` · ↑${gitState.ahead || 0} ↓${gitState.behind || 0}`
@@ -2755,28 +2786,24 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
             <button
               type="button"
               onClick={() => toggleSidePanelTab('preview')}
-              className={`relative flex items-center gap-1.5 rounded-lg px-2 py-1.5 transition-colors text-sm font-medium ${
-                showActivitySidebar && sidePanelTab === 'preview'
-                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 midnight:bg-blue-950/30'
-                  : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
-              }`}
+              aria-pressed={showActivitySidebar && sidePanelTab === 'preview'}
+              aria-label="Browser"
+              className={panelToggleClass(showActivitySidebar && sidePanelTab === 'preview')}
               title="Browser"
             >
-              <Globe className="w-4 h-4" />
+              <Globe className="h-4 w-4" />
             </button>
           )}
           {!isTemporaryChat && workingContext?.workingDir && (
             <button
               type="button"
               onClick={() => toggleSidePanelTab('terminal')}
-              className={`relative flex items-center gap-1.5 rounded-lg px-2 py-1.5 transition-colors text-sm font-medium ${
-                showTerminalDock
-                  ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
-                  : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
-              }`}
+              aria-pressed={showTerminalDock}
+              aria-label="Terminal"
+              className={panelToggleClass(showTerminalDock)}
               title="Terminal"
             >
-              <SquareTerminal className="w-4 h-4" />
+              <SquareTerminal className="h-4 w-4" />
             </button>
           )}
           <button
@@ -2789,14 +2816,10 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
             }}
             aria-pressed={isTemporaryChat}
             aria-label={isTemporaryChat ? TEMPORARY_CHAT.end : TEMPORARY_CHAT.start}
-            className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium transition-colors ${
-              isTemporaryChat
-                ? 'bg-selected text-fg'
-                : 'text-fg-subtle hover:bg-hover hover:text-fg'
-            }`}
+            className={panelToggleClass(isTemporaryChat)}
             title={isTemporaryChat ? TEMPORARY_CHAT.end : TEMPORARY_CHAT.start}
           >
-            <MessageCircleDashed className="w-4 h-4" />
+            <MessageCircleDashed className="h-4 w-4" />
           </button>
         </div>
         <div className="flex flex-col items-center justify-center flex-1 px-6 py-8">
@@ -2847,7 +2870,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
               autoFocus={true}
               placeholder={
                 agentRunning
-                  ? "Agent is working..."
+                  ? "Working…"
                   : isTemporaryChat
                   ? TEMPORARY_CHAT.placeholder
                   : getVoicePlaceholder(
@@ -2934,7 +2957,8 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                         onChange={(e) => setEditTitle(e.target.value)}
                         onKeyDown={handleKeyDown}
                         onBlur={handleSaveRename}
-                        className="h-8 min-w-0 w-full max-w-full rounded-md border border-gray-300 bg-gray-50 px-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 midnight:border-slate-700 midnight:bg-slate-900 midnight:text-slate-100"
+                        aria-label="Chat name"
+                        className={`h-8 min-w-0 max-w-full px-2 text-[14px] ${CONTROL_CLASS}`}
                         autoFocus
                       />
                     ) : currentConversationId && conversationTitle ? (
@@ -2948,7 +2972,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                       </button>
                     ) : (
                       <h1 className="min-w-0 flex-1 truncate text-[14px] font-medium text-fg">
-                        {conversationTitle || "Untitled Chat"}
+                        {conversationTitle || "Untitled chat"}
                       </h1>
                     )}
                     {isTemporaryChat && (
@@ -2973,11 +2997,8 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                       <button
                         type="button"
                         onClick={() => toggleSidePanelTab('preview')}
-                        className={`inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-medium transition-colors sm:px-2.5 sm:text-sm ${
-                          showActivitySidebar && sidePanelTab === 'preview'
-                            ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 midnight:bg-blue-950/30 midnight:text-blue-300'
-                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
-                        }`}
+                        aria-pressed={showActivitySidebar && sidePanelTab === 'preview'}
+                        className={panelToggleClass(showActivitySidebar && sidePanelTab === 'preview')}
                         title="Browser"
                       >
                         <Globe className="h-4 w-4" />
@@ -2986,110 +3007,110 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                     )}
 
                     {!isTemporaryChat && hasConversationBranches && (
-                      <div ref={branchMenuRef} className="relative">
+                      <>
                         <button
+                          ref={branchMenuRef}
                           type="button"
                           onClick={() => setShowBranchMenu(v => !v)}
-                          className={`inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-medium transition-colors sm:px-2.5 sm:text-sm ${
-                            showBranchMenu
-                              ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
-                              : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
-                          }`}
+                          aria-haspopup="dialog"
+                          aria-expanded={showBranchMenu}
+                          className={panelToggleClass(showBranchMenu)}
                           title="Conversation branches"
                         >
                           <GitBranch className="h-4 w-4" />
                           <span className="hidden sm:inline">Branches</span>
-                          <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-                            {conversationBranches.length}
-                          </span>
+                          <span className={COUNT_CLASS}>{conversationBranches.length}</span>
                         </button>
-                        {showBranchMenu && (
-                          <div className="absolute right-0 top-full z-50 mt-1.5 w-72 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-900">
-                            <div className="border-b border-gray-100 px-3 py-2 dark:border-gray-800 midnight:border-slate-800">
-                              <div className="text-xs font-semibold text-gray-700 dark:text-gray-200">Conversation branches</div>
-                              <div className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">Switch between alternate continuations.</div>
-                            </div>
-                            <div className="max-h-72 overflow-y-auto p-1">
-                              {conversationBranches.map(branch => (
-                                <div
-                                  key={branch.id}
-                                  className={`group flex w-full items-start gap-2 rounded-md px-2 py-2 transition-colors ${
-                                    branch.active
-                                      ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100'
-                                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800/70 dark:hover:text-gray-100'
-                                  }`}
-                                >
-                                  <GitBranch className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${branch.active ? 'text-blue-500' : 'text-gray-400'}`} />
-                                  {editingBranchId === branch.id ? (
-                                    <span className="min-w-0 flex-1">
-                                      <input
-                                        value={branchNameDraft}
-                                        onChange={(e) => setBranchNameDraft(e.target.value)}
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter') handleRenameBranch(branch.id, branchNameDraft);
-                                          if (e.key === 'Escape') {
-                                            setEditingBranchId(null);
-                                            setBranchNameDraft('');
-                                          }
-                                        }}
-                                        onBlur={() => handleRenameBranch(branch.id, branchNameDraft)}
-                                        className="w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-800 outline-none focus:border-gray-300 focus:ring-2 focus:ring-gray-100 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100 dark:focus:ring-gray-800"
-                                        autoFocus
-                                      />
-                                    </span>
-                                  ) : (
-                                    <>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleSwitchBranch(branch.id)}
-                                        disabled={branch.active || agentRunning}
-                                        className="min-w-0 flex-1 text-left disabled:cursor-default"
-                                      >
-                                        <span className="block truncate text-xs font-semibold">{branch.label}</span>
-                                        <span className="mt-0.5 block text-[11px] text-gray-400 dark:text-gray-500">
-                                          {branch.messageCount} messages{branch.active ? ' · current' : ''}
-                                        </span>
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setEditingBranchId(branch.id);
-                                          setBranchNameDraft(branch.label || '');
-                                        }}
-                                        className="mt-0.5 rounded p-1 text-gray-300 opacity-0 transition-colors hover:bg-white hover:text-gray-600 group-hover:opacity-100 dark:hover:bg-gray-950 dark:hover:text-gray-200"
-                                        title="Rename branch"
-                                      >
-                                        <Edit2 className="h-3.5 w-3.5" />
-                                      </button>
-                                    </>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
+                        <Popover
+                          anchorRef={branchMenuRef}
+                          open={showBranchMenu}
+                          onClose={() => {
+                            setShowBranchMenu(false);
+                            // Closing it mid-rename (a click outside, say) saves
+                            // the name, as leaving the field does.
+                            if (editingBranchId) finishBranchRename(editingBranchId, branchNameDraft.trim() ? branchNameDraft : null, false);
+                          }}
+                          placement="bottom-end"
+                          width={288}
+                          label="Conversation branches"
+                        >
+                          <div className="-m-2">
+                          <div className="px-2.5 pb-1.5 pt-1.5">
+                            <div className="text-[13px] font-medium text-fg">Branches</div>
+                            <div className="mt-0.5 text-[12px] leading-4 text-fg-subtle">Other ways this chat went. Pick one to switch to it.</div>
                           </div>
-                        )}
-                      </div>
+                          <div className="max-h-72 overflow-y-auto">
+                            {conversationBranches.map(branch => (
+                              <div
+                                key={branch.id}
+                                className={`group flex w-full items-start gap-2 rounded-lg px-2.5 py-2 transition-colors ${
+                                  branch.active ? 'bg-selected text-fg' : 'text-fg-muted hover:bg-hover hover:text-fg'
+                                }`}
+                              >
+                                <GitBranch className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${branch.active ? 'text-fg' : 'text-fg-subtle'}`} />
+                                {editingBranchId === branch.id ? (
+                                  <span className="min-w-0 flex-1">
+                                    <BranchNameField
+                                      value={branchNameDraft}
+                                      onChange={setBranchNameDraft}
+                                      onDone={(name, fromKey) => finishBranchRename(branch.id, name, fromKey)}
+                                    />
+                                  </span>
+                                ) : (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSwitchBranch(branch.id)}
+                                      disabled={branch.active || agentRunning}
+                                      className="min-w-0 flex-1 rounded text-left outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:cursor-default"
+                                    >
+                                      <span className="block truncate text-[13px] font-medium">{branch.label}</span>
+                                      <span className="mt-0.5 block text-[11px] text-fg-subtle">
+                                        {branch.messageCount} messages{branch.active ? ' · current' : ''}
+                                      </span>
+                                    </button>
+                                    {branch.active ? <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-fg" /> : null}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingBranchId(branch.id);
+                                        setBranchNameDraft(branch.label || '');
+                                      }}
+                                      data-branch-rename={branch.id}
+                                      aria-label={`Rename ${branch.label}`}
+                                      className="rounded-md p-1 text-fg-subtle opacity-0 outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-accent/40 group-hover:opacity-100"
+                                      title="Rename branch"
+                                    >
+                                      <Edit2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                          </div>
+                        </Popover>
+                      </>
                     )}
 
                     {hasConversationContent && (
-                      <div ref={exportMenuRef} className="relative">
-                        <button
-                          type="button"
+                      <>
+                        <IconButton
+                          ref={exportMenuRef}
+                          icon={Download}
+                          label="Export conversation"
+                          side="bottom"
                           onClick={() => setShowExportMenu((v) => !v)}
-                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300 midnight:hover:bg-gray-800"
-                          title="Export conversation"
-                        >
-                          <Download className="w-4 h-4" />
-                        </button>
-                        {showExportMenu && (
-                          <div className="absolute right-0 top-full mt-1.5 z-50 w-40 bg-white dark:bg-gray-900 midnight:bg-slate-900 border border-gray-200 dark:border-gray-700 midnight:border-slate-700 rounded-lg shadow-xl overflow-hidden">
-                            <button type="button" onClick={() => { handleExportMarkdown(); setShowExportMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">Markdown (.md)</button>
-                            <button type="button" onClick={() => { handleExportHTML(); setShowExportMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">HTML (.html)</button>
-                            <button type="button" onClick={() => { handleExportJSON(); setShowExportMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">JSON (.json)</button>
-                            <button type="button" onClick={() => { handleExportPDF(); setShowExportMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">PDF (print)</button>
-                          </div>
-                        )}
-                      </div>
+                          aria-haspopup="menu"
+                          aria-expanded={showExportMenu}
+                        />
+                        <Menu anchorRef={exportMenuRef} open={showExportMenu} onClose={() => setShowExportMenu(false)} placement="bottom-end" width={184} label="Export conversation">
+                          <MenuItem label="Markdown (.md)" onSelect={handleExportMarkdown} />
+                          <MenuItem label="HTML (.html)" onSelect={handleExportHTML} />
+                          <MenuItem label="JSON (.json)" onSelect={handleExportJSON} />
+                          <MenuItem label="PDF (print)" onSelect={handleExportPDF} />
+                        </Menu>
+                      </>
                     )}
 
                     {isTemporaryChat && (
@@ -3101,7 +3122,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                         }}
                         aria-pressed="true"
                         aria-label={TEMPORARY_CHAT.end}
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-selected text-fg transition-colors hover:bg-hover"
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-selected text-fg outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-accent/40"
                         title={TEMPORARY_CHAT.end}
                       >
                         <MessageCircleDashed className="h-4 w-4" />
@@ -3109,14 +3130,13 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                     )}
 
                     {currentConversationId && conversationTitle && (
-                      <button
-                        type="button"
-                        onClick={() => setShowDeleteConfirm(true)}
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-red-500 dark:hover:bg-gray-800 dark:hover:text-red-400 midnight:hover:bg-slate-800"
-                        title="Delete conversation"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <IconButton
+                        icon={Trash2}
+                        label="Delete conversation"
+                        side="bottom"
+                        onClick={askDeleteConversation}
+                        className="hover:text-red-600 dark:hover:text-red-400"
+                      />
                     )}
                   </div>
                 </div>
@@ -3130,17 +3150,13 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                     <button
                       type="button"
                       onClick={() => toggleSidePanelTab('code')}
-                      className={`inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs font-medium transition-colors ${
-                        showActivitySidebar && sidePanelTab === 'code'
-                          ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
-                          : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
-                      }`}
-                      title="Show code files, Git and copies"
+                      className={panelToggleClass(showActivitySidebar && sidePanelTab === 'code', true)}
+                      title="Code files, Git and copies"
                     >
                       <Code2 className="h-3.5 w-3.5" />
                       Code
                       {gitState?.detected && (
-                        <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                        <span className={COUNT_CLASS}>
                           {gitState.changedCount || 0}
                           {(gitState.ahead || gitState.behind) ? ` · ${gitState.ahead || 0}/${gitState.behind || 0}` : ''}
                         </span>
@@ -3151,20 +3167,13 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                     <button
                       type="button"
                       onClick={() => toggleSidePanelTab('terminal')}
-                      className={`relative inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs font-medium transition-colors ${
-                        showTerminalDock
-                          ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
-                          : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
-                      }`}
-                      title="Terminal & active processes"
+                      className={panelToggleClass(showTerminalDock, true)}
+                      title="Terminal and running processes"
                     >
                       <SquareTerminal className="h-3.5 w-3.5" />
                       Terminal
                       {detectedPreviewUrl && !showTerminalDock && (
-                        <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
-                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-                          <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
-                        </span>
+                        <span role="img" className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-label="A server is running" title="A server is running" />
                       )}
                     </button>
                     </>}
@@ -3173,11 +3182,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                       <button
                         type="button"
                         onClick={() => toggleSidePanelTab('steps')}
-                        className={`inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs font-medium transition-colors ${
-                          showActivitySidebar && sidePanelTab === 'steps'
-                            ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
-                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
-                        }`}
+                        className={panelToggleClass(showActivitySidebar && sidePanelTab === 'steps', true)}
                         title="Show steps"
                       >
                         <PanelRightOpen className="h-3.5 w-3.5" />
@@ -3189,16 +3194,12 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                       <button
                         type="button"
                         onClick={() => toggleSidePanelTab('artifacts')}
-                        className={`inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs font-medium transition-colors ${
-                          showActivitySidebar && sidePanelTab === 'artifacts'
-                            ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
-                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
-                        }`}
+                        className={panelToggleClass(showActivitySidebar && sidePanelTab === 'artifacts', true)}
                         title="Show artifacts"
                       >
                         <FilePlus className="h-3.5 w-3.5" />
                         Artifacts
-                        <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                        <span className={COUNT_CLASS}>
                           {conversationArtifacts.length}
                         </span>
                       </button>
@@ -3208,16 +3209,12 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                       <button
                         type="button"
                         onClick={() => toggleSidePanelTab('media')}
-                        className={`inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs font-medium transition-colors ${
-                          showActivitySidebar && sidePanelTab === 'media'
-                            ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
-                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
-                        }`}
+                        className={panelToggleClass(showActivitySidebar && sidePanelTab === 'media', true)}
                         title="Show all sources and media"
                       >
                         <Link2 className="h-3.5 w-3.5" />
                         Sources
-                        <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                        <span className={COUNT_CLASS}>
                           {sourceCatalog.totalCount}
                         </span>
                       </button>
@@ -3227,16 +3224,12 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                       <button
                         type="button"
                         onClick={() => toggleSidePanelTab('saved')}
-                        className={`inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs font-medium transition-colors ${
-                          showActivitySidebar && sidePanelTab === 'saved'
-                            ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 midnight:bg-slate-800'
-                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 midnight:hover:bg-slate-800'
-                        }`}
+                        className={panelToggleClass(showActivitySidebar && sidePanelTab === 'saved', true)}
                         title="Show bookmarked messages"
                       >
                         <BookMarked className="h-3.5 w-3.5" />
                         Saved
-                        <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                        <span className={COUNT_CLASS}>
                           {savedItemsCount}
                         </span>
                       </button>
@@ -3338,7 +3331,7 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
                     ? 'Working…'
                     : isTemporaryChat
                     ? TEMPORARY_CHAT.placeholder
-                    : getVoicePlaceholder(sttReady, ttsReady, "Ask anything...")
+                    : getVoicePlaceholder(sttReady, ttsReady, "Ask anything…")
                 }
                 hasMessages={hasConversationContent}
                 toolsEnabled={toolsEnabled}
@@ -3380,23 +3373,23 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
         {terminalEverOpened && workingContext?.workingDir && (!isXLScreen || workbenchPreferences.terminalPosition === 'bottom') && (
           <section
             style={{ height: showTerminalDock ? bottomDockHeight : 0 }}
-            className="relative shrink-0 overflow-hidden border-t border-gray-200 bg-white transition-[height] duration-150 dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-950"
+            className="relative shrink-0 overflow-hidden border-t border-line bg-canvas transition-[height] duration-150"
             aria-hidden={!showTerminalDock}
           >
             {showTerminalDock && (
-              <div onMouseDown={handleBottomDockDragStart} className="absolute inset-x-0 top-0 z-20 h-1.5 cursor-row-resize hover:bg-indigo-400/20" title="Drag to resize terminal" />
+              <div onMouseDown={handleBottomDockDragStart} className="absolute inset-x-0 top-0 z-20 h-1.5 cursor-row-resize transition-colors hover:bg-line-strong" title="Drag to resize the terminal" />
             )}
             <div className="flex h-full min-h-0 flex-col pt-1">
-              <div className="flex h-8 shrink-0 items-center gap-2 border-b border-gray-200 px-3 dark:border-gray-700 midnight:border-slate-700">
-                <SquareTerminal className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />
-                <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">Terminal</span>
+              <div className="flex h-9 shrink-0 items-center gap-2 border-b border-line pl-3 pr-1.5">
+                <SquareTerminal className="h-3.5 w-3.5 text-fg-subtle" />
+                <span className="text-[12px] font-medium text-fg-muted">Terminal</span>
                 {workingContext?.workingDir && (
-                  <span className="ml-2 flex min-w-0 items-center gap-1 text-[10px] text-gray-400" title={workingContext.workingDir}>
+                  <span className="ml-2 flex min-w-0 items-center gap-1 text-[11px] text-fg-subtle" title={workingContext.workingDir}>
                     <FolderOpen className="h-3 w-3 shrink-0" /><span className="truncate">{workingContext.workingDir}</span>
                   </span>
                 )}
                 <div className="flex-1" />
-                <button type="button" onClick={() => { setShowTerminalDock(false); try { localStorage.setItem('asyncat_show_terminal_dock', 'false'); } catch { /* noop */ } }} className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200" title="Close terminal dock"><X className="h-3.5 w-3.5" /></button>
+                <IconButton icon={X} label="Close the terminal" size="sm" side="bottom" onClick={() => { setShowTerminalDock(false); try { localStorage.setItem('asyncat_show_terminal_dock', 'false'); } catch { /* noop */ } }} />
               </div>
               <div className="min-h-0 flex-1">
                 <Suspense fallback={null}><TerminalPanel workingDir={workingContext?.workingDir || null} agentOutput={agentTerminalOutput} visible={showTerminalDock} /></Suspense>
@@ -3409,15 +3402,15 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
       {shouldRenderSidePanel && (
         <aside
           style={{ width: sidePanelWidth }}
-          className="hidden xl:flex xl:shrink-0 relative border-l border-gray-200 dark:border-gray-700 midnight:border-slate-700"
+          className="hidden xl:flex xl:shrink-0 relative border-l border-line"
         >
           {/* Drag handle — hover shows a subtle line, cursor changes to resize */}
           <div
             onMouseDown={handlePanelDragStart}
-            className="absolute left-0 top-0 bottom-0 w-1.5 z-10 cursor-col-resize group hover:bg-indigo-400/20 transition-colors"
+            className="absolute left-0 top-0 bottom-0 w-1.5 z-10 cursor-col-resize group transition-colors hover:bg-hover"
             title="Drag to resize"
           >
-            <div className="absolute left-0.5 top-1/2 -translate-y-1/2 h-10 w-0.5 rounded-full bg-transparent group-hover:bg-indigo-400 transition-colors" />
+            <div className="absolute left-0.5 top-1/2 -translate-y-1/2 h-10 w-0.5 rounded-full bg-transparent transition-colors group-hover:bg-fg-subtle" />
           </div>
           <div className="flex-1 min-w-0">
             <CommandCenterSidePanel
@@ -3460,18 +3453,18 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
       {terminalEverOpened && workingContext?.workingDir && isXLScreen && workbenchPreferences.terminalPosition === 'right' && (
         <aside
           style={{ width: showTerminalDock ? sidePanelWidth : 0 }}
-          className="relative hidden shrink-0 overflow-hidden border-l border-gray-200 bg-white transition-[width] duration-150 xl:flex dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-950"
+          className="relative hidden shrink-0 overflow-hidden border-l border-line bg-canvas transition-[width] duration-150 xl:flex"
           aria-hidden={!showTerminalDock}
         >
           {showTerminalDock && (
-            <div onMouseDown={handlePanelDragStart} className="absolute inset-y-0 left-0 z-20 w-1.5 cursor-col-resize hover:bg-indigo-400/20" title="Drag to resize terminal" />
+            <div onMouseDown={handlePanelDragStart} className="absolute inset-y-0 left-0 z-20 w-1.5 cursor-col-resize transition-colors hover:bg-line-strong" title="Drag to resize the terminal" />
           )}
           <div className="flex min-w-0 flex-1 flex-col">
-            <div className="flex h-10 shrink-0 items-center gap-2 border-b border-gray-200 px-3 dark:border-gray-700 midnight:border-slate-700">
-              <SquareTerminal className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />
-              <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">Terminal</span>
+            <div className="flex h-10 shrink-0 items-center gap-2 border-b border-line pl-3 pr-1.5">
+              <SquareTerminal className="h-3.5 w-3.5 text-fg-subtle" />
+              <span className="text-[12px] font-medium text-fg-muted">Terminal</span>
               <div className="flex-1" />
-              <button type="button" onClick={() => { setShowTerminalDock(false); try { localStorage.setItem('asyncat_show_terminal_dock', 'false'); } catch { /* noop */ } }} className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200" title="Close terminal dock"><X className="h-3.5 w-3.5" /></button>
+              <IconButton icon={X} label="Close the terminal" size="sm" side="bottom" onClick={() => { setShowTerminalDock(false); try { localStorage.setItem('asyncat_show_terminal_dock', 'false'); } catch { /* noop */ } }} />
             </div>
             <div className="min-h-0 flex-1"><Suspense fallback={null}><TerminalPanel workingDir={workingContext?.workingDir || null} agentOutput={agentTerminalOutput} visible={showTerminalDock} /></Suspense></div>
           </div>
@@ -3482,14 +3475,15 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
           enough because Electron <webview> elements stay alive (play audio, run JS) even
           when hidden. By gating on !isXLScreen we guarantee only ONE webview mounts. */}
       {!isXLScreen && shouldRenderSidePanel && (
-        <div className="fixed inset-0 z-50 flex bg-black/35 xl:hidden">
+        // A sheet from the right edge, not a centred dialog, so it is built here.
+        <div className="fixed inset-0 z-50 flex bg-black/45 xl:hidden">
           <button
             type="button"
             className="flex-1"
             onClick={() => setShowActivitySidebar(false)}
             aria-label="Close side panel"
           />
-          <div className="h-full w-[min(24rem,92vw)] border-l border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900 midnight:border-slate-700 midnight:bg-slate-950">
+          <div className="h-full w-[min(24rem,92vw)] border-l border-line bg-canvas shadow-xl shadow-black/10 dark:shadow-black/40">
             <CommandCenterSidePanel
               activeTab={sidePanelTab}
               onClose={() => setShowActivitySidebar(false)}
@@ -3523,20 +3517,6 @@ const CommandCenterV2Enhanced = ({ agentSessionId = null }) => {
           </div>
         </div>
       )}
-
-      <DeleteConfirmationModal
-        isOpen={showDeleteConfirm}
-        onClose={() => setShowDeleteConfirm(false)}
-        onConfirm={handleDeleteConversation}
-        title={conversationTitle}
-      />
-
-      <DeleteConfirmationModal
-        isOpen={showDeleteAgentConfirm}
-        onClose={() => setShowDeleteAgentConfirm(false)}
-        onConfirm={handleAgentDelete}
-        title={agentCurrentGoal}
-      />
 
     </div>
   );
