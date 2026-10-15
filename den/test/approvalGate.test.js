@@ -108,6 +108,6 @@ test('a file tool called in a chat without a project says it needs one, not that
   const runtime = Object.assign(Object.create(AgentRuntime.prototype), { noProject: true, agentMode: 'action' });
   const writeFile = runtime._unavailableTool('write_file');
   assert.equal(writeFile.code, 'needs_project');
-  assert.match(writeFile.error, /needs a project with a folder/);
+  assert.match(writeFile.error, /need a project with a folder\. Open a project or add a folder/);
   assert.equal(runtime._unavailableTool('no_such_tool').code, 'unknown_tool');
 });

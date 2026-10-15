@@ -2018,7 +2018,7 @@ export class AgentRuntime {
     if (this.noProject && !NO_PROJECT_TOOL_CATEGORIES.has(tool.category)) {
       return {
         code: 'needs_project',
-        error: `"${name}" needs a project with a folder. Reading and writing files and running commands only work in a project: tell the user to open a project or add a folder, then ask again.`,
+        error: 'Reading and writing files and running commands need a project with a folder. Open a project or add a folder, then ask again.',
         reason: 'Needs a project with a folder',
         description: `Needs a project with a folder: ${name}`,
       };
