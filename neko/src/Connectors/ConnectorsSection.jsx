@@ -53,13 +53,15 @@ export default function ConnectorsSection() {
       {!loading && suggestions.length ? (
         <section aria-label="Suggested connectors">
           <h3 className="mb-2 text-[12px] font-medium text-fg-subtle">From the catalog</h3>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {/* One column on a phone; minmax(0, 1fr) so a long description
+              truncates instead of widening the column past the screen. */}
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {suggestions.map((entry) => (
               <button
                 key={entry.id}
                 type="button"
                 onClick={() => setAdding({ entry })}
-                className="flex items-center gap-2.5 rounded-xl border border-line px-3 py-2.5 text-left transition-colors hover:border-line-strong hover:bg-hover"
+                className="flex min-w-0 items-center gap-2.5 rounded-xl border border-line px-3 py-2.5 text-left transition-colors hover:border-line-strong hover:bg-hover"
               >
                 <ConnectorIcon title={entry.title} kind={entry.kind} />
                 <span className="min-w-0">

@@ -269,7 +269,7 @@ const LocalModelsPane = ({
               className="min-w-0 flex-1 bg-transparent font-mono text-[12.5px] text-fg outline-none placeholder:text-fg-subtle"
             />
           </label>
-          <div className="flex shrink-0 items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5 sm:shrink-0 sm:flex-nowrap">
             {window?.electronAPI?.openFilesDialog ? <Button size="md" variant="ghost" icon={File} onClick={chooseFile}>File</Button> : null}
             {window?.electronAPI?.openDirectory ? <Button size="md" variant="ghost" icon={FolderOpen} onClick={chooseFolder}>Folder</Button> : null}
             <Button
