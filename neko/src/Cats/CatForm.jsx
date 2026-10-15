@@ -251,7 +251,8 @@ export function SpaceSection({ form, set, cat = null }) {
         <RadioGroup
           label="Where it works"
           value={form.folderMode}
-          onChange={(value) => (value === 'custom' && !form.folder ? browse() : set({ folderMode: value }))}
+          // In the desktop app a folder is picked at once; elsewhere its path is typed below.
+          onChange={(value) => (value === 'custom' && !form.folder && window.electronAPI?.openDirectory ? browse() : set({ folderMode: value }))}
           options={choices.map((choice) => ({
             value: choice.value,
             label: choice.label,
