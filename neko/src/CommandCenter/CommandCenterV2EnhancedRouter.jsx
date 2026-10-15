@@ -1,15 +1,19 @@
 import { useEffect, useRef } from "react";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
 import { useCommandCenter } from './context/CommandCenterContextEnhanced';
+import { useToast } from '../components/toastContext';
 import CommandCenterV2EnhancedOriginal from "./CommandCenterV2Enhanced.jsx";
 
 const CommandCenterV2Enhanced = () => {
   const { conversationId, sessionId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
+  const toast = useToast();
   const { loadConversation, currentConversationId, handleNewConversation } = useCommandCenter();
   const loadedRouteConversationRef = useRef(null);
   const handledProjectStartRef = useRef(null);
+  const routeConversationIdRef = useRef(conversationId);
+  routeConversationIdRef.current = conversationId;
   const previousConversationIdRef = useRef(currentConversationId);
 
   useEffect(() => {
@@ -31,8 +35,19 @@ const CommandCenterV2Enhanced = () => {
     }
 
     loadedRouteConversationRef.current = conversationId;
-    loadConversation(conversationId);
-  }, [conversationId, currentConversationId, loadConversation]);
+    loadConversation(conversationId).then((result) => {
+      // A trashed or deleted chat (an old link, a row from before it went):
+      // say so and leave its dead address, so a message typed next starts a
+      // new chat that stays on screen.
+      if (!result?.notFound || routeConversationIdRef.current !== conversationId) return;
+      loadedRouteConversationRef.current = null;
+      navigate('/home', { replace: true });
+      toast.info('That chat was deleted', {
+        detail: 'It may still be in the Trash.',
+        action: { label: 'Open Trash', onClick: () => navigate('/trash') },
+      });
+    });
+  }, [conversationId, currentConversationId, loadConversation, navigate, toast]);
 
   // A new chat gets its own address as soon as it is saved, however it was
   // started (Home, a project page, Quick ask), so the sidebar marks it and a

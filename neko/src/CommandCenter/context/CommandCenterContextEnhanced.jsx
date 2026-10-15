@@ -563,12 +563,16 @@ export function CommandCenterProvider({ children, onProjectsChange }) {
         ? loadedMetadata.compactedConversationHistory
         : null;
       dispatch({ type: ActionTypes.SET_CONVERSATION_HISTORY, payload: compactedHistory || apiHistory.slice(-8) });
+      return { ok: true };
     } catch (error) {
-      if (requestId !== loadConversationRequestRef.current) return;
-      console.error('Load conversation error:', error);
+      if (requestId !== loadConversationRequestRef.current) return { ok: false, stale: true };
       dispatch({ type: ActionTypes.RESET_STATE, payload: { keepMode: true } });
       currentConversationIdRef.current = null;
+      // Trashed or deleted for good: the page that opened it says so.
+      if (error?.status === 404) return { ok: false, notFound: true };
+      console.error('Load conversation error:', error);
       dispatch({ type: ActionTypes.SET_ERROR, payload: 'Failed to load conversation' });
+      return { ok: false };
     } finally {
       if (requestId === loadConversationRequestRef.current) {
         dispatch({ type: ActionTypes.SET_CONVERSATION_LOADING, payload: false });
