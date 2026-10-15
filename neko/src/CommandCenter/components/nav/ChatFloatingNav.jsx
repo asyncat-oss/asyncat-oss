@@ -1,3 +1,5 @@
+// The chat's outline: a dot per message at the left edge, and on hover the
+// list of what was asked, to jump to.
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 export default function ChatFloatingNav({ items = [], scrollContainerRef }) {
@@ -60,8 +62,8 @@ export default function ChatFloatingNav({ items = [], scrollContainerRef }) {
               key={i}
               className={`block rounded-full transition-all duration-200 ${
                 i === activeIdx
-                  ? 'h-4 w-[3px] bg-accent'
-                  : 'h-[5px] w-[3px] bg-gray-300/70 dark:bg-gray-600/60'
+                  ? 'h-4 w-[3px] bg-fg-muted'
+                  : 'h-[5px] w-[3px] bg-line-strong'
               }`}
             />
           ))}
@@ -73,29 +75,29 @@ export default function ChatFloatingNav({ items = [], scrollContainerRef }) {
             open ? 'opacity-100 translate-x-0 pointer-events-auto' : 'opacity-0 -translate-x-1 pointer-events-none'
           }`}
         >
-          <div className="w-52 overflow-hidden rounded-lg border border-gray-200/80 bg-white/95 shadow-sm backdrop-blur-sm dark:border-gray-700/60 dark:bg-gray-900/95">
+          <div className="w-56 overflow-hidden rounded-xl border border-line bg-elevated shadow-xl shadow-black/10">
             <div className="max-h-80 overflow-y-auto py-1">
               {items.map((item, i) => (
                 <button
                   key={item.domId}
                   type="button"
                   onClick={() => goTo(item.domId)}
-                  className={`flex w-full items-start gap-2 px-3 py-1.5 text-left transition-colors ${
+                  className={`flex w-full items-start gap-2 px-3 py-1.5 text-left outline-none transition-colors focus-visible:bg-hover ${
                     i === activeIdx
-                      ? 'bg-gray-50 dark:bg-gray-800/50'
-                      : 'hover:bg-gray-50/80 dark:hover:bg-gray-800/40'
+                      ? 'bg-selected'
+                      : 'hover:bg-hover'
                   }`}
                 >
-                  <span className={`mt-0.5 shrink-0 text-[10px] tabular-nums font-semibold w-4 ${
-                    i === activeIdx ? 'text-accent' : 'text-fg-subtle'
+                  <span className={`mt-px shrink-0 text-[11px] tabular-nums w-4 ${
+                    i === activeIdx ? 'font-medium text-fg' : 'text-fg-subtle'
                   }`}>
                     {i + 1}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className={`text-[12px] leading-snug line-clamp-2 ${
+                    <p className={`text-[13px] leading-snug line-clamp-2 ${
                       i === activeIdx
-                        ? 'font-medium text-gray-800 dark:text-gray-100'
-                        : 'text-gray-500 dark:text-gray-400'
+                        ? 'font-medium text-fg'
+                        : 'text-fg-muted'
                     }`}>
                       {item.goal || `Message ${i + 1}`}
                     </p>
