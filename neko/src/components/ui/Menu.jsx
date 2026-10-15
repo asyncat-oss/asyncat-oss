@@ -8,7 +8,7 @@ const MenuContext = createContext({ close: () => {} });
 const MOVE_KEYS = ['ArrowDown', 'ArrowUp', 'Home', 'End'];
 
 function menuItems(menu) {
-  return [...(menu?.querySelectorAll('[role="menuitem"]:not([disabled])') || [])];
+  return [...(menu?.querySelectorAll('[role^="menuitem"]:not([disabled])') || [])];
 }
 
 /**
@@ -114,7 +114,10 @@ export function MenuItem({ icon: Icon, label, hint, checked, danger = false, dis
   return (
     <button
       type="button"
-      role="menuitem"
+      // A choice among options (a model, a sort order) says whether it is the
+      // chosen one, for screen readers too.
+      role={checked === undefined ? 'menuitem' : 'menuitemradio'}
+      aria-checked={checked === undefined ? undefined : Boolean(checked)}
       disabled={disabled}
       onClick={() => {
         if (!keepOpen) close();
