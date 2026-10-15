@@ -21,6 +21,8 @@ The UI for the full Asyncat experience:
 - **Built-in browser** shared with the agent (it runs in the desktop app)
 - **Files** — what agents made, with a viewer for each, and everything else Asyncat keeps on this computer
 - **Settings** — General, Appearance, Personalization, Shortcuts, Notifications, Connections, Privacy & safety, Workbench, Desktop, and About
+- **First-run setup** — `/welcome`: a model that fits this computer or a provider, your ChatGPT or Claude chats, and how careful Asyncat is (Settings → General → Run setup again opens it later)
+- **Quick ask** — the `/quick` page the desktop app's Quick ask window shows: one input, the answer streamed below it in the app's theme, saved as a normal chat
 
 ## Getting started
 
