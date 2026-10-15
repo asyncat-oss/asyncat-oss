@@ -23,7 +23,7 @@ import {
   sandboxRoot,
 } from '../../agent/SandboxManager.js';
 import { loadSkills, reloadSkills, listSkills, normalizeTags, createSkill, updateSkill, deleteSkill } from '../../agent/skills.js';
-import { loadSoul, readSoulRaw, writeSoul, listSouls } from '../../agent/prompts/agentSystemPrompt.js';
+import { loadSoul, soulInfo, writeSoul, resetSoul, listSouls } from '../../agent/prompts/agentSystemPrompt.js';
 import { getAiClientForScheduledProvider, getAiClientForUser } from '../controllers/ai/clientFactory.js';
 import { checkModelRef, chooseRunModel, describeModelRef, modelErrorDetails, openRunModel, rememberChatModel, setDefaultModel } from '../controllers/ai/chatModel.js';
 import { noProjectToolNames } from '../../agent/toolScopes.js';
@@ -1021,26 +1021,30 @@ router.get('/souls', withWorkspaceContext, (req, res) => {
   res.json({ success: true, souls: listSouls() });
 });
 
+// A soul (Settings → Personalization → Instructions file): { name, content,
+// path, displayPath, edited, hasDefault }. Edits are kept in the user's own
+// copy; reset deletes it (see agentSystemPrompt.js).
 router.get('/soul', withWorkspaceContext, (req, res) => {
-  const { name = 'default' } = req.query;
-  const content = readSoulRaw(name);
-  if (content === null) {
-    return res.status(404).json({ success: false, error: `Soul "${name}" not found` });
-  }
-  res.json({ success: true, name, content });
+  const name = String(req.query.name || 'default');
+  const info = soulInfo(name);
+  if (!info) return res.status(404).json({ success: false, error: `Soul "${name}" not found` });
+  res.json({ success: true, ...info });
 });
 
 router.put('/soul', withWorkspaceContext, (req, res) => {
   try {
-    const { name = 'default', content } = req.body;
-    if (typeof content !== 'string') {
-      return res.status(400).json({ success: false, error: 'content is required' });
-    }
-    writeSoul(name, content);
-    res.json({ success: true, name });
+    const { name = 'default', content } = req.body || {};
+    res.json({ success: true, ...writeSoul(String(name), content) });
   } catch (err) {
-    res.status(err.message.includes('not found') ? 404 : 500)
-      .json({ success: false, error: err.message });
+    res.status(err.status || 500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/soul/reset', withWorkspaceContext, (req, res) => {
+  try {
+    res.json({ success: true, ...resetSoul(String(req.body?.name || 'default')) });
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, error: err.message });
   }
 });
 

@@ -76,7 +76,7 @@ test('a reset can be called off, and it never touches a top-level or home folder
   assert.equal(safeTarget(path.join(scratch, 'data')), path.join(scratch, 'data'));
 });
 
-test('export everything: the database, files and skills; no models and no key', async () => {
+test('export everything: the database, files, skills and the edited instructions file; no models and no key', async () => {
   // The isolate helper gives this file its own data folder and database.
   const dataRoot = process.env.ASYNCAT_DATA_PATH;
   fs.mkdirSync(path.join(dataRoot, 'models'), { recursive: true });
@@ -88,6 +88,8 @@ test('export everything: the database, files and skills; no models and no key', 
   process.env.ASYNCAT_HOME = path.join(scratch, 'export-home');
   fs.mkdirSync(path.join(process.env.ASYNCAT_HOME, 'skills'), { recursive: true });
   fs.writeFileSync(path.join(process.env.ASYNCAT_HOME, 'skills', 'mine.md'), '# mine');
+  fs.mkdirSync(path.join(process.env.ASYNCAT_HOME, 'souls'), { recursive: true });
+  fs.writeFileSync(path.join(process.env.ASYNCAT_HOME, 'souls', 'default.md'), '# My edited instructions');
 
   const { exportEverything, exportEstimate, dataLocations } = await import('../src/privacy/privacyService.js');
   const estimate = await exportEstimate();
@@ -105,6 +107,7 @@ test('export everything: the database, files and skills; no models and no key', 
   assert.ok(names.includes('data/mcp.json'));
   assert.ok(names.includes('data/generated/images/cat.png'));
   assert.ok(names.includes('skills/mine.md'));
+  assert.ok(names.includes('souls/default.md'), 'the edited instructions file');
   assert.equal(names.some((name) => name.includes('models/')), false, 'models are left out');
   assert.equal(names.some((name) => name.endsWith('secret.key')), false, 'the key is left out');
   const sqliteHeader = (await zip.file('database/asyncat.db').async('nodebuffer')).toString('latin1', 0, 15);

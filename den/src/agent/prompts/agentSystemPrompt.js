@@ -3,51 +3,120 @@
 // Generates the system prompt for the ReAct agent loop.
 
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { runtimeHome } from '../../config/runtimeConfig.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// The instructions files ("souls") Asyncat ships. Edits never change these:
+// they go to a copy in Asyncat's home folder, which wins while it exists, so
+// an update keeps them and "Reset to default" just deletes the copy.
+// "Delete everything" removes the copies too (privacy/resetData.js).
 const SOULS_DIR = path.join(__dirname, '..', 'souls');
+export const SOUL_MAX_CHARS = 20000;
+const SOUL_NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
 
 const DEFAULT_IDENTITY = `You are an autonomous AI agent running locally on the user's machine. You can think, plan, execute tools, and iterate until the task is complete.`;
 
+export function userSoulsDir() {
+  return path.join(runtimeHome(), 'souls');
+}
+
+function soulError(message, status) {
+  return Object.assign(new Error(message), { status });
+}
+
+/** The shipped file and the user's copy of a soul, or null for a name that can't be one. */
+function soulPaths(name) {
+  if (!SOUL_NAME.test(String(name || ''))) return null;
+  return { shipped: path.join(SOULS_DIR, `${name}.md`), edited: path.join(userSoulsDir(), `${name}.md`) };
+}
+
+/** The file a soul is read from: the user's copy when there is one. */
+function soulFile(name) {
+  const paths = soulPaths(name);
+  if (!paths) return null;
+  if (fs.existsSync(paths.edited)) return paths.edited;
+  return fs.existsSync(paths.shipped) ? paths.shipped : null;
+}
+
+/** "~/…" for a path in the home folder, as Settings shows it. */
+function shortPath(filePath) {
+  const home = os.homedir();
+  return filePath.startsWith(home + path.sep) ? `~${filePath.slice(home.length)}` : filePath;
+}
+
 export function loadSoul(name = 'default') {
-  try {
-    const filePath = path.join(SOULS_DIR, `${name}.md`);
-    if (!fs.existsSync(filePath)) return null;
-    const content = fs.readFileSync(filePath, 'utf8');
-    // Strip frontmatter for prompt injection
-    const withoutFrontmatter = content.replace(/^---[\s\S]*?---\n?/, '').trim();
-    return withoutFrontmatter;
-  } catch {
-    return null;
-  }
+  const content = readSoulRaw(name);
+  // Strip frontmatter for prompt injection
+  return content === null ? null : content.replace(/^---[\s\S]*?---\n?/, '').trim();
 }
 
 export function readSoulRaw(name = 'default') {
   try {
-    const filePath = path.join(SOULS_DIR, `${name}.md`);
-    if (!fs.existsSync(filePath)) return null;
-    return fs.readFileSync(filePath, 'utf8');
+    const filePath = soulFile(name);
+    return filePath ? fs.readFileSync(filePath, 'utf8') : null;
   } catch {
     return null;
   }
 }
 
+/**
+ * A soul for Settings → Personalization → Instructions file: its text, the
+ * file it is read from, and whether that is the user's edited copy. Null
+ * when there is no such soul.
+ */
+export function soulInfo(name = 'default') {
+  const filePath = soulFile(name);
+  if (!filePath) return null;
+  const paths = soulPaths(name);
+  return {
+    name,
+    content: fs.readFileSync(filePath, 'utf8'),
+    path: filePath,
+    displayPath: shortPath(filePath),
+    edited: filePath === paths.edited,
+    hasDefault: fs.existsSync(paths.shipped),
+  };
+}
+
+/** Save the user's copy of a soul that exists. Returns soulInfo. */
 export function writeSoul(name = 'default', content) {
-  const filePath = path.join(SOULS_DIR, `${name}.md`);
-  if (!fs.existsSync(filePath)) throw new Error(`Soul "${name}" not found`);
-  fs.writeFileSync(filePath, content, 'utf8');
+  const paths = soulPaths(name);
+  if (!paths || !soulFile(name)) throw soulError(`Soul "${name}" not found`, 404);
+  if (typeof content !== 'string') throw soulError('content is required', 400);
+  if (!content.trim()) throw soulError('The instructions file can\'t be empty. Reset it to go back to the default.', 400);
+  if (content.length > SOUL_MAX_CHARS) {
+    throw soulError(`Keep the instructions file under ${SOUL_MAX_CHARS.toLocaleString('en')} characters.`, 400);
+  }
+  fs.mkdirSync(path.dirname(paths.edited), { recursive: true });
+  fs.writeFileSync(paths.edited, content, 'utf8');
+  return soulInfo(name);
+}
+
+/** Drop the user's copy, so the shipped file is used again. Returns soulInfo. */
+export function resetSoul(name = 'default') {
+  const paths = soulPaths(name);
+  if (!paths || !soulFile(name)) throw soulError(`Soul "${name}" not found`, 404);
+  if (!fs.existsSync(paths.shipped)) throw soulError(`Soul "${name}" has no default to go back to`, 409);
+  fs.rmSync(paths.edited, { force: true });
+  return soulInfo(name);
 }
 
 export function listSouls() {
-  try {
-    return fs.readdirSync(SOULS_DIR)
-      .filter(f => f.endsWith('.md'))
-      .map(f => f.replace(/\.md$/, ''));
-  } catch {
-    return [];
+  const names = new Set();
+  for (const dir of [SOULS_DIR, userSoulsDir()]) {
+    try {
+      for (const file of fs.readdirSync(dir)) {
+        const name = file.replace(/\.md$/, '');
+        if (file.endsWith('.md') && SOUL_NAME.test(name)) names.add(name);
+      }
+    } catch {
+      // No such folder yet.
+    }
   }
+  return [...names].sort();
 }
 
 /**

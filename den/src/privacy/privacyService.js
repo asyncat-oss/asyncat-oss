@@ -14,6 +14,7 @@ import {
   runtimeDataPath, runtimeDataRoot, runtimeDbPath, runtimeHome, runtimeModelsPath, runtimeUploadsPath,
 } from '../config/runtimeConfig.js';
 import { folderUsage } from '../storage/diskUsage.js';
+import { userSoulsDir } from '../agent/prompts/agentSystemPrompt.js';
 import { RESET_MARKER } from './resetData.js';
 
 const dbPath = () => runtimeDbPath();
@@ -133,6 +134,7 @@ data/                Everything else in Asyncat's data folder: connectors,
                      generated pictures, knowledge files, Cat folders.
 uploads/             Files added to chats and notes (when kept apart).
 skills/              Your own skills.
+souls/               Your edited instructions file.
 
 Not included: downloaded models (download them again), and the key that
 opens saved API keys and sign-ins. Those stay encrypted in this export and
@@ -160,6 +162,8 @@ export async function exportEverything({ destDir = exportFolder(), now = new Dat
     if (!inside(uploadsPath(), dataRoot) && fs.existsSync(uploadsPath())) addFolder(zip, uploadsPath(), 'uploads', () => false, counter);
     const skills = path.join(runtimeHome(), 'skills');
     if (fs.existsSync(skills)) addFolder(zip, skills, 'skills', () => false, counter);
+    const souls = userSoulsDir();
+    if (fs.existsSync(souls)) addFolder(zip, souls, 'souls', () => false, counter);
 
     fs.mkdirSync(destDir, { recursive: true });
     const pad = (n) => String(n).padStart(2, '0');
