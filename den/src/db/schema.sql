@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS project_folders (
 
 CREATE TABLE IF NOT EXISTS notes (
   id          TEXT PRIMARY KEY,
-  title       TEXT NOT NULL DEFAULT 'Untitled Note',
+  title       TEXT NOT NULL DEFAULT 'Untitled note',
   content     TEXT,
   projectid   TEXT,
   createdby   TEXT REFERENCES users(id),

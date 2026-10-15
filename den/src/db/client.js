@@ -68,7 +68,7 @@ function ensureNotesSchema() {
 
       CREATE TABLE IF NOT EXISTS notes_next (
         id          TEXT PRIMARY KEY,
-        title       TEXT NOT NULL DEFAULT 'Untitled Note',
+        title       TEXT NOT NULL DEFAULT 'Untitled note',
         content     TEXT,
         projectid   TEXT,
         createdby   TEXT REFERENCES users(id),

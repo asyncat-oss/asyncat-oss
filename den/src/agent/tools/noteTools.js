@@ -170,7 +170,7 @@ Example:
       }
 
       const note = await createNote({
-        title: args.title || 'Untitled Note',
+        title: args.title || 'Untitled note',
         content: htmlContent,
         metadata,
         conversation_id: context.conversationId || null,

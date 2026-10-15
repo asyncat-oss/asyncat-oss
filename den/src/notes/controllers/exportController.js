@@ -20,7 +20,7 @@ export async function exportDocx(req, res) {
       .eq('id', id)
       .single();
 
-    const filename = sanitizeFilename(note?.title || 'Untitled Note') + '.docx';
+    const filename = sanitizeFilename(note?.title || 'Untitled note') + '.docx';
 
     // Set response headers
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
@@ -85,7 +85,7 @@ export async function exportPdf(req, res) {
       .eq('id', id)
       .single();
 
-    const filename = sanitizeFilename(note?.title || 'Untitled Note') + '.pdf';
+    const filename = sanitizeFilename(note?.title || 'Untitled note') + '.pdf';
 
     // Set response headers
     res.setHeader('Content-Type', 'application/pdf');

@@ -21,7 +21,7 @@ async function exportNoteAsDocx(noteId, userId, db) {
 
     // Parse metadata to get blocks
     let blocks = [];
-    const title = note.title || 'Untitled Note';
+    const title = note.title || 'Untitled note';
 
     if (note.metadata) {
       const metadata = typeof note.metadata === 'string'
@@ -82,7 +82,7 @@ async function exportNoteAsPdf(
 
     // Parse metadata to get blocks
     let blocks = [];
-    const title = note.title || 'Untitled Note';
+    const title = note.title || 'Untitled note';
 
     if (note.metadata) {
       const metadata = typeof note.metadata === 'string'

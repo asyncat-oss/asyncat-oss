@@ -84,7 +84,7 @@ const createNote = async (noteData, userId, db = null) => {
 
     const noteToCreate = {
       id: randomUUID(),
-      title: title || "Untitled Note",
+      title: title || "Untitled note",
       content: content || "",
       projectid: null,
       createdby: userId,

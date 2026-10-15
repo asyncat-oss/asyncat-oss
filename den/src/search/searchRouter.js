@@ -90,7 +90,7 @@ router.get('/', (req, res) => {
       rows.forEach(r => results.push({
         _type: 'note',
         id: r.id,
-        title: r.title || 'Untitled Note',
+        title: r.title || 'Untitled note',
         snippet: snippet(r.content, q),
         projectId: r.projectid || null,
         // The chat the note was created in, which is where it can be opened.
