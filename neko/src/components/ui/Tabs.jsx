@@ -27,7 +27,7 @@ export function Tabs({ value, onChange, items, className = '', label }) {
             {Icon ? <Icon className="h-4 w-4" strokeWidth={1.75} /> : null}
             {itemLabel}
             {meta ? (
-              <span className={`rounded-md px-1.5 py-px text-[11px] font-medium tabular-nums ${active ? 'bg-accent-soft text-accent' : 'bg-hover text-fg-subtle'}`}>
+              <span className={`rounded-md px-1.5 py-px text-[11px] font-medium tabular-nums ${active ? 'bg-selected text-fg' : 'bg-hover text-fg-subtle'}`}>
                 {meta}
               </span>
             ) : null}
