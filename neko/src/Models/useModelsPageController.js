@@ -1,9 +1,18 @@
-import { useState, useEffect, useRef } from 'react';
+import { createElement, Fragment, useState, useEffect, useRef } from 'react';
 import { llamaServerApi, localModelsApi, aiProviderApi, mlxApi } from '../Settings/settingApi.js';
 import { useModelConfig } from '../CommandCenter/hooks/useModelConfig.js';
 import { INSTALL_PROFILE_LABELS, DEFAULT_LOAD_CTX_SIZE, MAX_LOAD_CTX_SIZE, normalizeLoadCtxSize, getModelContextLimit, getModelLoadCtxError, loadSavedModelContextSizes, saveModelContextSizes } from './modelPageShared.jsx';
 import { useConfirm } from '../components/confirmContext.js';
 import { useToast, errorDetail } from '../components/toastContext.js';
+
+// A confirm message that names a file on its own line. Long names with no
+// spaces wrap instead of running out of the dialog.
+const fileMessage = (name, note) => createElement(
+  Fragment,
+  null,
+  createElement('span', { className: 'block break-all font-medium text-fg' }, name),
+  note,
+);
 
 const notifyModelRuntimeUpdated = () => {
   window.dispatchEvent(new CustomEvent('asyncat-model-runtime-updated'));
@@ -51,7 +60,6 @@ export const useModelsPageController = ({ runtimeOnly = false } = {}) => {
   const [loadingProviders, setLoadingProviders] = useState(true);
   const [providerAction, setProviderAction] = useState(null);
   const [providerError, setProviderError] = useState('');
-  const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [deleteError, setDeleteError] = useState('');
   const pollCleanup = useRef(null);
   const installPollCleanup = useRef(null);
@@ -548,14 +556,22 @@ export const useModelsPageController = ({ runtimeOnly = false } = {}) => {
     }
   };
 
-  const handleDelete = (m) => {
+  // A linked file only leaves the library; a downloaded one is deleted.
+  const handleDelete = async (m) => {
     setDeleteError('');
-    setDeleteConfirm(m);
-  };
-
-  const confirmDelete = async () => {
-    const m = deleteConfirm;
-    setDeleteConfirm(null);
+    const ok = await confirm(m.isExternal
+      ? {
+          title: 'Remove from library?',
+          message: fileMessage(m.name, 'The file on disk stays where it is.'),
+          confirmLabel: 'Remove',
+        }
+      : {
+          title: 'Delete model?',
+          message: fileMessage(m.filename, "The file is deleted from this computer. This can't be undone."),
+          confirmLabel: 'Delete',
+          destructive: true,
+        });
+    if (!ok) return;
     setDeletingModel(m.filename);
     setDeleteError('');
     try {
@@ -743,8 +759,6 @@ export const useModelsPageController = ({ runtimeOnly = false } = {}) => {
     loadingProviders,
     providerAction,
     providerError,
-    deleteConfirm,
-    setDeleteConfirm,
     deleteError,
     setDeleteError,
     pollCleanup,
@@ -766,7 +780,6 @@ export const useModelsPageController = ({ runtimeOnly = false } = {}) => {
     handleStart,
     handleStop,
     handleDelete,
-    confirmDelete,
     handleAddPath,
     handleEngineSwitch,
     handleManagedInstall,

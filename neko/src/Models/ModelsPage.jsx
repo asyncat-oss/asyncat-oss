@@ -7,7 +7,6 @@ import ActiveBrainPanel from './ActiveBrainPanel.jsx';
 import ProvidersSection from './ProvidersSection.jsx';
 import LocalModelsPane from './LocalModelsPane.jsx';
 import ModelUsageSection from './ModelUsageSection.jsx';
-import ConfirmDeleteDialog from './ConfirmDeleteDialog.jsx';
 import ModelDownloadHub from './ModelDownloadHub.jsx';
 import LocalEnginePanel from './LocalEnginePanel.jsx';
 import VoicePage from './media/VoicePage.jsx';
@@ -49,13 +48,13 @@ const ModelsPage = () => {
     modelLoadCtxSizes, modelLoadCtxErrors,
     providerCatalog, providerProfiles, providerConfig,
     loadingProviders, providerAction, providerError,
-    deleteConfirm, setDeleteConfirm, deleteError, setDeleteError,
+    deleteError, setDeleteError,
     pollCleanup, clearEngineActionMessages,
     updateModelLoadCtxSize, commitModelLoadCtxSize,
     loadStatus, loadModelList, loadEngineData, loadEngineCatalog, loadProviderData,
     handleProviderSave, handleProviderDelete, handleProviderTest,
     handleProviderActivate, handleProviderDeactivate, handleMakeLocalDefault, handleLoadProviderModels,
-    handleStart, handleStop, handleDelete, confirmDelete,
+    handleStart, handleStop, handleDelete,
     handleAddPath,
   } = controller;
 
@@ -328,12 +327,6 @@ const ModelsPage = () => {
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div data-models-page className="flex h-full w-full flex-col bg-canvas text-fg">
-      <ConfirmDeleteDialog
-        model={deleteConfirm}
-        onConfirm={confirmDelete}
-        onCancel={() => setDeleteConfirm(null)}
-      />
-
       <header className="shrink-0 border-b border-line px-6 pt-6 lg:px-10">
         <div className="mx-auto flex max-w-5xl items-start justify-between gap-4">
           <div className="min-w-0">
