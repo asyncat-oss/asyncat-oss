@@ -55,13 +55,14 @@ const ListboxOptions = forwardRef(function ListboxOptions(
       role="listbox"
       aria-label={labelledBy ? undefined : label}
       aria-labelledby={labelledBy}
-      className={`relative min-h-0 overflow-y-auto ${className}`}
+      // Never scrolls sideways: a wide option is cut off with an ellipsis.
+      className={`relative min-h-0 overflow-y-auto overflow-x-hidden ${className}`}
     >
       {sections.length === 0 ? <p className="px-2.5 py-2 text-[13px] text-fg-subtle">{emptyText}</p> : null}
       {sections.map((section) => {
         // Only options and groups may sit in a listbox, so the divider is
         // hidden from screen readers (groups already carry their headings).
-        if (section.separator) return <div key={section.key} aria-hidden="true" className="-mx-1 my-1 h-px bg-line" />;
+        if (section.separator) return <div key={section.key} aria-hidden="true" className="my-1 h-px bg-line" />;
         if (!section.group) return section.items.map(renderOption);
         const headingId = `${id}-${section.key}`;
         return (
