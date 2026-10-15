@@ -963,6 +963,16 @@ const ModernBlockEditor = forwardRef(
       onConfirm: null,
       blockCount: 0,
     });
+    // The warning opens with focus on Cancel (the Dialog would pick its
+    // first control, the "don't ask again" box), so Enter never deletes or
+    // ticks anything by surprise.
+    const deletionCancelRef = useRef(null);
+    useEffect(() => {
+      if (deletionWarningModal.isOpen) {
+        deletionCancelRef.current?.focus({ preventScroll: true });
+      }
+    }, [deletionWarningModal.isOpen]);
+
     // Cancel: close the warning and let go of the blocks it was about.
     const closeDeletionWarning = () => {
       clearBlockSelection();
@@ -8327,7 +8337,11 @@ const ModernBlockEditor = forwardRef(
             onClose={closeDeletionWarning}
             footer={
               <>
-                <Button variant="ghost" onClick={closeDeletionWarning}>
+                <Button
+                  ref={deletionCancelRef}
+                  variant="ghost"
+                  onClick={closeDeletionWarning}
+                >
                   Cancel
                 </Button>
                 <Button
