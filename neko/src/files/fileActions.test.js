@@ -75,6 +75,7 @@ test('pictures, notes, knowledge, adapters and links get their own words', () =>
   const knowledge = { kind: 'knowledge', place: 'uploads', title: 'spec.pdf', where: 'Research', manageRoute: '/agents', can: can({ delete: true, manage: true }), deleteVerb: 'remove', badges: [] };
   assert.equal(removeLabel(knowledge), 'Remove');
   assert.equal(manageLabel(knowledge), 'Manage in Research');
+  assert.equal(manageLabel({ kind: 'folder', manageRoute: '/models?view=local' }), 'Manage in Models', 'engines are managed in Models');
   assert.equal(removeConfirm(knowledge).title, 'Remove “spec.pdf” from Research\'s knowledge?');
   assert.equal(removedMessage(knowledge, { mode: 'delete' }), 'Removed');
 

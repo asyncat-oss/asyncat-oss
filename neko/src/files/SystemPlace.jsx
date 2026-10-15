@@ -23,7 +23,7 @@ function Hint({ item }) {
   const navigate = useNavigate();
   const hint = item.hint || '';
   if (!item.manageRoute) return hint ? <span className="text-fg-subtle"> · {hint}</span> : null;
-  // "Change in Settings → Engines" is itself the link; otherwise the link follows the hint.
+  // "Manage in Models" is itself the link; otherwise the link follows the hint.
   const says = /^(Change|Manage|Clear)/.test(hint);
   const link = (
     <button type="button" onClick={() => navigate(item.manageRoute)} className="text-accent hover:underline">

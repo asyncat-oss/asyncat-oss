@@ -429,7 +429,7 @@ export function AdapterCard({ adapter, onChanged, defaultPrompt = '' }) {
                   <p className="whitespace-pre-wrap text-[13px] leading-5 text-fg">{text || '(no answer)'}</p>
                 </div>
               ))}
-              {result.same ? <p className="text-[12px] text-fg-muted sm:col-span-2">Both answers are the same. More examples or another pass may help; an older llama.cpp also ignores per-request adapter settings (update it in Settings → Engines).</p> : null}
+              {result.same ? <p className="text-[12px] text-fg-muted sm:col-span-2">Both answers are the same. More examples or another pass may help; an older llama.cpp also ignores per-request adapter settings (update it in Models → Local models).</p> : null}
             </div>
           ) : null}
         </div>

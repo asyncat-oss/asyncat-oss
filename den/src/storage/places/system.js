@@ -17,7 +17,7 @@ import { makeItem } from '../fileItems.js';
 const ROWS = {
   uploads: { route: '/files/uploads' },
   models: { route: '/models' },
-  home: { label: 'Engines and Python environments', note: 'Change in Settings → Engines', route: '/settings/runtime' },
+  home: { label: 'Engines and Python environments', note: 'Manage in Models', route: '/models?view=local' },
 };
 
 function rows() {

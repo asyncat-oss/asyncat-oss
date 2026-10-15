@@ -39,7 +39,6 @@ export function manageLabel(item) {
   if (route.startsWith('/projects/')) return 'Manage in the project';
   if (route.startsWith('/agents')) return 'Manage in Agents';
   if (route.startsWith('/tools')) return 'Manage in Tools & Skills';
-  if (route.startsWith('/settings/runtime')) return 'Change in Settings → Engines';
   if (route.startsWith('/settings/connections')) return 'Change in Settings → Connections';
   if (route.startsWith('/files/uploads')) return 'See them in Uploads';
   if (route.startsWith('/files/logs')) return 'Open Logs & caches';
