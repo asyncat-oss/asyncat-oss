@@ -251,34 +251,14 @@ html.app-frame body {
   background: var(--color-canvas);
 }
 
-html::-webkit-scrollbar,
-body::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-html::-webkit-scrollbar-track,
-body::-webkit-scrollbar-track {
-  background: transparent;
-  border-radius: 10px;
-}
-
-html::-webkit-scrollbar-thumb,
-body::-webkit-scrollbar-thumb {
-  background: rgba(180, 180, 180, 0.5);
-  border-radius: 10px;
-}
-
-html::-webkit-scrollbar-thumb:hover,
-body::-webkit-scrollbar-thumb:hover {
-  background: rgba(150, 150, 150, 0.8);
-}
-
-/* For Firefox */
-html,
-body {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(180, 180, 180, 0.5) transparent;
+/* Scrollbars, everywhere: thin, in the app's greys, without the OS arrow
+   buttons (Chromium drops them when these are set). In the base layer, so a
+   class such as [scrollbar-width:none] still wins. */
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--as-fg-subtle) 45%, transparent) transparent;
+  }
 }
 
 /* The app rail lives in its own stacking context. Hide it while the embedded
