@@ -4,7 +4,7 @@
 // download sets up, and the names and sizes the rows read.
 
 import { initialVoiceChoice, initialWhisperChoice } from './choosers/choices.js';
-import { ENGINE_NAMES, baseName, jobPercent, voiceCatalogEntry, whisperCatalogEntry, whisperTitle } from './mediaFormat.js';
+import { ENGINE_NAMES, baseName, jobPercent, voiceCatalogEntry, whisperCatalogEntry, whisperFileTitle, whisperTitle } from './mediaFormat.js';
 import { providerLabel, serviceTitle } from './providers.js';
 
 export const GROUP_TITLES = { stt: 'Listening', tts: 'Speaking' };
@@ -330,7 +330,9 @@ export function listeningInUse(status, catalog, library) {
   const model = status?.stt?.provider === 'local' ? status.stt.model : null;
   if (!model?.path) return null;
   const entry = whisperCatalogEntry(catalog, model.path);
-  return { name: entry ? whisperTitle(entry) : model.name || baseName(model.path), bytes: sizeOf(library?.whisper, model.path), path: model.path };
+  const fileTitle = whisperFileTitle(model.path);
+  const name = entry ? whisperTitle(entry) : fileTitle !== baseName(model.path) ? fileTitle : model.name || fileTitle;
+  return { name, bytes: sizeOf(library?.whisper, model.path), path: model.path };
 }
 
 /** The voice in use on this computer: { id, name, language, bytes, path }, or null. */

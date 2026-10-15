@@ -146,6 +146,20 @@ export function whisperTitle(entry) {
   return entry ? `${entry.model.title}${entry.english ? ' (English)' : ''}` : '';
 }
 
+/**
+ * A whisper.cpp file's readable name, for one the catalog doesn't list:
+ *   "ggml-tiny.en.bin" → "Tiny (English)", "ggml-large-v3-turbo-q5_0.bin" →
+ *   "Large v3 Turbo (Q5_0)". Other names come back as they are.
+ */
+export function whisperFileTitle(filename) {
+  const name = baseName(filename);
+  const match = /^ggml-(tiny|base|small|medium|large(?:-v\d)?(?:-turbo)?)(\.en)?(?:-(q\d_[\dk]))?\.bin$/i.exec(name);
+  if (!match) return name;
+  const size = match[1].split('-').map((part) => (/^v\d$/i.test(part) ? part.toLowerCase() : part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())).join(' ');
+  const notes = [match[2] ? 'English' : null, match[3] ? match[3].toUpperCase() : null].filter(Boolean);
+  return notes.length ? `${size} (${notes.join(', ')})` : size;
+}
+
 /** The catalog voice a .onnx file is, by its name. */
 export function voiceCatalogEntry(catalog, filename) {
   const id = baseName(filename).replace(/\.onnx(\.json)?$/i, '');
@@ -162,10 +176,12 @@ function joinMeta(parts) {
   return parts.filter((part) => part !== null && part !== undefined && part !== '').join(' · ');
 }
 
-function fileState({ missing, incomplete, inUse }) {
+// "In use" only while the part works; a file picked for a part that can't
+// run yet (its engine missing) is just "Chosen", in grey.
+function fileState({ missing, incomplete, inUse, working = true }) {
   if (missing) return { text: 'File not found', tone: 'error' };
   if (incomplete) return { text: 'Settings file missing', tone: 'warning' };
-  if (inUse) return { text: 'In use', tone: 'accent' };
+  if (inUse) return working ? { text: 'In use', tone: 'accent' } : { text: 'Chosen', tone: 'neutral' };
   return null;
 }
 
@@ -179,7 +195,7 @@ function sortRows(rows) {
   });
 }
 
-function fileRow({ prefix, type, file, name, kindText, extra = [], inUse, catalogIndex = null, catalogId = null, useLabel, canUse = true }) {
+function fileRow({ prefix, type, file, name, kindText, extra = [], inUse, working = true, catalogIndex = null, catalogId = null, useLabel, canUse = true }) {
   const missing = Boolean(file.isMissing);
   const incomplete = Boolean(file.missingConfig);
   const external = Boolean(file.isExternal);
@@ -196,7 +212,7 @@ function fileRow({ prefix, type, file, name, kindText, extra = [], inUse, catalo
     missing,
     incomplete,
     inUse,
-    state: fileState({ missing, incomplete, inUse }),
+    state: fileState({ missing, incomplete, inUse, working }),
     catalogIndex,
     catalogId,
     useLabel: useLabel || null,
@@ -226,9 +242,10 @@ export function buildVoiceFiles(status, catalog, library, downloads = []) {
       prefix: 'voice-file-whisper',
       type: 'whisper',
       file,
-      name: entry ? whisperTitle(entry) : file.filename || file.name,
+      name: entry ? whisperTitle(entry) : whisperFileTitle(file.filename || file.name || file.path),
       kindText: AUDIO_KIND.whisper,
       inUse: Boolean(sttPath && file.path === sttPath),
+      working: Boolean(status?.stt?.ready),
       catalogIndex: entry ? catalog.whisper.indexOf(entry.model) : null,
       catalogId: entry?.model.id || null,
       useLabel: 'Use for listening',
@@ -245,6 +262,7 @@ export function buildVoiceFiles(status, catalog, library, downloads = []) {
       kindText: AUDIO_KIND.tts,
       extra: [language],
       inUse: Boolean(ttsPath && file.path === ttsPath),
+      working: Boolean(status?.tts?.ready),
       catalogIndex: voice ? catalog.voices.indexOf(voice) : null,
       catalogId: voice?.id || null,
       useLabel: 'Use for speaking',
@@ -257,7 +275,9 @@ export function buildVoiceFiles(status, catalog, library, downloads = []) {
       if (entry) return { name: whisperTitle(entry), kindText: AUDIO_KIND.whisper };
       const voice = voiceCatalogEntry(catalog, filename);
       if (voice) return { name: voice.name, kindText: AUDIO_KIND.tts };
-      return { name: filename, kindText: /\.onnx/i.test(filename) ? AUDIO_KIND.tts : AUDIO_KIND.whisper };
+      return /\.onnx/i.test(filename)
+        ? { name: filename, kindText: AUDIO_KIND.tts }
+        : { name: whisperFileTitle(filename), kindText: AUDIO_KIND.whisper };
     }),
     groups: [{ id: 'voice', label: null, rows }],
     count: rows.length,

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   FIT, buildImageFiles, buildVoiceFiles, downloadsFor, engineState, engineSummary, enginePlanText, filesCountText, folderOf,
   gpuLine, installText, jobPercent, sizeText, stepErrorText, stepProgressText, stepSizeText, totalText, versionText, voicesByLanguage, noDownloadText,
+  whisperFileTitle,
 } from './mediaFormat.js';
 
 test('sizes and step states read plainly', () => {
@@ -92,17 +93,18 @@ const audioLibrary = {
 
 test('voice files: catalog names, what is in use, and what can be done', () => {
   const status = {
-    stt: { provider: 'local', model: { path: '/data/models/audio/whisper/ggml-base.en-q5_1.bin' } },
-    tts: { provider: 'local', voice: { path: '/data/models/audio/tts/en_US-lessac-medium.onnx' } },
+    stt: { provider: 'local', ready: true, model: { path: '/data/models/audio/whisper/ggml-base.en-q5_1.bin' } },
+    tts: { provider: 'local', ready: true, voice: { path: '/data/models/audio/tts/en_US-lessac-medium.onnx' } },
   };
   const { groups, count, downloads } = buildVoiceFiles(status, voiceCatalog, audioLibrary, []);
   const rows = groups[0].rows;
   assert.equal(count, 6);
   assert.deepEqual(downloads, []);
   // Listening first (catalog order, then by name), then voices.
-  assert.deepEqual(rows.map((row) => row.name), ['Base (English)', 'Small', 'ggml-medium.bin', 'gone.bin', 'Lessac', 'de_DE-kerstin-low.onnx']);
+  // A file the catalog doesn't list gets a readable name from its file name.
+  assert.deepEqual(rows.map((row) => row.name), ['Base (English)', 'Small', 'gone.bin', 'Medium', 'Lessac', 'de_DE-kerstin-low.onnx']);
 
-  const [base, small, medium, gone, lessac, kerstin] = rows;
+  const [base, small, gone, medium, lessac, kerstin] = rows;
   assert.equal(base.meta, 'Listening · 60 MB');
   assert.deepEqual(base.state, { text: 'In use', tone: 'accent' });
   assert.equal(base.canDelete, false);
@@ -177,7 +179,7 @@ test('a tab shows its own downloads, not the ones setup shows', () => {
   assert.deepEqual(downloadsFor(list, 'image').map((item) => item.downloadId), ['e']);
 
   const { downloads } = buildVoiceFiles({}, voiceCatalog, { whisper: [], tts: [] }, downloadsFor(list, 'audio/', job));
-  assert.deepEqual(downloads.map((item) => item.name), ['Small', 'Amy', 'ggml-tiny.bin']);
+  assert.deepEqual(downloads.map((item) => item.name), ['Small', 'Amy', 'Tiny']);
   assert.equal(downloads[0].bytes, 24_000_000);
   assert.equal(downloads[2].error, 'HTTP 404');
 });
@@ -222,4 +224,20 @@ test('an engine with no download for this computer says so calmly, with no Insta
   assert.equal(engineSummary('whisper', { supported: true, noDownload: true }).state, 'nodownload');
   assert.equal(engineSummary('whisper', { supported: true, noDownload: false }).state, 'missing');
   assert.equal(engineSummary('whisper', { supported: true, noDownload: true, configuredPath: '/usr/bin/whisper-server' }).state, 'external');
+});
+
+test('whisper files the catalog does not list still get readable names', () => {
+  assert.equal(whisperFileTitle('/x/ggml-tiny.en.bin'), 'Tiny (English)');
+  assert.equal(whisperFileTitle('ggml-large-v3-turbo-q5_0.bin'), 'Large v3 Turbo (Q5_0)');
+  assert.equal(whisperFileTitle('ggml-base.bin'), 'Base');
+  assert.equal(whisperFileTitle('my-own-model.bin'), 'my-own-model.bin');
+});
+
+test('a voice file picked while its engine is missing is Chosen, not In use', () => {
+  const library = { whisper: [{ id: 'w1', filename: 'ggml-tiny.en.bin', path: '/m/ggml-tiny.en.bin', sizeBytes: 77_000_000 }], tts: [] };
+  const status = (ready) => ({ stt: { provider: 'local', ready, model: { path: '/m/ggml-tiny.en.bin' } } });
+  const row = (ready) => buildVoiceFiles(status(ready), { whisper: [] }, library).groups[0].rows[0];
+  assert.deepEqual(row(false).state, { text: 'Chosen', tone: 'neutral' });
+  assert.deepEqual(row(true).state, { text: 'In use', tone: 'accent' });
+  assert.equal(row(true).name, 'Tiny (English)');
 });

@@ -26,6 +26,7 @@ import { usePlayer } from './usePlayer.js';
 const FILTER_AFTER = 8;
 const STATE_TONE = {
   accent: 'text-accent',
+  neutral: 'text-fg-subtle',
   error: 'text-red-600 dark:text-red-400',
   warning: 'text-amber-700 dark:text-amber-400',
 };
