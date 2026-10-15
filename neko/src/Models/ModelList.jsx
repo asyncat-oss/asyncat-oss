@@ -64,7 +64,7 @@ export default function ModelList({ models, value = '', onSelect, loading = fals
               type="button"
               onClick={() => onSelect(model)}
               className={`flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/40 ${
-                chosen ? 'bg-accent-soft' : 'hover:bg-hover'
+                chosen ? 'bg-selected' : 'hover:bg-hover'
               }`}
             >
               <div className="min-w-0 flex-1">
