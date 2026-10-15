@@ -474,7 +474,8 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
   const collapsed = sidebarState === "collapsed";
   const displayName = profileData?.name || user?.name || "You";
   const latestChatRun = chatRunPreviews[0];
-  const commandCenterTarget = currentConversationId
+  // The logo goes back to the chat you were in (or the newest running one).
+  const chatTarget = currentConversationId
     ? `/conversations/${currentConversationId}`
     : latestChatRun?.conversationId
       ? `/conversations/${latestChatRun.conversationId}`
@@ -484,9 +485,9 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
     formatShortcut(Object.values(shortcuts).find((shortcut) => shortcut.action === action))
   ), [shortcuts]);
 
-  const openCommandCenter = useCallback(() => {
-    navigate(commandCenterTarget);
-  }, [commandCenterTarget, navigate]);
+  const openChat = useCallback(() => {
+    navigate(chatTarget);
+  }, [chatTarget, navigate]);
 
   const loadRecentConversations = useCallback(async () => {
     const requestId = ++recentRequestRef.current;
@@ -603,7 +604,7 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
         case "openSearch": onSearchOpen(true); break;
         case "openSettings": navigate("/settings/profile"); break;
         case "newChat": onNewChat(); break;
-        case "navHome": openCommandCenter(); break;
+        case "navHome": openChat(); break;
         case "navChat": navigate("/all-chats"); break;
         case "navWorkspace": navigate("/projects"); break;
         case "navModels": navigate("/models"); break;
@@ -624,7 +625,7 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
       document.removeEventListener("keydown", handler);
       window.removeEventListener("keyboard-shortcuts-changed", handleShortcutsChange);
     };
-  }, [navigate, onNewChat, onSearchOpen, openCommandCenter, shortcuts]);
+  }, [navigate, onNewChat, onSearchOpen, openChat, shortcuts]);
 
   const isOnProjects = basePage === "projects";
   const isOnModels = basePage === "models";
@@ -797,8 +798,8 @@ const DynamicSidebar = ({ onNewChat, basePage, isSearchOpen, onSearchOpen }) => 
             <>
               <button
                 type="button"
-                onClick={openCommandCenter}
-                title="Command Center"
+                onClick={openChat}
+                title="Go to chat"
                 className="flex min-w-0 items-center gap-1.5 rounded-lg px-1.5 py-1 outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
               >
                 {/* Below the sm breakpoint the sidebar is a 64px rail with no room for the name. */}
