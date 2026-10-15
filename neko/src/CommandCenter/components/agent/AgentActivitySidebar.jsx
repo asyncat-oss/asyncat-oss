@@ -2,14 +2,7 @@
 import { useRef, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 import { activityDot } from './activityDot.js';
-
-function cleanAgentActivityDetail(detail) {
-  return String(detail || '')
-    .replace(/<think>[\s\S]*?<\/think>/gi, '')
-    .replace(/\s*<tool_call>[\s\S]*?<\/(?:\w+:)?tool_call>/gi, '')
-    .replace(/\s*<tool_call[\s\S]*$/i, '')
-    .trim();
-}
+import { activityDetail } from './activityDetail.js';
 
 export default function AgentActivitySidebar({ items = [], isLoading = false, isRunning = false }) {
   const feedEndRef = useRef(null);
@@ -41,7 +34,7 @@ export default function AgentActivitySidebar({ items = [], isLoading = false, is
         )}
         <div className="py-1.5 px-1.5 space-y-px">
           {items.map((item, i) => {
-            const detail = cleanAgentActivityDetail(item.detail);
+            const detail = activityDetail(item.detail);
             const isLast = i === items.length - 1;
             const dot = activityDot(item.dot);
 
@@ -69,7 +62,7 @@ export default function AgentActivitySidebar({ items = [], isLoading = false, is
                       )}
                     </div>
                     {detail && (
-                      <p className="mt-0.5 text-[11px] leading-snug text-fg-subtle line-clamp-2 break-all">
+                      <p className="mt-0.5 text-[11px] leading-snug text-fg-subtle line-clamp-2 [overflow-wrap:anywhere]">
                         {detail}
                       </p>
                     )}
