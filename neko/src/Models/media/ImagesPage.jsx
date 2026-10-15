@@ -222,7 +222,12 @@ function ImagesSettings({ highlight, refreshKey }) {
                 {draft ? null : <Button variant="ghost" size="xs" className="ml-1" onClick={switchToService}>Use a service</Button>}
               </FirstRunIntro>
             ) : (
-              <FirstRunIntro>Images aren&apos;t set up yet. This suits your graphics card; change it before you download.</FirstRunIntro>
+              <FirstRunIntro>
+                {/* Only the model on this computer downloads anything. */}
+                {provider === 'local'
+                  ? "Images aren't set up yet. This suits your graphics card; change it before you download."
+                  : "Images aren't set up yet."}
+              </FirstRunIntro>
             )
           ) : null}
         </div>
