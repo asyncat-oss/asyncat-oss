@@ -1,14 +1,18 @@
+// An image block: upload or drop an image, pick a size, replace or remove
+// it, and open it full screen. Empty, it is a drop zone.
+
 import React, { useState, useRef, useEffect } from "react";
-import ReactDOM from "react-dom";
 import {
   Upload,
   Image as ImageIcon,
   Maximize2,
-  Loader,
+  Loader2 as Loader,
   Repeat,
   SquareX,
-  AlertTriangle,
 } from "lucide-react";
+import { Segmented } from "../../../components/ui/Tabs.jsx";
+import UploadAlertDialog from "./UploadAlertDialog";
+import MediaViewer from "./MediaViewer";
 import { attachmentsApi } from "../../noteApi";
 import { useNoteContext } from "../../context/NoteContext";
 
@@ -31,6 +35,22 @@ const ALLOWED_IMAGE_EXTENSIONS = [
 const ALLOWED_IMAGE_FORMAT_LABEL = "JPG, JPEG, PNG, GIF, WebP, SVG";
 const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 const MAX_IMAGE_SIZE_LABEL = "5MB";
+
+const SIZE_ITEMS = [
+  { value: "small", label: "S" },
+  { value: "medium", label: "M" },
+  { value: "large", label: "L" },
+];
+const SIZE_TIPS = [
+  "Compress the image",
+  "Make it smaller in width and height",
+  "Save it as WebP or JPEG",
+];
+const FORMAT_TIPS = [
+  "Save or convert it to JPG, PNG, GIF, WebP or SVG",
+  "Check the file's extension matches its format",
+  "Check the image opens before uploading it",
+];
 
 const createInitialUploadAlert = () => ({
   isOpen: false,
@@ -152,23 +172,6 @@ const ImageBlock = ({ block, onChange, contentRef, readOnly }) => {
     }
   };
 
-  // Handle escape key to close fullscreen view
-  useEffect(() => {
-    const handleKeyDown = (event) => {
-      if (event.key === "Escape" && isExpanded) {
-        setIsExpanded(false);
-      }
-    };
-
-    if (isExpanded) {
-      document.addEventListener("keydown", handleKeyDown);
-    }
-
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isExpanded]);
-
   useEffect(() => {
     return () => {
       if (controlRevealTimeoutRef.current) {
@@ -203,8 +206,8 @@ const ImageBlock = ({ block, onChange, contentRef, readOnly }) => {
       setUploadAlert({
         isOpen: true,
         variant: "format",
-        title: "Invalid Image Format",
-        message: `The selected file type is not supported. Please upload a ${ALLOWED_IMAGE_FORMAT_LABEL} image.`,
+        title: "This image format isn't supported",
+        message: "An image can be a JPG, PNG, GIF, WebP or SVG file.",
         fileName: file.name,
         fileSize: file.size,
         maxSize: "",
@@ -221,8 +224,8 @@ const ImageBlock = ({ block, onChange, contentRef, readOnly }) => {
       setUploadAlert({
         isOpen: true,
         variant: "size",
-        title: "Image Too Large",
-        message: `The selected image is ${sizeInMb}MB, which exceeds the ${MAX_IMAGE_SIZE_LABEL} limit. Please choose a smaller file or compress it before uploading.`,
+        title: "This image is too big",
+        message: `It is ${sizeInMb}MB, and an image can be up to ${MAX_IMAGE_SIZE_LABEL}.`,
         fileName: file.name,
         fileSize: file.size,
         maxSize: MAX_IMAGE_SIZE_LABEL,
@@ -246,10 +249,10 @@ const ImageBlock = ({ block, onChange, contentRef, readOnly }) => {
       setUploadAlert({
         isOpen: true,
         variant: isSizeError ? "size" : "format",
-        title: isSizeError ? "Image Too Large" : "Invalid Image Format",
+        title: isSizeError ? "This image is too big" : "This image format isn't supported",
         message: isSizeError
-          ? `The selected image exceeds the ${MAX_IMAGE_SIZE_LABEL} limit. Please choose a smaller file or compress it before uploading.`
-          : `The selected file type is not supported. Please upload a ${ALLOWED_IMAGE_FORMAT_LABEL} image.`,
+          ? `An image can be up to ${MAX_IMAGE_SIZE_LABEL}.`
+          : "An image can be a JPG, PNG, GIF, WebP or SVG file.",
         fileName: file.name,
         fileSize: file.size,
         maxSize: isSizeError ? MAX_IMAGE_SIZE_LABEL : "",
@@ -459,7 +462,7 @@ const ImageBlock = ({ block, onChange, contentRef, readOnly }) => {
           <button
             onClick={handleUploadClick}
             disabled={isUploading || isDeleting}
-            className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-50 dark:bg-blue-900/20 midnight:bg-blue-900/20 text-blue-700 dark:text-blue-300 midnight:text-blue-300 rounded hover:bg-blue-100 dark:hover:bg-blue-900/40 midnight:hover:bg-blue-900/40 disabled:opacity-50 h-6"
+            className="flex h-6 items-center gap-1 rounded-md border border-line-strong bg-canvas px-2 text-[12px] text-fg-muted transition-colors hover:bg-hover hover:text-fg disabled:opacity-50"
           >
             {isUploading ? (
               <>
@@ -477,52 +480,28 @@ const ImageBlock = ({ block, onChange, contentRef, readOnly }) => {
       )}
 
       {/* Controls - shown on hover */}
-      <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex justify-between items-center mb-4 pr-8 ">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
         <div className="flex items-center gap-2">
           {/* Size controls */}
           {imageUrl && showControls && (
-            <div className="flex items-center gap-1 bg-white dark:bg-gray-800 midnight:bg-gray-900 border border-gray-200 dark:border-gray-700 midnight:border-gray-600 rounded-lg px-2 py-1 shadow-sm">
-              <button
-                onClick={() => handleSizeChange("small")}
-                className={`px-2 py-1 text-xs rounded transition-colors ${
-                  currentSize === "small"
-                    ? "bg-blue-100 dark:bg-blue-900/40 midnight:bg-blue-900/40 text-blue-700 dark:text-blue-300 midnight:text-blue-300"
-                    : "text-gray-600 dark:text-gray-400 midnight:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 midnight:hover:bg-gray-700"
-                }`}
-              >
-                S
-              </button>
-              <button
-                onClick={() => handleSizeChange("medium")}
-                className={`px-2 py-1 text-xs rounded transition-colors ${
-                  currentSize === "medium"
-                    ? "bg-blue-100 dark:bg-blue-900/40 midnight:bg-blue-900/40 text-blue-700 dark:text-blue-300 midnight:text-blue-300"
-                    : "text-gray-600 dark:text-gray-400 midnight:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 midnight:hover:bg-gray-700"
-                }`}
-              >
-                M
-              </button>
-              <button
-                onClick={() => handleSizeChange("large")}
-                className={`px-2 py-1 text-xs rounded transition-colors ${
-                  currentSize === "large"
-                    ? "bg-blue-100 dark:bg-blue-900/40 midnight:bg-blue-900/40 text-blue-700 dark:text-blue-300 midnight:text-blue-300"
-                    : "text-gray-600 dark:text-gray-400 midnight:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 midnight:hover:bg-gray-700"
-                }`}
-              >
-                L
-              </button>
-            </div>
+            <Segmented
+              size="sm"
+              role="radiogroup"
+              label="Size"
+              value={currentSize}
+              onChange={handleSizeChange}
+              items={SIZE_ITEMS}
+            />
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-2">
           {/* Replace button */}
           {imageUrl && showControls && (
             <button
               onClick={handleReplaceClick}
               disabled={isUploading || isDeleting}
-              className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-50 dark:bg-blue-900/20 midnight:bg-blue-900/20 text-blue-700 dark:text-blue-300 midnight:text-blue-300 rounded hover:bg-blue-100 dark:hover:bg-blue-900/40 midnight:hover:bg-blue-900/40 disabled:opacity-50 h-6"
+              className="flex h-6 items-center gap-1 rounded-md border border-line-strong bg-canvas px-2 text-[12px] text-fg-muted transition-colors hover:bg-hover hover:text-fg disabled:opacity-50"
             >
               {isUploading ? (
                 <>
@@ -543,12 +522,12 @@ const ImageBlock = ({ block, onChange, contentRef, readOnly }) => {
             <button
               onClick={handleDeleteImage}
               disabled={isUploading || isDeleting}
-              className="flex items-center gap-1 px-2 py-1 text-xs bg-red-50 dark:bg-red-900/20 midnight:bg-red-900/20 text-red-700 dark:text-red-300 midnight:text-red-300 rounded hover:bg-red-100 dark:hover:bg-red-900/40 midnight:hover:bg-red-900/40 disabled:opacity-50 h-6"
+              className="flex h-6 items-center gap-1 rounded-md px-2 text-[12px] text-red-600 transition-colors hover:bg-red-500/10 disabled:opacity-50 dark:text-red-400"
             >
               {isDeleting ? (
                 <>
                   <Loader className="w-3 h-3 animate-spin" />
-                  Removing...
+                  Removing…
                 </>
               ) : (
                 <>
@@ -563,8 +542,8 @@ const ImageBlock = ({ block, onChange, contentRef, readOnly }) => {
 
       {/* Error message */}
       {error && (
-        <div className="mb-2 p-2 bg-red-50 dark:bg-red-900/20 midnight:bg-red-900/20 border border-red-200 dark:border-red-800 midnight:border-red-800 rounded-lg">
-          <p className="text-sm text-red-700 dark:text-red-300 midnight:text-red-300">
+        <div className="mb-2 rounded-lg bg-red-500/10 px-3 py-2">
+          <p className="text-[13px] text-red-700 dark:text-red-400">
             {error}
           </p>
         </div>
@@ -572,17 +551,17 @@ const ImageBlock = ({ block, onChange, contentRef, readOnly }) => {
 
       {/* Upload progress */}
       {isUploading && (
-        <div className="flex justify-center mb-2 mt-12 pl-8">
+        <div className="mb-2 mt-12 flex justify-center @2xl:pl-8">
           <div
             className=""
             style={{
               width: width === "auto" ? "800px" : width,
-              maxWidth: "800px",
+              maxWidth: "100%",
             }}
           >
-            <div className="w-full bg-gray-200 dark:bg-gray-700 midnight:bg-gray-700 rounded-full h-2">
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-hover">
               <div
-                className="bg-blue-600 dark:bg-blue-500 midnight:bg-indigo-500 h-2 rounded-full transition-all duration-300"
+                className="h-full rounded-full bg-accent transition-[width] duration-300"
                 style={{ width: `${uploadProgress}%` }}
               ></div>
             </div>
@@ -592,7 +571,7 @@ const ImageBlock = ({ block, onChange, contentRef, readOnly }) => {
 
       {/* Image container */}
       <div
-        className={`image-container flex justify-center pl-10 ${
+        className={`image-container flex justify-center @2xl:pl-10 ${
           !imageUrl ? "mt-15" : "pt-6"
         }`}
         style={{ maxWidth: "100%" }}
@@ -600,18 +579,18 @@ const ImageBlock = ({ block, onChange, contentRef, readOnly }) => {
         {imageUrl ? (
           !isImageLoaded ? (
             <div
-              className="bg-gray-100 dark:bg-gray-800 midnight:bg-gray-900 rounded-lg mx-auto relative"
+              className="relative mx-auto rounded-lg bg-hover"
               style={{
                 width: width === "auto" ? "800px" : width,
                 height: height === "auto" ? "300px" : height,
                 minHeight: "200px",
-                maxWidth: "800px",
+                maxWidth: "100%",
               }}
             >
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-50/40 dark:bg-gray-700/60 midnight:bg-gray-800/20 backdrop-blur-sm rounded-lg">
-                <Loader className="w-12 h-12 text-blue-500 mb-4 animate-spin" />
-                <p className="text-gray-700 dark:text-gray-300 midnight:text-gray-300 font-medium">
-                  Loading image...
+              <div className="absolute inset-0 flex flex-col items-center justify-center rounded-lg">
+                <Loader className="mb-2 h-5 w-5 animate-spin text-fg-subtle" />
+                <p className="text-[13px] text-fg-muted">
+                  Loading image…
                 </p>
               </div>
               {/* Hidden image for loading */}
@@ -651,22 +630,22 @@ const ImageBlock = ({ block, onChange, contentRef, readOnly }) => {
 
               {/* Replacing overlay - shows throughout the entire replacement process */}
               {isReplacing && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 dark:bg-black/80 midnight:bg-black/80 backdrop-blur-sm rounded-lg transition-opacity duration-300">
-                  <Loader className="w-12 h-12 text-blue-500 mb-4 animate-spin" />
-                  <p className="text-gray-700 dark:text-gray-300 midnight:text-gray-300 font-medium">
+                <div className="absolute inset-0 flex flex-col items-center justify-center rounded-lg bg-canvas/80 transition-opacity duration-300">
+                  <Loader className="mb-2 h-5 w-5 animate-spin text-fg-subtle" />
+                  <p className="text-[13px] text-fg-muted">
                     {isUploading
-                      ? `Uploading... ${uploadProgress}%`
-                      : "Loading new image..."}
+                      ? `Uploading… ${uploadProgress}%`
+                      : "Loading the new image…"}
                   </p>
                 </div>
               )}
 
               {/* Deleting overlay */}
               {isDeleting && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/20 dark:bg-black/20 midnight:bg-black/20 backdrop-blur-sm rounded-lg">
-                  <Loader className="w-12 h-12 text-red-500 mb-4 animate-spin" />
-                  <p className="text-gray-700 dark:text-gray-300 midnight:text-gray-300 font-medium">
-                    Removing...
+                <div className="absolute inset-0 flex flex-col items-center justify-center rounded-lg bg-canvas/60">
+                  <Loader className="mb-2 h-5 w-5 animate-spin text-fg-subtle" />
+                  <p className="text-[13px] text-fg-muted">
+                    Removing…
                   </p>
                 </div>
               )}
@@ -675,7 +654,7 @@ const ImageBlock = ({ block, onChange, contentRef, readOnly }) => {
               {!isUploading && !isDeleting && showControls && !readOnly && (
                 <button
                   onClick={() => setIsExpanded(!isExpanded)}
-                  className="absolute top-2 right-2 p-1 bg-black/50 dark:bg-black/50 midnight:bg-black/60 text-white rounded opacity-0 group-hover/image:opacity-100 hover:bg-black/70 dark:hover:bg-black/70 midnight:hover:bg-black/80 transition-all duration-200"
+                  className="absolute right-2 top-2 rounded-md bg-black/50 p-1 text-white opacity-0 transition-opacity duration-200 hover:bg-black/70 group-hover/image:opacity-100"
                   title="View fullscreen"
                 >
                   <Maximize2 className="w-5 h-5" />
@@ -685,16 +664,16 @@ const ImageBlock = ({ block, onChange, contentRef, readOnly }) => {
           )
         ) : (
           <div
-            className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer flex flex-col items-center justify-center mx-auto ${
+            className={`mx-auto flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed p-8 text-center transition-colors ${
               isDragging
-                ? "border-blue-400 bg-blue-50 dark:bg-blue-900/20 midnight:bg-blue-900/20"
-                : "border-gray-300 dark:border-gray-600 midnight:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500 midnight:hover:border-gray-500"
+                ? "border-accent bg-accent-soft"
+                : "border-line-strong hover:bg-hover"
             } ${isUploading ? "pointer-events-none opacity-50" : ""}`}
             style={{
               width: width === "auto" ? "800px" : width,
               height: height === "auto" ? "300px" : height,
               minHeight: "200px",
-              maxWidth: "800px",
+              maxWidth: "100%",
             }}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
@@ -703,18 +682,18 @@ const ImageBlock = ({ block, onChange, contentRef, readOnly }) => {
           >
             {isUploading ? (
               <div className="flex flex-col items-center justify-center">
-                <Loader className="w-12 h-12 text-blue-500 mb-4 animate-spin" />
-                <p className="text-gray-500 dark:text-gray-400 midnight:text-gray-400 mb-2 font-medium">
-                  Uploading... {uploadProgress}%
+                <Loader className="mb-2 h-5 w-5 animate-spin text-fg-subtle" />
+                <p className="text-[13px] font-medium text-fg-muted">
+                  Uploading… {uploadProgress}%
                 </p>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center">
-                <ImageIcon className="w-16 h-16 text-gray-400 mb-4" />
-                <p className="text-gray-500 dark:text-gray-400 midnight:text-gray-400 mb-2 font-medium">
+                <ImageIcon className="mb-3 h-8 w-8 text-fg-subtle" strokeWidth={1.5} />
+                <p className="mb-1 text-[13px] font-medium text-fg-muted">
                   Click to upload or drag and drop
                 </p>
-                <p className="text-xs text-gray-400">
+                <p className="text-[12px] text-fg-subtle">
                   JPG, JPEG, PNG, GIF, WebP, SVG up to 5MB
                 </p>
               </div>
@@ -727,7 +706,7 @@ const ImageBlock = ({ block, onChange, contentRef, readOnly }) => {
       <div className="mt-2">
         <div
           ref={contentRef}
-          className="text-sm text-gray-600 dark:text-gray-400 midnight:text-gray-400 text-center italic outline-none"
+          className="text-center text-[13px] italic text-fg-muted outline-none"
           style={{ minHeight: "1.2em" }}
         >
           {caption || ""}
@@ -743,246 +722,53 @@ const ImageBlock = ({ block, onChange, contentRef, readOnly }) => {
         className="hidden"
       />
 
-      {/* Expanded view modal - using portal to render outside DOM hierarchy */}
-      {isExpanded &&
-        imageUrl &&
-        ReactDOM.createPortal(
-          <div
-            className="fixed inset-0 z-[10000] bg-black/80 dark:bg-black/80 midnight:bg-black/90 flex items-center justify-center p-4"
-            onClick={() => setIsExpanded(false)}
-          >
-            <div className="relative w-full h-full flex items-center justify-center">
-              <img
-                src={imageUrl}
-                alt={alt}
-                className="max-w-full max-h-full object-contain rounded-lg"
-                style={{
-                  maxWidth: "calc(100vw - 2rem)",
-                  maxHeight: "calc(100vh - 2rem)",
-                }}
-                onClick={(e) => e.stopPropagation()}
-                onError={handleImageLoadError}
-              />
-              {caption && (
-                <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/70 dark:bg-black/70 midnight:bg-black/80 text-white px-4 py-2 rounded-lg text-sm max-w-[90%] text-center">
-                  {caption}
-                </div>
-              )}
-            </div>
-          </div>,
-          document.body
-        )}
+      {/* The image full screen */}
+      {isExpanded && imageUrl && (
+        <MediaViewer
+          label={caption ? `Image: ${caption}` : "Image"}
+          onClose={() => setIsExpanded(false)}
+        >
+          <div className="relative w-full h-full flex items-center justify-center">
+            <img
+              src={imageUrl}
+              alt={alt}
+              className="max-w-full max-h-full object-contain rounded-lg"
+              style={{
+                maxWidth: "calc(100vw - 2rem)",
+                maxHeight: "calc(100vh - 2rem)",
+              }}
+              onClick={(e) => e.stopPropagation()}
+              onError={handleImageLoadError}
+            />
+            {caption && (
+              <div className="absolute bottom-4 left-1/2 max-w-[90%] -translate-x-1/2 rounded-lg bg-black/70 px-3 py-1.5 text-center text-[13px] text-white">
+                {caption}
+              </div>
+            )}
+          </div>
+        </MediaViewer>
+      )}
 
       {/* Image Upload Alert Modal */}
-      <ImageUploadAlertModal
+      <UploadAlertDialog
         isOpen={uploadAlert.isOpen}
         onClose={handleCloseUploadAlert}
-        title={uploadAlert.title || "Upload Error"}
+        title={uploadAlert.title || undefined}
         message={uploadAlert.message}
         fileName={uploadAlert.fileName}
         fileSize={uploadAlert.fileSize}
         maxSize={uploadAlert.maxSize}
         allowedFormats={uploadAlert.allowedFormats}
-        variant={uploadAlert.variant}
+        tips={
+          uploadAlert.variant === "size"
+            ? SIZE_TIPS
+            : uploadAlert.variant === "format"
+            ? FORMAT_TIPS
+            : []
+        }
       />
     </div>
   );
 };
-
-function ImageUploadAlertModal({
-  isOpen,
-  onClose,
-  title = "Upload Error",
-  message,
-  fileSize,
-  maxSize,
-  fileName,
-  allowedFormats,
-  variant,
-}) {
-  const modalRef = useRef(null);
-
-  useEffect(() => {
-    const handleEscape = (e) => {
-      if (e.key === "Escape" && isOpen) {
-        onClose();
-      }
-    };
-
-    const handleEnter = (e) => {
-      if (
-        e.key === "Enter" &&
-        isOpen &&
-        modalRef.current &&
-        modalRef.current.contains(e.target)
-      ) {
-        e.preventDefault();
-        onClose();
-      }
-    };
-
-    if (isOpen) {
-      document.body.style.overflow = "hidden";
-      document.addEventListener("keydown", handleEscape);
-      document.addEventListener("keydown", handleEnter);
-    }
-
-    return () => {
-      document.body.style.overflow = "auto";
-      document.removeEventListener("keydown", handleEscape);
-      document.removeEventListener("keydown", handleEnter);
-    };
-  }, [isOpen, onClose]);
-
-  if (!isOpen) return null;
-
-  const handleBackdropClick = (e) => {
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  };
-
-  const formatFileSize = (bytes) => {
-    if (!bytes) return "Unknown";
-    const mb = bytes / (1024 * 1024);
-    return `${mb.toFixed(2)}MB`;
-  };
-
-  const portalTarget = typeof document !== "undefined" ? document.body : null;
-
-  if (!portalTarget) return null;
-
-  return ReactDOM.createPortal(
-    <div
-      className="fixed inset-0 flex items-center justify-center"
-      style={{ zIndex: 2147483647, pointerEvents: "auto" }}
-    >
-      <div
-        className="absolute inset-0 bg-black/40 dark:bg-black/60 midnight:bg-black/70 backdrop-blur-sm transition-opacity duration-200"
-        style={{ zIndex: 2147483646 }}
-        onClick={handleBackdropClick}
-      />
-
-      <div
-        ref={modalRef}
-        className="relative w-full max-w-md overflow-hidden rounded-xl bg-white dark:bg-gray-700 midnight:bg-gray-900 shadow-2xl dark:shadow-gray-900/30 midnight:shadow-black/30 transform transition-all duration-300 scale-100 mx-4"
-        style={{
-          transformOrigin: "center",
-          zIndex: 2147483647,
-        }}
-      >
-        {/* Header */}
-        <div className="flex items-center p-4 bg-white border-b dark:bg-gray-700 midnight:bg-gray-900 border-gray-200 dark:border-gray-600 midnight:border-gray-800">
-          <div className="flex items-center gap-3">
-            <ImageIcon className="w-5 h-5 text-red-500 dark:text-red-400 midnight:text-red-400" />
-            <h2 className="text-lg font-semibold text-gray-800 dark:text-white midnight:text-indigo-200">
-              {title}
-            </h2>
-          </div>
-        </div>
-
-        {/* Content */}
-        <div className="p-6">
-          <div className="flex items-start space-x-4">
-            <div className="flex-shrink-0 p-2 rounded-full bg-red-50 dark:bg-red-900/20 midnight:bg-red-900/20">
-              <AlertTriangle className="w-6 h-6 text-red-500 dark:text-red-400 midnight:text-red-400" />
-            </div>
-            <div className="flex-1">
-              <div className="text-gray-700 dark:text-gray-300 midnight:text-gray-400 mb-4">
-                {message}
-              </div>
-
-              {/* File Details */}
-              <div className="bg-gray-50 dark:bg-gray-800 midnight:bg-gray-800 rounded-lg p-4 space-y-2">
-                {fileName && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium text-gray-600 dark:text-gray-400 midnight:text-gray-500">
-                      File:
-                    </span>
-                    <span className="text-sm text-gray-800 dark:text-gray-200 midnight:text-gray-300 truncate max-w-48">
-                      {fileName}
-                    </span>
-                  </div>
-                )}
-
-                {fileSize && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium text-gray-600 dark:text-gray-400 midnight:text-gray-500">
-                      File Size:
-                    </span>
-                    <span className="text-sm font-mono text-red-600 dark:text-red-400 midnight:text-red-400">
-                      {formatFileSize(fileSize)}
-                    </span>
-                  </div>
-                )}
-
-                {maxSize && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium text-gray-600 dark:text-gray-400 midnight:text-gray-500">
-                      Max Allowed:
-                    </span>
-                    <span className="text-sm font-mono text-green-600 dark:text-green-400 midnight:text-green-400">
-                      {maxSize}
-                    </span>
-                  </div>
-                )}
-
-                {allowedFormats && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium text-gray-600 dark:text-gray-400 midnight:text-gray-500">
-                      Allowed Formats:
-                    </span>
-                    <span className="text-sm font-mono text-indigo-600 dark:text-indigo-300 midnight:text-indigo-200">
-                      {allowedFormats}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* Tips */}
-              {variant === "size" ? (
-                <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 midnight:bg-blue-900/20 rounded-lg">
-                  <h4 className="text-sm font-medium text-blue-800 dark:text-blue-300 midnight:text-blue-300 mb-1">
-                    💡 Tips to reduce file size:
-                  </h4>
-                  <ul className="text-xs text-blue-700 dark:text-blue-500 midnight:text-blue-400 space-y-1">
-                    <li>• Compress the image using online tools</li>
-                    <li>• Reduce image dimensions or resolution before uploading</li>
-                    <li>• Convert to a more efficient format such as WebP or JPEG</li>
-                  </ul>
-                </div>
-              ) : variant === "format" ? (
-                <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 midnight:bg-blue-900/20 rounded-lg">
-                  <h4 className="text-sm font-medium text-blue-800 dark:text-blue-300 midnight:text-blue-300 mb-1">
-                    💡 Tips to fix format issues:
-                  </h4>
-                  <ul className="text-xs text-blue-700 dark:text-blue-500 midnight:text-blue-400 space-y-1">
-                    <li>• Export or convert the image to JPG, PNG, GIF, WebP, or SVG</li>
-                    <li>• Ensure the file extension matches the actual image format</li>
-                    <li>• Verify the image opens correctly before uploading</li>
-                  </ul>
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-end p-4 bg-gray-50 border-t dark:bg-gray-800 midnight:bg-gray-900 border-gray-200 dark:border-gray-600 midnight:border-gray-800">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-6 py-2 text-white bg-blue-600 dark:bg-blue-700 midnight:bg-indigo-700 
-              hover:bg-blue-700 dark:hover:bg-blue-800 midnight:hover:bg-indigo-800 
-              rounded-lg transition-all duration-200 shadow-sm hover:shadow-md font-medium"
-          >
-            Got it
-          </button>
-        </div>
-      </div>
-    </div>,
-    portalTarget
-  );
-}
 
 export default ImageBlock;

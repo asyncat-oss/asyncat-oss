@@ -1,9 +1,11 @@
+// An audio block: upload or drop a recording and play it with our own
+// controls, or replace or remove it. Empty, it is a drop zone.
+
 import React, { useState, useRef, useEffect } from "react";
-import ReactDOM from "react-dom";
 import {
   Upload,
   Volume2 as AudioIcon,
-  Loader,
+  Loader2 as Loader,
   Repeat,
   SquareX,
   Play,
@@ -12,8 +14,9 @@ import {
   VolumeX,
   Rewind,
   FastForward,
-  AlertTriangle,
 } from "lucide-react";
+import UploadAlertDialog from "./UploadAlertDialog";
+import { ensureNoteRangeStyle, rangeFill } from "./mediaRange";
 import { attachmentsApi } from "../../noteApi";
 import { useNoteContext } from "../../context/NoteContext";
 
@@ -39,6 +42,17 @@ const ALLOWED_AUDIO_EXTENSIONS = [
 const ALLOWED_AUDIO_FORMAT_LABEL = "MP3, WAV, OGG, WebM, AAC, M4A, FLAC";
 const MAX_AUDIO_SIZE_BYTES = 5 * 1024 * 1024;
 const MAX_AUDIO_SIZE_LABEL = "5MB";
+
+const SIZE_TIPS = [
+  "Trim the recording",
+  "Lower its bitrate",
+  "Save it as MP3 or OGG",
+];
+const FORMAT_TIPS = [
+  "Save or convert it to MP3, WAV, OGG, WebM, AAC, M4A or FLAC",
+  "Check the file's extension matches its format",
+  "Use an audio converter if you need to",
+];
 
 const createInitialUploadAlert = () => ({
   isOpen: false,
@@ -66,6 +80,7 @@ const AudioBlock = ({ block, onChange, contentRef, readOnly }) => {
       }
     `;
     document.head.appendChild(style);
+    ensureNoteRangeStyle();
     return () => document.head.removeChild(style);
   }, []);
 
@@ -155,8 +170,8 @@ const AudioBlock = ({ block, onChange, contentRef, readOnly }) => {
       setUploadAlert({
         isOpen: true,
         variant: "format",
-        title: "Invalid Audio Format",
-        message: `The selected file type is not supported. Please upload a ${ALLOWED_AUDIO_FORMAT_LABEL} audio file.`,
+        title: "This audio format isn't supported",
+        message: "A recording can be an MP3, WAV, OGG, WebM, AAC, M4A or FLAC file.",
         fileName: file.name,
         fileSize: file.size,
         maxSize: "",
@@ -173,8 +188,8 @@ const AudioBlock = ({ block, onChange, contentRef, readOnly }) => {
       setUploadAlert({
         isOpen: true,
         variant: "size",
-        title: "Audio Too Large",
-        message: `The selected audio file is ${sizeInMb}MB, which exceeds the ${MAX_AUDIO_SIZE_LABEL} limit. Please choose a smaller file or compress it before uploading.`,
+        title: "This recording is too big",
+        message: `It is ${sizeInMb}MB, and a recording can be up to ${MAX_AUDIO_SIZE_LABEL}.`,
         fileName: file.name,
         fileSize: file.size,
         maxSize: MAX_AUDIO_SIZE_LABEL,
@@ -198,10 +213,10 @@ const AudioBlock = ({ block, onChange, contentRef, readOnly }) => {
       setUploadAlert({
         isOpen: true,
         variant: isSizeError ? "size" : "format",
-        title: isSizeError ? "Audio Too Large" : "Invalid Audio Format",
+        title: isSizeError ? "This recording is too big" : "This audio format isn't supported",
         message: isSizeError
-          ? `The selected audio file exceeds the ${MAX_AUDIO_SIZE_LABEL} limit. Please choose a smaller file or compress it before uploading.`
-          : `The selected file type is not supported. Please upload a ${ALLOWED_AUDIO_FORMAT_LABEL} audio file.`,
+          ? `A recording can be up to ${MAX_AUDIO_SIZE_LABEL}.`
+          : "A recording can be an MP3, WAV, OGG, WebM, AAC, M4A or FLAC file.",
         fileName: file.name,
         fileSize: file.size,
         maxSize: isSizeError ? MAX_AUDIO_SIZE_LABEL : "",
@@ -544,11 +559,11 @@ const AudioBlock = ({ block, onChange, contentRef, readOnly }) => {
           100
         )
       : 0;
-  const sliderBackground = `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${timelineProgress}%, #4b5563 ${timelineProgress}%, #4b5563 100%)`;
+  const sliderBackground = rangeFill(timelineProgress, "var(--as-line-strong)");
   const normalizedVolume = Math.min(Math.max(volume || 0, 0), 1);
   const effectiveVolume = isMuted ? 0 : normalizedVolume;
   const volumeProgress = Math.min(Math.max(effectiveVolume * 100, 0), 100);
-  const volumeBackground = `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${volumeProgress}%, #4b5563 ${volumeProgress}%, #4b5563 100%)`;
+  const volumeBackground = rangeFill(volumeProgress, "var(--as-line-strong)");
 
   return (
     <div className="audio-block group relative">
@@ -558,7 +573,7 @@ const AudioBlock = ({ block, onChange, contentRef, readOnly }) => {
           <button
             onClick={handleUploadClick}
             disabled={isUploading || isDeleting}
-            className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-50 dark:bg-blue-900/20 midnight:bg-blue-900/20 text-blue-700 dark:text-blue-300 midnight:text-blue-300 rounded hover:bg-blue-100 dark:hover:bg-blue-900/40 midnight:hover:bg-blue-900/40 disabled:opacity-50 h-6"
+            className="flex h-6 items-center gap-1 rounded-md border border-line-strong bg-canvas px-2 text-[12px] text-fg-muted transition-colors hover:bg-hover hover:text-fg disabled:opacity-50"
           >
             {isUploading ? (
               <>
@@ -576,14 +591,14 @@ const AudioBlock = ({ block, onChange, contentRef, readOnly }) => {
       )}
 
       {/* Controls - shown on hover */}
-      <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex justify-end items-center mb-4 pr-8 ">
+      <div className="mb-4 flex flex-wrap items-center justify-end gap-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
         <div className="flex items-center gap-2">
           {/* Replace button */}
           {audioUrl && showControls && (
             <button
               onClick={handleReplaceClick}
               disabled={isUploading || isDeleting}
-              className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-50 dark:bg-blue-900/20 midnight:bg-blue-900/20 text-blue-700 dark:text-blue-300 midnight:text-blue-300 rounded hover:bg-blue-100 dark:hover:bg-blue-900/40 midnight:hover:bg-blue-900/40 disabled:opacity-50 h-6"
+              className="flex h-6 items-center gap-1 rounded-md border border-line-strong bg-canvas px-2 text-[12px] text-fg-muted transition-colors hover:bg-hover hover:text-fg disabled:opacity-50"
             >
               {isUploading ? (
                 <>
@@ -604,12 +619,12 @@ const AudioBlock = ({ block, onChange, contentRef, readOnly }) => {
             <button
               onClick={handleDeleteAudio}
               disabled={isUploading || isDeleting}
-              className="flex items-center gap-1 px-2 py-1 text-xs bg-red-50 dark:bg-red-900/20 midnight:bg-red-900/20 text-red-700 dark:text-red-300 midnight:text-red-300 rounded hover:bg-red-100 dark:hover:bg-red-900/40 midnight:hover:bg-red-900/40 disabled:opacity-50 h-6"
+              className="flex h-6 items-center gap-1 rounded-md px-2 text-[12px] text-red-600 transition-colors hover:bg-red-500/10 disabled:opacity-50 dark:text-red-400"
             >
               {isDeleting ? (
                 <>
                   <Loader className="w-3 h-3 animate-spin" />
-                  Removing...
+                  Removing…
                 </>
               ) : (
                 <>
@@ -624,8 +639,8 @@ const AudioBlock = ({ block, onChange, contentRef, readOnly }) => {
 
       {/* Error message */}
       {error && (
-        <div className="mb-2 p-2 bg-red-50 dark:bg-red-900/20 midnight:bg-red-900/20 border border-red-200 dark:border-red-800 midnight:border-red-800 rounded-lg">
-          <p className="text-sm text-red-700 dark:text-red-300 midnight:text-red-300">
+        <div className="mb-2 rounded-lg bg-red-500/10 px-3 py-2">
+          <p className="text-[13px] text-red-700 dark:text-red-400">
             {error}
           </p>
         </div>
@@ -633,11 +648,11 @@ const AudioBlock = ({ block, onChange, contentRef, readOnly }) => {
 
       {/* Upload progress */}
       {isUploading && (
-        <div className="flex justify-center mb-2 mt-12 pl-8">
+        <div className="mb-2 mt-12 flex justify-center @2xl:pl-8">
           <div className="w-full max-w-2xl">
-            <div className="w-full bg-gray-200 dark:bg-gray-700 midnight:bg-gray-700 rounded-full h-2">
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-hover">
               <div
-                className="bg-blue-600 dark:bg-blue-500 midnight:bg-indigo-500 h-2 rounded-full transition-all duration-300"
+                className="h-full rounded-full bg-accent transition-[width] duration-300"
                 style={{ width: `${uploadProgress}%` }}
               ></div>
             </div>
@@ -647,7 +662,7 @@ const AudioBlock = ({ block, onChange, contentRef, readOnly }) => {
 
       {/* Audio container */}
       <div
-        className={`audio-container flex justify-center pl-10 ${
+        className={`audio-container flex justify-center @2xl:pl-10 ${
           !audioUrl ? "mt-15" : "pt-6"
         }`}
         style={{ maxWidth: "100%" }}
@@ -655,17 +670,17 @@ const AudioBlock = ({ block, onChange, contentRef, readOnly }) => {
         {audioUrl ? (
           !isAudioLoaded && (isUploading || isReplacing) ? (
             <div
-              className="bg-gray-100 dark:bg-gray-800 midnight:bg-gray-900 rounded-lg mx-auto relative"
+              className="relative mx-auto rounded-lg bg-hover"
               style={{
                 width: "600px",
                 height: "120px",
-                maxWidth: "600px",
+                maxWidth: "100%",
               }}
             >
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-50/40 dark:bg-gray-700/60 midnight:bg-gray-800/20 backdrop-blur-sm rounded-lg">
-                <Loader className="w-12 h-12 text-blue-500 mb-4 animate-spin" />
-                <p className="text-gray-700 dark:text-gray-300 midnight:text-gray-300 font-medium">
-                  Loading audio...
+              <div className="absolute inset-0 flex flex-col items-center justify-center rounded-lg">
+                <Loader className="mb-2 h-5 w-5 animate-spin text-fg-subtle" />
+                <p className="text-[13px] text-fg-muted">
+                  Loading audio…
                 </p>
               </div>
               {/* Hidden audio for loading */}
@@ -763,7 +778,7 @@ const AudioBlock = ({ block, onChange, contentRef, readOnly }) => {
 
               {/* Custom Audio Player UI */}
               <div
-                className="bg-white dark:bg-gray-800 midnight:bg-gray-900 rounded-lg shadow-sm hover:shadow-md transition-all duration-300 p-4"
+                className="rounded-xl border border-line bg-surface p-4"
                 style={{
                   animation:
                     shouldAnimate && showAudio && !readOnly
@@ -790,7 +805,7 @@ const AudioBlock = ({ block, onChange, contentRef, readOnly }) => {
                   onChange={handleSeekEnd}
                   onMouseUp={handleSeekEnd}
                   onTouchEnd={handleSeekEnd}
-                  className="w-full h-1.5 mb-3 rounded-lg appearance-none cursor-pointer"
+                  className="note-range mb-3 h-1.5 w-full cursor-pointer appearance-none rounded-lg"
                   style={{
                     background: sliderBackground,
                     WebkitAppearance: "none",
@@ -800,12 +815,12 @@ const AudioBlock = ({ block, onChange, contentRef, readOnly }) => {
                 />
 
                 {/* Controls Row */}
-                <div className="flex items-center justify-between text-gray-900 dark:text-gray-100 midnight:text-gray-100">
+                <div className="flex items-center justify-between text-fg">
                   <div className="flex items-center gap-2">
                     {/* Play/Pause */}
                     <button
                       onClick={togglePlayPause}
-                      className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 midnight:hover:bg-gray-700 rounded transition-colors"
+                      className="rounded-md p-1.5 text-fg-muted transition-colors hover:bg-hover hover:text-fg"
                       title={isPlaying ? "Pause" : "Play"}
                     >
                       {isPlaying ? (
@@ -818,7 +833,7 @@ const AudioBlock = ({ block, onChange, contentRef, readOnly }) => {
                     {/* Skip Backward */}
                     <button
                       onClick={() => skip(-5)}
-                      className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 midnight:hover:bg-gray-700 rounded transition-colors"
+                      className="rounded-md p-1.5 text-fg-muted transition-colors hover:bg-hover hover:text-fg"
                       title="Rewind 5 seconds"
                     >
                       <Rewind className="w-4 h-4" />
@@ -827,7 +842,7 @@ const AudioBlock = ({ block, onChange, contentRef, readOnly }) => {
                     {/* Skip Forward */}
                     <button
                       onClick={() => skip(5)}
-                      className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 midnight:hover:bg-gray-700 rounded transition-colors"
+                      className="rounded-md p-1.5 text-fg-muted transition-colors hover:bg-hover hover:text-fg"
                       title="Forward 5 seconds"
                     >
                       <FastForward className="w-4 h-4" />
@@ -850,7 +865,7 @@ const AudioBlock = ({ block, onChange, contentRef, readOnly }) => {
                     >
                       <button
                         onClick={toggleMute}
-                        className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 midnight:hover:bg-gray-700 rounded transition-colors"
+                        className="rounded-md p-1.5 text-fg-muted transition-colors hover:bg-hover hover:text-fg"
                         title={isMuted ? "Unmute" : "Mute"}
                       >
                         {getVolumeIcon("w-5 h-5")}
@@ -866,7 +881,7 @@ const AudioBlock = ({ block, onChange, contentRef, readOnly }) => {
                           value={effectiveVolume}
                           onChange={handleVolumeChange}
                           onInput={handleVolumeChange}
-                          className="w-20 h-1.5 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                          className="note-range h-1.5 w-20 cursor-pointer appearance-none rounded-lg"
                           style={{
                             background: volumeBackground,
                           }}
@@ -878,10 +893,10 @@ const AudioBlock = ({ block, onChange, contentRef, readOnly }) => {
 
                 {/* Buffering overlay */}
                 {isAudioBuffering && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 dark:bg-black/80 midnight:bg-black/80 backdrop-blur-sm rounded-lg">
-                    <Loader className="w-8 h-8 text-blue-500 mb-2 animate-spin" />
-                    <p className="text-gray-700 dark:text-gray-300 midnight:text-gray-300 font-medium text-sm">
-                      Loading...
+                  <div className="absolute inset-0 flex flex-col items-center justify-center rounded-xl bg-canvas/80">
+                    <Loader className="mb-2 h-5 w-5 animate-spin text-fg-subtle" />
+                    <p className="text-[13px] text-fg-muted">
+                      Loading…
                     </p>
                   </div>
                 )}
@@ -889,22 +904,22 @@ const AudioBlock = ({ block, onChange, contentRef, readOnly }) => {
 
               {/* Replacing overlay */}
               {isReplacing && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 dark:bg-black/80 midnight:bg-black/80 backdrop-blur-sm rounded-lg transition-opacity duration-300">
-                  <Loader className="w-12 h-12 text-blue-500 mb-4 animate-spin" />
-                  <p className="text-gray-700 dark:text-gray-300 midnight:text-gray-300 font-medium">
+                <div className="absolute inset-0 flex flex-col items-center justify-center rounded-lg bg-canvas/80 transition-opacity duration-300">
+                  <Loader className="mb-2 h-5 w-5 animate-spin text-fg-subtle" />
+                  <p className="text-[13px] text-fg-muted">
                     {isUploading
-                      ? `Uploading... ${uploadProgress}%`
-                      : "Loading new audio..."}
+                      ? `Uploading… ${uploadProgress}%`
+                      : "Loading the new audio…"}
                   </p>
                 </div>
               )}
 
               {/* Deleting overlay */}
               {isDeleting && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/20 dark:bg-black/20 midnight:bg-black/20 backdrop-blur-sm rounded-lg">
-                  <Loader className="w-12 h-12 text-red-500 mb-4 animate-spin" />
-                  <p className="text-gray-700 dark:text-gray-300 midnight:text-gray-300 font-medium">
-                    Removing...
+                <div className="absolute inset-0 flex flex-col items-center justify-center rounded-lg bg-canvas/60">
+                  <Loader className="mb-2 h-5 w-5 animate-spin text-fg-subtle" />
+                  <p className="text-[13px] text-fg-muted">
+                    Removing…
                   </p>
                 </div>
               )}
@@ -912,15 +927,15 @@ const AudioBlock = ({ block, onChange, contentRef, readOnly }) => {
           )
         ) : (
           <div
-            className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer flex flex-col items-center justify-center mx-auto ${
+            className={`mx-auto flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed p-8 text-center transition-colors ${
               isDragging
-                ? "border-blue-400 bg-blue-50 dark:bg-blue-900/20 midnight:bg-blue-900/20"
-                : "border-gray-300 dark:border-gray-600 midnight:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500 midnight:hover:border-gray-500"
+                ? "border-accent bg-accent-soft"
+                : "border-line-strong hover:bg-hover"
             } ${isUploading ? "pointer-events-none opacity-50" : ""}`}
             style={{
               width: "600px",
               height: "150px",
-              maxWidth: "600px",
+              maxWidth: "100%",
             }}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
@@ -929,18 +944,18 @@ const AudioBlock = ({ block, onChange, contentRef, readOnly }) => {
           >
             {isUploading ? (
               <div className="flex flex-col items-center justify-center">
-                <Loader className="w-12 h-12 text-blue-500 mb-4 animate-spin" />
-                <p className="text-gray-500 dark:text-gray-400 midnight:text-gray-400 mb-2 font-medium">
-                  Uploading... {uploadProgress}%
+                <Loader className="mb-2 h-5 w-5 animate-spin text-fg-subtle" />
+                <p className="text-[13px] font-medium text-fg-muted">
+                  Uploading… {uploadProgress}%
                 </p>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center">
-                <AudioIcon className="w-16 h-16 text-gray-400 mb-4" />
-                <p className="text-gray-500 dark:text-gray-400 midnight:text-gray-400 mb-2 font-medium">
+                <AudioIcon className="mb-3 h-8 w-8 text-fg-subtle" strokeWidth={1.5} />
+                <p className="mb-1 text-[13px] font-medium text-fg-muted">
                   Click to upload or drag and drop
                 </p>
-                <p className="text-xs text-gray-400">
+                <p className="text-[12px] text-fg-subtle">
                   MP3, WAV, OGG, WebM, AAC, M4A, FLAC up to 5MB
                 </p>
               </div>
@@ -953,7 +968,7 @@ const AudioBlock = ({ block, onChange, contentRef, readOnly }) => {
       <div className="mt-2">
         <div
           ref={contentRef}
-          className="text-sm text-gray-600 dark:text-gray-400 midnight:text-gray-400 text-center italic outline-none"
+          className="text-center text-[13px] italic text-fg-muted outline-none"
           style={{ minHeight: "1.2em" }}
         >
           {caption || ""}
@@ -970,215 +985,25 @@ const AudioBlock = ({ block, onChange, contentRef, readOnly }) => {
       />
 
       {/* Audio Upload Alert Modal */}
-      <AudioUploadAlertModal
+      <UploadAlertDialog
         isOpen={uploadAlert.isOpen}
         onClose={handleCloseUploadAlert}
-        title={uploadAlert.title || "Upload Error"}
+        title={uploadAlert.title || undefined}
         message={uploadAlert.message}
         fileName={uploadAlert.fileName}
         fileSize={uploadAlert.fileSize}
         maxSize={uploadAlert.maxSize}
         allowedFormats={uploadAlert.allowedFormats}
-        variant={uploadAlert.variant}
+        tips={
+          uploadAlert.variant === "size"
+            ? SIZE_TIPS
+            : uploadAlert.variant === "format"
+            ? FORMAT_TIPS
+            : []
+        }
       />
     </div>
   );
 };
-
-function AudioUploadAlertModal({
-  isOpen,
-  onClose,
-  title = "Upload Error",
-  message,
-  fileSize,
-  maxSize,
-  fileName,
-  allowedFormats,
-  variant,
-}) {
-  const modalRef = useRef(null);
-
-  useEffect(() => {
-    const handleEscape = (e) => {
-      if (e.key === "Escape" && isOpen) {
-        onClose();
-      }
-    };
-
-    const handleEnter = (e) => {
-      if (
-        e.key === "Enter" &&
-        isOpen &&
-        modalRef.current &&
-        modalRef.current.contains(e.target)
-      ) {
-        e.preventDefault();
-        onClose();
-      }
-    };
-
-    if (isOpen) {
-      document.body.style.overflow = "hidden";
-      document.addEventListener("keydown", handleEscape);
-      document.addEventListener("keydown", handleEnter);
-    }
-
-    return () => {
-      document.body.style.overflow = "auto";
-      document.removeEventListener("keydown", handleEscape);
-      document.removeEventListener("keydown", handleEnter);
-    };
-  }, [isOpen, onClose]);
-
-  if (!isOpen) return null;
-
-  const handleBackdropClick = (e) => {
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  };
-
-  const formatFileSize = (bytes) => {
-    if (!bytes) return "Unknown";
-    const mb = bytes / (1024 * 1024);
-    return `${mb.toFixed(2)}MB`;
-  };
-
-  const portalTarget = typeof document !== "undefined" ? document.body : null;
-
-  if (!portalTarget) return null;
-
-  return ReactDOM.createPortal(
-    <div
-      className="fixed inset-0 flex items-center justify-center"
-      style={{ zIndex: 2147483647, pointerEvents: "auto" }}
-    >
-      <div
-        className="absolute inset-0 bg-black/40 dark:bg-black/60 midnight:bg-black/70 backdrop-blur-sm transition-opacity duration-200"
-        style={{ zIndex: 2147483646 }}
-        onClick={handleBackdropClick}
-      />
-
-      <div
-        ref={modalRef}
-        className="relative w-full max-w-md overflow-hidden rounded-xl bg-white dark:bg-gray-700 midnight:bg-gray-900 shadow-2xl dark:shadow-gray-900/30 midnight:shadow-black/30 transform transition-all duration-300 scale-100 mx-4"
-        style={{
-          transformOrigin: "center",
-          zIndex: 2147483647,
-        }}
-      >
-        {/* Header */}
-        <div className="flex items-center p-4 bg-white border-b dark:bg-gray-700 midnight:bg-gray-900 border-gray-200 dark:border-gray-600 midnight:border-gray-800">
-          <div className="flex items-center gap-3">
-            <AudioIcon className="w-5 h-5 text-red-500 dark:text-red-400 midnight:text-red-400" />
-            <h2 className="text-lg font-semibold text-gray-800 dark:text-white midnight:text-indigo-200">
-              {title}
-            </h2>
-          </div>
-        </div>
-
-        {/* Content */}
-        <div className="p-6">
-          <div className="flex items-start space-x-4">
-            <div className="flex-shrink-0 p-2 rounded-full bg-red-50 dark:bg-red-900/20 midnight:bg-red-900/20">
-              <AlertTriangle className="w-6 h-6 text-red-500 dark:text-red-400 midnight:text-red-400" />
-            </div>
-            <div className="flex-1">
-              <div className="text-gray-700 dark:text-gray-300 midnight:text-gray-400 mb-4">
-                {message}
-              </div>
-
-              {/* File Details */}
-              <div className="bg-gray-50 dark:bg-gray-800 midnight:bg-gray-800 rounded-lg p-4 space-y-2">
-                {fileName && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium text-gray-600 dark:text-gray-400 midnight:text-gray-500">
-                      File:
-                    </span>
-                    <span className="text-sm text-gray-800 dark:text-gray-200 midnight:text-gray-300 truncate max-w-48">
-                      {fileName}
-                    </span>
-                  </div>
-                )}
-
-                {fileSize && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium text-gray-600 dark:text-gray-400 midnight:text-gray-500">
-                      File Size:
-                    </span>
-                    <span className="text-sm font-mono text-red-600 dark:text-red-400 midnight:text-red-400">
-                      {formatFileSize(fileSize)}
-                    </span>
-                  </div>
-                )}
-
-                {maxSize && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium text-gray-600 dark:text-gray-400 midnight:text-gray-500">
-                      Max Allowed:
-                    </span>
-                    <span className="text-sm font-mono text-green-600 dark:text-green-400 midnight:text-green-400">
-                      {maxSize}
-                    </span>
-                  </div>
-                )}
-
-                {allowedFormats && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium text-gray-600 dark:text-gray-400 midnight:text-gray-500">
-                      Allowed Formats:
-                    </span>
-                    <span className="text-sm font-mono text-indigo-600 dark:text-indigo-300 midnight:text-indigo-200">
-                      {allowedFormats}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* Tips */}
-              {variant === "size" ? (
-                <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 midnight:bg-blue-900/20 rounded-lg">
-                  <h4 className="text-sm font-medium text-blue-800 dark:text-blue-300 midnight:text-blue-300 mb-1">
-                    Tips to reduce file size:
-                  </h4>
-                  <ul className="text-xs text-blue-700 dark:text-blue-500 midnight:text-blue-400 space-y-1">
-                    <li>• Trim the audio length before uploading</li>
-                    <li>• Lower the bitrate to reduce file size</li>
-                    <li>• Convert to MP3 or OGG format</li>
-                  </ul>
-                </div>
-              ) : variant === "format" ? (
-                <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 midnight:bg-blue-900/20 rounded-lg">
-                  <h4 className="text-sm font-medium text-blue-800 dark:text-blue-300 midnight:text-blue-300 mb-1">
-                    Tips to fix format issues:
-                  </h4>
-                  <ul className="text-xs text-blue-700 dark:text-blue-500 midnight:text-blue-400 space-y-1">
-                    <li>• Export or convert the audio to MP3, WAV, OGG, WebM, AAC, M4A, or FLAC</li>
-                    <li>• Ensure the file extension matches the actual format</li>
-                    <li>• Use an audio converter tool if needed</li>
-                  </ul>
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-end p-4 bg-gray-50 border-t dark:bg-gray-800 midnight:bg-gray-900 border-gray-200 dark:border-gray-600 midnight:border-gray-800">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-6 py-2 text-white bg-blue-600 dark:bg-blue-700 midnight:bg-indigo-700
-              hover:bg-blue-700 dark:hover:bg-blue-800 midnight:hover:bg-indigo-800
-              rounded-lg transition-all duration-200 shadow-sm hover:shadow-md font-medium"
-          >
-            Got it
-          </button>
-        </div>
-      </div>
-    </div>,
-    portalTarget
-  );
-}
 
 export default AudioBlock;
