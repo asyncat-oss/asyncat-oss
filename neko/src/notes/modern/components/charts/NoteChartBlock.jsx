@@ -11,6 +11,7 @@ import {
 } from 'recharts';
 import { Download, Pencil, Plus, Trash2 } from 'lucide-react';
 import Button from '../../../../components/ui/Button.jsx';
+import Checkbox from '../../../../components/ui/Checkbox.jsx';
 import { Input } from '../../../../components/ui/Field.jsx';
 import Select from '../../../../components/ui/Select.jsx';
 import { CHART_HEIGHT_OPTIONS, getHeightKey, getHeightValue } from './chartConstants';
@@ -35,7 +36,7 @@ const DEFAULTS = {
         { label: 'Dataset 2', data: [8, 15, 7, 12, 9, 6], borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', tension: 0.4 },
       ],
     },
-    config: { title: 'Line Chart', showGrid: true, showLegend: true, showPoints: true, heightSize: 'medium' },
+    config: { title: 'Line chart', showGrid: true, showLegend: true, showPoints: true, heightSize: 'medium' },
   },
   area: {
     data: {
@@ -45,26 +46,26 @@ const DEFAULTS = {
         { label: 'Dataset 2', data: [8, 15, 7, 12, 9, 6], borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.3)', tension: 0.4 },
       ],
     },
-    config: { title: 'Area Chart', showGrid: true, showLegend: true, showPoints: true, heightSize: 'medium' },
+    config: { title: 'Area chart', showGrid: true, showLegend: true, showPoints: true, heightSize: 'medium' },
   },
   bar: {
     data: {
       labels: ['01', '02', '03', '04'],
       datasets: [
-        { label: 'Dataset One', data: [65, 59, 80, 81], backgroundColor: '#3b82f6' },
-        { label: 'Dataset Two', data: [45, 78, 65, 92], backgroundColor: '#ef4444' },
-        { label: 'Dataset Three', data: [35, 48, 55, 71], backgroundColor: '#10b981' },
+        { label: 'Dataset 1', data: [65, 59, 80, 81], backgroundColor: '#3b82f6' },
+        { label: 'Dataset 2', data: [45, 78, 65, 92], backgroundColor: '#ef4444' },
+        { label: 'Dataset 3', data: [35, 48, 55, 71], backgroundColor: '#10b981' },
       ],
     },
-    config: { title: 'Bar Chart', showGrid: true, showLegend: true, orientation: 'vertical', heightSize: 'medium' },
+    config: { title: 'Bar chart', showGrid: true, showLegend: true, orientation: 'vertical', heightSize: 'medium' },
   },
   pie: {
     data: { labels: ['Desktop', 'Mobile', 'Tablet', 'Other'], datasets: [{ data: [45, 35, 15, 5], backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'] }] },
-    config: { title: 'Pie Chart', showLegend: true, showPercentages: true, showValues: true, heightSize: 'medium' },
+    config: { title: 'Pie chart', showLegend: true, showPercentages: true, showValues: true, heightSize: 'medium' },
   },
   donut: {
     data: { labels: ['Desktop', 'Mobile', 'Tablet'], datasets: [{ data: [45, 35, 20], backgroundColor: ['#3b82f6', '#10b981', '#f59e0b'] }] },
-    config: { title: 'Donut Chart', showLegend: true, showPercentages: true, heightSize: 'medium', innerRadius: 0.5 },
+    config: { title: 'Donut chart', showLegend: true, showPercentages: true, heightSize: 'medium', innerRadius: 0.5 },
   },
   scatter: {
     data: {
@@ -73,7 +74,7 @@ const DEFAULTS = {
         { label: 'Dataset 2', data: [{ x: 5, y: 15 }, { x: 20, y: 30 }, { x: 35, y: 5 }, { x: 40, y: 20 }], backgroundColor: '#ef4444', borderColor: '#ef4444' },
       ],
     },
-    config: { title: 'Scatter Chart', showGrid: true, showLegend: true, showTrendline: false, heightSize: 'medium', pointSize: 6 },
+    config: { title: 'Scatter chart', showGrid: true, showLegend: true, showTrendline: false, heightSize: 'medium', pointSize: 6 },
   },
 };
 
@@ -451,10 +452,7 @@ export default function NoteChartBlock({ type, block, onChange, readOnly = false
           </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1">
             {(TOGGLES[type] || []).map(([key, label]) => (
-              <label key={key} className="flex items-center gap-1.5 text-[12px] text-fg-muted">
-                <input type="checkbox" checked={Boolean(config[key] ?? key !== 'showTrendline')} onChange={(e) => setConfig(key, e.target.checked)} />
-                {label}
-              </label>
+              <Checkbox key={key} label={label} checked={Boolean(config[key] ?? key !== 'showTrendline')} onChange={(next) => setConfig(key, next)} />
             ))}
           </div>
           {type === 'scatter'

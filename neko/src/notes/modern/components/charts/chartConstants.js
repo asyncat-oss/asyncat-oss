@@ -3,7 +3,7 @@ export const CHART_HEIGHT_OPTIONS = {
   small: { label: "Small", value: 250 },
   medium: { label: "Medium", value: 350 },
   large: { label: "Large", value: 450 },
-  extraLarge: { label: "Extra Large", value: 550 }
+  extraLarge: { label: "Extra large", value: 550 }
 };
 
 // Helper function to get height value from key
