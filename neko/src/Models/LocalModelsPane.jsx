@@ -67,7 +67,7 @@ const ModelCard = ({
       id={`model-card-${m.id || m.filename}`}
       className={`flex flex-col gap-3 rounded-xl border px-4 py-3 transition-[border-color,background-color] sm:flex-row sm:items-center ${
         isLoaded ? 'border-accent/35 bg-accent-soft' : 'border-line bg-surface hover:border-line-strong'
-      } ${highlighted ? 'ring-2 ring-amber-400/70' : ''}`}
+      } ${highlighted ? 'ring-2 ring-accent/40' : ''}`}
     >
       <div className="flex min-w-0 flex-1 items-center gap-3.5">
         {m.isExternal ? (

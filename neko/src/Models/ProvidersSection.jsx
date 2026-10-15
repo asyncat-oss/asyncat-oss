@@ -36,7 +36,7 @@ function ProfileRow({ profile, catalog, isActive, busy, highlighted, onUse, onCh
       id={`provider-card-${profile.id}`}
       className={`group flex items-center gap-3.5 rounded-xl border px-4 py-3 transition-[border-color,box-shadow,background-color] ${
         isActive ? 'border-accent/35 bg-accent-soft' : 'border-line bg-surface hover:border-line-strong'
-      } ${highlighted ? 'ring-2 ring-amber-400/70' : ''}`}
+      } ${highlighted ? 'ring-2 ring-accent/40' : ''}`}
     >
       <ProviderLogo providerId={profile.provider_id} name={profile.name} size="md" />
       <div className="min-w-0 flex-1">
