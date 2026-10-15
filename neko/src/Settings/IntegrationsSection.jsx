@@ -1,290 +1,228 @@
-// Settings/IntegrationsSection.jsx
-import { useState, useEffect, useCallback } from 'react';
+// Settings → Connections → Services: outside services Asyncat's tools use.
+// RSS feeds and links to read later, a mailbox (IMAP and SMTP), messages to
+// Discord, Slack, Telegram or email, and a Hugging Face token. What people
+// enter goes to den's config, or its encrypted secrets for passwords and
+// tokens (configApi).
+
+import { useCallback, useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
 import {
-  CheckCircle2, ExternalLink, Loader2, Plug, Unplug,
-  AlertTriangle, ChevronDown, ChevronUp, Save,
-  Rss, Mail, Bookmark, RefreshCw, Plus, Trash2, Bell,
+  Bell, Bookmark, ChevronDown, ChevronRight, ExternalLink, Mail, Plus, RefreshCw, Rss, Trash2, Unplug,
 } from 'lucide-react';
-import { integrationsApi, configApi, apiUtils } from './settingApi';
+import Button from '../components/ui/Button.jsx';
+import IconButton from '../components/ui/IconButton.jsx';
+import { Field, Input } from '../components/ui/Field.jsx';
+import Skeleton from '../components/ui/Skeleton.jsx';
+import { errorDetail, useToast } from '../components/toastContext.js';
+import { LogoTile, ProviderLogo } from '../Models/modelLogos.jsx';
+import { integrationsApi, configApi } from './settingApi';
 
-const mutedCls = 'text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-400';
-const panelCls = 'rounded-xl border border-gray-200/80 dark:border-gray-800 midnight:border-gray-800 bg-white dark:bg-gray-900 midnight:bg-gray-950 overflow-hidden';
+const CHANNELS = [
+  { id: 'discord', label: 'Discord' },
+  { id: 'slack', label: 'Slack' },
+  { id: 'telegram', label: 'Telegram' },
+  { id: 'email', label: 'Email' },
+];
 
-// ── Credential setup form (inline, collapsible) ───────────────────────────────
+function count(n, word) {
+  const value = Number(n) || 0;
+  return `${value} ${word}${value === 1 ? '' : 's'}`;
+}
+
+const SEVERITY = { error: 'Error', warning: 'Warning', success: 'Done', info: 'Info' };
+
+function Dot({ on, tone = 'ok' }) {
+  const color = !on ? 'bg-fg-subtle/50' : tone === 'error' ? 'bg-red-500' : 'bg-emerald-500';
+  return <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${color}`} aria-hidden="true" />;
+}
+
+Dot.propTypes = { on: PropTypes.bool, tone: PropTypes.string };
+
+function TextLink({ href, children }) {
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[12px] text-accent hover:underline">
+      {children} <ExternalLink className="h-3 w-3" />
+    </a>
+  );
+}
+
+TextLink.propTypes = { href: PropTypes.string.isRequired, children: PropTypes.node };
+
+// ── Entering keys ────────────────────────────────────────────────────────────
 
 function CredentialSetup({ fields, helpUrl, helpText, onSaved }) {
-  const [values, setValues] = useState(() =>
-    Object.fromEntries(fields.map((f) => [f.key, '']))
-  );
+  const [values, setValues] = useState(() => Object.fromEntries(fields.map((field) => [field.key, ''])));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
-  const handleSave = async () => {
-    const filled = fields.filter((f) => values[f.key]?.trim());
+  const save = async (event) => {
+    event.preventDefault();
+    const filled = fields.filter((field) => values[field.key]?.trim());
     if (filled.length === 0) {
-      setError('Enter at least one credential to save.');
+      setError('Fill in at least one field.');
       return;
     }
     setSaving(true);
     setError(null);
     try {
       for (const field of filled) {
-        const val = values[field.key].trim();
-        if (field.configType === 'config') {
-          await configApi.updateConfig(field.key, val);
-        } else {
-          await configApi.updateSecret(field.key, val);
-        }
+        const value = values[field.key].trim();
+        if (field.configType === 'config') await configApi.updateConfig(field.key, value);
+        else await configApi.updateSecret(field.key, value);
       }
       await onSaved?.();
     } catch (err) {
-      setError(err.message || 'Failed to save credentials.');
+      setError(errorDetail(err) || "Couldn't save that.");
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="px-5 py-4 border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50 midnight:bg-gray-950/50 space-y-3">
-      {fields.map((field) => (
-        <div key={field.key} className="space-y-1">
-          <label className="block text-[11px] font-medium text-gray-600 dark:text-gray-400 midnight:text-gray-400">
-            {field.label}
-            <code className="ml-1.5 px-1 rounded bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 font-mono text-[10px] text-gray-500">
-              {field.key}
-            </code>
-          </label>
-          <input
-            type={field.configType === 'secret' ? 'password' : 'text'}
-            value={values[field.key]}
-            onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))}
-            placeholder={field.placeholder}
-            autoComplete="off"
-            className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-gray-700 bg-white dark:bg-gray-800 midnight:bg-gray-800 text-gray-900 dark:text-gray-100 midnight:text-gray-100 placeholder-gray-400 font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:focus:ring-indigo-400 transition-shadow"
-          />
-        </div>
-      ))}
-
-      {error && (
-        <p className="text-[11px] text-red-600 dark:text-red-400 midnight:text-red-400">{error}</p>
-      )}
-
-      <div className="flex items-center gap-3 pt-0.5">
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={saving}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-white midnight:bg-gray-100 midnight:hover:bg-white text-white dark:text-gray-900 midnight:text-gray-900 disabled:opacity-50 transition-colors"
-        >
-          {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
-          Save credentials
-        </button>
-        {helpUrl && (
-          <a
-            href={helpUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-gray-200 underline underline-offset-2 transition-colors"
+    <form onSubmit={save} className="space-y-3 border-t border-line px-4 py-4">
+      <div className={`grid gap-3 ${fields.length > 2 ? 'sm:grid-cols-2' : ''}`}>
+        {fields.map((field) => (
+          <Field
+            key={field.key}
+            htmlFor={`service-${field.key}`}
+            label={<>{field.label} <span className="ml-1 font-mono text-[11px] font-normal text-fg-subtle">{field.key}</span></>}
           >
-            {helpText || 'Get credentials'} <ExternalLink size={10} />
-          </a>
-        )}
+            <Input
+              id={`service-${field.key}`}
+              type={field.configType === 'secret' ? 'password' : 'text'}
+              value={values[field.key]}
+              onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.value }))}
+              placeholder={field.placeholder}
+              autoComplete="off"
+              spellCheck={false}
+              className="font-mono text-[12px]"
+            />
+          </Field>
+        ))}
       </div>
-    </div>
+      {error ? <p role="alert" className="text-[12px] text-red-600 dark:text-red-400">{error}</p> : null}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button type="submit" variant="primary" loading={saving}>Save</Button>
+        {helpUrl ? <TextLink href={helpUrl}>{helpText || 'Where to find these'}</TextLink> : null}
+      </div>
+    </form>
   );
 }
 
-// ── Integration card ──────────────────────────────────────────────────────────
+const setupFieldShape = PropTypes.shape({
+  key: PropTypes.string.isRequired,
+  label: PropTypes.string.isRequired,
+  configType: PropTypes.oneOf(['config', 'secret']),
+  placeholder: PropTypes.string,
+});
 
-function IntegrationCard({
-  logo,
-  name,
-  description,
-  status,
-  configured,
-  loading,
-  onConnect,
-  onDisconnect,
-  connecting,
-  disconnecting,
-  setupFields,
-  setupHelpUrl,
-  setupHelpText,
-  onCredsSaved,
-  // When true: configured == connected, no separate OAuth step needed
-  noOAuth = false,
-  children,
+CredentialSetup.propTypes = {
+  fields: PropTypes.arrayOf(setupFieldShape).isRequired,
+  helpUrl: PropTypes.string,
+  helpText: PropTypes.string,
+  onSaved: PropTypes.func,
+};
+
+// ── One service ──────────────────────────────────────────────────────────────
+
+function ServiceCard({
+  id, logo, name, description, configured, loading, details, showStatus = true,
+  onDisconnect, disconnecting, setupFields, setupHelpUrl, setupHelpText, onCredsSaved, children,
 }) {
   const [setupOpen, setSetupOpen] = useState(false);
-  const connected = noOAuth ? configured : status?.connected;
 
-  // Close setup form once credentials make it configured
   useEffect(() => {
     if (configured) setSetupOpen(false);
   }, [configured]);
 
-  const handleCredsSaved = async () => {
-    setSetupOpen(false);
-    await onCredsSaved?.();
-  };
+  if (loading) return <Skeleton className="h-[74px] rounded-xl" />;
 
-  if (loading) {
-    return (
-      <div className={`${panelCls} p-5 animate-pulse`}>
-        <div className="flex items-center gap-4">
-          <div className="h-11 w-11 rounded-xl bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 flex-shrink-0" />
-          <div className="flex-1 space-y-2">
-            <div className="h-4 w-32 rounded bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800" />
-            <div className="h-3 w-64 rounded bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800" />
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const canSetUp = !configured && Boolean(setupFields?.length);
+  const canDisconnect = configured && Boolean(onDisconnect);
 
   return (
-    <div className={panelCls}>
-      <div className="px-5 py-4 flex items-start gap-4">
-        {/* Logo */}
-        <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border border-gray-200 dark:border-gray-700 midnight:border-gray-700 bg-white dark:bg-gray-800 midnight:bg-gray-800">
+    <section className="rounded-xl border border-line bg-surface" data-service={id}>
+      <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-start">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
           {logo}
-        </div>
-
-        {/* Info */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 midnight:text-gray-100">
-              {name}
-            </h3>
-            {connected && (
-              <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-green-50 dark:bg-green-900/20 midnight:bg-green-900/20 text-green-700 dark:text-green-400 midnight:text-green-400 border border-green-200/70 dark:border-green-800/40 midnight:border-green-800/40">
-                <CheckCircle2 size={9} />
-                Connected
-              </span>
-            )}
-            {!configured && (
-              <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-amber-50 dark:bg-amber-900/20 midnight:bg-amber-900/20 text-amber-700 dark:text-amber-400 midnight:text-amber-400 border border-amber-200/70 dark:border-amber-800/40 midnight:border-amber-800/40">
-                <AlertTriangle size={9} />
-                Needs setup
-              </span>
-            )}
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
+              <h3 className="text-[14px] font-medium text-fg">{name}</h3>
+              {showStatus ? (
+                <span className="inline-flex items-center gap-1.5 text-[12px] text-fg-muted">
+                  <Dot on={configured} />
+                  {configured ? 'Connected' : 'Not set up'}
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-0.5 text-[12px] leading-5 text-fg-muted">{description}</p>
+            {details ? <div className="mt-1 text-[12px] leading-5 text-fg-subtle">{details}</div> : null}
           </div>
-
-          <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400 midnight:text-gray-400">
-            {description}
-          </p>
-
-          {connected && status?.email && (
-            <p className={`mt-1.5 ${mutedCls}`}>
-              Signed in as{' '}
-              <span className="font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-300">
-                {status.email}
-              </span>
-            </p>
-          )}
-          {connected && status?.login && !status?.email && (
-            <p className={`mt-1.5 ${mutedCls}`}>
-              Signed in as{' '}
-              <span className="font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-300">
-                @{status.login}
-              </span>
-            </p>
-          )}
-          {noOAuth && configured && status?.notes !== undefined && (
-            <p className={`mt-1.5 ${mutedCls}`}>
-              {status.notes} note{status.notes !== 1 ? 's' : ''} · {status.folders} folder{status.folders !== 1 ? 's' : ''}
-            </p>
-          )}
-          {noOAuth && configured && status?.vaultPath && (
-            <p className={`mt-1 ${mutedCls} font-mono truncate`} title={status.vaultPath}>
-              {status.vaultPath}
-            </p>
-          )}
         </div>
-
-        {/* Actions */}
-        <div className="flex-shrink-0 flex items-center gap-2">
-          {!configured && setupFields?.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setSetupOpen((o) => !o)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-gray-700 text-xs font-medium text-gray-600 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 midnight:hover:bg-gray-900 transition-colors"
-            >
-              {setupOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-              {setupOpen ? 'Cancel' : 'Configure'}
-            </button>
-          )}
-
-          {connected && onDisconnect ? (
-            <button
-              type="button"
-              onClick={onDisconnect}
-              disabled={disconnecting}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 midnight:border-gray-700 text-xs font-medium text-gray-600 dark:text-gray-300 midnight:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 midnight:hover:bg-gray-900 disabled:opacity-50 transition-colors"
-            >
-              {disconnecting ? <Loader2 size={12} className="animate-spin" /> : <Unplug size={12} />}
-              Disconnect
-            </button>
-          ) : !noOAuth && configured ? (
-            <button
-              type="button"
-              onClick={onConnect}
-              disabled={connecting}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-white midnight:bg-gray-100 midnight:hover:bg-white text-white dark:text-gray-900 midnight:text-gray-900 disabled:opacity-45 transition-colors"
-            >
-              {connecting ? <Loader2 size={12} className="animate-spin" /> : <Plug size={12} />}
-              Connect
-            </button>
-          ) : null}
-        </div>
+        {canSetUp || canDisconnect ? (
+          <div className="flex shrink-0 items-center gap-2 pl-11 sm:pl-0">
+            {canSetUp ? (
+              <Button size="sm" variant={setupOpen ? 'ghost' : 'secondary'} onClick={() => setSetupOpen((open) => !open)} aria-expanded={setupOpen}>
+                {setupOpen ? 'Cancel' : 'Set up'}
+              </Button>
+            ) : null}
+            {canDisconnect ? (
+              <Button size="sm" variant="ghost" icon={Unplug} loading={disconnecting} onClick={onDisconnect}>Disconnect</Button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
-
-      {/* Inline credential setup form */}
-      {!configured && setupOpen && setupFields?.length > 0 && (
+      {!configured && setupOpen && setupFields?.length ? (
         <CredentialSetup
           fields={setupFields}
           helpUrl={setupHelpUrl}
           helpText={setupHelpText}
-          onSaved={handleCredsSaved}
+          onSaved={async () => {
+            setSetupOpen(false);
+            await onCredsSaved?.();
+          }}
         />
-      )}
+      ) : null}
+      {children ? <div className="border-t border-line px-4 py-3">{children}</div> : null}
+    </section>
+  );
+}
 
-      {children && (
-        <div className="border-t border-gray-100 dark:border-gray-800 midnight:border-gray-800 px-5 py-4">
-          {children}
-        </div>
+ServiceCard.propTypes = {
+  id: PropTypes.string.isRequired,
+  logo: PropTypes.node,
+  name: PropTypes.string.isRequired,
+  description: PropTypes.node,
+  configured: PropTypes.bool,
+  loading: PropTypes.bool,
+  details: PropTypes.node,
+  showStatus: PropTypes.bool,
+  onDisconnect: PropTypes.func,
+  disconnecting: PropTypes.bool,
+  setupFields: PropTypes.arrayOf(setupFieldShape),
+  setupHelpUrl: PropTypes.string,
+  setupHelpText: PropTypes.string,
+  onCredsSaved: PropTypes.func,
+  children: PropTypes.node,
+};
+
+// ── RSS and read later ───────────────────────────────────────────────────────
+
+function ListBox({ empty, children }) {
+  const items = Array.isArray(children) ? children.filter(Boolean) : children;
+  return (
+    <div className="max-h-40 overflow-auto rounded-lg border border-line">
+      {items && (!Array.isArray(items) || items.length) ? <div className="divide-y divide-line">{items}</div> : (
+        <p className="px-3 py-2.5 text-[12px] text-fg-subtle">{empty}</p>
       )}
     </div>
   );
 }
 
-// ── Logos ──────────────────────────────────────────────────────────────────────
+ListBox.propTypes = { empty: PropTypes.string.isRequired, children: PropTypes.node };
 
-const RssLogo = () => (
-  <Rss size={22} className="text-orange-500 dark:text-orange-400 midnight:text-orange-400" />
-);
-
-const MailLogo = () => (
-  <Mail size={22} className="text-sky-600 dark:text-sky-400 midnight:text-sky-400" />
-);
-
-const NotificationLogo = () => (
-  <Bell size={22} className="text-violet-600 dark:text-violet-400 midnight:text-violet-400" />
-);
-
-const HuggingFaceLogo = () => (
-  <svg viewBox="0 0 24 24" className="w-6 h-6" aria-hidden="true">
-    <circle cx="12" cy="12" r="10" fill="#FFD21E" />
-    <circle cx="8.5" cy="10" r="1.4" fill="#333" />
-    <circle cx="15.5" cy="10" r="1.4" fill="#333" />
-    <path d="M8 14.5c1.2 1.8 6.8 1.8 8 0" stroke="#333" strokeWidth="1.4" fill="none" strokeLinecap="round" />
-    <path d="M7 8.5c-.5-1-1.5-1-2 0" stroke="#333" strokeWidth="1" fill="none" strokeLinecap="round" />
-    <path d="M17 8.5c.5-1 1.5-1 2 0" stroke="#333" strokeWidth="1" fill="none" strokeLinecap="round" />
-  </svg>
-);
-
-function RssReadLaterManager({ onChanged, flash }) {
+function RssReadLaterManager({ onChanged }) {
+  const toast = useToast();
   const [feeds, setFeeds] = useState([]);
   const [savedLinks, setSavedLinks] = useState([]);
   const [feedUrl, setFeedUrl] = useState('');
@@ -305,253 +243,206 @@ function RssReadLaterManager({ onChanged, flash }) {
     load().catch(() => {});
   }, [load]);
 
-  const addFeed = async () => {
-    if (!feedUrl.trim()) return;
-    setBusy('feed');
+  const run = async (key, fn, failure) => {
+    setBusy(key);
     try {
+      await fn();
+    } catch (err) {
+      toast.error(failure, { detail: errorDetail(err) });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const addFeed = (event) => {
+    event.preventDefault();
+    if (!feedUrl.trim()) return;
+    run('feed', async () => {
       const res = await integrationsApi.rss.addFeed(feedUrl.trim());
       setFeedUrl('');
       await load();
       await onChanged?.();
-      flash?.({ type: 'success', text: `Added feed${res.imported ? ` with ${res.imported} item${res.imported === 1 ? '' : 's'}` : ''}.` });
-    } catch (err) {
-      flash?.({ type: 'error', text: apiUtils.handleError(err, 'Failed to add RSS feed') });
-    } finally {
-      setBusy(null);
-    }
+      toast.success(res.imported ? `Added the feed with ${res.imported} item${res.imported === 1 ? '' : 's'}` : 'Added the feed');
+    }, "Couldn't add the feed");
   };
 
-  const refreshFeeds = async () => {
-    setBusy('refresh');
-    try {
-      const res = await integrationsApi.rss.refreshAll();
-      await load();
-      await onChanged?.();
-      flash?.({ type: 'success', text: `RSS refresh complete: ${res.refreshed || 0} ok, ${res.failed || 0} failed.` });
-    } catch (err) {
-      flash?.({ type: 'error', text: apiUtils.handleError(err, 'Failed to refresh feeds') });
-    } finally {
-      setBusy(null);
-    }
-  };
+  const refreshFeeds = () => run('refresh', async () => {
+    const res = await integrationsApi.rss.refreshAll();
+    await load();
+    await onChanged?.();
+    toast.success('Feeds refreshed', { detail: res.failed ? `${res.refreshed || 0} worked, ${res.failed} failed.` : undefined });
+  }, "Couldn't refresh the feeds");
 
-  const removeFeed = async (id) => {
-    setBusy(`delete-${id}`);
-    try {
-      await integrationsApi.rss.deleteFeed(id);
-      await load();
-      await onChanged?.();
-    } catch (err) {
-      flash?.({ type: 'error', text: apiUtils.handleError(err, 'Failed to remove feed') });
-    } finally {
-      setBusy(null);
-    }
-  };
+  const removeFeed = (id) => run(`delete-${id}`, async () => {
+    await integrationsApi.rss.deleteFeed(id);
+    await load();
+    await onChanged?.();
+  }, "Couldn't remove the feed");
 
-  const addReadLater = async () => {
+  const addReadLater = (event) => {
+    event.preventDefault();
     if (!linkUrl.trim()) return;
-    setBusy('link');
-    try {
+    run('link', async () => {
       await integrationsApi.rss.addReadLater({ url: linkUrl.trim(), notes: linkNotes.trim() });
       setLinkUrl('');
       setLinkNotes('');
       await load();
       await onChanged?.();
-      flash?.({ type: 'success', text: 'Saved link to read later.' });
-    } catch (err) {
-      flash?.({ type: 'error', text: apiUtils.handleError(err, 'Failed to save link') });
-    } finally {
-      setBusy(null);
-    }
+      toast.success('Saved the link to read later');
+    }, "Couldn't save the link");
   };
 
   return (
-    <div className="space-y-4">
-      <div className="grid gap-3 lg:grid-cols-2">
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-300">Feeds</p>
-            <button
-              type="button"
-              onClick={refreshFeeds}
-              disabled={busy === 'refresh' || feeds.length === 0}
-              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200 midnight:text-gray-400 midnight:hover:bg-gray-900 midnight:hover:text-gray-200"
-            >
-              {busy === 'refresh' ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-              Refresh
-            </button>
-          </div>
-          <div className="flex gap-2">
-            <input
-              value={feedUrl}
-              onChange={(e) => setFeedUrl(e.target.value)}
-              placeholder="https://example.com/feed.xml"
-              className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 midnight:border-gray-700 midnight:bg-gray-800 midnight:text-gray-100"
-            />
-            <button
-              type="button"
-              onClick={addFeed}
-              disabled={busy === 'feed' || !feedUrl.trim()}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-45 dark:bg-gray-100 dark:text-gray-900 midnight:bg-gray-100 midnight:text-gray-900"
-            >
-              {busy === 'feed' ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
-              Add
-            </button>
-          </div>
-          <div className="max-h-36 overflow-auto rounded-lg border border-gray-100 dark:border-gray-800 midnight:border-gray-800">
-            {feeds.length === 0 ? (
-              <p className="px-3 py-3 text-xs text-gray-400 dark:text-gray-500 midnight:text-gray-500">No feeds yet.</p>
-            ) : feeds.map(feed => (
-              <div key={feed.id} className="flex items-center gap-2 border-b border-gray-100 px-3 py-2 last:border-b-0 dark:border-gray-800 midnight:border-gray-800">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-medium text-gray-800 dark:text-gray-200 midnight:text-gray-200">{feed.title}</p>
-                  <p className="truncate text-[10px] text-gray-400">{feed.unreadCount || 0} unread · {feed.url}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => removeFeed(feed.id)}
-                  disabled={busy === `delete-${feed.id}`}
-                  className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-red-500 dark:hover:bg-gray-800"
-                  aria-label="Remove feed"
-                >
-                  {busy === `delete-${feed.id}` ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
-                </button>
+    <div className="grid gap-4 lg:grid-cols-2">
+      <div className="space-y-2">
+        <div className="flex h-7 items-center justify-between">
+          <p className="text-[12px] font-medium text-fg-muted">Feeds</p>
+          <Button size="xs" variant="ghost" icon={RefreshCw} loading={busy === 'refresh'} disabled={feeds.length === 0} onClick={refreshFeeds}>Refresh</Button>
+        </div>
+        <form onSubmit={addFeed} className="flex gap-2">
+          <Input value={feedUrl} onChange={(event) => setFeedUrl(event.target.value)} placeholder="https://example.com/feed.xml" aria-label="Feed address" className="min-w-0 flex-1" />
+          <Button type="submit" icon={Plus} loading={busy === 'feed'} disabled={!feedUrl.trim()}>Add</Button>
+        </form>
+        <ListBox empty="No feeds yet.">
+          {feeds.map((feed) => (
+            <div key={feed.id} className="flex items-center gap-2 py-1.5 pl-3 pr-1.5">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[13px] text-fg">{feed.title}</p>
+                <p className="truncate text-[11px] text-fg-subtle">{feed.unreadCount || 0} unread · {feed.url}</p>
               </div>
-            ))}
-          </div>
-        </div>
+              <IconButton size="sm" icon={Trash2} label={`Remove ${feed.title}`} loading={busy === `delete-${feed.id}`} onClick={() => removeFeed(feed.id)} />
+            </div>
+          ))}
+        </ListBox>
+      </div>
 
-        <div className="space-y-2">
-          <p className="text-xs font-medium text-gray-700 dark:text-gray-300 midnight:text-gray-300">Read Later</p>
-          <div className="flex gap-2">
-            <input
-              value={linkUrl}
-              onChange={(e) => setLinkUrl(e.target.value)}
-              placeholder="https://article.example.com"
-              className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 midnight:border-gray-700 midnight:bg-gray-800 midnight:text-gray-100"
-            />
-            <button
-              type="button"
-              onClick={addReadLater}
-              disabled={busy === 'link' || !linkUrl.trim()}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-45 dark:bg-gray-100 dark:text-gray-900 midnight:bg-gray-100 midnight:text-gray-900"
-            >
-              {busy === 'link' ? <Loader2 size={12} className="animate-spin" /> : <Bookmark size={12} />}
-              Save
-            </button>
-          </div>
-          <input
-            value={linkNotes}
-            onChange={(e) => setLinkNotes(e.target.value)}
-            placeholder="Optional note"
-            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 midnight:border-gray-700 midnight:bg-gray-800 midnight:text-gray-100"
-          />
-          <div className="max-h-36 overflow-auto rounded-lg border border-gray-100 dark:border-gray-800 midnight:border-gray-800">
-            {savedLinks.length === 0 ? (
-              <p className="px-3 py-3 text-xs text-gray-400 dark:text-gray-500 midnight:text-gray-500">No saved links yet.</p>
-            ) : savedLinks.map(item => (
-              <a
-                key={item.id}
-                href={item.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block border-b border-gray-100 px-3 py-2 last:border-b-0 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/70 midnight:border-gray-800 midnight:hover:bg-gray-900"
-              >
-                <p className="truncate text-xs font-medium text-gray-800 dark:text-gray-200 midnight:text-gray-200">{item.title}</p>
-                <p className="truncate text-[10px] text-gray-400">{item.url}</p>
-              </a>
-            ))}
-          </div>
+      <div className="space-y-2">
+        <div className="flex h-7 items-center">
+          <p className="text-[12px] font-medium text-fg-muted">Read later</p>
         </div>
+        <form onSubmit={addReadLater} className="space-y-2">
+          <div className="flex gap-2">
+            <Input value={linkUrl} onChange={(event) => setLinkUrl(event.target.value)} placeholder="https://article.example.com" aria-label="Link to read later" className="min-w-0 flex-1" />
+            <Button type="submit" icon={Bookmark} loading={busy === 'link'} disabled={!linkUrl.trim()}>Save</Button>
+          </div>
+          <Input value={linkNotes} onChange={(event) => setLinkNotes(event.target.value)} placeholder="A note, if you like" aria-label="Note for the link" />
+        </form>
+        <ListBox empty="No saved links yet.">
+          {savedLinks.map((item) => (
+            <a key={item.id} href={item.url} target="_blank" rel="noopener noreferrer" className="block px-3 py-1.5 transition-colors hover:bg-hover">
+              <p className="truncate text-[13px] text-fg">{item.title}</p>
+              <p className="truncate text-[11px] text-fg-subtle">{item.url}</p>
+            </a>
+          ))}
+        </ListBox>
       </div>
     </div>
   );
 }
 
-// ── Main section ──────────────────────────────────────────────────────────────
+RssReadLaterManager.propTypes = { onChanged: PropTypes.func };
 
-const setupFieldShape = PropTypes.shape({
-  key: PropTypes.string.isRequired,
-  label: PropTypes.string.isRequired,
-  configType: PropTypes.oneOf(['config', 'secret']),
-  placeholder: PropTypes.string,
-});
+// ── Messages elsewhere ───────────────────────────────────────────────────────
 
-CredentialSetup.propTypes = {
-  fields: PropTypes.arrayOf(setupFieldShape).isRequired,
-  helpUrl: PropTypes.string,
-  helpText: PropTypes.string,
-  onSaved: PropTypes.func,
-};
+function DeliveryHistory() {
+  const toast = useToast();
+  const [open, setOpen] = useState(false);
+  const [log, setLog] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
-IntegrationCard.propTypes = {
-  logo: PropTypes.node,
-  name: PropTypes.string.isRequired,
-  description: PropTypes.string,
-  status: PropTypes.shape({
-    connected: PropTypes.bool,
-    email: PropTypes.string,
-    login: PropTypes.string,
-    notes: PropTypes.number,
-    folders: PropTypes.number,
-    vaultPath: PropTypes.string,
-  }),
-  configured: PropTypes.bool,
-  loading: PropTypes.bool,
-  onConnect: PropTypes.func,
-  onDisconnect: PropTypes.func,
-  connecting: PropTypes.bool,
-  disconnecting: PropTypes.bool,
-  setupFields: PropTypes.arrayOf(setupFieldShape),
-  setupHelpUrl: PropTypes.string,
-  setupHelpText: PropTypes.string,
-  onCredsSaved: PropTypes.func,
-  noOAuth: PropTypes.bool,
-  children: PropTypes.node,
-};
+  const toggle = async () => {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    setOpen(true);
+    if (log !== null) return;
+    setLoading(true);
+    try {
+      const result = await integrationsApi.notifications.fetchLog(50);
+      setLog(result.entries || []);
+    } catch (err) {
+      toast.error("Couldn't load the history", { detail: errorDetail(err) });
+    } finally {
+      setLoading(false);
+    }
+  };
 
-RssReadLaterManager.propTypes = {
-  onChanged: PropTypes.func,
-  flash: PropTypes.func.isRequired,
-};
+  const clear = async () => {
+    setClearing(true);
+    try {
+      await integrationsApi.notifications.clearLog();
+      setLog([]);
+      toast.success('History cleared');
+    } catch (err) {
+      toast.error("Couldn't clear the history", { detail: errorDetail(err) });
+    } finally {
+      setClearing(false);
+    }
+  };
+
+  return (
+    <div>
+      <button type="button" onClick={toggle} aria-expanded={open} className="flex items-center gap-1 rounded text-[12px] font-medium text-fg-muted outline-none hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/40">
+        {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+        What was sent
+      </button>
+      {open ? (
+        <div className="mt-2">
+          {loading ? <Skeleton className="h-16" /> : !log?.length ? (
+            <p className="text-[12px] text-fg-subtle">Nothing sent yet.</p>
+          ) : (
+            <>
+              <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line">
+                {log.slice(0, 20).map((entry) => (
+                  <li key={entry.id} className="flex items-start gap-2.5 px-3 py-2">
+                    <span className="mt-1.5"><Dot on tone={entry.success ? 'ok' : 'error'} /></span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[12px] text-fg">{entry.title}</p>
+                      {entry.error ? <p className="truncate text-[11px] text-red-600 dark:text-red-400">{entry.error}</p> : null}
+                      <p className="text-[11px] text-fg-subtle">
+                        {SEVERITY[entry.severity] || entry.severity} · {CHANNELS.find((channel) => channel.id === entry.channel)?.label || entry.channel} · {new Date(entry.created_at).toLocaleString()}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-1.5 flex justify-end">
+                <Button size="xs" variant="ghost" icon={Trash2} loading={clearing} onClick={clear}>Clear history</Button>
+              </div>
+            </>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// ── The page ─────────────────────────────────────────────────────────────────
 
 export default function IntegrationsSection() {
-  const [message, setMessage] = useState(null);
+  const toast = useToast();
 
-  // ── RSS / Read Later ───────────────────────────────────────────────────────
-  const [rssStatus,       setRssStatus]       = useState(null);
-  const [rssLoading,      setRssLoading]      = useState(true);
+  const [rssStatus, setRssStatus] = useState(null);
+  const [rssLoading, setRssLoading] = useState(true);
 
-  // ── Generic Mail ───────────────────────────────────────────────────────────
-  const [mailStatus,        setMailStatus]        = useState(null);
-  const [mailLoading,       setMailLoading]       = useState(true);
+  const [mailStatus, setMailStatus] = useState(null);
+  const [mailLoading, setMailLoading] = useState(true);
   const [mailDisconnecting, setMailDisconnecting] = useState(false);
-  const [mailTesting,       setMailTesting]       = useState(null);
+  const [mailTesting, setMailTesting] = useState(null);
 
-  // ── Outbound Notifications ────────────────────────────────────────────────
-  const [notifyStatus,        setNotifyStatus]        = useState(null);
-  const [notifyLoading,       setNotifyLoading]       = useState(true);
+  const [notifyStatus, setNotifyStatus] = useState(null);
+  const [notifyLoading, setNotifyLoading] = useState(true);
   const [notifyDisconnecting, setNotifyDisconnecting] = useState(false);
-  const [notifyTesting,       setNotifyTesting]       = useState(null);
+  const [notifyTesting, setNotifyTesting] = useState(null);
   const [telegramDiscovering, setTelegramDiscovering] = useState(false);
-  const [telegramChatId,      setTelegramChatId]      = useState(null);
-  const [telegramSaving,      setTelegramSaving]      = useState(false);
-  const [notifyLog,           setNotifyLog]           = useState(null);
-  const [notifyLogLoading,    setNotifyLogLoading]    = useState(false);
-  const [notifyLogOpen,       setNotifyLogOpen]       = useState(false);
-  const [notifyLogClearing,   setNotifyLogClearing]   = useState(false);
+  const [telegramChatId, setTelegramChatId] = useState(null);
+  const [telegramSaving, setTelegramSaving] = useState(false);
 
-  // ── Hugging Face ───────────────────────────────────────────────────────────
-  const [hfConfigured,      setHfConfigured]      = useState(false);
-  const [hfLoading,         setHfLoading]         = useState(true);
-  const [hfDisconnecting,   setHfDisconnecting]   = useState(false);
-
-  const flash = useCallback((msg, ms = 4000) => {
-    setMessage(msg);
-    setTimeout(() => setMessage(null), ms);
-  }, []);
-
-  // ── Load all statuses ───────────────────────────────────────────────────────
+  const [hfConfigured, setHfConfigured] = useState(false);
+  const [hfLoading, setHfLoading] = useState(true);
+  const [hfDisconnecting, setHfDisconnecting] = useState(false);
 
   const loadRssStatus = useCallback(async () => {
     try { setRssStatus(await integrationsApi.rss.fetchStatus()); }
@@ -589,469 +480,252 @@ export default function IntegrationsSection() {
     loadHfStatus();
   }, [loadRssStatus, loadMailStatus, loadNotifyStatus, loadHfStatus]);
 
-  // ── Mail actions ────────────────────────────────────────────────────────────
-
-  const handleMailDisconnect = async () => {
-    setMailDisconnecting(true);
+  const clearKeys = async (keys, setBusy, reload, done, failure) => {
+    setBusy(true);
     try {
-      const keys = [
-        'MAIL_IMAP_HOST', 'MAIL_IMAP_PORT', 'MAIL_IMAP_SECURE', 'MAIL_IMAP_USER', 'MAIL_IMAP_PASSWORD',
-        'MAIL_SMTP_HOST', 'MAIL_SMTP_PORT', 'MAIL_SMTP_SECURE', 'MAIL_SMTP_USER', 'MAIL_SMTP_PASSWORD',
-        'MAIL_FROM_EMAIL', 'MAIL_FROM_NAME',
-      ];
-      for (const key of keys) {
-        await configApi.updateConfig(key, '');
-      }
-      await loadMailStatus();
-      flash({ type: 'success', text: 'Mail integration disconnected.' });
+      for (const key of keys) await configApi.updateConfig(key, '');
+      await reload();
+      toast.success(done);
     } catch (err) {
-      flash({ type: 'error', text: apiUtils.handleError(err, 'Failed to disconnect mail') });
+      toast.error(failure, { detail: errorDetail(err) });
     } finally {
-      setMailDisconnecting(false);
+      setBusy(false);
     }
   };
 
-  const handleMailTest = async (kind) => {
+  const disconnectMail = () => clearKeys([
+    'MAIL_IMAP_HOST', 'MAIL_IMAP_PORT', 'MAIL_IMAP_SECURE', 'MAIL_IMAP_USER', 'MAIL_IMAP_PASSWORD',
+    'MAIL_SMTP_HOST', 'MAIL_SMTP_PORT', 'MAIL_SMTP_SECURE', 'MAIL_SMTP_USER', 'MAIL_SMTP_PASSWORD',
+    'MAIL_FROM_EMAIL', 'MAIL_FROM_NAME',
+  ], setMailDisconnecting, loadMailStatus, 'Email disconnected', "Couldn't disconnect email");
+
+  const disconnectNotify = () => clearKeys([
+    'NOTIFY_EMAIL_TO', 'NOTIFY_DEFAULT_CHANNELS', 'NOTIFY_DISCORD_WEBHOOK', 'NOTIFY_SLACK_WEBHOOK',
+    'NOTIFY_TELEGRAM_BOT_TOKEN', 'NOTIFY_TELEGRAM_CHAT_ID',
+  ], setNotifyDisconnecting, loadNotifyStatus, 'Messages elsewhere turned off', "Couldn't turn them off");
+
+  const testMail = async (kind) => {
+    const name = kind === 'imap' ? 'IMAP' : 'SMTP';
     setMailTesting(kind);
     try {
       if (kind === 'imap') await integrationsApi.mail.testImap();
       else await integrationsApi.mail.testSmtp();
-      flash({ type: 'success', text: `${kind === 'imap' ? 'IMAP' : 'SMTP'} connection works.` });
+      toast.success(`${name} works`);
     } catch (err) {
-      flash({ type: 'error', text: apiUtils.handleError(err, `${kind === 'imap' ? 'IMAP' : 'SMTP'} test failed`) });
+      toast.error(`${name} didn't work`, { detail: errorDetail(err) });
     } finally {
       setMailTesting(null);
     }
   };
 
-  const handleNotifyDisconnect = async () => {
-    setNotifyDisconnecting(true);
-    try {
-      const keys = [
-        'NOTIFY_EMAIL_TO',
-        'NOTIFY_DEFAULT_CHANNELS',
-        'NOTIFY_DISCORD_WEBHOOK',
-        'NOTIFY_SLACK_WEBHOOK',
-        'NOTIFY_TELEGRAM_BOT_TOKEN',
-        'NOTIFY_TELEGRAM_CHAT_ID',
-      ];
-      for (const key of keys) {
-        await configApi.updateConfig(key, '');
-      }
-      await loadNotifyStatus();
-      flash({ type: 'success', text: 'Outbound notifications disconnected.' });
-    } catch (err) {
-      flash({ type: 'error', text: apiUtils.handleError(err, 'Failed to disconnect notifications') });
-    } finally {
-      setNotifyDisconnecting(false);
-    }
-  };
-
-  const handleNotifyTest = async (channel) => {
+  const testChannel = async (channel) => {
+    const label = CHANNELS.find((item) => item.id === channel)?.label || channel;
     setNotifyTesting(channel);
     try {
       await integrationsApi.notifications.test(channel);
-      flash({ type: 'success', text: `Test notification sent to ${channel}.` });
+      toast.success(`Sent a test to ${label}`);
     } catch (err) {
-      flash({ type: 'error', text: apiUtils.handleError(err, `${channel} test failed`) });
+      toast.error(`The test to ${label} failed`, { detail: errorDetail(err) });
     } finally {
       setNotifyTesting(null);
     }
   };
 
-  const handleTelegramDiscover = async () => {
+  const discoverTelegram = async () => {
     setTelegramDiscovering(true);
     setTelegramChatId(null);
     try {
       const result = await integrationsApi.notifications.discoverTelegramChatId();
-      if (result.chatId) {
-        setTelegramChatId(result.chatId);
-      } else {
-        flash({ type: 'error', text: result.message || 'No chat found. Send a message to your bot first.' });
-      }
+      if (result.chatId) setTelegramChatId(result.chatId);
+      else toast.error('No chat found', { detail: result.message || 'Send your bot a message first.' });
     } catch (err) {
-      flash({ type: 'error', text: apiUtils.handleError(err, 'Telegram discovery failed') });
+      toast.error("Couldn't find the chat", { detail: errorDetail(err) });
     } finally {
       setTelegramDiscovering(false);
     }
   };
 
-  const handleTelegramSaveChatId = async () => {
+  const saveTelegramChatId = async () => {
     if (!telegramChatId) return;
     setTelegramSaving(true);
     try {
       await configApi.updateConfig('NOTIFY_TELEGRAM_CHAT_ID', telegramChatId);
       setTelegramChatId(null);
       await loadNotifyStatus();
-      flash({ type: 'success', text: 'Telegram chat ID saved. Channel is ready.' });
+      toast.success('Telegram is ready');
     } catch (err) {
-      flash({ type: 'error', text: apiUtils.handleError(err, 'Failed to save chat ID') });
+      toast.error("Couldn't save the chat ID", { detail: errorDetail(err) });
     } finally {
       setTelegramSaving(false);
     }
   };
 
-  const handleNotifyLogOpen = async () => {
-    setNotifyLogOpen(true);
-    if (notifyLog !== null) return; // already loaded
-    setNotifyLogLoading(true);
-    try {
-      const result = await integrationsApi.notifications.fetchLog(50);
-      setNotifyLog(result.entries || []);
-    } catch (err) {
-      flash({ type: 'error', text: apiUtils.handleError(err, 'Failed to load notification log') });
-    } finally {
-      setNotifyLogLoading(false);
-    }
-  };
-
-  const handleNotifyLogClear = async () => {
-    setNotifyLogClearing(true);
-    try {
-      await integrationsApi.notifications.clearLog();
-      setNotifyLog([]);
-      flash({ type: 'success', text: 'Notification log cleared.' });
-    } catch (err) {
-      flash({ type: 'error', text: apiUtils.handleError(err, 'Failed to clear log') });
-    } finally {
-      setNotifyLogClearing(false);
-    }
-  };
-
-  // ── Hugging Face actions ────────────────────────────────────────────────────
-
-  const handleHfDisconnect = async () => {
+  const disconnectHf = async () => {
     setHfDisconnecting(true);
     try {
       await configApi.updateSecret('HF_TOKEN', '');
       await loadHfStatus();
-      flash({ type: 'success', text: 'Hugging Face token removed.' });
+      toast.success('Hugging Face token removed');
     } catch (err) {
-      flash({ type: 'error', text: apiUtils.handleError(err, 'Failed to remove token') });
+      toast.error("Couldn't remove the token", { detail: errorDetail(err) });
     } finally {
       setHfDisconnecting(false);
     }
   };
 
-  return (
-    <div className="space-y-5 font-sans">
-      {/* Flash message */}
-      {message && (
-        <div className={`rounded-lg border px-3 py-2 text-xs font-medium ${
-          message.type === 'success'
-            ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800/40 midnight:bg-green-900/20 midnight:text-green-300 midnight:border-green-800/40'
-            : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800/40 midnight:bg-red-900/20 midnight:text-red-300 midnight:border-red-800/40'
-        }`}>
-          {message.text}
-        </div>
-      )}
+  const readyChannels = CHANNELS.filter((channel) => notifyStatus?.channels?.[channel.id]);
+  const defaultChannels = (notifyStatus?.defaultChannels || []).map((id) => CHANNELS.find((channel) => channel.id === id)?.label || id);
 
-      <p className={`${mutedCls} -mt-1`}>
-        Connect external services. Click <strong className="font-medium text-gray-600 dark:text-gray-300 midnight:text-gray-300">Configure</strong> on any card to enter credentials directly — no need to edit <code className="px-1 rounded bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800 font-mono text-[11px] text-gray-500 dark:text-gray-400 midnight:text-gray-400">.env</code> manually.
+  return (
+    <div className="space-y-3" data-services>
+      <p className="text-[12px] leading-5 text-fg-subtle">
+        Services agents can use. What you enter is kept on this computer, with passwords and tokens encrypted.
       </p>
 
-      <div className="space-y-3">
-        {/* RSS / Read Later */}
-        <IntegrationCard
-          logo={<RssLogo />}
-          name="RSS & Read Later"
-          description="Follow RSS/Atom feeds and save links for later reading. Command Center tools can list feeds, refresh items, and save links."
-          status={rssStatus}
-          configured={rssStatus?.configured ?? false}
-          loading={rssLoading}
-          onCredsSaved={loadRssStatus}
-          noOAuth
-        >
-          <div className="mb-3 flex flex-wrap gap-2 text-[11px] text-gray-500 dark:text-gray-400 midnight:text-gray-400">
-            <span>{rssStatus?.feeds || 0} feeds</span>
-            <span>{rssStatus?.unread || 0} unread feed items</span>
-            <span>{rssStatus?.readLater || 0} saved links</span>
-          </div>
-          <RssReadLaterManager onChanged={loadRssStatus} flash={flash} />
-        </IntegrationCard>
+      <ServiceCard
+        id="rss"
+        logo={<LogoTile cfg={{ component: Rss }} size="sm" />}
+        name="RSS and read later"
+        description="Follow RSS and Atom feeds and keep links to read later. Agents can list feeds, refresh them and save links."
+        configured={rssStatus?.configured ?? false}
+        loading={rssLoading}
+        details={rssStatus ? [count(rssStatus.feeds, 'feed'), count(rssStatus.unread, 'unread item'), count(rssStatus.readLater, 'saved link')].join(' · ') : null}
+        showStatus={false}
+      >
+        <RssReadLaterManager onChanged={loadRssStatus} />
+      </ServiceCard>
 
-        {/* Generic IMAP / SMTP */}
-        <IntegrationCard
-          logo={<MailLogo />}
-          name="Generic Mail"
-          description="Connect any IMAP/SMTP mailbox for recent mail lookup and approval-gated email sending."
-          status={mailStatus}
-          configured={mailStatus?.configured ?? false}
-          loading={mailLoading}
-          onDisconnect={handleMailDisconnect}
-          disconnecting={mailDisconnecting}
-          onCredsSaved={loadMailStatus}
-          noOAuth
-          setupFields={[
-            { key: 'MAIL_IMAP_HOST', label: 'IMAP host', configType: 'config', placeholder: 'imap.gmail.com' },
-            { key: 'MAIL_IMAP_PORT', label: 'IMAP port', configType: 'config', placeholder: '993' },
-            { key: 'MAIL_IMAP_SECURE', label: 'IMAP TLS', configType: 'config', placeholder: 'true' },
-            { key: 'MAIL_IMAP_USER', label: 'IMAP username', configType: 'config', placeholder: 'you@example.com' },
-            { key: 'MAIL_IMAP_PASSWORD', label: 'IMAP password / app password', configType: 'secret', placeholder: '••••••••' },
-            { key: 'MAIL_SMTP_HOST', label: 'SMTP host', configType: 'config', placeholder: 'smtp.gmail.com' },
-            { key: 'MAIL_SMTP_PORT', label: 'SMTP port', configType: 'config', placeholder: '465' },
-            { key: 'MAIL_SMTP_SECURE', label: 'SMTP TLS', configType: 'config', placeholder: 'true' },
-            { key: 'MAIL_SMTP_USER', label: 'SMTP username', configType: 'config', placeholder: 'you@example.com' },
-            { key: 'MAIL_SMTP_PASSWORD', label: 'SMTP password / app password', configType: 'secret', placeholder: '••••••••' },
-            { key: 'MAIL_FROM_EMAIL', label: 'From email', configType: 'config', placeholder: 'you@example.com' },
-            { key: 'MAIL_FROM_NAME', label: 'From name', configType: 'config', placeholder: 'Your Name' },
-          ]}
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${
-              mailStatus?.imapConfigured
-                ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-800/40 dark:bg-green-900/20 dark:text-green-300 midnight:border-green-800/40 midnight:bg-green-900/20 midnight:text-green-300'
-                : 'border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 midnight:border-gray-800 midnight:bg-gray-950 midnight:text-gray-400'
-            }`}>
-              IMAP {mailStatus?.imapConfigured ? 'configured' : 'not configured'}
+      <ServiceCard
+        id="mail"
+        logo={<LogoTile cfg={{ component: Mail }} size="sm" />}
+        name="Email"
+        description="Any IMAP and SMTP mailbox. Agents can look up recent mail, and send mail once you approve it."
+        configured={mailStatus?.configured ?? false}
+        loading={mailLoading}
+        details={mailStatus?.email ? `Signed in as ${mailStatus.email}` : null}
+        onDisconnect={disconnectMail}
+        disconnecting={mailDisconnecting}
+        onCredsSaved={loadMailStatus}
+        setupFields={[
+          { key: 'MAIL_IMAP_HOST', label: 'IMAP server', configType: 'config', placeholder: 'imap.example.com' },
+          { key: 'MAIL_IMAP_PORT', label: 'IMAP port', configType: 'config', placeholder: '993' },
+          { key: 'MAIL_IMAP_SECURE', label: 'IMAP over TLS', configType: 'config', placeholder: 'true' },
+          { key: 'MAIL_IMAP_USER', label: 'IMAP user name', configType: 'config', placeholder: 'you@example.com' },
+          { key: 'MAIL_IMAP_PASSWORD', label: 'IMAP password or app password', configType: 'secret', placeholder: '••••••••' },
+          { key: 'MAIL_SMTP_HOST', label: 'SMTP server', configType: 'config', placeholder: 'smtp.example.com' },
+          { key: 'MAIL_SMTP_PORT', label: 'SMTP port', configType: 'config', placeholder: '465' },
+          { key: 'MAIL_SMTP_SECURE', label: 'SMTP over TLS', configType: 'config', placeholder: 'true' },
+          { key: 'MAIL_SMTP_USER', label: 'SMTP user name', configType: 'config', placeholder: 'you@example.com' },
+          { key: 'MAIL_SMTP_PASSWORD', label: 'SMTP password or app password', configType: 'secret', placeholder: '••••••••' },
+          { key: 'MAIL_FROM_EMAIL', label: 'Send from', configType: 'config', placeholder: 'you@example.com' },
+          { key: 'MAIL_FROM_NAME', label: 'Sender name', configType: 'config', placeholder: 'Your name' },
+        ]}
+      >
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          {[['imap', 'IMAP', mailStatus?.imapConfigured], ['smtp', 'SMTP', mailStatus?.smtpConfigured]].map(([kind, name, ready]) => (
+            <span key={kind} className="inline-flex items-center gap-1.5 text-[12px] text-fg-muted">
+              <Dot on={Boolean(ready)} />
+              {name} {ready ? 'set up' : 'not set up'}
             </span>
-            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${
-              mailStatus?.smtpConfigured
-                ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-800/40 dark:bg-green-900/20 dark:text-green-300 midnight:border-green-800/40 midnight:bg-green-900/20 midnight:text-green-300'
-                : 'border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 midnight:border-gray-800 midnight:bg-gray-950 midnight:text-gray-400'
-            }`}>
-              SMTP {mailStatus?.smtpConfigured ? 'configured' : 'not configured'}
-            </span>
-            {mailStatus?.email && (
-              <span className="text-[11px] text-gray-500 dark:text-gray-400 midnight:text-gray-400">{mailStatus.email}</span>
-            )}
-            <button
-              type="button"
-              onClick={() => handleMailTest('imap')}
-              disabled={!mailStatus?.imapConfigured || mailTesting === 'imap'}
-              className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 midnight:border-gray-700 midnight:text-gray-300 midnight:hover:bg-gray-900"
-            >
-              {mailTesting === 'imap' ? <Loader2 size={12} className="animate-spin" /> : <Mail size={12} />}
-              Test IMAP
-            </button>
-            <button
-              type="button"
-              onClick={() => handleMailTest('smtp')}
-              disabled={!mailStatus?.smtpConfigured || mailTesting === 'smtp'}
-              className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 midnight:border-gray-700 midnight:text-gray-300 midnight:hover:bg-gray-900"
-            >
-              {mailTesting === 'smtp' ? <Loader2 size={12} className="animate-spin" /> : <Mail size={12} />}
-              Test SMTP
-            </button>
-          </div>
-        </IntegrationCard>
+          ))}
+          <span className="flex gap-2 sm:ml-auto">
+            <Button size="xs" icon={Mail} loading={mailTesting === 'imap'} disabled={!mailStatus?.imapConfigured} onClick={() => testMail('imap')}>Test IMAP</Button>
+            <Button size="xs" icon={Mail} loading={mailTesting === 'smtp'} disabled={!mailStatus?.smtpConfigured} onClick={() => testMail('smtp')}>Test SMTP</Button>
+          </span>
+        </div>
+      </ServiceCard>
 
-        {/* Outbound Notifications */}
-        <IntegrationCard
-          logo={<NotificationLogo />}
-          name="Outbound Notifications"
-          description="Let the agent ping you when long work finishes or needs attention. Supports Discord, Slack, Telegram, and email via configured channels."
-          status={notifyStatus}
-          configured={notifyStatus?.configured ?? false}
-          loading={notifyLoading}
-          onDisconnect={handleNotifyDisconnect}
-          disconnecting={notifyDisconnecting}
-          onCredsSaved={loadNotifyStatus}
-          noOAuth
-          setupFields={[
-            { key: 'NOTIFY_DEFAULT_CHANNELS', label: 'Default channels', configType: 'config', placeholder: 'discord,slack,telegram,email' },
-            { key: 'NOTIFY_EMAIL_TO', label: 'Default email recipient', configType: 'config', placeholder: 'you@example.com' },
-            { key: 'NOTIFY_DISCORD_WEBHOOK', label: 'Discord webhook URL', configType: 'secret', placeholder: 'https://discord.com/api/webhooks/...' },
-            { key: 'NOTIFY_SLACK_WEBHOOK', label: 'Slack webhook URL', configType: 'secret', placeholder: 'https://hooks.slack.com/services/...' },
-            { key: 'NOTIFY_TELEGRAM_BOT_TOKEN', label: 'Telegram bot token', configType: 'secret', placeholder: '123456:ABC...' },
-            { key: 'NOTIFY_TELEGRAM_CHAT_ID', label: 'Telegram chat ID', configType: 'config', placeholder: '123456789' },
-          ]}
-          setupHelpUrl="https://core.telegram.org/bots/tutorial"
-          setupHelpText="Telegram BotFather guide"
-        >
-          <div className="space-y-3">
-            {/* Channel status badges */}
-            <div className="flex flex-wrap items-center gap-2">
-              {['discord', 'slack', 'telegram', 'email'].map((channel) => {
-                const ready = Boolean(notifyStatus?.channels?.[channel]);
-                return (
-                  <span
-                    key={channel}
-                    className={`rounded-full border px-2 py-0.5 text-[10px] font-medium capitalize ${
-                      ready
-                        ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-800/40 dark:bg-green-900/20 dark:text-green-300 midnight:border-green-800/40 midnight:bg-green-900/20 midnight:text-green-300'
-                        : 'border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 midnight:border-gray-800 midnight:bg-gray-950 midnight:text-gray-400'
-                    }`}
-                  >
-                    {channel} {ready ? 'ready' : 'off'}
-                  </span>
-                );
-              })}
-              {notifyStatus?.defaultChannels?.length > 0 && (
-                <span className="text-[11px] text-gray-500 dark:text-gray-400 midnight:text-gray-400">
-                  Default: {notifyStatus.defaultChannels.join(', ')}
+      <ServiceCard
+        id="notify"
+        logo={<LogoTile cfg={{ component: Bell }} size="sm" />}
+        name="Messages elsewhere"
+        description="Agents can message you on Discord, Slack, Telegram or by email when long work finishes or needs you."
+        configured={notifyStatus?.configured ?? false}
+        loading={notifyLoading}
+        details={defaultChannels.length ? `Sends to ${defaultChannels.join(', ')} unless told otherwise` : null}
+        onDisconnect={disconnectNotify}
+        disconnecting={notifyDisconnecting}
+        onCredsSaved={loadNotifyStatus}
+        setupFields={[
+          { key: 'NOTIFY_DEFAULT_CHANNELS', label: 'Send to', configType: 'config', placeholder: 'discord,slack,telegram,email' },
+          { key: 'NOTIFY_EMAIL_TO', label: 'Email address', configType: 'config', placeholder: 'you@example.com' },
+          { key: 'NOTIFY_DISCORD_WEBHOOK', label: 'Discord webhook address', configType: 'secret', placeholder: 'https://discord.com/api/webhooks/…' },
+          { key: 'NOTIFY_SLACK_WEBHOOK', label: 'Slack webhook address', configType: 'secret', placeholder: 'https://hooks.slack.com/services/…' },
+          { key: 'NOTIFY_TELEGRAM_BOT_TOKEN', label: 'Telegram bot token', configType: 'secret', placeholder: '123456:ABC…' },
+          { key: 'NOTIFY_TELEGRAM_CHAT_ID', label: 'Telegram chat ID', configType: 'config', placeholder: '123456789' },
+        ]}
+        setupHelpUrl="https://core.telegram.org/bots/tutorial"
+        setupHelpText="Making a Telegram bot"
+      >
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            {CHANNELS.map((channel) => {
+              const ready = Boolean(notifyStatus?.channels?.[channel.id]);
+              return (
+                <span key={channel.id} className="inline-flex items-center gap-1.5 text-[12px] text-fg-muted" data-channel={channel.id}>
+                  <Dot on={ready} />
+                  {channel.label}
                 </span>
-              )}
-            </div>
-
-            {/* Test buttons — one per ready channel */}
-            {['discord', 'slack', 'telegram', 'email'].some((ch) => notifyStatus?.channels?.[ch]) && (
-              <div className="flex flex-wrap items-center gap-2">
-                {['discord', 'slack', 'telegram', 'email'].map((channel) => {
-                  if (!notifyStatus?.channels?.[channel]) return null;
-                  return (
-                    <button
-                      key={channel}
-                      type="button"
-                      onClick={() => handleNotifyTest(channel)}
-                      disabled={!!notifyTesting}
-                      className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 midnight:border-gray-700 midnight:text-gray-300 midnight:hover:bg-gray-900 capitalize transition-colors"
-                    >
-                      {notifyTesting === channel ? <Loader2 size={12} className="animate-spin" /> : <Bell size={12} />}
-                      Test {channel}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Telegram guide: shown when token is saved but chat ID is missing */}
-            {notifyStatus?.telegramTokenSet && !notifyStatus?.channels?.telegram && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800/40 dark:bg-amber-900/10 midnight:border-amber-800/40 midnight:bg-amber-900/10 px-3 py-2.5 space-y-2">
-                <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-300 midnight:text-amber-300">
-                  Telegram: bot token saved — chat ID needed
-                </p>
-                <ol className="text-[11px] text-amber-700 dark:text-amber-400 midnight:text-amber-400 space-y-0.5 list-decimal list-inside">
-                  <li>Open Telegram and find your bot by its username</li>
-                  <li>Send it any message (e.g. &quot;hello&quot;)</li>
-                  <li>Click <strong>Discover chat ID</strong> — it auto-fills your ID</li>
-                </ol>
-                <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                  <button
-                    type="button"
-                    onClick={handleTelegramDiscover}
-                    disabled={telegramDiscovering || telegramSaving}
-                    className="inline-flex items-center gap-1 rounded-md border border-amber-300 dark:border-amber-700 midnight:border-amber-700 bg-white dark:bg-gray-800 midnight:bg-gray-800 px-2 py-1 text-[11px] font-medium text-amber-800 dark:text-amber-300 midnight:text-amber-300 hover:bg-amber-50 dark:hover:bg-gray-700 midnight:hover:bg-gray-700 disabled:opacity-50 transition-colors"
-                  >
-                    {telegramDiscovering ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-                    Discover chat ID
-                  </button>
-                  {telegramChatId && (
-                    <>
-                      <span className="font-mono text-[11px] text-green-700 dark:text-green-400 midnight:text-green-400">
-                        Found: {telegramChatId}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={handleTelegramSaveChatId}
-                        disabled={telegramSaving}
-                        className="inline-flex items-center gap-1 rounded-md bg-green-600 hover:bg-green-500 px-2 py-1 text-[11px] font-medium text-white disabled:opacity-50 transition-colors"
-                      >
-                        {telegramSaving ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
-                        Save &amp; activate
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Quick-setup links shown when nothing is configured yet */}
-            {!notifyStatus?.configured && (
-              <div className="flex flex-wrap gap-x-4 gap-y-1">
-                <a href="https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 midnight:hover:text-indigo-400 underline underline-offset-2">
-                  Discord webhook guide <ExternalLink size={9} />
-                </a>
-                <a href="https://api.slack.com/messaging/webhooks" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 midnight:hover:text-indigo-400 underline underline-offset-2">
-                  Slack webhook guide <ExternalLink size={9} />
-                </a>
-                <a href="https://core.telegram.org/bots/tutorial" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 midnight:hover:text-indigo-400 underline underline-offset-2">
-                  Telegram BotFather <ExternalLink size={9} />
-                </a>
-              </div>
-            )}
-
-            {/* Delivery history log */}
-            <div>
-              <button
-                type="button"
-                onClick={notifyLogOpen ? () => setNotifyLogOpen(false) : handleNotifyLogOpen}
-                className="inline-flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400 midnight:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 midnight:hover:text-gray-200 transition-colors"
-              >
-                {notifyLogOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                Delivery history
-              </button>
-
-              {notifyLogOpen && (
-                <div className="mt-2 space-y-1.5">
-                  {notifyLogLoading && (
-                    <div className="flex items-center gap-2 py-3 text-[11px] text-gray-400">
-                      <Loader2 size={12} className="animate-spin" /> Loading…
-                    </div>
-                  )}
-                  {!notifyLogLoading && notifyLog?.length === 0 && (
-                    <p className="py-2 text-[11px] text-gray-400 dark:text-gray-500 midnight:text-gray-500">No notifications sent yet.</p>
-                  )}
-                  {!notifyLogLoading && notifyLog?.length > 0 && (
-                    <>
-                      <div className="rounded-lg border border-gray-100 dark:border-gray-800 midnight:border-gray-800 overflow-hidden divide-y divide-gray-100 dark:divide-gray-800 midnight:divide-gray-800">
-                        {notifyLog.slice(0, 20).map((entry) => (
-                          <div key={entry.id} className="flex items-start gap-2.5 px-3 py-2">
-                            <span className={`mt-0.5 h-1.5 w-1.5 flex-shrink-0 rounded-full ${entry.success ? 'bg-green-500' : 'bg-red-400'}`} />
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-[11px] font-medium text-gray-800 dark:text-gray-200 midnight:text-gray-200 truncate">{entry.title}</span>
-                                <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${
-                                  entry.severity === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                                  : entry.severity === 'warning' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                                  : entry.severity === 'success' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                                  : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
-                                }`}>{entry.severity}</span>
-                                <span className="capitalize text-[10px] text-gray-500 dark:text-gray-400">{entry.channel}</span>
-                              </div>
-                              {entry.error && (
-                                <p className="mt-0.5 text-[10px] text-red-500 dark:text-red-400 midnight:text-red-400 truncate">{entry.error}</p>
-                              )}
-                              <p className="text-[10px] text-gray-400 dark:text-gray-500 midnight:text-gray-500">
-                                {new Date(entry.created_at).toLocaleString()}
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="flex justify-end pt-0.5">
-                        <button
-                          type="button"
-                          onClick={handleNotifyLogClear}
-                          disabled={notifyLogClearing}
-                          className="inline-flex items-center gap-1 text-[10px] text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors disabled:opacity-50"
-                        >
-                          {notifyLogClearing ? <Loader2 size={10} className="animate-spin" /> : <Trash2 size={10} />}
-                          Clear history
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
+              );
+            })}
+            {readyChannels.length ? (
+              <span className="flex flex-wrap gap-2 sm:ml-auto">
+                {readyChannels.map((channel) => (
+                  <Button key={channel.id} size="xs" icon={Bell} loading={notifyTesting === channel.id} disabled={Boolean(notifyTesting) && notifyTesting !== channel.id} onClick={() => testChannel(channel.id)}>
+                    Test {channel.label}
+                  </Button>
+                ))}
+              </span>
+            ) : null}
           </div>
-        </IntegrationCard>
 
-        {/* Hugging Face */}
-        <IntegrationCard
-          logo={<HuggingFaceLogo />}
-          name="Hugging Face"
-          description="Access gated models and private repos when downloading from HuggingFace Hub in the Models page."
-          status={{ configured: hfConfigured }}
-          configured={hfConfigured}
-          loading={hfLoading}
-          onDisconnect={handleHfDisconnect}
-          disconnecting={hfDisconnecting}
-          onCredsSaved={loadHfStatus}
-          noOAuth
-          setupFields={[
-            {
-              key: 'HF_TOKEN',
-              label: 'Access Token',
-              configType: 'secret',
-              placeholder: 'hf_...',
-            },
-          ]}
-          setupHelpUrl="https://huggingface.co/settings/tokens"
-          setupHelpText="Create token"
-        />
-      </div>
+          {/* Telegram: the bot token is saved but the chat ID is missing. */}
+          {notifyStatus?.telegramTokenSet && !notifyStatus?.channels?.telegram ? (
+            <div className="rounded-lg border border-line px-3 py-2.5" data-telegram-setup>
+              <p className="text-[13px] font-medium text-fg">Telegram needs your chat ID</p>
+              <ol className="mt-1 list-decimal space-y-0.5 pl-4 text-[12px] leading-5 text-fg-muted">
+                <li>In Telegram, find your bot by its user name.</li>
+                <li>Send it any message, such as &ldquo;hello&rdquo;.</li>
+                <li>Choose Find my chat ID here.</li>
+              </ol>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <Button size="xs" icon={RefreshCw} loading={telegramDiscovering} disabled={telegramSaving} onClick={discoverTelegram}>Find my chat ID</Button>
+                {telegramChatId ? (
+                  <>
+                    <span className="font-mono text-[12px] text-fg">{telegramChatId}</span>
+                    <Button size="xs" variant="primary" loading={telegramSaving} onClick={saveTelegramChatId}>Save and turn on</Button>
+                  </>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
+          {!notifyStatus?.configured ? (
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              <TextLink href="https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks">Discord webhooks</TextLink>
+              <TextLink href="https://api.slack.com/messaging/webhooks">Slack webhooks</TextLink>
+              <TextLink href="https://core.telegram.org/bots/tutorial">Telegram bots</TextLink>
+            </div>
+          ) : null}
+
+          <DeliveryHistory />
+        </div>
+      </ServiceCard>
+
+      <ServiceCard
+        id="huggingface"
+        logo={<ProviderLogo providerId="huggingface" name="Hugging Face" size="sm" />}
+        name="Hugging Face"
+        description="Download gated models and private repositories from the Hugging Face Hub on the Models page."
+        configured={hfConfigured}
+        loading={hfLoading}
+        onDisconnect={disconnectHf}
+        disconnecting={hfDisconnecting}
+        onCredsSaved={loadHfStatus}
+        setupFields={[{ key: 'HF_TOKEN', label: 'Access token', configType: 'secret', placeholder: 'hf_…' }]}
+        setupHelpUrl="https://huggingface.co/settings/tokens"
+        setupHelpText="Make a token"
+      />
     </div>
   );
 }
