@@ -32,8 +32,8 @@ test('where a memory came from', () => {
 
 test('the counts line', () => {
   const stats = { total: 4, cap: 750, byType: { task_state: 1, preference: 1, fact: 2, feedback: 0 } };
-  assert.equal(memorySummary(stats, { shown: 4 }), '4 of 750 memories · Fact 2 · Preference 1 · Task state 1');
-  assert.equal(memorySummary(stats, { shown: 1, filtered: true }), '1 shown · 4 of 750 memories · Fact 2 · Preference 1 · Task state 1');
+  assert.equal(memorySummary(stats, { shown: 4 }), '4 memories · room for 750 · Fact 2 · Preference 1 · Task state 1');
+  assert.equal(memorySummary(stats, { shown: 1, filtered: true }), '1 shown · 4 memories · room for 750 · Fact 2 · Preference 1 · Task state 1');
   assert.equal(memorySummary(null, { shown: 1 }), '1 memory');
   assert.equal(memorySummary(null, { shown: 0, filtered: true }), '0 shown');
 });

@@ -94,17 +94,18 @@ const toolShape = PropTypes.shape({
 
 ToolInspector.propTypes = { tool: toolShape };
 
-function Summary({ tools, shown, filtered }) {
-  const counts = permissionCounts(tools);
+// The risk counts are for the tools listed, so a search's line adds up.
+function Summary({ tools, visible, filtered }) {
+  const counts = permissionCounts(visible);
   return (
     <p className="text-[12px] tabular-nums text-fg-subtle">
-      {filtered ? `${shown} of ${tools.length} tools` : `${tools.length} tools`}
+      {filtered ? `${visible.length} of ${tools.length} tools` : `${tools.length} tools`}
       {' · '}{counts.safe} safe · {counts.moderate} moderate · {counts.dangerous} dangerous
     </p>
   );
 }
 
-Summary.propTypes = { tools: PropTypes.arrayOf(toolShape).isRequired, shown: PropTypes.number.isRequired, filtered: PropTypes.bool };
+Summary.propTypes = { tools: PropTypes.arrayOf(toolShape).isRequired, visible: PropTypes.arrayOf(toolShape).isRequired, filtered: PropTypes.bool };
 
 export default function ToolsTab({ catalog }) {
   const { tools, loading, error, reload, query, setQuery, os, setOs, selectedName, select } = catalog;
@@ -119,7 +120,7 @@ export default function ToolsTab({ catalog }) {
         <SearchField size="sm" value={query} onChange={setQuery} placeholder="Search tools" className="sm:max-w-xs sm:flex-1" />
         <Segmented size="sm" role="radiogroup" label="Runs on" value={os} onChange={setOs} items={SYSTEMS} className="self-start sm:self-auto" />
       </div>
-      {tools.length ? <Summary tools={tools} shown={visible.length} filtered={filtered} /> : null}
+      {tools.length ? <Summary tools={tools} visible={visible} filtered={filtered} /> : null}
     </>
   );
 

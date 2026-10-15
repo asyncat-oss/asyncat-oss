@@ -31,14 +31,14 @@ export function memorySource(source) {
 }
 
 /**
- * The line above the list: "4 of 750 memories · Fact 2 · Preference 1",
+ * The line above the list: "4 memories · room for 750 · Fact 2 · Preference 1",
  * kinds by count. With a search or filter on, it starts with how many show.
  */
 export function memorySummary(stats, { shown = 0, filtered = false } = {}) {
   const parts = [];
   if (filtered) parts.push(`${shown} shown`);
   if (stats) {
-    parts.push(`${stats.total} of ${stats.cap} memories`);
+    parts.push(`${stats.total} ${stats.total === 1 ? 'memory' : 'memories'} · room for ${stats.cap}`);
     const kinds = Object.entries(stats.byType || {})
       .filter(([, count]) => count > 0)
       .sort(([a, x], [b, y]) => y - x || MEMORY_KINDS.indexOf(a) - MEMORY_KINDS.indexOf(b));
