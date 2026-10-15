@@ -1,20 +1,27 @@
-// Training/TrainingPage.jsx — Fine-tuning / LoRA training page
+// Training/TrainingPage.jsx — Models → Training: this computer, the guided
+// steps, the advanced form for any model and dataset, and the jobs.
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import PropTypes from 'prop-types';
 import {
-  HardDrive, Zap, AlertTriangle,
-  Play, Square, Trash2, RefreshCw, ChevronDown, ChevronUp,
-  Download, XCircle, Settings2, Brain, FileJson,
+  Check, HardDrive, Zap,
+  Play, Square, Trash2, RefreshCw, ChevronDown, ChevronRight, ChevronUp,
+  Download, X, Settings2, Brain, FileJson,
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { trainingApi } from './trainingApi.js';
+import { axisNumber } from './chartFormat.js';
 import GuidedTraining from './GuidedTraining.jsx';
+import Button from '../components/ui/Button.jsx';
+import IconButton from '../components/ui/IconButton.jsx';
+import Notice from '../components/ui/Notice.jsx';
 import Select from '../components/ui/Select.jsx';
 import Combobox from '../components/ui/Combobox.jsx';
-import { Input } from '../components/ui/Field.jsx';
-
-// Matches the palette used elsewhere in the app (BlockBasedMessageRenderer).
-const CHART_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4'];
+import Skeleton from '../components/ui/Skeleton.jsx';
+import StatusLine from '../components/ui/StatusLine.jsx';
+import { Progress } from '../components/ui/Progress.jsx';
+import { Field, Input } from '../components/ui/Field.jsx';
+import { useConfirm } from '../components/confirmContext.js';
+import { Badge } from '../Models/modelPageShared.jsx';
 
 // Curated, known-good fine-tuning bases — free text still works, these are just
 // suggestions so users aren't stuck guessing a HF repo id from scratch.
@@ -76,21 +83,19 @@ function estimateVramFit(modelId, availableVramGb) {
   return { paramsB, estGb, fit };
 }
 
-// ── Status badge ────────────────────────────────────────────────────────────
+// ── Job status ──────────────────────────────────────────────────────────────
+
+const STATUS = {
+  queued: { label: 'Queued', color: 'gray' },
+  running: { label: 'Running', color: 'blue' },
+  completed: { label: 'Completed', color: 'green' },
+  failed: { label: 'Failed', color: 'red' },
+  cancelled: { label: 'Cancelled', color: 'gray' },
+};
 
 const StatusBadge = ({ status }) => {
-  const styles = {
-    queued: 'border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-400',
-    running: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-400',
-    completed: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-400',
-    failed: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-400',
-    cancelled: 'border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-400',
-  };
-  return (
-    <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium capitalize ${styles[status] || styles.queued}`}>
-      {status}
-    </span>
-  );
+  const meta = STATUS[status] || { label: status, color: 'gray' };
+  return <Badge color={meta.color}>{meta.label}</Badge>;
 };
 
 StatusBadge.propTypes = {
@@ -101,18 +106,11 @@ StatusBadge.propTypes = {
 
 const ProgressBar = ({ percent = 0, loss = null }) => (
   <div className="w-full">
-    <div className="flex items-center justify-between text-xs mb-1">
-      <span className="text-gray-500 dark:text-gray-400">{percent.toFixed(1)}%</span>
-      {loss !== null && (
-        <span className="text-gray-500 dark:text-gray-400">Loss: {loss.toFixed(4)}</span>
-      )}
+    <div className="mb-1.5 flex items-center justify-between text-[12px] tabular-nums text-fg-muted">
+      <span>{percent.toFixed(1)}%</span>
+      {loss !== null && <span>Loss {loss.toFixed(4)}</span>}
     </div>
-    <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800 midnight:bg-gray-800/60">
-      <div
-        className="h-full rounded-full bg-gray-700 transition-[width] duration-500 ease-out dark:bg-gray-300"
-        style={{ width: `${Math.min(100, percent)}%` }}
-      />
-    </div>
+    <Progress value={percent} label="Training progress" />
   </div>
 );
 
@@ -121,93 +119,68 @@ ProgressBar.propTypes = {
   loss: PropTypes.number,
 };
 
-// ── Readiness banner ────────────────────────────────────────────────────────
+// ── This computer ───────────────────────────────────────────────────────────
 
-const ReadinessBanner = ({ readiness, onInstall, installing, onRemove }) => {
+const Fact = ({ icon: Icon, children }) => (
+  <div className="flex min-w-0 items-center gap-2 text-[13px] text-fg-muted">
+    <Icon className="h-4 w-4 shrink-0 text-fg-subtle" strokeWidth={1.75} />
+    <span className="min-w-0 truncate">{children}</span>
+  </div>
+);
+
+Fact.propTypes = { icon: PropTypes.elementType.isRequired, children: PropTypes.node };
+
+const ReadinessBanner = ({ readiness, onInstall, installing, onRemove, onRefresh }) => {
   if (!readiness) return null;
+  const gpu = readiness.gpu;
 
   return (
-    <section className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
-      <div className="flex items-center justify-between gap-4 border-b border-gray-100 px-5 py-3.5 dark:border-gray-800 midnight:border-slate-800">
-        <div>
-          <h2 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-white">Environment</h2>
-          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Local hardware and training runtime.</p>
+    <section className="rounded-2xl border border-line bg-surface px-5 py-4">
+      {/* On a phone the status goes under the title instead of squeezing it. */}
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+        <div className="min-w-0 flex-[1_1_12rem]">
+          <h2 className="text-[14px] font-semibold text-fg">This computer</h2>
+          <p className="mt-0.5 text-[12px] leading-5 text-fg-muted">What training can use here.</p>
         </div>
-        {readiness.envReady && (
-          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            Ready
-          </span>
-        )}
-      </div>
-      <div className="px-5 py-4">
-          <div className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-3">
-            {/* GPU */}
-            <div className="flex items-center gap-2">
-              <Zap className="w-3.5 h-3.5 text-gray-400" />
-              <span className="text-gray-600 dark:text-gray-300">
-                {readiness.gpu
-                  ? `${readiness.gpu.name || readiness.gpu.vendor}${readiness.gpu.vramGb ? ` (${readiness.gpu.vramGb}GB)` : ''}`
-                  : 'No GPU detected (CPU only)'}
-              </span>
-            </div>
-            {/* Backend */}
-            <div className="flex items-center gap-2">
-              <Brain className="w-3.5 h-3.5 text-gray-400" />
-              <span className="text-gray-600 dark:text-gray-300">
-                Backend: <span className="font-medium">{(readiness.backend || 'cpu').toUpperCase()}</span>
-              </span>
-            </div>
-            {/* Disk */}
-            <div className="flex items-center gap-2">
-              <HardDrive className="w-3.5 h-3.5 text-gray-400" />
-              <span className="text-gray-600 dark:text-gray-300">
-                {readiness.disk?.freeGb != null ? `${readiness.disk.freeGb}GB free` : 'Disk: unknown'}
-              </span>
-            </div>
-          </div>
-
-          {/* Warnings */}
-          {readiness.warnings?.length > 0 && (
-            <div className="mt-3 space-y-1.5">
-              {readiness.warnings.map((w, i) => (
-                <div key={i} className="flex items-start gap-2 text-xs text-amber-600 dark:text-amber-400">
-                  <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                  <span>{w}</span>
-                </div>
-              ))}
-            </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {readiness.envReady && (
+            <span className="inline-flex items-center gap-1.5 text-[12px] text-fg-muted">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
+              Training tools ready
+            </span>
           )}
+          <IconButton icon={RefreshCw} label="Refresh" size="sm" onClick={onRefresh} />
+        </div>
+      </div>
 
-          {/* Install / Status */}
-          <div className="mt-3 flex items-center gap-3">
-            {readiness.envReady ? (
-              <button
-                onClick={onRemove}
-                className="text-xs font-medium text-gray-500 transition-colors hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400"
-                title="Uninstall training environment"
-              >
-                Remove environment
-              </button>
-            ) : (
-              <button
-                onClick={onInstall}
-                disabled={installing || !readiness.canInstall}
-                className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-3 py-2 text-xs font-medium text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white
-                  disabled:opacity-50 disabled:cursor-not-allowed
-                  transition-colors duration-150"
-              >
-                {installing ? (
-                  'Installing…'
-                ) : (
-                  <>
-                    <Download className="w-3.5 h-3.5" />
-                    Install Training Environment
-                  </>
-                )}
-              </button>
-            )}
-          </div>
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
+        <Fact icon={Zap}>
+          {gpu
+            ? `${gpu.name || gpu.vendor}${gpu.vramGb ? `, ${gpu.vramGb} GB` : ''}`
+            : 'No GPU found (processor only)'}
+        </Fact>
+        <Fact icon={Brain}>Runs on {(readiness.backend || 'cpu').toUpperCase()}</Fact>
+        <Fact icon={HardDrive}>
+          {readiness.disk?.freeGb != null ? `${readiness.disk.freeGb} GB free` : 'Free space unknown'}
+        </Fact>
+      </div>
+
+      {readiness.warnings?.length > 0 && (
+        <div className="mt-3 space-y-1">
+          {readiness.warnings.map((w, i) => <Notice key={i} tone="warning">{w}</Notice>)}
+        </div>
+      )}
+
+      <div className="mt-3">
+        {readiness.envReady ? (
+          <Button variant="ghost" size="xs" icon={Trash2} onClick={onRemove} className="-ml-2">
+            Remove the training tools
+          </Button>
+        ) : (
+          <Button icon={Download} loading={installing} disabled={!readiness.canInstall} onClick={onInstall}>
+            {installing ? 'Installing…' : 'Install the training tools'}
+          </Button>
+        )}
       </div>
     </section>
   );
@@ -218,6 +191,7 @@ ReadinessBanner.propTypes = {
   onInstall: PropTypes.func.isRequired,
   installing: PropTypes.bool.isRequired,
   onRemove: PropTypes.func.isRequired,
+  onRefresh: PropTypes.func.isRequired,
 };
 
 // ── Dataset dropdown ────────────────────────────────────────────────────────
@@ -251,6 +225,20 @@ const DEFAULT_HYPERPARAMS = {
   alpha: 32,
   batchSize: 4,
   maxSeqLen: 2048,
+};
+
+const HYPERPARAM_FIELDS = [
+  { key: 'epochs', label: 'Epochs', type: 'number', min: 1, max: 50 },
+  { key: 'lr', label: 'Learning rate', type: 'number', step: '0.0001' },
+  { key: 'rank', label: 'LoRA rank', type: 'number', min: 4, max: 256 },
+  { key: 'alpha', label: 'LoRA alpha', type: 'number', min: 4, max: 512 },
+  { key: 'batchSize', label: 'Batch size', type: 'number', min: 1, max: 64 },
+  { key: 'maxSeqLen', label: 'Max sequence length', type: 'number', min: 128, max: 8192 },
+];
+
+const VRAM_TONE = {
+  risky: 'text-red-600 dark:text-red-400',
+  tight: 'text-amber-700 dark:text-amber-400',
 };
 
 const NewJobForm = ({ readiness, onSubmit, submitting }) => {
@@ -290,15 +278,14 @@ const NewJobForm = ({ readiness, onSubmit, submitting }) => {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
-      <div className="mb-4">
-        <h2 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-white">New training job</h2>
-        <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Choose a model and JSONL dataset, then adjust advanced settings if needed.</p>
+    <form onSubmit={handleSubmit} className="space-y-4 px-5 py-4">
+      <div>
+        <h3 className="text-[13px] font-semibold text-fg">New training job</h3>
+        <p className="mt-0.5 text-[12px] leading-5 text-fg-muted">Choose a model and a JSONL dataset, then change the settings if you need to.</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-        <div>
-          <label htmlFor="training-job-name" className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Job Name</label>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field label="Job name" htmlFor="training-job-name">
           <Input
             id="training-job-name"
             type="text"
@@ -307,9 +294,8 @@ const NewJobForm = ({ readiness, onSubmit, submitting }) => {
             placeholder="e.g. alpaca-qwen-lora"
             required
           />
-        </div>
-        <div>
-          <label htmlFor="training-base-model" className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Base Model</label>
+        </Field>
+        <Field label="Base model" htmlFor="training-base-model">
           <Combobox
             id="training-base-model"
             value={baseModel}
@@ -319,34 +305,36 @@ const NewJobForm = ({ readiness, onSubmit, submitting }) => {
             required
           />
           {vramHint && (
-            <p className={`mt-1 text-[10px] ${
-              vramHint.fit === 'risky' ? 'text-red-500' : vramHint.fit === 'tight' ? 'text-amber-500' : 'text-gray-400 dark:text-gray-500'
-            }`}>
-              ~{vramHint.paramsB}B params · est. {vramHint.estGb}GB VRAM (4-bit QLoRA)
-              {vramHint.fit === 'risky' && ' — likely too large for your GPU'}
-              {vramHint.fit === 'tight' && ' — tight fit, lower rank/batch size if it OOMs'}
+            <p className={`mt-1.5 text-[12px] leading-5 ${VRAM_TONE[vramHint.fit] || 'text-fg-subtle'}`}>
+              About {vramHint.paramsB}B parameters · needs about {vramHint.estGb} GB of GPU memory (4-bit QLoRA)
+              {vramHint.fit === 'risky' && ': likely too big for your GPU'}
+              {vramHint.fit === 'tight' && ': a tight fit; lower the rank or batch size if it runs out of memory'}
             </p>
           )}
-        </div>
+        </Field>
       </div>
 
-      <div className="mb-3">
-        <div className="flex items-center justify-between mb-1">
-          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Dataset (JSONL)</label>
-          {datasets.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setDatasetMode(datasetMode === 'pick' ? 'custom' : 'pick')}
-              className="text-[10px] font-medium text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
-            >
-              {datasetMode === 'pick' ? 'Enter custom path' : 'Pick from downloaded datasets'}
-            </button>
-          )}
-        </div>
+      <Field
+        label="Dataset (JSONL)"
+        htmlFor={datasetMode === 'custom' ? 'training-dataset-path' : undefined}
+        hint={datasets.length === 0
+          ? 'No downloaded datasets yet. Ask the agent: "download alpaca dataset for fine-tuning"'
+          : 'Download more by asking the agent: "download alpaca dataset for fine-tuning"'}
+        action={datasets.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => setDatasetMode(datasetMode === 'pick' ? 'custom' : 'pick')}
+            className="rounded text-[12px] text-accent outline-none hover:underline focus-visible:ring-2 focus-visible:ring-accent/40"
+          >
+            {datasetMode === 'pick' ? 'Enter a path' : 'Pick a downloaded dataset'}
+          </button>
+        ) : null}
+      >
         {datasetMode === 'pick' ? (
           <DatasetSelect datasets={datasets} value={datasetPath} onChange={setDatasetPath} />
         ) : (
           <Input
+            id="training-dataset-path"
             type="text"
             value={datasetPath}
             onChange={(e) => setDatasetPath(e.target.value)}
@@ -355,67 +343,46 @@ const NewJobForm = ({ readiness, onSubmit, submitting }) => {
             required
           />
         )}
-        <p className="mt-1 text-[10px] text-gray-400 dark:text-gray-500">
-          {datasets.length === 0
-            ? 'No downloaded datasets found. Ask the agent: "download alpaca dataset for fine-tuning"'
-            : 'Download more datasets using the agent: "download alpaca dataset for fine-tuning"'}
-        </p>
+      </Field>
+
+      <div>
+        <button
+          type="button"
+          onClick={() => setShowAdvanced(!showAdvanced)}
+          aria-expanded={showAdvanced}
+          className="-ml-1 inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 text-[12px] font-medium text-fg-muted outline-none transition-colors hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/40"
+        >
+          <Settings2 className="h-3.5 w-3.5" />
+          Settings
+          <ChevronRight className={`h-3.5 w-3.5 transition-transform ${showAdvanced ? 'rotate-90' : ''}`} />
+        </button>
+
+        {showAdvanced && (
+          <div className="mt-2 grid grid-cols-2 gap-3 rounded-xl border border-line p-3 sm:grid-cols-3">
+            {HYPERPARAM_FIELDS.map(({ key, label, ...props }) => (
+              <Field key={key} label={label} htmlFor={`training-${key}`}>
+                <Input
+                  id={`training-${key}`}
+                  {...props}
+                  value={hyper[key]}
+                  onChange={(e) => setHyper({ ...hyper, [key]: key === 'lr' ? parseFloat(e.target.value) : parseInt(e.target.value) })}
+                  className="h-8 tabular-nums"
+                />
+              </Field>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Advanced settings toggle */}
-      <button
-        type="button"
-        onClick={() => setShowAdvanced(!showAdvanced)}
-        className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 mb-2 transition-colors"
-      >
-        <Settings2 className="w-3.5 h-3.5" />
-        Hyperparameters
-        {showAdvanced ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-      </button>
-
-      {showAdvanced && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800/40 midnight:bg-gray-800/30">
-          {[
-            { key: 'epochs', label: 'Epochs', type: 'number', min: 1, max: 50 },
-            { key: 'lr', label: 'Learning Rate', type: 'number', step: '0.0001' },
-            { key: 'rank', label: 'LoRA Rank', type: 'number', min: 4, max: 256 },
-            { key: 'alpha', label: 'LoRA Alpha', type: 'number', min: 4, max: 512 },
-            { key: 'batchSize', label: 'Batch Size', type: 'number', min: 1, max: 64 },
-            { key: 'maxSeqLen', label: 'Max Seq Length', type: 'number', min: 128, max: 8192 },
-          ].map(({ key, label, ...props }) => (
-            <div key={key}>
-              <label className="block text-[10px] font-medium text-gray-500 dark:text-gray-400 mb-0.5">{label}</label>
-              <input
-                {...props}
-                value={hyper[key]}
-                onChange={(e) => setHyper({ ...hyper, [key]: key === 'lr' ? parseFloat(e.target.value) : parseInt(e.target.value) })}
-                className="w-full px-2 py-1.5 text-xs rounded-md border border-gray-200 dark:border-gray-700
-                  bg-white dark:bg-gray-900 text-gray-900 dark:text-white
-                  focus:outline-none focus:border-gray-400 dark:focus:border-gray-500"
-              />
-            </div>
-          ))}
-        </div>
-      )}
-
-      <button
+      <Button
         type="submit"
-        disabled={submitting || !readiness?.canTrain || !name.trim() || !baseModel.trim() || !datasetPath.trim()}
-        className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white
-          disabled:opacity-50 disabled:cursor-not-allowed
-          transition-colors duration-150"
+        variant="primary"
+        icon={Play}
+        loading={submitting}
+        disabled={!readiness?.canTrain || !name.trim() || !baseModel.trim() || !datasetPath.trim()}
       >
-        {submitting ? (
-          <>
-            Starting…
-          </>
-        ) : (
-          <>
-            <Play className="w-4 h-4" />
-            Start Training
-          </>
-        )}
-      </button>
+        {submitting ? 'Starting…' : 'Start training'}
+      </Button>
     </form>
   );
 };
@@ -426,18 +393,29 @@ NewJobForm.propTypes = {
   submitting: PropTypes.bool.isRequired,
 };
 
-// ── Job Card ────────────────────────────────────────────────────────────────
-
 // ── Metrics chart ───────────────────────────────────────────────────────────
 
+// Charts use the accent for their line, and a second line (GPU use) in grey.
+const LINE = 'var(--as-accent)';
+const SECOND_LINE = 'var(--as-fg-subtle)';
+const AXIS_TICK = { fontSize: 10, fill: 'var(--as-fg-subtle)' };
+const TOOLTIP_STYLE = {
+  fontSize: 11,
+  padding: '4px 8px',
+  borderRadius: 8,
+  border: '1px solid var(--as-line-strong)',
+  background: 'var(--as-elevated)',
+  color: 'var(--as-fg)',
+};
+
 const MetricChart = ({ title, data, lines }) => (
-  <div className="rounded-lg border border-gray-200/60 dark:border-white/[0.06] midnight:border-white/[0.04] p-2">
-    <p className="text-[10px] font-medium text-gray-500 dark:text-gray-400 mb-1 px-1">{title}</p>
+  <div className="rounded-xl border border-line p-2">
+    <p className="mb-1 px-1 text-[11px] font-medium text-fg-subtle">{title}</p>
     <ResponsiveContainer width="100%" height={120}>
-      <LineChart data={data} margin={{ top: 4, right: 8, left: -22, bottom: 0 }}>
-        <XAxis dataKey="step" tick={{ fontSize: 9 }} stroke="#9ca3af" />
-        <YAxis tick={{ fontSize: 9 }} stroke="#9ca3af" width={32} />
-        <Tooltip contentStyle={{ fontSize: 11, padding: '4px 8px' }} labelFormatter={(s) => `Step ${s}`} />
+      <LineChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+        <XAxis dataKey="step" tick={AXIS_TICK} stroke="var(--as-line-strong)" />
+        <YAxis tick={AXIS_TICK} tickFormatter={axisNumber} stroke="var(--as-line-strong)" width={34} />
+        <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={{ color: 'var(--as-fg-muted)' }} labelFormatter={(s) => `Step ${s}`} />
         {lines.map((l) => (
           <Line
             key={l.key}
@@ -515,46 +493,46 @@ const JobDetails = ({ job }) => {
   const hasMetric = (key) => metrics.some((m) => m[key] != null);
 
   return (
-    <div className="mt-3 pt-3 border-t border-gray-100 dark:border-white/[0.06] space-y-3">
+    <div className="mt-3 space-y-3 border-t border-line pt-3">
       {logs.length > 0 && (
         <div
           ref={logRef}
-          className="max-h-32 overflow-y-auto rounded-lg bg-gray-50 dark:bg-gray-900/60 midnight:bg-gray-900/40 p-2 font-mono text-[10px] text-gray-500 dark:text-gray-400 space-y-0.5"
+          className="max-h-32 space-y-0.5 overflow-y-auto rounded-lg bg-hover p-2 font-mono text-[11px] leading-4 text-fg-muted"
         >
           {logs.map((l, i) => <div key={i}>{l.text}</div>)}
         </div>
       )}
 
       {loadingMetrics ? (
-        <p className="text-xs text-gray-400 dark:text-gray-500">Loading metrics…</p>
+        <p className="text-[12px] text-fg-subtle">Loading metrics…</p>
       ) : metrics.length === 0 ? (
-        <p className="text-xs text-gray-400 dark:text-gray-500">No metrics yet — they&apos;ll appear once training starts logging steps.</p>
+        <p className="text-[12px] text-fg-subtle">No metrics yet. They appear once training logs its first steps.</p>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           {hasMetric('loss') && (
-            <MetricChart title="Loss" data={metrics} lines={[{ key: 'loss', color: CHART_COLORS[0] }]} />
+            <MetricChart title="Loss" data={metrics} lines={[{ key: 'loss', color: LINE }]} />
           )}
           {hasMetric('lr') && (
-            <MetricChart title="Learning Rate" data={metrics} lines={[{ key: 'lr', color: CHART_COLORS[4] }]} />
+            <MetricChart title="Learning rate" data={metrics} lines={[{ key: 'lr', color: LINE }]} />
           )}
           {hasMetric('gradNorm') && (
-            <MetricChart title="Grad Norm" data={metrics} lines={[{ key: 'gradNorm', color: CHART_COLORS[3] }]} />
+            <MetricChart title="Gradient norm" data={metrics} lines={[{ key: 'gradNorm', color: LINE }]} />
           )}
           {hasMetric('perplexity') && (
-            <MetricChart title="Perplexity" data={metrics} lines={[{ key: 'perplexity', color: CHART_COLORS[2] }]} />
+            <MetricChart title="Perplexity" data={metrics} lines={[{ key: 'perplexity', color: LINE }]} />
           )}
           {(hasMetric('gpuMemGb') || hasMetric('gpuUtilPct')) && (
             <MetricChart
-              title="GPU Mem (GB) / Util %"
+              title="GPU memory (GB) and use (%)"
               data={metrics}
               lines={[
-                { key: 'gpuMemGb', name: 'GPU Mem (GB)', color: CHART_COLORS[1] },
-                { key: 'gpuUtilPct', name: 'GPU Util %', color: CHART_COLORS[5] },
+                { key: 'gpuMemGb', name: 'GPU memory (GB)', color: LINE },
+                { key: 'gpuUtilPct', name: 'GPU use (%)', color: SECOND_LINE },
               ]}
             />
           )}
           {hasMetric('cpuPct') && (
-            <MetricChart title="CPU %" data={metrics} lines={[{ key: 'cpuPct', color: '#64748b' }]} />
+            <MetricChart title="Processor use (%)" data={metrics} lines={[{ key: 'cpuPct', color: LINE }]} />
           )}
         </div>
       )}
@@ -566,96 +544,66 @@ JobDetails.propTypes = {
   job: jobShape.isRequired,
 };
 
+// ── Job card ────────────────────────────────────────────────────────────────
+
 const JobCard = ({ job, onStop, onDelete }) => {
   const progress = job.progress || {};
   const isActive = job.status === 'running' || job.status === 'queued';
   const [expanded, setExpanded] = useState(false);
+  const meta = [job.baseModel, job.backend?.toUpperCase(), job.hyperparams?.rank ? `r=${job.hyperparams.rank}` : null].filter(Boolean);
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 transition-colors dark:border-gray-800 dark:bg-gray-900 midnight:border-slate-800 midnight:bg-slate-950">
-      <div className="flex items-start justify-between mb-2">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <h4 className="text-sm font-semibold text-gray-900 dark:text-white midnight:text-white truncate">
-              {job.name}
-            </h4>
+    <div className="rounded-xl border border-line bg-surface px-4 py-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-2">
+            <h4 className="truncate text-[13px] font-medium text-fg">{job.name}</h4>
             <StatusBadge status={job.status} />
           </div>
-          <div className="flex items-center gap-3 text-[11px] text-gray-500 dark:text-gray-400">
-            <span title="Base model">{job.baseModel}</span>
-            <span>•</span>
-            <span title="Backend">{job.backend?.toUpperCase()}</span>
-            {job.hyperparams?.rank && (
-              <>
-                <span>•</span>
-                <span>r={job.hyperparams.rank}</span>
-              </>
-            )}
-          </div>
+          <p className="mt-0.5 truncate text-[12px] text-fg-subtle">{meta.join(' · ')}</p>
         </div>
-        <div className="flex items-center gap-1 flex-shrink-0">
-          <button
+        <div className="-mr-1 flex shrink-0 items-center gap-0.5">
+          <IconButton
+            icon={expanded ? ChevronUp : ChevronDown}
+            label={expanded ? 'Hide metrics and logs' : 'Show metrics and logs'}
+            size="sm"
+            aria-expanded={expanded}
             onClick={() => setExpanded((e) => !e)}
-            title={expanded ? 'Hide details' : 'Show metrics & logs'}
-            className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
-          >
-            {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-          </button>
-          {isActive && (
-            <button
-              onClick={() => onStop(job.id)}
-              title="Stop training"
-              className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-            >
-              <Square className="w-3.5 h-3.5" />
-            </button>
-          )}
-          {!isActive && (
-            <button
-              onClick={() => onDelete(job.id)}
-              title="Delete job"
-              className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-          )}
+          />
+          {isActive
+            ? <IconButton icon={Square} label="Stop training" size="sm" onClick={() => onStop(job.id)} />
+            : <IconButton icon={Trash2} label="Delete job" size="sm" onClick={() => onDelete(job.id)} />}
         </div>
       </div>
 
-      {/* Progress */}
       {isActive && progress.percent != null && (
-        <div className="mt-2">
+        <div className="mt-3">
           <ProgressBar percent={progress.percent || 0} loss={progress.loss} />
           {progress.step != null && progress.totalSteps != null && (
-            <div className="flex justify-between text-[10px] text-gray-400 dark:text-gray-500 mt-1">
-              <span>Step {progress.step} / {progress.totalSteps}</span>
+            <div className="mt-1.5 flex justify-between text-[11px] tabular-nums text-fg-subtle">
+              <span>Step {progress.step} of {progress.totalSteps}</span>
               {progress.epoch != null && <span>Epoch {progress.epoch}</span>}
             </div>
           )}
         </div>
       )}
 
-      {/* Error */}
       {job.status === 'failed' && job.error && (
-        <div className="mt-2 p-2 rounded-lg bg-red-50 dark:bg-red-900/10 midnight:bg-red-900/10">
-          <p className="text-xs text-red-600 dark:text-red-400 break-words">{job.error}</p>
-        </div>
+        <p className="mt-2 break-words rounded-lg bg-red-500/10 px-3 py-2 text-[12px] leading-5 text-red-700 dark:text-red-400">{job.error}</p>
       )}
 
-      {/* Completed output */}
       {job.status === 'completed' && job.outputDir && (
-        <div className="mt-2 p-2 rounded-lg bg-green-50 dark:bg-green-900/10 midnight:bg-green-900/10">
-          <p className="text-xs text-green-600 dark:text-green-400">
-            ✓ Adapter saved to: <code className="text-[10px] bg-green-100 dark:bg-green-900/30 px-1 rounded">{job.outputDir}</code>
-          </p>
-        </div>
+        <p className="mt-2 flex min-w-0 items-center gap-1.5 text-[12px] text-fg-muted">
+          <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+          <span className="shrink-0">Adapter saved to</span>
+          <code className="truncate font-mono text-[11px] text-fg">{job.outputDir}</code>
+        </p>
       )}
 
-      {/* Timestamps */}
-      <div className="mt-2 text-[10px] text-gray-400 dark:text-gray-500">
+      <p className="mt-2 text-[11px] text-fg-subtle">
         Created {new Date(job.createdAt).toLocaleString()}
-        {job.completedAt && ` • Finished ${new Date(job.completedAt).toLocaleString()}`}
-      </div>
+        {job.completedAt && ` · Finished ${new Date(job.completedAt).toLocaleString()}`}
+      </p>
 
       {expanded && <JobDetails job={job} />}
     </div>
@@ -679,6 +627,7 @@ const TrainingPage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const pollCleanups = useRef([]);
+  const confirm = useConfirm();
 
   // ── Load data ─────────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
@@ -741,9 +690,13 @@ const TrainingPage = () => {
 
   // ── Remove handler ────────────────────────────────────────────────────────
   const handleRemove = async () => {
-    if (!window.confirm('Are you sure you want to remove the training virtual environment? This will delete the venv directory.')) {
-      return;
-    }
+    const confirmed = await confirm({
+      title: 'Remove the training tools?',
+      message: 'This deletes the folder with PyTorch and the training libraries. Trained adapters and datasets stay. You can install the tools again later.',
+      confirmLabel: 'Remove',
+      destructive: true,
+    });
+    if (!confirmed) return;
     setLoading(true);
     try {
       await trainingApi.removeEnv();
@@ -790,136 +743,100 @@ const TrainingPage = () => {
 
   if (loading) {
     return (
-      <div className="flex-1 overflow-y-auto" role="status" aria-label="Loading training environment">
-        <div className="mx-auto max-w-4xl space-y-4 px-4 py-8 sm:px-6">
-          <div className="mb-7 space-y-2">
-            <div className="h-5 w-24 animate-pulse rounded bg-gray-200 dark:bg-gray-800" />
-            <div className="h-3 w-64 animate-pulse rounded bg-gray-100 dark:bg-gray-800/70" />
-          </div>
-          {[112, 260].map((height) => (
-            <div key={height} className="animate-pulse rounded-xl border border-gray-200 p-5 dark:border-gray-800" style={{ height }}>
-              <div className="h-3.5 w-32 rounded bg-gray-200 dark:bg-gray-800" />
-              <div className="mt-4 h-3 w-3/4 rounded bg-gray-100 dark:bg-gray-800/70" />
-            </div>
-          ))}
+      <div className="h-full overflow-y-auto" role="status" aria-label="Loading training">
+        <div className="mx-auto max-w-4xl space-y-4 px-4 py-6 sm:px-6">
+          <Skeleton className="h-36 rounded-2xl" />
+          <Skeleton className="h-72 rounded-2xl" />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 overflow-y-auto">
-      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
-        {/* Header */}
-        <div className="mb-7">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-white midnight:text-white">Training</h1>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Teach a small local model from your own chats, notes and files.</p>
-            </div>
-            <button
-              onClick={loadData}
-              className="p-2 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              title="Refresh"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Error */}
+    <div className="h-full overflow-y-auto">
+      <div className="mx-auto max-w-4xl space-y-4 px-4 py-6 sm:px-6">
         {error && (
-          <div className="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800/30 flex items-start gap-2">
-            <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-            </div>
-            <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600">
-              <XCircle className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-
-        {/* Install progress */}
-        {installing && installProgress && (
-          <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60">
-            <div className="mb-2 flex items-center gap-2">
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                {installProgress.message || 'Installing…'}
+          <Notice
+            tone="error"
+            action={(
+              <span className="flex items-center gap-1">
+                {!readiness ? <Button variant="ghost" size="xs" onClick={loadData}>Try again</Button> : null}
+                <button type="button" onClick={() => setError(null)} aria-label="Dismiss" className="flex h-6 w-6 items-center justify-center rounded-md outline-none hover:bg-red-500/10 focus-visible:ring-2 focus-visible:ring-accent/40">
+                  <X className="h-3.5 w-3.5" />
+                </button>
               </span>
-            </div>
-            <ProgressBar percent={installProgress.percent || 0} />
+            )}
+          >
+            {error}
+          </Notice>
+        )}
+
+        {installing && installProgress && (
+          <div className="rounded-xl border border-line px-4 py-3">
+            <StatusLine tone="progress" text={installProgress.message || 'Installing…'} percent={installProgress.percent || 0} />
           </div>
         )}
 
-        <div className="space-y-4">
-          {/* Readiness */}
-          <ReadinessBanner
+        <ReadinessBanner
+          readiness={readiness}
+          onInstall={handleInstall}
+          installing={installing}
+          onRemove={handleRemove}
+          onRefresh={loadData}
+        />
+
+        {readiness ? (
+          <GuidedTraining
             readiness={readiness}
+            jobs={jobs}
             onInstall={handleInstall}
             installing={installing}
-            onRemove={handleRemove}
+            onStop={handleStopJob}
+            onJobsChanged={loadData}
           />
+        ) : null}
 
-          {readiness ? (
-            <GuidedTraining
-              readiness={readiness}
-              jobs={jobs}
-              onInstall={handleInstall}
-              installing={installing}
-              onStop={handleStopJob}
-              onJobsChanged={loadData}
-            />
-          ) : null}
+        {/* Any model and any dataset, with every setting — only when the environment is ready */}
+        {readiness?.canTrain && (
+          <details className="group rounded-2xl border border-line bg-surface" data-advanced-training>
+            <summary className="flex cursor-pointer list-none items-center gap-2 rounded-2xl px-5 py-3.5 text-[13px] font-medium text-fg outline-none focus-visible:ring-2 focus-visible:ring-accent/40 [&::-webkit-details-marker]:hidden">
+              <ChevronRight className="h-4 w-4 shrink-0 text-fg-subtle transition-transform group-open:rotate-90" />
+              Advanced: train any model on any dataset, with every setting
+            </summary>
+            <div className="border-t border-line">
+              <NewJobForm
+                readiness={readiness}
+                onSubmit={handleStartJob}
+                submitting={submitting}
+              />
+            </div>
+          </details>
+        )}
 
-          {/* Any model and any dataset, with every setting — only when the environment is ready */}
-          {readiness?.canTrain && (
-            <details className="group rounded-xl border border-gray-200 dark:border-gray-800 midnight:border-slate-800" data-advanced-training>
-              <summary className="cursor-pointer list-none px-5 py-3 text-sm font-medium text-gray-700 dark:text-gray-300">
-                Advanced: train any model on any dataset, with every setting
-              </summary>
-              <div className="border-t border-gray-100 p-0 dark:border-gray-800">
-                <NewJobForm
-                  readiness={readiness}
-                  onSubmit={handleStartJob}
-                  submitting={submitting}
+        {jobs.length > 0 && (
+          <section className="pt-2">
+            <h2 className="mb-2 text-[13px] font-semibold text-fg">
+              Training jobs <span className="font-normal text-fg-subtle">{jobs.length}</span>
+            </h2>
+            <div className="space-y-2">
+              {jobs.map(job => (
+                <JobCard
+                  key={job.id}
+                  job={job}
+                  onStop={handleStopJob}
+                  onDelete={handleDeleteJob}
                 />
-              </div>
-            </details>
-          )}
-
-          {/* Jobs list */}
-          {jobs.length > 0 && (
-            <div>
-              <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white midnight:text-white">
-                Training jobs
-                <span className="text-xs font-normal text-gray-400">({jobs.length})</span>
-              </h2>
-              <div className="space-y-3">
-                {jobs.map(job => (
-                  <JobCard
-                    key={job.id}
-                    job={job}
-                    onStop={handleStopJob}
-                    onDelete={handleDeleteJob}
-                  />
-                ))}
-              </div>
+              ))}
             </div>
-          )}
+          </section>
+        )}
 
-          {/* Empty state */}
-          {jobs.length === 0 && readiness?.canTrain && (
-            <div className="border-t border-gray-100 py-7 text-center dark:border-gray-800">
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">
-                No training jobs yet
-              </p>
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                Follow the steps above, or ask the agent to start fine-tuning.
-              </p>
-            </div>
-          )}
-        </div>
+        {jobs.length === 0 && readiness?.canTrain && (
+          <div className="py-6 text-center">
+            <p className="text-[13px] font-medium text-fg-muted">No training jobs yet</p>
+            <p className="mt-0.5 text-[12px] text-fg-subtle">Follow the steps above, or ask the agent to start fine-tuning.</p>
+          </div>
+        )}
       </div>
     </div>
   );
