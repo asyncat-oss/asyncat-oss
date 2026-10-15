@@ -1061,7 +1061,8 @@ const ModernNoteEditor = ({ note, onBack }) => {
         />
       </div>
 
-      {/* Content */}
+      {/* Content. Positioned, so the editor's notifications and the loading
+          veil sit over the visible note rather than the whole window. */}
       <div className="relative flex flex-1 overflow-hidden">
         <div className="flex-1 overflow-y-auto editor-fullscreen">
           <NoteBanner

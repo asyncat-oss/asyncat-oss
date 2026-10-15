@@ -31,6 +31,7 @@ const ensureBlockSelectionStyle = () => {
   `;
   document.head.appendChild(style);
 };
+import Checkbox from "../../../components/ui/Checkbox.jsx";
 import BlockActions from "./BlockActions";
 import TableBlock from "./TableBlock";
 import CodeBlock from "./CodeBlock";
@@ -95,7 +96,8 @@ const CHART_TYPES = {
   [BlockType.DONUT_CHART]: "donut",
 };
 
-// Memoized Todo component with read-only support
+// The todo's tick box: the app's Checkbox. A todo can't be ticked until it
+// has some text; a click doesn't reach the block underneath.
 const TodoCheckbox = memo(
   ({
     checked,
@@ -106,48 +108,28 @@ const TodoCheckbox = memo(
     canToggle = true,
     tooltip,
   }) => (
-    <input
-      type="checkbox"
-      checked={checked || false}
-      onChange={
-        readOnly
-          ? undefined
-          : (e) => {
-              if (!canToggle && !checked) {
-                e.preventDefault();
-                e.target.checked = false;
-                return;
-              }
-              onChange(e.target.checked);
-            }
-      }
-      onClick={
-        readOnly
-          ? undefined
-          : (e) => {
-              e.stopPropagation();
-
-              if (!canToggle && !checked) {
-                e.preventDefault();
-                e.target.checked = false;
-              }
-
-              if (onBlockFocus) {
-                onBlockFocus(blockId);
-              }
-            }
-      }
-      className={`mt-1 w-4 h-4 text-teal-500 accent-teal-500 dark:accent-teal-400 midnight:accent-teal-300 rounded border-gray-300 dark:border-gray-600 focus:ring-teal-400 focus:ring-2 focus:ring-offset-1 focus:outline-none transition ${
-        readOnly
-          ? "cursor-not-allowed opacity-50"
-          : canToggle
-          ? "cursor-pointer"
-          : "cursor-not-allowed opacity-60"
+    <span
+      className={`mt-1 flex ${
+        readOnly ? "opacity-50" : !canToggle && !checked ? "opacity-60" : ""
       }`}
-      aria-disabled={readOnly || (!canToggle && !checked)}
-      disabled={readOnly}
       title={tooltip}
-    />
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!readOnly && onBlockFocus) {
+          onBlockFocus(blockId);
+        }
+      }}
+    >
+      <Checkbox
+        checked={Boolean(checked)}
+        disabled={readOnly}
+        aria-label={checked ? "Mark as not done" : "Mark as done"}
+        onChange={(next) => {
+          if (readOnly || (!canToggle && !checked)) return;
+          onChange(next);
+        }}
+      />
+    </span>
   )
 );
 
@@ -181,7 +163,7 @@ const ListNumber = memo(({ blockIndex, indentLevel = 0 }) => {
   };
 
   return (
-    <span className="text-gray-500 dark:text-gray-400 font-medium select-none min-w-[1.5rem]">
+    <span className="min-w-[1.5rem] select-none font-medium text-fg-subtle">
       {formatNumber(blockIndex, indentLevel)}
     </span>
   );
@@ -1324,7 +1306,7 @@ const Block = forwardRef(
       const baseClasses =
         "w-full outline-none resize-none bg-transparent border-none block-content rounded-md whitespace-pre-wrap";
       const textClasses =
-        "text-gray-900 dark:text-gray-100 midnight:text-gray-100";
+        "text-fg";
       const readOnlyClasses = readOnly
         ? "cursor-not-allowed opacity-70 select-none"
         : "cursor-text";
@@ -1405,7 +1387,7 @@ const Block = forwardRef(
 
           return (
             <div className="flex items-start gap-2" style={{ paddingLeft: `${indentPadding}rem` }}>
-              <span className="text-gray-500 dark:text-gray-400 mt-0.4 select-none text-lg">
+              <span className="mt-0.4 select-none text-lg text-fg-subtle">
                 {bulletShape}
               </span>
               <div
@@ -1459,7 +1441,7 @@ const Block = forwardRef(
                     : readOnlyClasses
                 } ${
                   isTodoChecked
-                    ? "line-through decoration-teal-500 dark:decoration-teal-400 midnight:decoration-teal-300"
+                    ? "line-through decoration-fg-subtle"
                     : ""
                 }`}
                 style={{ minHeight: "1.2em", overflowWrap: "anywhere", wordBreak: "break-word", hyphens: "none" }}
@@ -1473,11 +1455,11 @@ const Block = forwardRef(
         case BlockType.QUOTE:
           return (
             <div className="flex gap-3">
-              <div className="w-1 bg-gray-300 dark:bg-gray-600 rounded-full flex-shrink-0 self-stretch -my-1"></div>
+              <div className="-my-1 w-[3px] flex-shrink-0 self-stretch rounded-full bg-line-strong"></div>
               <div
                 ref={contentRef}
                 contentEditable={!readOnly}
-                className={`${baseClasses} flex-1 italic text-gray-700 dark:text-gray-300 ${textClasses} ${readOnlyClasses}`}
+                className={`${baseClasses} flex-1 italic text-fg-muted ${readOnlyClasses}`}
                 style={{ minHeight: "1.2em", overflowWrap: "anywhere", wordBreak: "break-word", hyphens: "none" }}
                 placeholder={readOnly ? "" : "Quote"}
                 {...commonProps}
@@ -1683,7 +1665,7 @@ const Block = forwardRef(
         <div
           className={`group relative py-2 px-3 rounded-lg transition-all duration-200 ${
             readOnly
-              ? "bg-gray-100/40 dark:bg-gray-800/20 midnight:bg-gray-800/20 cursor-not-allowed"
+              ? "cursor-not-allowed bg-hover"
               : "bg-transparent"
           } ${
             isAllBlocksSelected && shouldHideButtonsOnSelectAll()
@@ -1691,7 +1673,7 @@ const Block = forwardRef(
               : ""
           } ${
             isSelected
-              ? "ring-2 ring-blue-500/50 dark:ring-blue-400/60 midnight:ring-indigo-400/60 bg-blue-500/10 dark:bg-blue-500/10 midnight:bg-indigo-500/10"
+              ? "bg-accent-soft ring-2 ring-accent/40"
               : ""
           }`}
           onClick={(e) => {
@@ -1713,13 +1695,13 @@ const Block = forwardRef(
             }
           }}
         >
-          <div className="flex items-start gap-2 w-full pr-28 relative">
+          <div className="relative flex w-full items-start gap-2 pr-28">
             <div className="flex-1 min-w-0 w-full">{renderBlockContent()}</div>
 
             {/* Block actions - hidden in read-only mode */}
             {!readOnly && (
               <div
-                className="absolute right-[-0.5rem] top-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex-shrink-0 z-10 block-actions-container"
+                className="block-actions-container absolute right-[-0.5rem] top-0 z-10 flex-shrink-0 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
                 data-block-selection-disabled="true"
               >
                 <BlockActions

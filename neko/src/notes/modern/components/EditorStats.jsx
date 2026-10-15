@@ -1,3 +1,5 @@
+// Word, character and block counts for a note, in a small corner panel.
+
 import { useMemo } from 'react';
 import { FileText, Clock } from 'lucide-react';
 
@@ -35,16 +37,16 @@ const EditorStats = ({ blocks, isVisible }) => {
 
   if (!isVisible) return null;
   return (
-    <div className="fixed bottom-4 right-4 bg-white dark:bg-gray-800 midnight:bg-gray-900 border border-gray-200 dark:border-gray-700 midnight:border-gray-800 rounded-lg shadow-lg p-3 text-xs text-gray-600 dark:text-gray-400 midnight:text-gray-400 z-40">
+    <div className="fixed bottom-4 right-4 z-40 rounded-xl border border-line bg-elevated px-3 py-2 text-[12px] tabular-nums text-fg-muted shadow-lg shadow-black/10 dark:shadow-black/40">
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-1">
-          <FileText className="w-3 h-3" />
+          <FileText className="h-3 w-3 text-fg-subtle" />
           <span>{stats.blocks} blocks</span>
         </div>
         <div>{stats.words} words</div>
         <div>{stats.characters} characters</div>
         <div className="flex items-center gap-1">
-          <Clock className="w-3 h-3" />
+          <Clock className="h-3 w-3 text-fg-subtle" />
           <span>{stats.readingTime}m read</span>
         </div>
       </div>

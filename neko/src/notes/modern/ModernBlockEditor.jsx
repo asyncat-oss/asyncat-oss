@@ -8,7 +8,6 @@ import React, {
   useImperativeHandle,
   useMemo,
 } from "react";
-import ReactDOM from "react-dom";
 import {
   DndContext,
   DragOverlay,
@@ -31,6 +30,17 @@ import ConfirmationModal from "./ConfirmationModal";
 import { debounce } from "../utils/autoSaveUtils";
 import { DeltaTracker } from "../utils/deltaSystem";
 import { sanitizeHtmlContent } from "../../utils/sanitizer";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Info,
+  Loader2,
+  Plus,
+  XCircle,
+} from "lucide-react";
+import Dialog from "../../components/ui/Dialog.jsx";
+import Button from "../../components/ui/Button.jsx";
+import Checkbox from "../../components/ui/Checkbox.jsx";
 
 // Global persistent storage for block histories keyed by note ID
 const globalBlockHistories = new Map();
@@ -549,26 +559,32 @@ const DropZone = ({
         isActive
           ? `mx-4 ${
               isOver
-                ? "bg-blue-500/20 dark:bg-blue-400/20 midnight:bg-blue-400/20 border-2 border-dashed border-blue-500 dark:border-blue-400 midnight:border-blue-400"
-                : "bg-gray-200/50 dark:bg-gray-700/50 midnight:bg-gray-700/50 border-2 border-dashed border-gray-300 dark:border-gray-600 midnight:border-gray-600"
+                ? "bg-accent-soft border border-dashed border-accent"
+                : "bg-hover border border-dashed border-line-strong"
             } rounded-lg`
           : "opacity-0 pointer-events-auto" // Invisible but large collision area
       }`}
     >
       {isActive && (
         <div
-          className={`flex items-center justify-center h-full text-sm font-medium transition-colors duration-200 ${
-            isOver
-              ? "text-blue-600 dark:text-blue-400 midnight:text-blue-400"
-              : "text-gray-600 dark:text-gray-400 midnight:text-gray-400"
+          className={`flex items-center justify-center h-full text-[13px] transition-colors duration-200 ${
+            isOver ? "text-accent" : "text-fg-subtle"
           }`}
         >
-          Drop Block Here
+          Drop the block here
         </div>
       )}
     </div>
   );
 };
+
+// Dialogs, menus and dropdown lists the editor opens sit outside it (in a
+// portal). A press inside one is about the blocks, so it keeps their
+// selection.
+const FLOATING_LAYER_SELECTOR =
+  "[data-block-selection-modal], [role='dialog'], [role='alertdialog'], [role='menu'], [data-select-panel]";
+const isInFloatingLayer = (element) =>
+  Boolean(element && typeof element.closest === "function" && element.closest(FLOATING_LAYER_SELECTOR));
 
 const ZERO_WIDTH_SPACE_REGEX = /\u200B/g;
 const NBSP_CHAR_REGEX = /\u00A0/g;
@@ -947,6 +963,15 @@ const ModernBlockEditor = forwardRef(
       onConfirm: null,
       blockCount: 0,
     });
+    // Cancel: close the warning and let go of the blocks it was about.
+    const closeDeletionWarning = () => {
+      clearBlockSelection();
+      setDeletionWarningModal({
+        isOpen: false,
+        blockCount: 0,
+        onConfirm: null,
+      });
+    };
     const rootRef = useRef(null);
     const blockRefs = useRef({});
     const lastClipboardWriteSuccessfulRef = useRef(true);
@@ -1543,10 +1568,7 @@ const ModernBlockEditor = forwardRef(
           targetElement = rawTarget.parentElement;
         }
 
-        if (
-          targetElement &&
-          targetElement.closest("[data-block-selection-modal]")
-        ) {
+        if (targetElement && isInFloatingLayer(targetElement)) {
           return;
         }
 
@@ -4847,9 +4869,9 @@ const ModernBlockEditor = forwardRef(
           case "clearAll":
             setConfirmationModal({
               isOpen: true,
-              title: "Clear All Content",
+              title: "Clear the whole note?",
               message:
-                "Are you sure you want to delete all content? This action cannot be undone.",
+                "Everything in this note will be deleted. You can't undo this.",
               onConfirm: () => {
                 // Clear all blocks and create a single empty text block
                 const newBlock = createBlock(BlockType.TEXT, "");
@@ -5463,7 +5485,7 @@ const ModernBlockEditor = forwardRef(
                 const hasSeenTip = localStorage.getItem("slashMenuTipSeen");
                 if (!hasSeenTip) {
                   showNotification(
-                    "💡 Tip: You can search blocks or click to select!",
+                    "Tip: type to search the blocks, or click one.",
                     "info",
                     5000
                   );
@@ -7088,9 +7110,9 @@ const ModernBlockEditor = forwardRef(
               // Show confirmation modal for deleting all content
               setConfirmationModal({
                 isOpen: true,
-                title: "Clear All Content",
+                title: "Clear the whole note?",
                 message:
-                  "Are you sure you want to delete all content? This action cannot be undone.",
+                  "Everything in this note will be deleted. You can't undo this.",
                 onConfirm: () => {
                   // Clear all blocks and create a single empty text block
                   const newBlock = createBlock(BlockType.TEXT, "");
@@ -8019,9 +8041,9 @@ const ModernBlockEditor = forwardRef(
     return (
       <div
         ref={rootRef}
-        className="bg-white dark:bg-gray-900 midnight:bg-gray-950 transition-colors duration-200"
+        className="@container bg-canvas"
       >
-        <div className="max-w-5xl mx-auto px-8 py-16 pb-24">
+        <div className="mx-auto max-w-5xl px-4 pb-24 pt-8 @2xl:px-8 @2xl:pt-16">
           {/* Title */}
           <div className="mb-8">
             <textarea
@@ -8034,8 +8056,8 @@ const ModernBlockEditor = forwardRef(
               onKeyDown={handleTitleKeyDown}
               onFocus={handleTitleFocus}
               rows={1}
-              className="w-full text-2xl md:text-3xl lg:text-4xl font-bold bg-transparent border-none outline-none text-gray-900 dark:text-gray-100 midnight:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 resize-none overflow-hidden leading-tight"
-              placeholder="What is my name?"
+              className="w-full resize-none overflow-hidden border-none bg-transparent text-2xl font-bold leading-tight tracking-[-0.02em] text-fg outline-none placeholder:text-fg-subtle @2xl:text-3xl @4xl:text-4xl"
+              placeholder="Untitled"
               style={{
                 minHeight: "1.5em",
                 lineHeight: "1.1",
@@ -8093,7 +8115,7 @@ const ModernBlockEditor = forwardRef(
                         onMouseUp={handleBlockWrapperMouseUp}
                       >
                         {showSelectionOverlay && (
-                          <div className="pointer-events-none absolute inset-0 rounded-lg bg-blue-500/15 dark:bg-blue-400/10 midnight:bg-indigo-500/15 ring-1 ring-blue-500/40 dark:ring-blue-400/40 midnight:ring-indigo-400/40 z-10" />
+                          <div className="pointer-events-none absolute inset-0 z-10 rounded-lg bg-accent-soft ring-1 ring-accent/40" />
                         )}
                         <div
                           className={
@@ -8135,38 +8157,21 @@ const ModernBlockEditor = forwardRef(
                 );
               })}
 
-              {/* Enhanced New Block Zone */}
+              {/* New block zone */}
               <div
-                className="group/new-block relative min-h-[80px] cursor-text transition-all duration-200 hover:bg-gray-50/30 dark:hover:bg-gray-800/20 midnight:hover:bg-gray-800/20 rounded-lg"
+                className="group/new-block relative min-h-[80px] cursor-text rounded-lg"
                 onClick={handleNewBlockZoneClick}
               >
                 <div className="h-full w-full min-h-[80px]" />
 
-                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/new-block:opacity-100 transition-opacity duration-200 pointer-events-none">
-                  <div className="flex flex-col items-center gap-2">
-                    <div className="bg-blue-500 dark:bg-blue-600 midnight:bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg shadow-lg flex items-center gap-2">
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M12 4v16m8-8H4"
-                        />
-                      </svg>
-                      Click to add a new block
-                    </div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400 midnight:text-gray-400">
-                      or press{" "}
-                      <kbd className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 midnight:bg-gray-700 rounded text-xs">
-                        Enter
-                      </kbd>{" "}
-                      in the last block
-                    </div>
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover/new-block:opacity-100">
+                  <div className="flex items-center gap-1.5 text-[12px] text-fg-subtle">
+                    <Plus className="h-3.5 w-3.5" />
+                    Click to add a block, or press
+                    <kbd className="rounded-md border border-line bg-surface px-1.5 font-sans text-[11px] text-fg-muted">
+                      Enter
+                    </kbd>
+                    in the last one
                   </div>
                 </div>
               </div>
@@ -8176,7 +8181,7 @@ const ModernBlockEditor = forwardRef(
             <DragOverlay>
               {draggedBlock && (
                 <div
-                  className="shadow-2xl pointer-events-none bg-gray-200 dark:bg-gray-800 midnight:bg-gray-900 rounded-lg border-2 border-blue-500 dark:border-blue-400 midnight:border-blue-400"
+                  className="pointer-events-none rounded-lg border border-accent/50 bg-elevated shadow-xl shadow-black/10 dark:shadow-black/40"
                   style={{ opacity: 1 }}
                 >
                   <div
@@ -8231,131 +8236,55 @@ const ModernBlockEditor = forwardRef(
           {/* Save Status Indicator */}
           {saveStatus && (
             <div
-              className={`fixed top-4 left-4 px-3 py-1.5 rounded-full text-sm shadow-lg z-50 flex items-center gap-2 ${
-                saveStatus === "saving"
-                  ? "bg-yellow-100 text-yellow-800"
-                  : saveStatus === "saved"
-                  ? "bg-green-100 text-green-800"
-                  : saveStatus === "error"
-                  ? "bg-red-100 text-red-800"
-                  : "bg-gray-100 text-gray-800"
-              }`}
+              role="status"
+              className="fixed left-4 top-4 z-50 flex items-center gap-2 rounded-full border border-line bg-elevated px-3 py-1.5 text-[12px] text-fg-muted shadow-sm"
             >
               {saveStatus === "saving" && (
                 <>
-                  <div className="w-3 h-3 border border-yellow-600 dark:border-yellow-500 midnight:border-yellow-400 border-t-transparent rounded-full animate-spin"></div>
-                  Saving...
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-fg-subtle" />
+                  Saving…
                 </>
               )}
               {saveStatus === "saved" && (
                 <>
-                  <div className="w-3 h-3 bg-green-600 dark:bg-green-500 midnight:bg-green-400 rounded-full"></div>
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                   Saved
                 </>
               )}
               {saveStatus === "error" && (
                 <>
-                  <div className="w-3 h-3 bg-red-600 dark:bg-red-500 midnight:bg-red-400 rounded-full"></div>
+                  <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
                   Save failed
                 </>
               )}
             </div>
           )}
 
-          {/* Enhanced Notification */}
+          {/* Notification, at the bottom of the note's visible area: the
+              note editor's content frame (not this scrolling page) is the
+              nearest positioned box, so it stays put while the note scrolls
+              and never covers the side panel's header. */}
           {notification && (
             <div
-              className={`fixed top-4 right-4 px-4 py-3 rounded-lg shadow-lg z-50 flex items-center gap-2 transition-all duration-300 ${
-                notification.type === "success"
-                  ? "bg-green-100 text-green-800 dark:bg-green-900/80 dark:text-green-200 midnight:bg-green-950/90 midnight:text-green-300"
-                  : notification.type === "error"
-                  ? "bg-red-100 text-red-800 dark:bg-red-900/80 dark:text-red-200 midnight:bg-red-950/90 midnight:text-red-300"
-                  : notification.type === "warning"
-                  ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/80 dark:text-yellow-200 midnight:bg-yellow-950/90 midnight:text-yellow-300"
-                  : "bg-blue-100 text-blue-800 dark:bg-blue-900/80 dark:text-blue-200 midnight:bg-blue-950/90 midnight:text-blue-300"
-              }`}
-              style={{
-                animation: "slideInRight 0.3s ease-out",
-              }}
+              role={notification.type === "error" ? "alert" : "status"}
+              className="pointer-events-none absolute bottom-4 left-1/2 z-50 flex w-max max-w-[min(24rem,calc(100%-2rem))] -translate-x-1/2 items-center gap-2 rounded-xl border border-line bg-elevated px-3 py-2 text-[13px] text-fg shadow-lg shadow-black/10 dark:shadow-black/40"
+              style={{ animation: "fadeIn 150ms ease-out" }}
             >
               {notification.type === "success" && (
-                <svg
-                  className="w-5 h-5"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                    clipRule="evenodd"
-                  />
-                </svg>
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
               )}
               {notification.type === "error" && (
-                <svg
-                  className="w-5 h-5"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                    clipRule="evenodd"
-                  />
-                </svg>
+                <XCircle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
               )}
               {notification.type === "warning" && (
-                <svg
-                  className="w-5 h-5"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                    clipRule="evenodd"
-                  />
-                </svg>
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
               )}
               {notification.type === "info" && (
-                <svg
-                  className="w-5 h-5"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                    clipRule="evenodd"
-                  />
-                </svg>
+                <Info className="h-4 w-4 shrink-0 text-fg-subtle" />
               )}
-              <span className="text-sm font-medium">
-                {notification.message}
-              </span>
+              <span>{notification.message}</span>
             </div>
           )}
-
-          <style>{`
-          @keyframes slideInRight {
-            from {
-              transform: translateX(100%);
-              opacity: 0;
-            }
-            to {
-              transform: translateX(0);
-              opacity: 1;
-            }
-          }
-          @keyframes fadeIn {
-            from {
-              opacity: 0;
-            }
-            to {
-              opacity: 1;
-            }
-          }
-        `}</style>
 
           {/* Confirmation Modal */}
           <ConfirmationModal
@@ -8378,88 +8307,47 @@ const ModernBlockEditor = forwardRef(
             }}
             title={confirmationModal.title}
             message={confirmationModal.message}
-            confirmText="Delete All"
+            confirmText="Delete all"
             cancelText="Cancel"
             isDangerous={true}
           />
 
-          {/* Deletion Warning Modal with "Don't show again" checkbox */}
-          {deletionWarningModal.isOpen &&
-            ReactDOM.createPortal(
-              <div
-                className="fixed inset-0 bg-black/40 dark:bg-black/60 backdrop-blur-sm flex items-center justify-center z-[2147483647]"
-                style={{ zIndex: 2147483647 }}
-                onClick={() => {
-                  // Clear selection and close on backdrop click
-                  clearBlockSelection();
-                  setDeletionWarningModal({
-                    isOpen: false,
-                    blockCount: 0,
-                    onConfirm: null,
-                  });
-                }}
-              >
-                <div
-                  data-block-selection-modal
-                  className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 p-6"
-                  onClick={(e) => e.stopPropagation()}
+          {/* Deletion warning, with "Don't ask again" for this session */}
+          <Dialog
+            open={deletionWarningModal.isOpen}
+            role="alertdialog"
+            size="sm"
+            closeButton={false}
+            title={
+              deletionWarningModal.blockCount === 1
+                ? "Delete this block?"
+                : `Delete ${deletionWarningModal.blockCount} blocks?`
+            }
+            description="You can't undo this."
+            onClose={closeDeletionWarning}
+            footer={
+              <>
+                <Button variant="ghost" onClick={closeDeletionWarning}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  data-confirm-action
+                  onClick={() => deletionWarningModal.onConfirm?.()}
                 >
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                    Delete {deletionWarningModal.blockCount}{" "}
-                    {deletionWarningModal.blockCount === 1 ? "Block" : "Blocks"}?
-                  </h3>
-                  <p className="text-gray-600 dark:text-gray-300 mb-6">
-                    This action cannot be undone.{" "}
-                    {deletionWarningModal.blockCount === 1
-                      ? "This block"
-                      : "These blocks"}{" "}
-                    will be permanently deleted.
-                  </p>
-
-                  {/* Checkbox for "Don't show again" */}
-                  <label className="flex items-center space-x-2 mb-6 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 cursor-pointer"
-                      onChange={(e) => {
-                        setShowDeletionWarning(!e.target.checked);
-                      }}
-                    />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">
-                      Don&apos;t show this warning again during this session
-                    </span>
-                  </label>
-
-                  <div className="flex justify-end space-x-3">
-                    <button
-                      onClick={() => {
-                        // Clear selection and close
-                        clearBlockSelection();
-                        setDeletionWarningModal({
-                          isOpen: false,
-                          blockCount: 0,
-                          onConfirm: null,
-                        });
-                      }}
-                      className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (deletionWarningModal.onConfirm) {
-                          deletionWarningModal.onConfirm();
-                        }
-                      }}
-                      className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              </div>,
-              document.body
-            )}
+                  Delete
+                </Button>
+              </>
+            }
+          >
+            <div data-block-selection-modal>
+              <Checkbox
+                checked={!showDeletionWarning}
+                onChange={(dontAsk) => setShowDeletionWarning(!dontAsk)}
+                label="Don't ask again while this note is open"
+              />
+            </div>
+          </Dialog>
         </div>
       </div>
     );
