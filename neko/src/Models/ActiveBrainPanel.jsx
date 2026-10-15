@@ -11,6 +11,7 @@ import { ProviderLogo, LocalModelLogo } from './modelLogos.jsx';
 import { imagesSummary, listeningSummary, speakingSummary } from './media/mediaSummary.js';
 import { useMediaStatus } from './media/useMediaStatus.js';
 import { providerPlace } from './providerPlace.js';
+import Skeleton from '../components/ui/Skeleton.jsx';
 
 const DOT = {
   idle: 'bg-fg-subtle/50',
@@ -46,6 +47,7 @@ Capability.propTypes = {
  * and Images); a new `refreshKey` looks again.
  */
 const ActiveBrainPanel = ({
+  loading = false,
   activeConfig,
   activeProviderName,
   serverStatus,
@@ -135,6 +137,23 @@ const ActiveBrainPanel = ({
   const activeProfileId = activeConfig?.profile_id;
   const ctxSize = serverStatus?.ctxSize && isRunning ? Number(serverStatus.ctxSize).toLocaleString() : '';
   const shownCtx = engineFacts ? ctxSize : '';
+
+  // Until the default is known, a neutral card: not "Not set up" with a
+  // Choose a model button that may be wrong a moment later.
+  if (loading) {
+    return (
+      <section className="rounded-2xl border border-line bg-surface" aria-busy="true" data-default-model-loading>
+        <div className="flex items-center gap-4 p-5">
+          <Skeleton className="h-12 w-12 rounded-xl" />
+          <div className="min-w-0 flex-1 space-y-2">
+            <p className="text-[12px] text-fg-subtle">Checking…</p>
+            <Skeleton className="h-4 w-48 max-w-full" />
+            <Skeleton className="h-3 w-64 max-w-full" />
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="rounded-2xl border border-line bg-surface">
@@ -266,6 +285,7 @@ const ActiveBrainPanel = ({
 };
 
 ActiveBrainPanel.propTypes = {
+  loading: PropTypes.bool,
   activeConfig: PropTypes.object,
   activeProviderName: PropTypes.string,
   serverStatus: PropTypes.object,

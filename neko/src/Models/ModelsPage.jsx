@@ -377,6 +377,7 @@ const ModelsPage = () => {
             {activeTab === 'chat' && (
               <>
                 <ActiveBrainPanel
+                  loading={(!providerConfig && loadingProviders) || (!serverStatus && loadingStatus)}
                   activeConfig={providerConfig}
                   activeProviderName={activeProviderName}
                   serverStatus={serverStatus}
