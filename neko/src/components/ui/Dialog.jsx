@@ -28,6 +28,18 @@ function initialFocusIn(panel, body) {
     || null;
 }
 
+// While a dialog is open the app underneath can't be reached with Tab, the
+// mouse or a screen reader: its root is inert (dialogs render outside it).
+let openModals = 0;
+function holdAppInert() {
+  openModals += 1;
+  document.getElementById('root')?.setAttribute('inert', '');
+  return () => {
+    openModals = Math.max(0, openModals - 1);
+    if (!openModals) document.getElementById('root')?.removeAttribute('inert');
+  };
+}
+
 /**
  * A centred modal dialog. Escape and a click on the backdrop close it, unless
  * something is open on top of it: with a Select open in it, or dialogs
@@ -68,14 +80,39 @@ export default function Dialog({
   useEffect(() => {
     if (!open) return undefined;
     const previous = document.activeElement;
+    const releaseApp = holdAppInert();
     // A field that took focus as it mounted (autoFocus) keeps it.
     if (!panelRef.current?.contains(document.activeElement)) {
       initialFocusIn(panelRef.current, bodyRef.current)?.focus({ preventScroll: true });
     }
     const onKeyDown = (event) => {
-      if (event.key === 'Escape' && isTopLayer(layerRef.current)) {
+      if (!isTopLayer(layerRef.current)) return;
+      if (event.key === 'Escape') {
         event.stopPropagation();
         onCloseRef.current?.();
+        return;
+      }
+      // Tab and Shift+Tab go round the dialog, never to the page behind it.
+      if (event.key === 'Tab') {
+        const panel = panelRef.current;
+        const items = focusablesIn(panel);
+        if (!items.length) {
+          event.preventDefault();
+          return;
+        }
+        const first = items[0];
+        const last = items[items.length - 1];
+        const active = document.activeElement;
+        if (!panel.contains(active)) {
+          event.preventDefault();
+          (event.shiftKey ? last : first).focus();
+        } else if (event.shiftKey && active === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && active === last) {
+          event.preventDefault();
+          first.focus();
+        }
       }
     };
     // An alertdialog has only buttons, so it takes Escape first (window,
@@ -87,6 +124,7 @@ export default function Dialog({
     listenOn.addEventListener('keydown', onKeyDown, capture);
     return () => {
       listenOn.removeEventListener('keydown', onKeyDown, capture);
+      releaseApp();
       previous?.focus?.({ preventScroll: true });
     };
     // Focus once per opening.
