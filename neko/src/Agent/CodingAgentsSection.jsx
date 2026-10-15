@@ -11,6 +11,7 @@ import { Check, Copy, ExternalLink, Folder, Loader2, RefreshCw, Search, SquarePe
 import { agentApi } from '../CommandCenter/api';
 import { useCommandCenter } from '../CommandCenter/context/CommandCenterContextEnhanced';
 import Button from '../components/ui/Button.jsx';
+import Checkbox from '../components/ui/Checkbox.jsx';
 import { Segmented } from '../components/ui/Tabs.jsx';
 import { errorDetail, useToast } from '../components/toastContext.js';
 import { Badge, Panel } from '../Models/modelPageShared.jsx';
@@ -223,10 +224,7 @@ function SessionsPanel() {
             className="h-8 w-full rounded-lg border border-line bg-surface pl-8 pr-2.5 text-[13px] text-fg outline-none placeholder:text-fg-subtle focus:border-accent"
           />
         </label>
-        <label className="flex cursor-pointer items-center gap-1.5 text-[12px] text-fg-muted">
-          <input type="checkbox" checked={showAutomated} onChange={event => setShowAutomated(event.target.checked)} className="accent-[var(--as-accent)]" />
-          Show automated and temporary runs
-        </label>
+        <Checkbox checked={showAutomated} onChange={setShowAutomated} label="Show automated and temporary runs" />
       </div>
       <Panel className="divide-y divide-line overflow-hidden">
         {loading ? (

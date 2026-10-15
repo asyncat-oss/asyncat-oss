@@ -5,6 +5,7 @@ import { ArrowLeft, Bot, ChevronDown, ImagePlus, MessageSquare, Plus, Trash2, X 
 import Button from '../components/ui/Button';
 import { Field, Input } from '../components/ui/Field';
 import Select from '../components/ui/Select.jsx';
+import Checkbox from '../components/ui/Checkbox.jsx';
 import ContextMeter from '../components/ContextMeter';
 import KnowledgeFiles from '../components/KnowledgeFiles';
 import { useConfirm } from '../components/confirmContext';
@@ -359,8 +360,8 @@ export default function AgentEditor({ agentId = null, template = null, onClose }
               </p>
               <div className="grid gap-2 sm:grid-cols-2">
                 {capabilityOptions.map((cap) => (
-                  <label key={cap.id} className={`flex cursor-pointer items-start gap-2.5 rounded-xl border px-3 py-2.5 transition-colors ${capabilityOn(cap.id) ? 'border-line-strong bg-surface' : 'border-line hover:bg-hover'}`}>
-                    <input type="checkbox" checked={capabilityOn(cap.id)} onChange={() => toggleCapability(cap.id)} className="mt-0.5 accent-current" />
+                  <label key={cap.id} className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-line px-3 py-2.5 transition-colors hover:bg-hover">
+                    <span className="flex h-5 shrink-0 items-center"><Checkbox checked={capabilityOn(cap.id)} onChange={() => toggleCapability(cap.id)} /></span>
                     <span>
                       <span className="block text-[13px] font-medium text-fg">{cap.label}</span>
                       <span className="block text-[12px] leading-5 text-fg-muted">{CAPABILITY_HINTS[cap.id]}</span>
@@ -387,14 +388,18 @@ export default function AgentEditor({ agentId = null, template = null, onClose }
               </button>
               {showAdvanced && (
                 <div className="space-y-4 border-t border-line px-3 py-3">
-                  <label className="flex items-start gap-2.5">
-                    <input type="checkbox" checked={Boolean(agent.is_default)} onChange={(e) => update({ is_default: e.target.checked })} className="mt-0.5" />
-                    <span className="text-[13px] text-fg">Pick this agent for new chats<span className="block text-[12px] text-fg-muted">It shows in the agent picker, and you can switch it off per chat.</span></span>
-                  </label>
-                  <label className="flex items-start gap-2.5">
-                    <input type="checkbox" checked={Boolean(agent.auto_approve)} onChange={(e) => update({ auto_approve: e.target.checked })} className="mt-0.5" />
-                    <span className="text-[13px] text-fg">Run actions without asking<span className="block text-[12px] text-amber-700 dark:text-amber-400">Commands and file changes run without an approval card. Only for agents you trust with your files.</span></span>
-                  </label>
+                  <Checkbox
+                    checked={Boolean(agent.is_default)}
+                    onChange={(value) => update({ is_default: value })}
+                    label="Pick this agent for new chats"
+                    description="It shows in the agent picker, and you can switch it off per chat."
+                  />
+                  <Checkbox
+                    checked={Boolean(agent.auto_approve)}
+                    onChange={(value) => update({ auto_approve: value })}
+                    label="Run actions without asking"
+                    description={<span className="text-amber-700 dark:text-amber-400">Commands and file changes run without an approval card. Only for agents you trust with your files.</span>}
+                  />
                   <Field label="Most steps per answer" htmlFor="agent-rounds" hint="How many tool steps it may take before it has to answer.">
                     <Input id="agent-rounds" type="number" min={1} max={100} value={agent.max_rounds} onChange={(e) => update({ max_rounds: e.target.value })} className="w-28" />
                   </Field>

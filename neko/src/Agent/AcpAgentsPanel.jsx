@@ -10,6 +10,7 @@ import { agentApi } from '../CommandCenter/api';
 import Button from '../components/ui/Button.jsx';
 import Dialog from '../components/ui/Dialog.jsx';
 import { Field, Input } from '../components/ui/Field.jsx';
+import RadioGroup from '../components/ui/RadioGroup.jsx';
 import { Segmented } from '../components/ui/Tabs.jsx';
 import { useConfirm } from '../components/confirmContext.js';
 import { errorDetail, useToast } from '../components/toastContext.js';
@@ -107,17 +108,22 @@ function AddAcpAgentDialog({ catalog, onClose, onAdded }) {
       <div className="space-y-4">
         <Segmented value={view} onChange={(value) => { setView(value); setPending(null); setError(''); }} items={[{ value: 'catalog', label: 'Known agents' }, { value: 'custom', label: 'Another agent' }]} label="Agent" />
         {view === 'catalog' ? (
-          <div className="space-y-2" role="radiogroup" aria-label="Agent">
-            {catalog.map((item) => (
-              <label key={item.id} className={`flex cursor-pointer items-start gap-3 rounded-xl border px-3.5 py-3 ${picked === item.id ? 'border-accent bg-accent/5' : 'border-line hover:bg-hover'}`}>
-                <input type="radio" name="acp-catalog" className="mt-0.5 h-4 w-4 accent-[var(--as-accent)]" checked={picked === item.id} onChange={() => setPicked(item.id)} />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[13px] font-medium text-fg">{item.title}</span>
-                  <span className="block text-[12px] leading-5 text-fg-muted">{item.note}</span>
-                  <span className="mt-1 block font-mono text-[11px] text-fg-subtle">{joinCommand(item.command, item.args)}</span>
-                </span>
-              </label>
-            ))}
+          <div className="space-y-2">
+            <RadioGroup
+              label="Agent"
+              value={picked}
+              onChange={setPicked}
+              options={catalog.map((item) => ({
+                value: item.id,
+                label: item.title,
+                description: (
+                  <>
+                    <span className="block">{item.note}</span>
+                    <span className="mt-0.5 block font-mono text-[11px] text-fg-subtle">{joinCommand(item.command, item.args)}</span>
+                  </>
+                ),
+              }))}
+            />
             {entry ? (
               <div className="rounded-xl bg-hover/50 px-3.5 py-2.5 text-[12px] leading-5 text-fg-muted">
                 Asyncat doesn&apos;t install agents. Install {entry.title} yourself
