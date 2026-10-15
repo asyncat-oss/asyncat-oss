@@ -1,3 +1,9 @@
+// Exporting a chat: the entries (who said what, when) and the files made
+// from them (Markdown, HTML, JSON, print).
+
+// Who answered, in an export.
+const ASSISTANT_NAME = 'Asyncat';
+
 const escapeExportHtml = (value = '') => String(value)
   .replace(/&/g, '&amp;')
   .replace(/</g, '&lt;')
@@ -72,7 +78,7 @@ const eventToExportEntry = (event) => {
 
   if (type === 'answer') {
     return {
-      role: 'The Cat',
+      role: ASSISTANT_NAME,
       kind: 'message',
       timestamp: getEventExportTimestamp(event),
       content: data.answer || '',
@@ -171,7 +177,7 @@ const buildConversationExportEntries = (messages = [], events = [], streamingTex
   if (messages.length > 0) {
     messages.forEach(msg => {
       entries.push({
-        role: msg.type === 'user' || msg.role === 'user' ? 'You' : 'The Cat',
+        role: msg.type === 'user' || msg.role === 'user' ? 'You' : ASSISTANT_NAME,
         kind: 'message',
         timestamp: msg.timestamp,
         content: msg.content || '',
@@ -193,7 +199,7 @@ const buildConversationExportEntries = (messages = [], events = [], streamingTex
 
   if (streamingText?.trim()) {
     entries.push({
-      role: 'The Cat',
+      role: ASSISTANT_NAME,
       kind: 'draft',
       timestamp: new Date().toISOString(),
       content: streamingText,
@@ -215,11 +221,11 @@ const buildExportHtmlDocument = (title, date, entries) => `<!DOCTYPE html>
     .meta { color: #666; font-size: 14px; margin-bottom: 30px; }
     .entry { margin: 24px 0; padding: 18px; border-radius: 8px; page-break-inside: avoid; }
     .you { background: #f0f0f0; }
-    .the-cat { background: #f9f9f9; border-left: 3px solid #4a9eff; }
+    .assistant { background: #f9f9f9; border-left: 3px solid #2456dc; }
     .agent { background: #fffaf0; border-left: 3px solid #f59e0b; }
     .error { background: #fff1f2; border-left: 3px solid #e11d48; }
     .speaker { font-weight: 600; margin-bottom: 10px; color: #111; }
-    .kind { color: #777; font-size: 12px; font-weight: 500; margin-left: 6px; text-transform: uppercase; }
+    .kind { color: #777; font-size: 12px; font-weight: 500; margin-left: 6px; }
     .time { color: #999; font-size: 13px; margin-left: 8px; }
     .content { white-space: pre-wrap; overflow-wrap: anywhere; }
     @media print { body { margin: 20px auto; } .entry { border: 1px solid #eee; } }
@@ -233,8 +239,8 @@ const buildExportHtmlDocument = (title, date, entries) => `<!DOCTYPE html>
       ? 'error'
       : entry.role === 'You'
         ? 'you'
-        : entry.role === 'The Cat'
-          ? 'the-cat'
+        : entry.role === ASSISTANT_NAME
+          ? 'assistant'
           : 'agent';
     const time = formatExportTime(entry.timestamp);
     return `
@@ -248,6 +254,7 @@ const buildExportHtmlDocument = (title, date, entries) => `<!DOCTYPE html>
 </html>`;
 
 export {
+  ASSISTANT_NAME,
   escapeExportHtml,
   stringifyExportValue,
   sanitizeExportFilename,
