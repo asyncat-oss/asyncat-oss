@@ -31,12 +31,14 @@ const handleResponse = async (response) => {
   if (!response.ok) {
     let errorMessage = `API Error: ${response.status} ${response.statusText}`;
     let errorCode = null;
+    let errorDetail = null;
     try {
       const errorData = await response.json();
       if (errorData.error) {
         errorMessage = errorData.message || errorData.error;
       }
       errorCode = errorData.code || null;
+      errorDetail = errorData.detail || null;
       if (response.status === 413) {
         errorMessage = errorData.message || 'The file is too large to process. Please use a smaller image.';
       }
@@ -48,6 +50,7 @@ const handleResponse = async (response) => {
     const error = new Error(errorMessage);
     error.status = response.status;
     error.code = errorCode;
+    error.detail = errorDetail;
     throw error;
   }
 

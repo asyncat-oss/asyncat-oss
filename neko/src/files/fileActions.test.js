@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  cleanConfirm, cleanedMessage, lockHint, manageLabel, menuItems, placeCleans, removeConfirm, removedMessage, removeLabel,
+  cleanConfirm, cleanedMessage, lockHint, manageLabel, menuItems, placeCleans, removeConfirm, removedMessage, removeLabel, trashFailedConfirm,
 } from './fileActions.js';
 
 const can = (over = {}) => ({ preview: false, open: false, reveal: false, download: false, delete: false, chat: false, manage: false, ...over });
@@ -102,4 +102,12 @@ test('clean-ups: which place has which, and what they say', () => {
   assert.equal(cleanConfirm('old-logs', { files: 3, bytes: 120 * 1024 ** 2 }).message, "Frees 120 MB. Today's logs stay because Asyncat is writing to them.");
   assert.equal(cleanedMessage({ files: 3, freedBytes: 120 * 1024 ** 2 }), 'Cleared 120 MB');
   assert.equal(cleanedMessage({ files: 0, freedBytes: 0 }), 'Nothing to clear');
+});
+
+test('when the Trash refuses a file, the follow-up names it and says why', () => {
+  const asked = trashFailedConfirm({ name: 'seed-list.txt' }, new Error('gio: file:///tmp/seed-list.txt: Trashing on system internal mounts is not supported'));
+  assert.equal(asked.title, '“seed-list.txt” can\'t go to the Trash');
+  assert.match(asked.message, /^This drive has no Trash\. Delete it for good\?/);
+  assert.equal(asked.confirmLabel, 'Delete for good');
+  assert.match(trashFailedConfirm({ title: 'Plan' }, new Error('EPERM')).message, /^The Trash refused it\./);
 });

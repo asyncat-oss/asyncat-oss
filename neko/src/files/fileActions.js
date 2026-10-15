@@ -128,8 +128,23 @@ export function removeConfirm(item, { desktop = false } = {}) {
     : { title: `Delete ${quoted(name)}?`, message: 'It is removed from this computer.', confirmLabel };
 }
 
-/** Asked when the Trash refused it. */
-export const TRASH_FAILED_CONFIRM = { title: "Couldn't move it to the Trash", message: 'Delete it for good instead?', confirmLabel: 'Delete' };
+/**
+ * Asked when the Trash refused it: which file, and why, before a delete
+ * that can't be undone.
+ *   { title: '“seed-list.txt” can't go to the Trash', message: 'This drive has no Trash. Delete it for good? …' }
+ */
+export function trashFailedConfirm(item, error) {
+  const name = item?.title || item?.name || 'This file';
+  const detail = String(error?.detail || error?.message || error || '');
+  const reason = /internal mount|not supported|no trash|trash is not available|unsupported/i.test(detail)
+    ? 'This drive has no Trash.'
+    : 'The Trash refused it.';
+  return {
+    title: `“${name}” can't go to the Trash`,
+    message: `${reason} Delete it for good? This can't be undone.`,
+    confirmLabel: 'Delete for good',
+  };
+}
 
 /** The toast after removing: "Moved to the Trash", "Removed" or "Deleted". */
 export function removedMessage(item, result = {}) {

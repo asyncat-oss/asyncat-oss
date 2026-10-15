@@ -24,7 +24,7 @@ import { errorDetail, useToast } from '../components/toastContext.js';
 import { subscribeAppEvent } from '../services/appEvents.js';
 import eventBus from '../utils/eventBus.js';
 import {
-  cleanConfirm, cleanedMessage, goesToTrash, placeCleans, removeConfirm, removedMessage, TRASH_FAILED_CONFIRM,
+  cleanConfirm, cleanedMessage, goesToTrash, placeCleans, removeConfirm, removedMessage, trashFailedConfirm,
 } from './fileActions.js';
 import {
   defaultSort, filterChips, groupLogs, isPlace, isPlaceKind, kindLabel, openId, PLACE_FILTERS, PLACES, SORTS, steadySizes,
@@ -260,6 +260,7 @@ function PlaceView({ place, desktop: desktopHint, onChanged }) {
     if (!(await confirm({ ...removeConfirm(item, { desktop }), destructive: true }))) return;
     const failed = item.deleteVerb === 'remove' ? "Couldn't remove it" : "Couldn't delete it";
     let result;
+    let deletedInstead = false;
     try {
       result = await storageApi.remove(item.id, { permanent: item.deleteVerb === 'trash' && !goesToTrash(item, { desktop }) });
     } catch (err) {
@@ -267,15 +268,16 @@ function PlaceView({ place, desktop: desktopHint, onChanged }) {
         toast.error(failed, { detail: errorDetail(err) });
         return;
       }
-      if (!(await confirm({ ...TRASH_FAILED_CONFIRM, destructive: true }))) return;
+      if (!(await confirm({ ...trashFailedConfirm(item, err), destructive: true }))) return;
       try {
         result = await storageApi.remove(item.id, { permanent: true });
+        deletedInstead = true;
       } catch (again) {
         toast.error(failed, { detail: errorDetail(again) });
         return;
       }
     }
-    toast.success(removedMessage(item, result));
+    toast.success(deletedInstead ? `Deleted ${item.title || item.name || 'it'}` : removedMessage(item, result));
     setViewer((current) => (current?.id === item.id ? null : current));
     if (openParam) setParam('open', '');
     reload();
