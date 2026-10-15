@@ -75,7 +75,7 @@ export default function NewCatDialog({ onClose, onCreated, template = null }) {
           <ol className="hidden items-center gap-1.5 sm:flex" aria-label="Steps">
             {STEPS.map((item, index) => (
               <li key={item.key} className={`flex items-center gap-1 text-[12px] ${index === step ? 'font-medium text-fg' : index < step ? 'text-fg-muted' : 'text-fg-subtle'}`}>
-                <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] ${index < step ? 'bg-accent text-white dark:text-gray-950' : index === step ? 'bg-fg text-canvas' : 'bg-hover'}`}>
+                <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] ${index < step ? 'bg-accent text-canvas' : index === step ? 'bg-fg text-canvas' : 'bg-hover'}`}>
                   {index < step ? <Check className="h-3 w-3" /> : index + 1}
                 </span>
                 {item.title}
@@ -105,7 +105,7 @@ export default function NewCatDialog({ onClose, onCreated, template = null }) {
                 onClick={() => setForm(formFromCat(null, example))}
                 className="rounded-full border border-line px-3 py-1 text-[12px] text-fg-muted transition-colors hover:bg-hover hover:text-fg"
               >
-                {example.avatar} {example.title}
+                {example.title}
               </button>
             ))}
           </div>

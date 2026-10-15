@@ -6,7 +6,7 @@
 import { useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import { Link } from 'react-router-dom';
-import { Brain, FolderOpen, Globe, ImagePlus, X } from 'lucide-react';
+import { Brain, Cat as CatIcon, FolderOpen, Globe, ImagePlus, X } from 'lucide-react';
 import Button from '../components/ui/Button.jsx';
 import { Field, Input } from '../components/ui/Field.jsx';
 import Select from '../components/ui/Select.jsx';
@@ -117,18 +117,20 @@ export function IdentitySection({ form, set, autoFocus = false }) {
           {isImage ? (
             <span className="relative">
               <img src={form.avatar} alt="" className="h-9 w-9 rounded-lg object-cover ring-2 ring-accent" />
-              <button type="button" onClick={() => set({ avatar: '🐱' })} aria-label="Remove the picture" className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-fg text-canvas"><X className="h-2.5 w-2.5" /></button>
+              <button type="button" onClick={() => set({ avatar: '' })} aria-label="Remove the picture" className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-fg text-canvas"><X className="h-2.5 w-2.5" /></button>
             </span>
           ) : null}
           {AVATARS.map((emoji) => (
             <button
-              key={emoji}
+              key={emoji || 'none'}
               type="button"
               onClick={() => set({ avatar: emoji })}
               aria-pressed={form.avatar === emoji}
+              aria-label={emoji ? undefined : 'No picture'}
+              title={emoji ? undefined : 'No picture'}
               className={`flex h-9 w-9 items-center justify-center rounded-lg text-lg transition-colors ${form.avatar === emoji ? 'bg-selected ring-1 ring-line-strong' : 'hover:bg-hover'}`}
             >
-              {emoji}
+              {emoji || <CatIcon className="h-[18px] w-[18px] text-fg-subtle" strokeWidth={1.75} />}
             </button>
           ))}
           <button type="button" onClick={() => fileRef.current?.click()} aria-label="Upload a picture" title="Upload a picture" className="flex h-9 w-9 items-center justify-center rounded-lg border border-dashed border-line-strong text-fg-subtle hover:bg-hover hover:text-fg">

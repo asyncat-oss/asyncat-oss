@@ -32,7 +32,7 @@ function DayChips({ value, onChange }) {
             title={day.long}
             onClick={() => toggle(day.value)}
             className={`h-7 min-w-10 rounded-lg px-2 text-[12px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/40 ${
-              on ? 'bg-accent text-white dark:text-gray-950' : 'border border-line-strong bg-canvas text-fg-muted hover:bg-hover hover:text-fg'
+              on ? 'border border-fg bg-fg text-canvas' : 'border border-line-strong bg-canvas text-fg-muted hover:bg-hover hover:text-fg'
             }`}
           >
             {day.short}

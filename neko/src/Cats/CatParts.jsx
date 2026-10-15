@@ -2,6 +2,7 @@
 // pill.
 
 import PropTypes from 'prop-types';
+import { Cat as CatIcon } from 'lucide-react';
 import { catStatus } from './catFormat.js';
 
 const SIZES = {
@@ -10,13 +11,18 @@ const SIZES = {
   md: 'h-11 w-11 text-2xl rounded-xl',
   lg: 'h-16 w-16 text-4xl rounded-2xl',
 };
+const ICON_SIZES = { xs: 'h-3 w-3', sm: 'h-4 w-4', md: 'h-5 w-5', lg: 'h-7 w-7' };
 
-/** A Cat's picture: an uploaded image or an emoji. */
+/** A Cat's picture: an uploaded image, the emoji it was given, or a plain cat glyph. */
 export function CatAvatar({ cat, size = 'sm', className = '' }) {
   const box = `${SIZES[size] || SIZES.sm} inline-flex shrink-0 items-center justify-center overflow-hidden ${className}`;
-  const avatar = cat?.avatar || '🐱';
+  const avatar = cat?.avatar || '';
   if (avatar.startsWith('data:image/')) return <img src={avatar} alt="" className={`${box} object-cover`} />;
-  return <span className={`${box} border border-line bg-canvas`} aria-hidden="true">{avatar}</span>;
+  return (
+    <span className={`${box} border border-line bg-canvas`} aria-hidden="true">
+      {avatar || <CatIcon className={`${ICON_SIZES[size] || ICON_SIZES.sm} text-fg-subtle`} strokeWidth={1.75} />}
+    </span>
+  );
 }
 
 CatAvatar.propTypes = {

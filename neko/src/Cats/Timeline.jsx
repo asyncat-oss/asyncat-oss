@@ -6,7 +6,7 @@ import { useState } from 'react';
 import PropTypes from 'prop-types';
 import {
   AlarmClock, Brain, CheckCircle2, CircleSlash, Eye, FileText, Globe, HelpCircle, Loader2, MessageSquare, RotateCcw,
-  SkipForward, Sparkles, ThumbsUp, Wrench, XCircle,
+  CirclePlus, SkipForward, ThumbsUp, Wrench, XCircle,
 } from 'lucide-react';
 import Button from '../components/ui/Button.jsx';
 import { useConfirm } from '../components/confirmContext.js';
@@ -28,7 +28,7 @@ const ICONS = {
   skipped: { icon: SkipForward, className: 'text-fg-subtle' },
   feedback: { icon: ThumbsUp, className: 'text-fg-subtle' },
   watching: { icon: Eye, className: 'text-fg-subtle' },
-  created: { icon: Sparkles, className: 'text-accent' },
+  created: { icon: CirclePlus, className: 'text-fg-subtle' },
 };
 
 function UndoFiles({ sessionId }) {

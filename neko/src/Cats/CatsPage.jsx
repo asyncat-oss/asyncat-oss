@@ -41,7 +41,7 @@ function CatCard({ cat, onToggle }) {
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             <StatusPill cat={cat} />
             {cat.waiting ? <span className="text-[11px] font-medium text-amber-700 dark:text-amber-400">{cat.waiting} waiting</span> : null}
-            {cat.unread ? <span className="rounded-full bg-accent px-1.5 text-[10px] font-semibold leading-4 text-white dark:text-gray-950">{cat.unread} new</span> : null}
+            {cat.unread ? <span className="rounded-full bg-accent px-1.5 text-[11px] font-medium leading-4 text-canvas">{cat.unread} new</span> : null}
           </div>
         </div>
         <Switch checked={cat.enabled} onChange={(value) => onToggle(cat, value)} label={`${cat.name} on or off`} />
@@ -73,7 +73,7 @@ function EmptyState({ onNew }) {
             onClick={() => onNew(template)}
             className="rounded-full border border-line px-3 py-1.5 text-[12px] text-fg-muted transition-colors hover:bg-hover hover:text-fg"
           >
-            {template.avatar} {template.title}
+            {template.title}
           </button>
         ))}
       </div>

@@ -15,7 +15,7 @@ export function formFromCat(cat = null, template = null) {
   const source = cat || template || {};
   return {
     name: source.name || '',
-    avatar: source.avatar || '🐱',
+    avatar: source.avatar || '',
     mission: source.mission || '',
     profileId: cat?.profileId || '',
     providerProfileId: cat?.providerProfileId || '',

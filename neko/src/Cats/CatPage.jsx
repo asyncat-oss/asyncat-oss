@@ -253,7 +253,7 @@ export default function CatPage() {
           </div>
         </div>
         <div className="mt-4 rounded-xl bg-hover/60 px-4 py-3">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-fg-subtle">Mission</p>
+          <p className="text-[12px] font-medium text-fg-subtle">Mission</p>
           <p className="mt-1 whitespace-pre-wrap text-[13px] leading-5 text-fg">{cat.mission}</p>
         </div>
         <div className="mt-3"><UsageLine cat={cat} /></div>

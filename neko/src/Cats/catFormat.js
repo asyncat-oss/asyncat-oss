@@ -34,7 +34,8 @@ export const TRIGGER_LABELS = {
 
 export const TRIGGER_ORDER = ['schedule', 'email', 'rss', 'webpage', 'folder'];
 
-export const AVATARS = ['🐱', '😺', '🐈', '🐈‍⬛', '🦁', '🐯', '🐾', '🦊', '🦉', '🐝', '🌱', '📬', '📰', '🔎', '🛠️', '💸'];
+// '' is no picture: the Cat shows a plain cat glyph.
+export const AVATARS = ['', '🐱', '😺', '🐈', '🐈‍⬛', '🦁', '🐯', '🐾', '🦊', '🦉', '🐝', '🌱', '📬', '📰', '🔎', '🛠️', '💸'];
 
 /** A new trigger of `kind` with sensible starting values. */
 export function defaultTrigger(kind) {
@@ -139,7 +140,6 @@ export const CAT_TEMPLATES = [
   {
     title: 'Every weekday at 8:00, sum up my unread email',
     name: 'Inbox Cat',
-    avatar: '📬',
     mission: 'Read my unread email and sum it up: who it is from, what they want, and what needs a reply today. Put the most urgent first.',
     triggers: [{ kind: 'schedule', config: { schedule: { kind: 'weekdays', time: '08:00' } } }],
     freedom: 'ask_risky',
@@ -147,7 +147,6 @@ export const CAT_TEMPLATES = [
   {
     title: 'Tell me when a page changes, like a price or a status',
     name: 'Watcher Cat',
-    avatar: '🔎',
     mission: 'Watch the page and tell me what changed and whether it matters. If a price dropped, say by how much.',
     triggers: [{ kind: 'webpage', config: { url: '', contains: '', everyMinutes: 60 } }],
     freedom: 'ask_risky',
@@ -155,7 +154,6 @@ export const CAT_TEMPLATES = [
   {
     title: 'Each morning, pick the best posts from a feed',
     name: 'News Cat',
-    avatar: '📰',
     mission: 'When the feed has new posts, pick the three most worth reading for me and say in one line each why.',
     triggers: [{ kind: 'rss', config: { url: '', everyMinutes: 30 } }],
     freedom: 'ask_risky',
@@ -163,7 +161,6 @@ export const CAT_TEMPLATES = [
   {
     title: 'Keep a folder tidy',
     name: 'Tidy Cat',
-    avatar: '🧹',
     mission: 'When new files arrive in the folder, sort them into subfolders by type and tell me what you moved. Never delete anything.',
     triggers: [{ kind: 'folder', config: { path: '', everyMinutes: 1 } }],
     freedom: 'ask_first',
