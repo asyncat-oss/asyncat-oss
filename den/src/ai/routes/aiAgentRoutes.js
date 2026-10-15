@@ -2362,6 +2362,22 @@ router.get('/memory/stats', withWorkspaceContext, async (req, res) => {
   }
 });
 
+// What Consolidate would merge, for the question asked before it runs.
+router.get('/memory/consolidate/preview', withWorkspaceContext, async (req, res) => {
+  try {
+    const workspaceId = req.workspaceId ||
+      db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(req.user.id)?.id;
+    if (!workspaceId) return res.status(404).json({ success: false, error: 'Workspace not found' });
+    const { memoryConsolidator } = await import('../../agent/MemoryConsolidator.js');
+    const expired = db.prepare(
+      "SELECT COUNT(*) AS n FROM agent_memory WHERE user_id = ? AND workspace_id = ? AND expires_at IS NOT NULL AND expires_at < datetime('now')"
+    ).get(req.user.id, workspaceId).n;
+    res.json({ success: true, expired, ...memoryConsolidator.preview({ userId: req.user.id, workspaceId }) });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── Memory consolidate (manual trigger) ──────────────────────────────────────
 router.post('/memory/consolidate', withWorkspaceContext, async (req, res) => {
   try {

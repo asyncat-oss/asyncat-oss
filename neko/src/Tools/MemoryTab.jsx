@@ -14,6 +14,7 @@ import SearchField from '../components/ui/SearchField.jsx';
 import Select from '../components/ui/Select.jsx';
 import Skeleton from '../components/ui/Skeleton.jsx';
 import { errorDetail, useToast } from '../components/toastContext.js';
+import { useConfirm } from '../components/confirmContext.js';
 import { Badge } from '../Models/modelPageShared.jsx';
 import { TagChip } from './catalogParts.jsx';
 import { AddMemoryForm, MemoryEditor, MemoryOwnerSelect } from './memoryParts.jsx';
@@ -142,6 +143,7 @@ function MemorySkeleton() {
 export default function MemoryTab({ memory, owners }) {
   const { memories, setMemories, query, setQuery, kind, setKind, scope, setScope, loading, error, reload, stats, reloadStats } = memory;
   const toast = useToast();
+  const confirm = useConfirm();
   const [adding, setAdding] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [consolidating, setConsolidating] = useState(false);
@@ -163,6 +165,22 @@ export default function MemoryTab({ memory, owners }) {
   async function consolidate() {
     setConsolidating(true);
     try {
+      // Say what will merge first; nothing changes without a yes.
+      const plan = await agentApi.previewConsolidation();
+      if (!plan.memories && !plan.expired) {
+        toast.info('Nothing to consolidate', { detail: 'Memories you wrote, and ones that are important or used often, are never merged.' });
+        return;
+      }
+      const parts = [
+        plan.memories ? `${plan.memories} memories Asyncat saved on its own will be merged into ${plan.clusters} short ${plan.clusters === 1 ? 'summary' : 'summaries'}` : null,
+        plan.expired ? `${plan.expired} expired ${plan.expired === 1 ? 'memory' : 'memories'} will be removed` : null,
+      ].filter(Boolean);
+      const ok = await confirm({
+        title: 'Consolidate memories?',
+        message: `${parts.join(', and ')}. Memories you wrote, and ones that are important or used often, stay as they are. This can't be undone.`,
+        confirmLabel: 'Consolidate',
+      });
+      if (!ok) return;
       await agentApi.consolidateMemory();
       await reloadStats();
       await reload();
@@ -223,7 +241,7 @@ export default function MemoryTab({ memory, owners }) {
               icon={RefreshCw}
               loading={consolidating}
               onClick={consolidate}
-              title="Merges small memories of the same kind into short summaries and drops expired ones. Important ones stay as they are."
+              title="Merges small memories Asyncat saved of the same kind into short summaries and drops expired ones. Yours and important ones stay as they are."
               className="ml-auto"
             >
               {consolidating ? 'Consolidating…' : 'Consolidate'}

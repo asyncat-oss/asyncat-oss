@@ -66,3 +66,27 @@ test('editing a memory changes its text and drops the stale embedding', () => {
   const hit = db.prepare('SELECT memory_id FROM agent_memory_fts WHERE agent_memory_fts MATCH ?').all('summer');
   assert.ok(hit.some((item) => item.memory_id === row.id));
 });
+
+test('Consolidate never merges memories you wrote, and its plain merge keeps one per line', async () => {
+  const { memoryConsolidator } = await import('../src/agent/MemoryConsolidator.js');
+  const ws = randomUUID();
+  db.prepare("INSERT INTO workspaces (id, name, owner_id) VALUES (?, 'Garden', ?)").run(ws, userId);
+  for (const content of ['The water tank holds 200 litres.', 'The basil is on the left shelf.', 'Tomatoes get water every two days.']) {
+    addMemory({ userId, workspaceId: ws, content, importance: 0.5 });
+  }
+  assert.deepEqual(memoryConsolidator.preview({ userId, workspaceId: ws }), { clusters: 0, memories: 0 }, 'hand-written ones are left alone');
+
+  const agentNote = (content) => db.prepare(`
+    INSERT INTO agent_memory (id, user_id, workspace_id, memory_type, key, content, tags, importance, source)
+    VALUES (?, ?, ?, 'fact', ?, ?, '[]', 0.4, 'auto')
+  `).run(randomUUID(), userId, ws, `fact_${randomUUID().slice(0, 6)}`, content);
+  ['Mint is in the blue pot.', 'The hose is by the door.', 'Compost is turned on Sundays.'].forEach(agentNote);
+  assert.deepEqual(memoryConsolidator.preview({ userId, workspaceId: ws }), { clusters: 1, memories: 3 });
+
+  const result = await memoryConsolidator.consolidate({ userId, workspaceId: ws });
+  assert.deepEqual([result.merged, result.deleted], [1, 3]);
+  const rows = db.prepare('SELECT content, source FROM agent_memory WHERE workspace_id = ? ORDER BY created_at').all(ws);
+  assert.equal(rows.filter((row) => row.source === 'user').length, 3, 'yours stay as they were');
+  const merged = rows.find((row) => row.content.includes('Mint'));
+  assert.equal(merged.content, 'Mint is in the blue pot.\nThe hose is by the door.\nCompost is turned on Sundays.');
+});

@@ -46,11 +46,13 @@ class MemoryConsolidator {
     }
   }
 
-  async _pass({ userId, workspaceId, aiClient, model }) {
-    let merged = 0;
-    let deleted = 0;
-
-    // Fetch candidates: low-importance, rarely accessed, non-protected types
+  /**
+   * The clusters a pass would merge: low-importance, rarely used memories
+   * that Asyncat saved itself (never ones the person wrote, nor the user and
+   * feedback kinds), grouped by kind, agent, project and Cat (never merging
+   * one project's or Cat's memories into another's).
+   */
+  _clusters(userId, workspaceId) {
     const candidates = db.prepare(`
       SELECT id, key, content, memory_type, importance, access_count, profile_id, project_id, cat_id
       FROM agent_memory
@@ -58,58 +60,66 @@ class MemoryConsolidator {
         AND importance < 0.7
         AND access_count < 3
         AND memory_type NOT IN ('user', 'feedback')
+        AND COALESCE(source, 'agent') <> 'user'
       ORDER BY memory_type, created_at ASC
       LIMIT 120
     `).all(userId, workspaceId);
 
-    if (candidates.length < MIN_CLUSTER_SIZE) {
-      return { merged, deleted, skipped: false };
-    }
-
-    // Group by type, agent, project and Cat (never merge one project's or
-    // Cat's memories into another's), then process each group in clusters
     const groups = new Map();
     for (const row of candidates) {
       const groupKey = JSON.stringify([row.memory_type, row.profile_id || null, row.project_id || null, row.cat_id || null]);
       if (!groups.has(groupKey)) groups.set(groupKey, []);
       groups.get(groupKey).push(row);
     }
+    const clusters = [];
+    for (const rows of groups.values()) {
+      for (let i = 0; i < rows.length; i += MAX_CLUSTER_SIZE) {
+        const cluster = rows.slice(i, i + MAX_CLUSTER_SIZE);
+        if (cluster.length < MIN_CLUSTER_SIZE) break;
+        clusters.push(cluster);
+      }
+    }
+    return clusters;
+  }
+
+  /** What a pass would do, without doing it: { clusters, memories }. */
+  preview({ userId, workspaceId }) {
+    const clusters = this._clusters(userId, workspaceId);
+    return { clusters: clusters.length, memories: clusters.reduce((sum, cluster) => sum + cluster.length, 0) };
+  }
+
+  async _pass({ userId, workspaceId, aiClient, model }) {
+    let merged = 0;
+    let deleted = 0;
+    const clusters = this._clusters(userId, workspaceId);
 
     const llmCreate = aiClient?.client?.chat?.completions?.create?.bind(
       aiClient.client.chat.completions
     );
 
-    for (const rows of groups.values()) {
-      const memType = rows[0].memory_type;
-      if (rows.length < MIN_CLUSTER_SIZE) continue;
+    for (const cluster of clusters) {
+      const memType = cluster[0].memory_type;
+      const summary = await this._mergeCluster(cluster, memType, llmCreate, model);
+      if (!summary) continue;
 
-      // Process in clusters
-      for (let i = 0; i < rows.length; i += MAX_CLUSTER_SIZE) {
-        const cluster = rows.slice(i, i + MAX_CLUSTER_SIZE);
-        if (cluster.length < MIN_CLUSTER_SIZE) break;
+      const mergedKey = `consolidated_${memType}_${randomUUID().slice(0, 8)}`;
+      const maxImportance = Math.max(...cluster.map(r => Number(r.importance || 0.5)));
 
-        const summary = await this._mergeCluster(cluster, memType, llmCreate, model);
-        if (!summary) continue;
+      db.prepare(`
+        INSERT INTO agent_memory (id, user_id, workspace_id, memory_type, key, content, tags, importance, profile_id, project_id, cat_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        randomUUID(), userId, workspaceId, memType, mergedKey,
+        summary, JSON.stringify(['consolidated']), maxImportance,
+        cluster[0].profile_id || null, cluster[0].project_id || null, cluster[0].cat_id || null
+      );
 
-        const mergedKey = `consolidated_${memType}_${randomUUID().slice(0, 8)}`;
-        const maxImportance = Math.max(...cluster.map(r => Number(r.importance || 0.5)));
+      const ids = cluster.map(r => r.id);
+      const placeholders = ids.map(() => '?').join(',');
+      db.prepare(`DELETE FROM agent_memory WHERE id IN (${placeholders})`).run(...ids);
 
-        db.prepare(`
-          INSERT INTO agent_memory (id, user_id, workspace_id, memory_type, key, content, tags, importance, profile_id, project_id, cat_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          randomUUID(), userId, workspaceId, memType, mergedKey,
-          summary, JSON.stringify(['consolidated']), maxImportance,
-          rows[0].profile_id || null, rows[0].project_id || null, rows[0].cat_id || null
-        );
-
-        const ids = cluster.map(r => r.id);
-        const placeholders = ids.map(() => '?').join(',');
-        db.prepare(`DELETE FROM agent_memory WHERE id IN (${placeholders})`).run(...ids);
-
-        merged++;
-        deleted += ids.length;
-      }
+      merged++;
+      deleted += ids.length;
     }
 
     if (merged > 0) {
@@ -146,8 +156,8 @@ class MemoryConsolidator {
       } catch { /* fall through to mechanical merge */ }
     }
 
-    // Mechanical fallback: concatenate, truncate
-    return cluster.map(r => r.content).join(' | ').slice(0, 400);
+    // Mechanical fallback: one memory per line, truncated.
+    return cluster.map(r => r.content).join('\n').slice(0, 400);
   }
 }
 

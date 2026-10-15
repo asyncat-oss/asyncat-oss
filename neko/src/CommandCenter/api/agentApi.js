@@ -300,6 +300,11 @@ export const agentApi = {
     return await apiRequest(`${API_BASE_URL}/agent/memory/consolidate`, { method: 'POST' });
   },
 
+  /** What Consolidate would do: { clusters, memories, expired }. */
+  previewConsolidation: async () => {
+    return await apiRequest(`${API_BASE_URL}/agent/memory/consolidate/preview`);
+  },
+
   deleteMemory: async (key, id = null) => {
     const query = id ? `?id=${encodeURIComponent(id)}` : '';
     return await apiRequest(`${API_BASE_URL}/agent/memory/${encodeURIComponent(key)}${query}`, {
