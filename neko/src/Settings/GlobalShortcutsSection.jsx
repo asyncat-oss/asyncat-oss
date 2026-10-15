@@ -68,7 +68,7 @@ export default function GlobalShortcutsSection() {
 
   if (!available) {
     return (
-      <SettingsSection icon={Globe2} title={TITLE}>
+      <SettingsSection icon={Globe2} title={TITLE} data-settings-section="system-wide" className="scroll-mt-6">
         <Notice>System-wide shortcuts come with the Asyncat desktop app.</Notice>
       </SettingsSection>
     );
@@ -88,6 +88,8 @@ export default function GlobalShortcutsSection() {
       hint="These work in every app while Asyncat runs, and that app won't get the keys. Change one or turn it off if it clashes with your editor or browser."
       aside={<Button size="xs" variant="ghost" onClick={reset}>Reset</Button>}
       data-global-shortcuts
+      data-settings-section="system-wide"
+      className="scroll-mt-6"
     >
       <RowGroup>
         {SHORTCUTS.map(({ id, label, description }) => {

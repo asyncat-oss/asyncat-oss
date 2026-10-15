@@ -120,7 +120,7 @@ export default function WorkbenchSection() {
         </RowGroup>
       </SettingsSection>
 
-      <SettingsSection icon={SquareTerminal} title="Terminal" hint="For new terminals. Open ones keep what they started with.">
+      <SettingsSection icon={SquareTerminal} title="Terminal" data-settings-section="terminal" className="scroll-mt-6" hint="For new terminals. Open ones keep what they started with.">
         <RowGroup>
           <SettingsRow label="Shell" hint={prefs.terminalShell === 'auto' && platform !== 'win32' ? "Auto uses your account's usual shell." : null}>
             <Segmented value={prefs.terminalShell} onChange={(value) => setPreference('terminalShell', value)} items={shellOptions} label="Shell" role="radiogroup" />
@@ -148,7 +148,7 @@ export default function WorkbenchSection() {
         </RowGroup>
       </SettingsSection>
 
-      <SettingsSection icon={Globe2} title="Browser" hint="The built-in browser keeps its sign-ins apart from Asyncat and your usual browser. Its tabs stay open while Asyncat runs, even with the panel closed.">
+      <SettingsSection icon={Globe2} title="Browser" data-settings-section="browser" className="scroll-mt-6" hint="The built-in browser keeps its sign-ins apart from Asyncat and your usual browser. Its tabs stay open while Asyncat runs, even with the panel closed.">
         <div className="space-y-3">
           <RowGroup>
             <SettingsRow label="Browsing mode" hint={MODE_HINTS[prefs.browserProfile]}>

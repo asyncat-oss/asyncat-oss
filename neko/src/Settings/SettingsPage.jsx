@@ -59,6 +59,7 @@ const ICONS = {
   // Search results that live outside Settings.
   files: Folder,
   models: Cpu,
+  tools: Wrench,
 };
 
 const DEV_OPTIONS_KEY = 'asyncat_developer_options';

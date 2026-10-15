@@ -13,7 +13,7 @@ test('settings search finds where a setting lives now', () => {
   assert.equal(first('mcp').label, 'Connections · Connectors');
   assert.equal(opens('mcp'), '/settings/connectors');
   assert.equal(opens('rss'), '/settings/integrations');
-  assert.equal(opens('sandbox'), '/settings/privacy');
+  assert.equal(opens('sandbox'), '/settings/privacy#commands');
   assert.equal(opens('dark'), '/settings/appearance');
   assert.equal(opens('avatar'), '/settings/general', 'Profile is at the top of General');
   assert.equal(opens('plan mode'), '/settings/general#new-chats', 'the mode new chats start in moved to General');
@@ -21,7 +21,7 @@ test('settings search finds where a setting lives now', () => {
   assert.equal(opens('tray'), '/settings/general#window');
   assert.equal(opens('setup'), '/settings/general#setup', 'Run setup again');
   assert.equal(opens('keyboard'), '/settings/shortcuts');
-  assert.equal(opens('wayland'), '/settings/shortcuts');
+  assert.equal(opens('wayland'), '/settings/shortcuts#system-wide');
   assert.equal(opens('pet'), '/settings/desktop#pet', 'the pet moved to Desktop');
   assert.equal(opens('quick ask'), '/settings/desktop#quick-ask');
   assert.equal(opens('uninstall'), '/settings/desktop#app-data');
@@ -35,6 +35,26 @@ test('settings search finds where a setting lives now', () => {
   assert.equal(opens('logs'), '/files/logs', 'Storage and logs are in Files');
   assert.equal(opens('engines'), '/models?view=local', 'engines are managed in Models');
   assert.deepEqual(searchSettings('', tabs), []);
+  // Each lands on its section, not the top of a long page.
+  assert.equal(opens('learning'), '/settings/privacy#learning');
+  assert.equal(opens('suggest skills'), '/settings/privacy#learning');
+  assert.equal(opens('saved keys'), '/settings/privacy#keys');
+  assert.equal(opens('blocked sites'), '/settings/privacy#browsing');
+  assert.equal(opens('always allowed'), '/settings/privacy#always-allowed');
+  assert.equal(opens('hf token'), '/settings/integrations#huggingface');
+  assert.equal(opens('imap'), '/settings/integrations#mail');
+  assert.equal(opens('cookies'), '/settings/workbench#browser');
+  assert.equal(opens('search engine'), '/settings/workbench#browser');
+  assert.equal(opens('quick ask shortcut'), '/settings/shortcuts#system-wide');
+  // Common words that found nothing.
+  assert.equal(opens('password'), '/settings/integrations#mail');
+  assert.equal(opens('api key'), '/models');
+  assert.equal(opens('text size'), '/settings/workbench#terminal');
+  assert.equal(opens('font'), '/settings/workbench#terminal');
+  assert.equal(opens('incognito'), '/settings/privacy#learning');
+  assert.equal(opens('clear data'), '/settings/privacy#data');
+  assert.equal(opens('memory'), '/tools?tab=memory');
+  assert.equal(opens('voice'), '/models?tab=audio');
   assert.deepEqual(searchSettings('zzzz', tabs), []);
 });
 
@@ -42,7 +62,7 @@ test('every search entry points at a page and a section that exist', () => {
   const byId = new Map(tabs.map((tab) => [tab.id, tab]));
   for (const entry of SETTINGS_INDEX) {
     if (entry.route) {
-      assert.match(entry.route, /^\/(files|models)/, entry.label);
+      assert.match(entry.route, /^\/(files|models|tools)/, entry.label);
       continue;
     }
     const tab = byId.get(entry.tab);
@@ -63,7 +83,8 @@ test('every section a link can scroll to is marked on its page', () => {
     .join('\n');
   for (const tab of tabs) {
     for (const section of tab.sections || []) {
-      assert.ok(source.includes(`data-settings-section="${section}"`), `${tab.id}#${section} has no anchor`);
+      // A service card is marked with its id (IntegrationsSection's ServiceCard).
+      assert.ok(source.includes(`data-settings-section="${section}"`) || source.includes(`id="${section}"`), `${tab.id}#${section} has no anchor`);
     }
   }
 });

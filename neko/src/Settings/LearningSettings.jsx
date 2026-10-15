@@ -54,7 +54,7 @@ export default function LearningSettings() {
   ];
 
   return (
-    <SettingsSection icon={BookMarked} title="Learning from chats" hint="Temporary chats never teach Asyncat anything." data-learning>
+    <SettingsSection icon={BookMarked} title="Learning from chats" hint="Temporary chats never teach Asyncat anything." data-learning data-settings-section="learning" className="scroll-mt-6">
       {error ? (
         <Notice tone="error">{error}</Notice>
       ) : (

@@ -141,7 +141,7 @@ function ServiceCard({
   const canDisconnect = configured && Boolean(onDisconnect);
 
   return (
-    <section className="rounded-xl border border-line bg-surface" data-service={id}>
+    <section className="scroll-mt-6 rounded-xl border border-line bg-surface" data-service={id} data-settings-section={id}>
       <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-start">
         <div className="flex min-w-0 flex-1 items-start gap-3">
           {logo}

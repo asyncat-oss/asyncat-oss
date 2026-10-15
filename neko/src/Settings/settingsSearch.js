@@ -11,13 +11,23 @@ export const SETTINGS_INDEX = [
   { tab: 'appearance', terms: ['appearance', 'theme', 'dark mode', 'light mode', 'midnight', 'system theme', 'colour', 'color', 'motion', 'animation', 'fade', 'sidebar', 'navigation', 'compact', 'icons only', 'hide from sidebar'] },
   { tab: 'personalization', terms: ['personalization', 'personalisation', 'preferences', 'about me', 'about you', 'what should asyncat know', 'custom instructions', 'how to answer', 'answer style', 'response style', 'tone of answers', 'language', 'british spelling'] },
   { tab: 'personalization', section: 'instructions', label: 'Instructions file', terms: ['instructions file', 'soul', 'persona', 'system prompt', 'agent rules', 'default.md', 'reset instructions'] },
-  { tab: 'shortcuts', terms: ['shortcuts', 'keyboard', 'keys', 'hotkeys', 'key bindings', 'system-wide shortcuts', 'global shortcuts', 'quick ask shortcut', 'show or hide asyncat', 'wayland'] },
+  { tab: 'shortcuts', terms: ['shortcuts', 'keyboard', 'keys', 'hotkeys', 'key bindings'] },
+  { tab: 'shortcuts', section: 'system-wide', label: 'System-wide', terms: ['system-wide shortcuts', 'global shortcuts', 'quick ask shortcut', 'show or hide asyncat', 'wayland'] },
   { tab: 'notifications', terms: ['notifications', 'notify', 'alerts', 'quiet hours', 'do not disturb', 'sounds', 'desktop notification'] },
-  { tab: 'connections', view: 'services', label: 'Services', terms: ['services', 'rss', 'feeds', 'read later', 'email', 'mail', 'imap', 'smtp', 'discord', 'slack', 'telegram', 'webhook', 'hugging face', 'hf token'] },
+  { tab: 'connections', view: 'services', label: 'Services', terms: ['services', 'rss', 'feeds', 'read later', 'discord', 'slack', 'telegram', 'webhook'] },
+  { tab: 'connections', view: 'services', section: 'mail', label: 'Services · Email', terms: ['email', 'mail', 'imap', 'smtp', 'password'] },
+  { tab: 'connections', view: 'services', section: 'huggingface', label: 'Services · Hugging Face', terms: ['hugging face', 'hf token', 'huggingface'] },
   { tab: 'connections', view: 'connectors', label: 'Connectors', terms: ['connectors', 'mcp', 'model context protocol', 'notion', 'github', 'linear', 'sentry', 'stripe', 'supabase', 'context7', 'oauth', 'sign in', 'npx', 'tools from apps'] },
-  { tab: 'privacy', terms: ['privacy', 'safety', 'security', 'always allowed', 'always allow', 'approvals', 'permissions', 'revoke', 'sandbox', 'command sandbox', 'network', 'registries', 'browser rules', 'blocked sites', 'learning', 'memories', 'suggest skills', 'keychain', 'encryption', 'secret key', 'saved keys'] },
-  { tab: 'privacy', section: 'data', label: 'Your data', terms: ['where data lives', 'data folder', 'export', 'backup', 'import', 'chatgpt', 'claude', 'bring chats', 'delete everything', 'erase'] },
-  { tab: 'workbench', terms: ['workbench', 'browser', 'terminal', 'shell', 'panel', 'layout', 'tabs', 'reopen tabs', 'search engine', 'links', 'history', 'browsing data', 'cookies'] },
+  { tab: 'privacy', terms: ['privacy', 'safety', 'security'] },
+  { tab: 'privacy', section: 'commands', label: 'Commands the agent runs', terms: ['sandbox', 'command sandbox', 'network', 'registries', 'commands'] },
+  { tab: 'privacy', section: 'always-allowed', label: 'Always allowed', terms: ['always allowed', 'always allow', 'approvals', 'permissions', 'revoke'] },
+  { tab: 'privacy', section: 'browsing', label: 'Browsing', terms: ['browser rules', 'blocked sites', 'block a site'] },
+  { tab: 'privacy', section: 'learning', label: 'Learning from chats', terms: ['learning', 'memories', 'remember', 'suggest skills', 'incognito', 'temporary chat', 'private chat'] },
+  { tab: 'privacy', section: 'keys', label: 'Saved keys', terms: ['keychain', 'encryption', 'secret key', 'saved keys', 'passwords'] },
+  { tab: 'privacy', section: 'data', label: 'Your data', terms: ['where data lives', 'data folder', 'export', 'backup', 'import', 'chatgpt', 'claude', 'bring chats', 'delete everything', 'erase', 'clear data', 'reset'] },
+  { tab: 'workbench', terms: ['workbench', 'panel', 'layout'] },
+  { tab: 'workbench', section: 'terminal', label: 'Terminal', terms: ['terminal', 'shell', 'text size', 'font', 'font size'] },
+  { tab: 'workbench', section: 'browser', label: 'Browser', terms: ['browser', 'tabs', 'reopen tabs', 'search engine', 'links', 'history', 'browsing data', 'cookies'] },
   { tab: 'desktop', section: 'pet', label: 'Pet', terms: ['desktop', 'pet', 'cat on screen', 'sprite'] },
   { tab: 'desktop', section: 'quick-ask', label: 'Quick ask', terms: ['quick ask', 'popup', 'tray menu'] },
   { tab: 'desktop', section: 'app-data', label: 'App data', terms: ['app data', 'data folder', 'uninstall'] },
@@ -25,6 +35,9 @@ export const SETTINGS_INDEX = [
   { tab: 'about', section: 'developer', label: 'Developer options', terms: ['developer options', 'advanced', 'server', 'ports', 'paths', 'restart server', 'database', 'comfyui', 'models folder'] },
   { route: '/files/logs', icon: 'files', label: 'Files · Logs & caches', terms: ['storage', 'logs', 'caches', 'disk space', 'clear logs'] },
   { route: '/models?view=local', icon: 'models', label: 'Models · Local models', terms: ['engines', 'llama.cpp', 'whisper', 'piper', 'stable diffusion', 'mlx', 'versions'] },
+  { route: '/models', icon: 'models', label: 'Models · Providers', terms: ['api key', 'api keys', 'providers', 'openai', 'anthropic', 'openrouter', 'default model'] },
+  { route: '/models?tab=audio', icon: 'models', label: 'Models · Voice', terms: ['voice', 'speech', 'microphone', 'mic', 'read aloud', 'dictation'] },
+  { route: '/tools?tab=memory', icon: 'tools', label: 'Tools & Skills · Memory', terms: ['memory', 'memories', 'consolidate'] },
 ];
 
 /**
@@ -67,6 +80,6 @@ export function searchSettings(query, tabs = []) {
 export function resultRoute(result) {
   if (result.route) return result.route;
   if (result.view === 'connectors') return '/settings/connectors';
-  if (result.view === 'services') return '/settings/integrations';
+  if (result.view === 'services') return `/settings/integrations${result.section ? `#${result.section}` : ''}`;
   return `/settings/${result.tab}${result.section ? `#${result.section}` : ''}`;
 }

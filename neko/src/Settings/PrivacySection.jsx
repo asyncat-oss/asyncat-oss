@@ -174,23 +174,23 @@ export default function PrivacySection() {
 
   return (
     <div className="space-y-8" data-privacy>
-      <SettingsSection icon={ShieldCheck} title="Commands the agent runs" hint={<>Whether new chats start in Plan or Action is set in <button type="button" onClick={() => navigate('/settings/general#new-chats')} className="text-accent hover:underline">General</button>.</>}>
+      <SettingsSection icon={ShieldCheck} title="Commands the agent runs" data-settings-section="commands" className="scroll-mt-6" hint={<>Whether new chats start in Plan or Action is set in <button type="button" onClick={() => navigate('/settings/general#new-chats')} className="text-accent hover:underline">General</button>.</>}>
         <RowGroup>
           <SandboxSettings />
         </RowGroup>
       </SettingsSection>
 
-      <SettingsSection icon={ListChecks} title="Always allowed" hint="Tools that run without asking. Remove one and it asks again next time.">
+      <SettingsSection icon={ListChecks} title="Always allowed" data-settings-section="always-allowed" className="scroll-mt-6" hint="Tools that run without asking. Remove one and it asks again next time.">
         <AlwaysAllowed />
       </SettingsSection>
 
-      <SettingsSection icon={Globe} title="Browsing">
+      <SettingsSection icon={Globe} title="Browsing" data-settings-section="browsing" className="scroll-mt-6">
         {overview && !overview.error ? <BrowserRules blockedSites={overview.blockedSites || []} onChange={saveBlockedSites} /> : <Loading error={overview?.error} />}
       </SettingsSection>
 
       <LearningSettings />
 
-      <SettingsSection icon={KeyRound} title="Saved keys">
+      <SettingsSection icon={KeyRound} title="Saved keys" data-settings-section="keys" className="scroll-mt-6">
         {overview && !overview.error ? (
           <p className="rounded-xl border border-line px-4 py-3 text-[13px] leading-5 text-fg-muted" data-key-source={overview.secrets?.keySource || 'none'}>{keyText(overview.secrets)}</p>
         ) : <Loading error={overview?.error} />}
