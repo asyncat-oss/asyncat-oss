@@ -60,6 +60,7 @@ import { listExternalSessions, readExternalSession } from '../../agent/externalS
 import { getExternalUsage } from '../../agent/externalUsage.js';
 import { cleanChatTitle } from '../chatTitle.js';
 import { recordDirectChatUsage } from '../directChatUsage.js';
+import { extractReasoningFromText } from '../../agent/reasoningParser.js';
 
 const router = express.Router();
 const pendingPermissions = new Map();
@@ -387,6 +388,16 @@ function messageContentWithImages(text, fileAttachments = []) {
   ];
 }
 
+// A plain chat runs no tools. A reply that is nothing but a tool call would
+// show as an empty answer, so it says what happened instead.
+export const PLAIN_CHAT_TOOL_NOTE = 'This needs tools, which this answer ran without. Set Tools to "Always use tools" in the message box and ask again.';
+
+export function plainChatAnswer(answer) {
+  const text = String(answer || '');
+  if (!/<tool_call|<｜tool▁call/i.test(text)) return text;
+  return extractReasoningFromText(text).answer.trim() ? text : PLAIN_CHAT_TOOL_NOTE;
+}
+
 router.post('/chat/stream', withWorkspaceContext, async (req, res) => {
   const message = String(req.body?.message || '').trim();
   if (!message) {
@@ -512,7 +523,7 @@ router.post('/chat/stream', withWorkspaceContext, async (req, res) => {
     }
 
     if (!abortController.signal.aborted) {
-      writeAgentSse(res, { type: 'done', data: { answer, stopReason: 'answer' } });
+      writeAgentSse(res, { type: 'done', data: { answer: plainChatAnswer(answer), stopReason: 'answer' } });
     }
   } catch (error) {
     if (!abortController.signal.aborted) {

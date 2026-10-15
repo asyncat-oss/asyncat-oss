@@ -367,3 +367,11 @@ test('a plain chat and a Quick ask each count once in Models → Usage', async (
   assert.equal(count("operation = 'quick-ask'"), before + 1);
   assert.equal(db.prepare("SELECT conversation_id FROM ai_model_usage_events WHERE operation = 'quick-ask' ORDER BY created_at DESC LIMIT 1").get().conversation_id, null);
 });
+
+test('a plain chat reply that is only a tool call says it needs tools, not nothing', async () => {
+  const { plainChatAnswer, PLAIN_CHAT_TOOL_NOTE } = await import('../src/ai/routes/aiAgentRoutes.js');
+  assert.equal(plainChatAnswer('<tool_call>\n{"name":"create_note","arguments":{"title":"Plan"}}\n</tool_call>'), PLAIN_CHAT_TOOL_NOTE);
+  assert.equal(plainChatAnswer('Here is the plan.'), 'Here is the plan.');
+  const mixed = 'Sure, here it is.\n<tool_call>{"name":"x","arguments":{}}</tool_call>';
+  assert.equal(plainChatAnswer(mixed), mixed, 'words around a tool call still show');
+});
