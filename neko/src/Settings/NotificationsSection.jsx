@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { Bell, Loader2, Moon } from 'lucide-react';
 import Button from '../components/ui/Button.jsx';
 import { Input } from '../components/ui/Field.jsx';
+import Notice from '../components/ui/Notice.jsx';
 import { RowGroup, SettingsRow, SettingsSection } from '../components/ui/Rows.jsx';
 import { errorDetail, useToast } from '../components/toastContext.js';
 import Switch from '../components/ui/Switch.jsx';
@@ -53,7 +54,7 @@ export default function NotificationsSection() {
   };
 
   if (!state) return <p className="flex items-center gap-2 text-[13px] text-fg-muted"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</p>;
-  if (state.error) return <p role="alert" className="rounded-lg bg-red-500/10 px-3 py-2 text-[13px] text-red-700 dark:text-red-400">{state.error}</p>;
+  if (state.error) return <Notice tone="error">{state.error}</Notice>;
   const { prefs } = state;
 
   return (
