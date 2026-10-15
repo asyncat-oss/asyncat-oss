@@ -2643,7 +2643,9 @@ function AgentDelegateEvent({ data, result, pending = false, events = [] }) {
 
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                {/* basis-48: on a narrow window the badges drop below the name
+                    instead of squeezing it to a word per line. */}
+                <div className="flex min-w-0 flex-1 basis-48 flex-wrap items-baseline gap-x-2 gap-y-0.5">
                   <span className="font-medium leading-tight text-fg">
                     {pending ? 'Delegating to' : isError ? 'Delegation failed for' : 'Delegated to'} {name}
                   </span>
