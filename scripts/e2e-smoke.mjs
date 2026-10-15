@@ -177,6 +177,9 @@ async function main() {
     ASYNCAT_LOG_DIR: path.join(scratch, 'logs'),
     CLAUDE_CONFIG_DIR: path.join(scratch, 'claude'),
     CODEX_HOME: path.join(scratch, 'codex'),
+    // An empty Hugging Face cache, so the models list never shows yours.
+    HF_HOME: path.join(scratch, 'huggingface'),
+    HF_HUB_CACHE: path.join(scratch, 'huggingface', 'hub'),
     FRONTEND_URL: app,
     ASYNCAT_RESTORE_LOCAL_MODEL: 'false',
     LLAMA_SERVER_PORT: String(llamaPort),
