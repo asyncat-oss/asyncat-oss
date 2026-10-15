@@ -1,6 +1,7 @@
 // The Steps panel beside a chat: one quiet line per thing the agent did.
 import { useRef, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
+import { activityDot } from './activityDot.js';
 
 function cleanAgentActivityDetail(detail) {
   return String(detail || '')
@@ -42,9 +43,7 @@ export default function AgentActivitySidebar({ items = [], isLoading = false, is
           {items.map((item, i) => {
             const detail = cleanAgentActivityDetail(item.detail);
             const isLast = i === items.length - 1;
-            // Calm steps: every dot is grey except an error's. The chat page
-            // still passes a colour per kind of step.
-            const dot = /\bbg-red-/.test(item.dot || '') ? 'bg-red-500' : 'bg-fg-subtle/60';
+            const dot = activityDot(item.dot);
 
             return (
               <div
