@@ -1,15 +1,16 @@
-export const Badge = ({ children, color = 'gray' }) => {
+// Small pieces shared by the Models pages: a badge (grey, or a status
+// colour; blue means in use), a panel, a section heading, and model helpers.
+
+export const Badge = ({ children, color = 'gray', title }) => {
   const colors = {
     green: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
     gray: 'bg-hover text-fg-muted',
     amber: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
     red: 'bg-red-500/10 text-red-700 dark:text-red-400',
     blue: 'bg-accent-soft text-accent',
-    purple: 'bg-violet-500/10 text-violet-700 dark:text-violet-300',
-    cyan: 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-300',
   };
   return (
-    <span className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium leading-4 ${colors[color] || colors.gray}`}>
+    <span title={title} className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium leading-4 ${colors[color] || colors.gray}`}>
       {children}
     </span>
   );
@@ -38,7 +39,7 @@ export const SectionHeader = ({ eyebrow, title, description, action }) => (
         </p>
       )}
     </div>
-    {action}
+    {action ? <div className="shrink-0 self-start sm:self-auto">{action}</div> : null}
   </div>
 );
 
@@ -109,15 +110,6 @@ export const conciseHardwareSummary = (hardware) => {
   if (!gpu) return `${hardware?.arch || 'unknown'} · CPU-safe`;
   const vram = gpu.vramGb ? ` · ${gpu.vramGb} GB` : '';
   return `${gpu.vendor}${vram}`;
-};
-
-export const capabilityBadgeColor = (hint) => {
-  if (hint === 'nvidia') return 'green';
-  if (hint === 'apple') return 'blue';
-  if (hint === 'amd') return 'amber';
-  if (hint === 'vulkan') return 'purple';
-  if (hint === 'intel') return 'cyan';
-  return 'gray';
 };
 
 export const providerLabel = (profile, catalog = []) => {
