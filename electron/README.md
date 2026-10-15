@@ -72,7 +72,7 @@ in a packaged build. To try it without publishing a real release:
 2. Start the packaged app with `ASYNCAT_UPDATE_REPO` set to that repository:
 
    ```sh
-   ASYNCAT_UPDATE_REPO=your-name/asyncat-oss ./Asyncat-0.8.0-beta.8-linux-x64.AppImage
+   ASYNCAT_UPDATE_REPO=your-name/asyncat-oss ./Asyncat-0.9.0-beta.1-linux-x64.AppImage
    ```
 
    On Windows: `set ASYNCAT_UPDATE_REPO=your-name/asyncat-oss` in a Command

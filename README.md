@@ -2,7 +2,7 @@
 
 **A local-first AI agent desktop app.** 200+ tools. 51 skills. Agents that work on their own. Learns from your chats, as far as you let it. Desktop automation. Fully offline.
 
-> **v0.8.0-beta.8** · MIT · [Install](#quick-start) · [Screenshots](#screenshots) · [Website](https://asyncat.com)
+> **v0.9.0-beta.1** · MIT · [Install](#quick-start) · [Screenshots](#screenshots) · [Website](https://asyncat.com)
 
 ![Asyncat after fixing a failing test: the steps it took, under "Worked for", and its answer](docs/images/chat.png)
 
